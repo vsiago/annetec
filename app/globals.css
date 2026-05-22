@@ -1,0 +1,179 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* ANNETEC Brand Colors */
+  --annetec-blue: #1c3670;
+  --annetec-fuchsia: #e5375b;
+  --annetec-blue-light: rgba(28, 54, 112, 0.1);
+  --annetec-fuchsia-light: rgba(229, 55, 91, 0.1);
+  
+  /* Base */
+  --background: #ffffff;
+  --foreground: #1c3670;
+  
+  /* Card */
+  --card: #ffffff;
+  --card-foreground: #1c3670;
+  
+  /* Popover */
+  --popover: #ffffff;
+  --popover-foreground: #1c3670;
+  
+  /* Primary - Blue */
+  --primary: #1c3670;
+  --primary-foreground: #ffffff;
+  
+  /* Secondary - Light Blue */
+  --secondary: #f0f4f9;
+  --secondary-foreground: #1c3670;
+  
+  /* Muted */
+  --muted: #f8fafc;
+  --muted-foreground: #64748b;
+  
+  /* Accent - Fuchsia */
+  --accent: #e5375b;
+  --accent-foreground: #ffffff;
+  
+  /* Destructive */
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  
+  /* Border & Input */
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #1c3670;
+  
+  /* Charts */
+  --chart-1: #1c3670;
+  --chart-2: #e5375b;
+  --chart-3: #3b82f6;
+  --chart-4: #10b981;
+  --chart-5: #f59e0b;
+  
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --font-sans: 'Inter', 'Inter Fallback', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback', monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  
+  /* Custom ANNETEC colors for Tailwind */
+  --color-annetec-blue: var(--annetec-blue);
+  --color-annetec-fuchsia: var(--annetec-fuchsia);
+  --color-annetec-blue-light: var(--annetec-blue-light);
+  --color-annetec-fuchsia-light: var(--annetec-fuchsia-light);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1c3670;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #152a5c;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Gradient backgrounds */
+.gradient-primary {
+  background: linear-gradient(135deg, #1c3670 0%, #2d4a8c 100%);
+}
+
+.gradient-accent {
+  background: linear-gradient(135deg, #e5375b 0%, #f25c7c 100%);
+}
+
+/* Glow effects */
+.glow-fuchsia {
+  box-shadow: 0 0 40px rgba(229, 55, 91, 0.3);
+}
+
+.glow-blue {
+  box-shadow: 0 0 40px rgba(28, 54, 112, 0.2);
+}
+
+/* Animation utilities */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(229, 55, 91, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(229, 55, 91, 0.5);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
