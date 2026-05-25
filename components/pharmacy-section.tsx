@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Pill, Percent, MapPin, CreditCard, ArrowRight } from "lucide-react"
+import { Pill, Percent, MapPin, CreditCard, ArrowRight, Heart } from "lucide-react"
 import Link from "next/link"
 
 export function PharmacySection() {
@@ -108,16 +108,16 @@ export function PharmacySection() {
               <motion.div
                 animate={{ y: [0, -10, 0] }}
                 transition={{ duration: 3, repeat: Infinity }}
-                className="absolute -top-4 -right-4 bg-white rounded-xl p-3 shadow-lg"
+                className="absolute -top-4 -right-4 bg-white rounded-2xl p-3.5 shadow-[0_15px_30px_-10px_rgba(229,55,91,0.2)] border border-white"
               >
-                <span className="text-3xl">💊</span>
+                <Pill size={32} className="text-[#e5375b]" strokeWidth={2.5} />
               </motion.div>
               <motion.div
                 animate={{ y: [0, 10, 0] }}
                 transition={{ duration: 3.5, repeat: Infinity }}
-                className="absolute -bottom-4 -left-4 bg-white rounded-xl p-3 shadow-lg"
+                className="absolute -bottom-4 -left-4 bg-white rounded-2xl p-3.5 shadow-[0_15px_30px_-10px_rgba(229,55,91,0.2)] border border-white"
               >
-                <span className="text-3xl">🏥</span>
+                <Heart size={32} className="text-[#e5375b]" strokeWidth={2.5} />
               </motion.div>
             </div>
           </motion.div>

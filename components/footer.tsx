@@ -10,7 +10,7 @@ const footerLinks = {
     { label: "Benefícios ao Idoso", href: "#idoso" },
   ],
   institucional: [
-    { label: "Sobre a Annetech", href: "#sobre" },
+    { label: "Sobre a Annetec", href: "#sobre" },
     { label: "Club de Vantagens", href: "#vantagens" },
     { label: "Teleorientação", href: "#teleorientacao" },
     { label: "FAQ", href: "#faq" },
@@ -40,22 +40,21 @@ export function Footer() {
           {/* Brand */}
           <div className="lg:col-span-2">
             <Link href="/" className="inline-flex items-center gap-2 mb-6">
-              <span className="text-2xl font-bold text-white">Anne</span>
-              <span className="text-2xl font-bold text-[#e5375b]">tech</span>
+              <img src="/annetec-light.svg" alt="Annetec" className="h-10" />
             </Link>
             <p className="text-white/70 leading-relaxed mb-6 max-w-sm">
-              A Annetech é um Plano de Assistência focado em múltiplos benefícios 
+              A Annetec é um Plano de Assistência focado em múltiplos benefícios 
               para melhorar a Saúde & Bem-Estar dos seus associados.
             </p>
 
             {/* Contact Info */}
             <div className="space-y-3">
               <a 
-                href="mailto:contato@annetech.com.br" 
+                href="mailto:contato@annetec.com.br" 
                 className="flex items-center gap-3 text-white/70 hover:text-[#e5375b] transition-colors"
               >
                 <Mail size={18} />
-                <span>contato@annetech.com.br</span>
+                <span>contato@annetec.com.br</span>
               </a>
               <a 
                 href="tel:08000000000" 
@@ -139,7 +138,7 @@ export function Footer() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-white/50 text-sm text-center md:text-left">
-              © {new Date().getFullYear()} Annetech. Todos os direitos reservados.
+              © {new Date().getFullYear()} Annetec. Todos os direitos reservados.
             </p>
             <p className="text-white/50 text-sm">
               Desenvolvido por{" "}

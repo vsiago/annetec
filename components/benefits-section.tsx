@@ -74,7 +74,7 @@ export function BenefitsSection() {
             Benefícios Múltiplos
           </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#1c3670] mb-6 text-balance">
-            Só na Annetech você conta com{" "}
+            Só na Annetec você conta com{" "}
             <span className="text-[#e5375b]">diversos benefícios</span>
           </h2>
           <p className="text-lg text-muted-foreground max-w-3xl mx-auto">

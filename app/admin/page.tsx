@@ -164,10 +164,15 @@ export default function AdminDashboard() {
                   <Tooltip
                     formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Vendas']}
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--background))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 15px -3px rgba(28,54,112,0.1)',
+                      padding: '12px',
                     }}
+                    itemStyle={{ color: '#1c3670', fontWeight: 'bold', fontSize: '14px' }}
+                    labelStyle={{ color: '#64748b', fontWeight: '600', fontSize: '13px', marginBottom: '4px' }}
+                    cursor={{ fill: 'rgba(28, 54, 112, 0.05)' }}
                   />
                   <Bar dataKey="vendas" fill="#1c3670" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -202,10 +207,14 @@ export default function AdminDashboard() {
                   <Tooltip
                     formatter={(value: number, name: string) => [value, name]}
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--background))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 15px -3px rgba(28,54,112,0.1)',
+                      padding: '12px',
                     }}
+                    itemStyle={{ fontWeight: 'bold', fontSize: '14px' }}
+                    labelStyle={{ display: 'none' }}
                   />
                 </PieChart>
               </ResponsiveContainer>

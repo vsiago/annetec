@@ -1,21 +1,68 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Shield, Heart, Phone, Users, CheckCircle } from "lucide-react"
+import { Shield, Heart, Phone, Users, CheckCircle, Pill, Stethoscope, Activity, Sparkles } from "lucide-react"
+
+const CAROUSEL_DATA = [
+  {
+    id: "farmacia",
+    title: "Farmácias e Medicamentos",
+    icon: Pill,
+    color: "bg-[#e5375b]",
+    hexColor: "#e5375b",
+    logos: ["Raia", "Drogasil", "Pague Menos", "Extrafarma", "Medipreço", "Omni"]
+  },
+  {
+    id: "consultas",
+    title: "Consultas e Exames",
+    icon: Stethoscope,
+    color: "bg-[#1c3670]",
+    hexColor: "#1c3670",
+    logos: ["Hapvida", "Sabin", "Fleury", "Notredame", "Hermes", "A+"]
+  },
+  {
+    id: "odonto",
+    title: "Odontologia",
+    icon: Activity,
+    color: "bg-teal-500",
+    hexColor: "#14b8a6",
+    logos: ["OdontoPrev", "Amil Dental", "Sorridents", "OdontoCompany", "BelaDente", "SulAmérica"]
+  },
+  {
+    id: "vantagens",
+    title: "Clube de Vantagens",
+    icon: Sparkles,
+    color: "bg-amber-500",
+    hexColor: "#f59e0b",
+    logos: ["Cinemark", "SmartFit", "Magalu", "Netshoes", "Burger King", "Uber"]
+  }
+];
 
 export function HeroSection() {
+  const [activeCategory, setActiveCategory] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveCategory((prev) => (prev + 1) % CAROUSEL_DATA.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const activeData = CAROUSEL_DATA[activeCategory];
+
   return (
-    <section className="relative min-h-screen flex items-center overflow-hidden bg-gradient-to-br from-white via-[#f0f4f9] to-white pt-20">
+    <section className="relative min-h-[100dvh] flex flex-col justify-center overflow-hidden bg-gradient-to-br from-white via-[#f0f4f9] to-white pt-24 pb-12 lg:pt-28">
       {/* Background Elements */}
-      <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-[#e5375b]/10 rounded-full blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-[#1c3670]/10 rounded-full blur-3xl" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#1c3670]/5 to-transparent rounded-full" />
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full flex-1 flex flex-col justify-center">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left Content */}
           <motion.div
@@ -80,23 +127,7 @@ export function HeroSection() {
               </Button>
             </motion.div>
 
-            {/* Price Highlight */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
-              className="mt-8 p-4 bg-white rounded-2xl shadow-lg border border-border/50 inline-block"
-            >
-              <p className="text-sm text-muted-foreground">A partir de</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-sm text-[#1c3670]">R$</span>
-                <span className="text-4xl font-bold text-[#e5375b]">14,90</span>
-                <span className="text-sm text-muted-foreground">/mês</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Plano Individual
-              </p>
-            </motion.div>
+
 
             {/* Trust Indicators */}
             <motion.div
@@ -118,128 +149,143 @@ export function HeroSection() {
             </motion.div>
           </motion.div>
 
-          {/* Right Content - Phone Mockups */}
+          {/* Right Content - Phone Mockup and Orbital Carousel */}
           <motion.div
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.8, delay: 0.3 }}
-            className="relative"
+            className="relative flex items-center justify-center lg:justify-end mt-10 lg:mt-0 w-full"
           >
-            <div className="relative flex justify-center items-center">
-              {/* Main Phone */}
+            <div className="relative w-full max-w-[600px] aspect-square flex items-center justify-center">
+              
+              {/* Floating Price Highlight (Desktop) */}
               <motion.div
-                animate={{ y: [0, -10, 0] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                className="relative z-20"
+                initial={{ opacity: 0, scale: 0.8, rotate: -5 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                transition={{ delay: 1, duration: 0.6, type: "spring" }}
+                className="absolute -top-8 -right-2 lg:-top-12 lg:-right-4 z-50 p-5 bg-white/90 backdrop-blur-2xl rounded-[1.5rem] shadow-[0_20px_40px_-15px_rgba(28,54,112,0.15)] border border-white hidden md:flex flex-col items-start"
               >
-                <div className="w-64 h-[500px] bg-[#1c3670] rounded-[3rem] p-3 shadow-2xl">
-                  <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden relative">
-                    {/* Phone Screen Content */}
-                    <div className="p-4 h-full flex flex-col">
-                      <div className="text-center py-4">
-                        <div className="flex items-center justify-center gap-1 mb-2">
-                          <span className="text-lg font-bold text-[#1c3670]">Anne</span>
-                          <span className="text-lg font-bold text-[#e5375b]">tech</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">Teleorientação em Saúde</p>
-                      </div>
+                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">A partir de</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-base font-bold text-[#1c3670]">R$</span>
+                  <span className="text-[3rem] leading-none font-black tracking-tighter text-[#e5375b]">14,90</span>
+                  <span className="text-sm font-semibold text-muted-foreground">/mês</span>
+                </div>
+                <div className="mt-2.5 inline-flex items-center gap-2 bg-[#1c3670]/5 px-3 py-1.5 rounded-full border border-[#1c3670]/10">
+                  <svg className="w-3.5 h-3.5 text-[#1c3670]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <p className="text-[11px] uppercase tracking-wider font-extrabold text-[#1c3670]">
+                    Plano Individual
+                  </p>
+                </div>
+              </motion.div>
+
+
+              {/* Decorative Connections - Multiple Rings */}
+              <svg className="absolute inset-0 w-full h-full z-0 pointer-events-none" viewBox="0 0 600 600">
+                {/* Inner Ring (Logo Orbit) */}
+                <circle cx="300" cy="300" r="230" fill="none" stroke="#1c3670" strokeWidth="2" strokeDasharray="6 6" className="opacity-20" />
+                {/* Outer Decorative Ring */}
+                <circle cx="300" cy="300" r="280" fill="none" stroke="#e5375b" strokeWidth="1" strokeDasharray="3 9" className="opacity-10" />
+              </svg>
+
+              {/* Central Phone Mockup */}
+              <div className="absolute z-30 pointer-events-none">
+                <div className="w-[240px] h-[490px] bg-[#1c3670] rounded-[2.5rem] p-2.5 shadow-2xl relative">
+                  <div className="w-full h-full bg-white rounded-[2rem] overflow-hidden flex flex-col relative">
+                    <div className="p-5 bg-gradient-to-b from-gray-50 to-white flex-1 flex flex-col items-center">
+                      <div className="w-12 h-1.5 bg-gray-300 rounded-full mb-8 mx-auto" />
+                      <img src="/annetec.svg" alt="Annetec" className="h-6 mb-10" />
                       
-                      {/* Feature Cards */}
-                      <div className="space-y-3 flex-1">
-                        {[
-                          { icon: "🩺", title: "Orientação Médica", desc: "24 horas" },
-                          { icon: "👴", title: "Gerontologia", desc: "Para 50+" },
-                          { icon: "👶", title: "Pediatria", desc: "Até 12 anos" },
-                          { icon: "👩", title: "Ginecologia", desc: "Anual grátis" },
-                        ].map((item, index) => (
-                          <motion.div
-                            key={index}
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.8 + index * 0.1 }}
-                            className="flex items-center gap-3 p-3 bg-gradient-to-r from-[#f0f4f9] to-white rounded-xl"
-                          >
-                            <span className="text-2xl">{item.icon}</span>
-                            <div>
-                              <p className="text-sm font-semibold text-[#1c3670]">{item.title}</p>
-                              <p className="text-xs text-muted-foreground">{item.desc}</p>
-                            </div>
-                            <CheckCircle size={16} className="text-green-500 ml-auto" />
-                          </motion.div>
-                        ))}
-                      </div>
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={activeCategory}
+                          initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.8, y: -10 }}
+                          transition={{ duration: 0.3 }}
+                          className="flex flex-col items-center text-center space-y-5"
+                        >
+                          <div className={`w-20 h-20 rounded-full flex items-center justify-center text-white ${activeData.color} shadow-lg shadow-${activeData.color.replace('bg-', '')}/30`}>
+                            <activeData.icon className="w-10 h-10" />
+                          </div>
+                          <h3 className="font-bold text-[#1c3670] text-xl leading-tight px-2">
+                            {activeData.title}
+                          </h3>
+                          <p className="text-sm text-muted-foreground px-2">
+                            As melhores opções disponíveis.
+                          </p>
+                        </motion.div>
+                      </AnimatePresence>
 
-                      {/* Bottom CTA */}
-                      <div className="mt-4">
-                        <div className="bg-[#e5375b] text-white text-center py-3 rounded-xl text-sm font-semibold">
-                          Acessar Teleorientação
+                      <div className="mt-auto w-full">
+                        <div className="bg-[#e5375b] text-white text-center py-3 rounded-xl text-sm font-bold shadow-md">
+                          Acessar Benefício
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </div>
 
-              {/* Secondary Phone - Benefits */}
-              <motion.div
-                animate={{ y: [0, 10, 0] }}
-                transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute -left-8 top-12 z-10 hidden lg:block"
+              {/* Orbital Carousel */}
+              <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-0 z-10"
               >
-                <div className="w-52 h-[400px] bg-[#e5375b] rounded-[2.5rem] p-3 shadow-xl transform -rotate-6">
-                  <div className="w-full h-full bg-white rounded-[2rem] overflow-hidden">
-                    <div className="p-3 h-full flex flex-col">
-                      <div className="text-center py-3">
-                        <p className="text-sm font-bold text-[#1c3670]">Benefícios Múltiplos</p>
+                <div className="w-full h-full relative">
+                  {/* Satellites - Permanently mounted so their continuous spin syncs with parent orbit */}
+                  {[0, 1, 2, 3, 4, 5].map((index) => {
+                    const angle = (index * 360) / 6;
+                    const logo = activeData.logos[index];
+                    
+                    return (
+                      <div
+                        key={`satellite-wrapper-${index}`}
+                        className="absolute w-full h-full top-0 left-0 pointer-events-none"
+                        style={{ transform: `rotate(${angle}deg)` }}
+                      >
+                        <div 
+                          className="absolute left-1/2 -ml-10 w-20 h-20 pointer-events-auto"
+                          style={{ top: '5%' }} /* Placed precisely on the 230px radius orbit in a 600x600 container */
+                        >
+                          <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ duration: 0.5, delay: index * 0.1 }}
+                            className="w-full h-full"
+                          >
+                            <motion.div
+                              animate={{ rotate: [-angle, -angle - 360] }}
+                              transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+                              className="w-full h-full rounded-full bg-white shadow-xl flex items-center justify-center p-2 border-[3px] transition-colors duration-500"
+                              style={{ borderColor: activeData.hexColor }}
+                            >
+                              <AnimatePresence mode="wait">
+                                <motion.div
+                                  key={`content-${activeCategory}`}
+                                  initial={{ opacity: 0, scale: 0.5 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.5 }}
+                                  transition={{ duration: 0.3 }}
+                                  className="w-full h-full flex items-center justify-center"
+                                >
+                                  <span className="text-[11px] leading-tight font-bold text-center text-[#1c3670] break-words">
+                                    {logo}
+                                  </span>
+                                </motion.div>
+                              </AnimatePresence>
+                            </motion.div>
+                          </motion.div>
+                        </div>
                       </div>
-                      <div className="space-y-2 flex-1">
-                        {[
-                          { icon: "🦷", text: "Odontologia" },
-                          { icon: "💊", text: "Farmácia -60%" },
-                          { icon: "🏥", text: "Consultas" },
-                          { icon: "🔬", text: "Exames" },
-                          { icon: "⚱️", text: "Auxílio Funeral" },
-                        ].map((item, index) => (
-                          <div key={index} className="flex items-center gap-2 p-2 bg-[#f0f4f9] rounded-lg">
-                            <span className="text-lg">{item.icon}</span>
-                            <span className="text-xs font-medium text-[#1c3670]">{item.text}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
               </motion.div>
 
-              {/* Tertiary Phone - Vantagens */}
-              <motion.div
-                animate={{ y: [0, -8, 0] }}
-                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute -right-8 top-20 z-10 hidden lg:block"
-              >
-                <div className="w-48 h-[350px] bg-[#1c3670] rounded-[2.5rem] p-3 shadow-xl transform rotate-6">
-                  <div className="w-full h-full bg-white rounded-[2rem] overflow-hidden">
-                    <div className="p-3 h-full flex flex-col">
-                      <div className="text-center py-3">
-                        <p className="text-sm font-bold text-[#1c3670]">Club de Vantagens</p>
-                      </div>
-                      <div className="space-y-2 flex-1">
-                        {[
-                          { icon: "🎉", text: "Lazer" },
-                          { icon: "📚", text: "Educação" },
-                          { icon: "💄", text: "Beleza" },
-                          { icon: "🏋️", text: "Esporte" },
-                        ].map((item, index) => (
-                          <div key={index} className="flex items-center gap-2 p-2 bg-[#e5375b]/10 rounded-lg">
-                            <span className="text-lg">{item.icon}</span>
-                            <span className="text-xs font-medium text-[#1c3670]">{item.text}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
             </div>
           </motion.div>
         </div>

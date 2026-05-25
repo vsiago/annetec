@@ -11,11 +11,11 @@ const faqs = [
   },
   {
     question: "As coberturas do Clube de Benefícios são distribuídas por faixa etária?",
-    answer: "Não. Em um Plano de Assistência o participante encontrará descontos, vantagens e coberturas para todas as faixas etárias. No entanto, há empresas que focam determinado segmento, como é o caso da Annetech em que, o público prioritário, são pessoas mais maduras, em torno dos 40 anos de idade ou mais. Esta segmentação é um grande diferencial da Annetech porque seus produtos são pensados e organizados para oferecerem coberturas que mais se identificam com o seu público-alvo. A Annetech é o único clube de benefícios a oferecer um conjunto de vantagens, benefícios e coberturas voltadas completamente para esta faixa etária."
+    answer: "Não. Em um Plano de Assistência o participante encontrará descontos, vantagens e coberturas para todas as faixas etárias. No entanto, há empresas que focam determinado segmento, como é o caso da Annetec em que, o público prioritário, são pessoas mais maduras, em torno dos 40 anos de idade ou mais. Esta segmentação é um grande diferencial da Annetec porque seus produtos são pensados e organizados para oferecerem coberturas que mais se identificam com o seu público-alvo. A Annetec é o único clube de benefícios a oferecer um conjunto de vantagens, benefícios e coberturas voltadas completamente para esta faixa etária."
   },
   {
-    question: "A Annetech foi criada apenas para quem não tem plano de saúde?",
-    answer: "De forma alguma. Se você não possui um plano de saúde, a Annetech pode te ajudar oferecendo descontos, benefícios e vantagens em diversos estabelecimentos para a realização de consultas, exames e terapias, em nível ambulatorial, para que você possa cuidar da sua Saúde & Bem-Estar. Mas, se você já é beneficiário de um plano ou seguro privado de assistência à saúde, seja ele coletivo, empresarial ou individual, a Annetech proporciona um complemento perfeito para cuidar de você e de sua família, por meio de coberturas exclusivas e pensadas para melhorarem a sua vida. Portanto, a Annetech é para quem tem um plano de saúde e para quem não tem."
+    question: "A Annetec foi criada apenas para quem não tem plano de saúde?",
+    answer: "De forma alguma. Se você não possui um plano de saúde, a Annetec pode te ajudar oferecendo descontos, benefícios e vantagens em diversos estabelecimentos para a realização de consultas, exames e terapias, em nível ambulatorial, para que você possa cuidar da sua Saúde & Bem-Estar. Mas, se você já é beneficiário de um plano ou seguro privado de assistência à saúde, seja ele coletivo, empresarial ou individual, a Annetec proporciona um complemento perfeito para cuidar de você e de sua família, por meio de coberturas exclusivas e pensadas para melhorarem a sua vida. Portanto, a Annetec é para quem tem um plano de saúde e para quem não tem."
   },
   {
     question: "O que é um Plano de Assistência?",
@@ -41,7 +41,7 @@ export function FAQSection() {
             Perguntas <span className="text-[#e5375b]">Frequentes</span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            Tire suas dúvidas sobre a Annetech
+            Tire suas dúvidas sobre a Annetec
           </p>
         </motion.div>
 

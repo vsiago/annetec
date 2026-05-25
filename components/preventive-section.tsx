@@ -8,14 +8,14 @@ const preventiveConsultations = [
   {
     icon: UserRound,
     title: "Consulta Geriátrica e Gerontológica Grátis",
-    description: "Na Annetech você que tem mais que 50 anos é super valorizado. Único Plano de Assistência a oferecer uma consulta Geriátrica e Gerontológica anual para você ficar em dia com a sua saúde global.",
+    description: "Na Annetec você que tem mais que 50 anos é super valorizado. Único Plano de Assistência a oferecer uma consulta Geriátrica e Gerontológica anual para você ficar em dia com a sua saúde global.",
     highlight: "Para 50+ anos",
     color: "#1c3670",
   },
   {
     icon: Heart,
     title: "Para as Mulheres, Prevenção é Fundamental",
-    description: "Na Annetech cada Associada têm direito a uma consulta Ginecológica anual gratuita. Assim, você se previne e se mantém ativa para curtir a vida com Saúde & Bem-Estar.",
+    description: "Na Annetec cada Associada têm direito a uma consulta Ginecológica anual gratuita. Assim, você se previne e se mantém ativa para curtir a vida com Saúde & Bem-Estar.",
     highlight: "Ginecologia anual grátis",
     color: "#e5375b",
   },

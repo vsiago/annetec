@@ -41,18 +41,18 @@ export function ContactSection() {
             </p>
 
             <a 
-              href="mailto:contato@annetech.com.br"
+              href="mailto:contato@annetec.com.br"
               className="inline-flex items-center gap-3 p-4 bg-[#1c3670] rounded-xl text-white hover:bg-[#152a5c] transition-colors mb-8"
             >
               <Mail size={24} />
-              <span className="font-medium">contato@annetech.com.br</span>
+              <span className="font-medium">contato@annetec.com.br</span>
             </a>
 
             {/* What We Are */}
             <div className="p-6 bg-white rounded-2xl shadow-lg border border-border/50">
               <h3 className="font-bold text-[#1c3670] mb-3">O que somos</h3>
               <p className="text-muted-foreground leading-relaxed">
-                A Annetech é um <strong className="text-[#1c3670]">Plano de Assistência</strong> e não um plano de saúde. 
+                A Annetec é um <strong className="text-[#1c3670]">Plano de Assistência</strong> e não um plano de saúde. 
                 É uma <strong className="text-[#e5375b]">&quot;Assist Tech&quot;</strong>, focada em múltiplos benefícios para 
                 melhorar a Saúde & Bem-Estar dos seus associados.
               </p>

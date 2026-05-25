@@ -43,7 +43,7 @@ export default function ClientDashboard() {
             Olá, {user?.name?.split(' ')[0]}
           </h1>
           <p className="text-muted-foreground">
-            Bem-vindo ao seu painel Annetech
+            Bem-vindo ao seu painel Annetec
           </p>
         </div>
         <Button className="bg-[#e5375b] hover:bg-[#d42d50] text-white" asChild>
@@ -64,7 +64,7 @@ export default function ClientDashboard() {
               </div>
               <div>
                 <p className="text-white/80 text-sm">Seu Plano</p>
-                <p className="text-xl font-bold">{client?.plan || 'Annetech'}</p>
+                <p className="text-xl font-bold">{client?.plan || 'Annetec'}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <CheckCircle2 className="h-4 w-4 text-green-400" />
                   <span className="text-sm text-green-400">Ativo</span>

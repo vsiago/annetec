@@ -29,7 +29,7 @@ export function ConsultationsSection() {
             <span className="text-[#e5375b]">preços mais em conta</span>
           </h2>
           <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-            Uma rede de parceiros exclusivos da Annetech garante consultas a partir de{" "}
+            Uma rede de parceiros exclusivos da Annetec garante consultas a partir de{" "}
             <strong className="text-[#1c3670]">R$ 40,00</strong> para que você possa cuidar 
             de você com consultas médicas muito mais em conta do que particular.
           </p>
@@ -60,7 +60,7 @@ export function ConsultationsSection() {
                 <span className="text-4xl font-bold text-[#e5375b]">40,00</span>
               </div>
             </div>
-            <Button asChild className="w-full bg-[#1c3670] hover:bg-[#152a5c]">
+            <Button asChild className="w-full bg-[#1c3670] hover:bg-[#152a5c] h-14 text-base rounded-xl">
               <Link href="#rede-consultas">
                 <MapPin size={18} className="mr-2" />
                 Confira a rede conveniada
@@ -81,7 +81,7 @@ export function ConsultationsSection() {
             </div>
             <h3 className="text-2xl font-bold text-[#1c3670] mb-4">Exames de Imagem</h3>
             <p className="text-muted-foreground mb-6">
-              A Annetech também tem parcerias exclusivas para realização de exames 
+              A Annetec também tem parcerias exclusivas para realização de exames 
               de imagem e muito mais com descontos especiais.
             </p>
             <div className="bg-[#f8fafc] rounded-xl p-4 mb-6">
@@ -91,7 +91,7 @@ export function ConsultationsSection() {
                 <span className="text-sm text-muted-foreground">em exames</span>
               </div>
             </div>
-            <Button asChild variant="outline" className="w-full border-[#e5375b] text-[#e5375b] hover:bg-[#e5375b] hover:text-white">
+            <Button asChild variant="outline" className="w-full border-[#e5375b] text-[#e5375b] hover:bg-[#e5375b] hover:text-white h-14 text-base rounded-xl">
               <Link href="#rede-exames">
                 <Search size={18} className="mr-2" />
                 Conhecer todos os exames
@@ -109,7 +109,7 @@ export function ConsultationsSection() {
           className="bg-gradient-to-r from-[#1c3670] to-[#2d4a8c] rounded-2xl p-6 lg:p-8 text-center"
         >
           <p className="text-white/90 mb-2">
-            A Annetech estará continuamente atualizando essa rede de conveniados para que a 
+            A Annetec estará continuamente atualizando essa rede de conveniados para que a 
             cada dia você tenha ainda mais opções.
           </p>
           <Link 

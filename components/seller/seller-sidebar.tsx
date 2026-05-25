@@ -13,6 +13,7 @@ import {
   Target,
   BarChart3,
   Users,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -35,6 +36,7 @@ const sidebarLinks = [
   { href: '/vendedor/clientes', label: 'Meus Clientes', icon: Users },
   { href: '/vendedor/metas', label: 'Metas & Comissões', icon: Target },
   { href: '/vendedor/relatorios', label: 'Relatórios', icon: BarChart3 },
+  { href: '/vendedor/configuracoes', label: 'Configurações', icon: Settings },
 ]
 
 export function SellerSidebar() {
@@ -62,7 +64,7 @@ export function SellerSidebar() {
           <Menu className="h-6 w-6" />
         </button>
         <img
-          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/%7B82016767-5B6D-4CD8-B07B-638D7240868D%7D-Moy5xJBbG54c1HGaaKwRGyMrOfjTCm.png"
+          src="/annetec.svg"
           alt="Annetec"
           className="h-8"
         />
@@ -93,7 +95,7 @@ export function SellerSidebar() {
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/10">
           <Link href="/vendedor">
             <img
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/%7B82016767-5B6D-4CD8-B07B-638D7240868D%7D-Moy5xJBbG54c1HGaaKwRGyMrOfjTCm.png"
+              src="/annetec-light.svg"
               alt="Annetec"
               className="h-8"
             />
@@ -151,6 +153,12 @@ export function SellerSidebar() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem asChild>
+                <Link href="/vendedor/configuracoes">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Configurações
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/vendedor/metas">
                   <Target className="mr-2 h-4 w-4" />

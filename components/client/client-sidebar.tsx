@@ -12,6 +12,7 @@ import {
   Users,
   Gift,
   HeadphonesIcon,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -34,6 +35,7 @@ const sidebarLinks = [
   { href: '/cliente/dependentes', label: 'Dependentes', icon: Users },
   { href: '/cliente/beneficios', label: 'Benefícios', icon: Gift },
   { href: '/cliente/suporte', label: 'Suporte', icon: HeadphonesIcon },
+  { href: '/cliente/configuracoes', label: 'Configurações', icon: Settings },
 ]
 
 export function ClientSidebar() {
@@ -61,7 +63,7 @@ export function ClientSidebar() {
           <Menu className="h-6 w-6" />
         </button>
         <img
-          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/%7B82016767-5B6D-4CD8-B07B-638D7240868D%7D-Moy5xJBbG54c1HGaaKwRGyMrOfjTCm.png"
+          src="/annetec.svg"
           alt="Annetec"
           className="h-8"
         />
@@ -91,7 +93,7 @@ export function ClientSidebar() {
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/10">
           <Link href="/cliente">
             <img
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/%7B82016767-5B6D-4CD8-B07B-638D7240868D%7D-Moy5xJBbG54c1HGaaKwRGyMrOfjTCm.png"
+              src="/annetec-light.svg"
               alt="Annetec"
               className="h-8"
             />
@@ -158,6 +160,12 @@ export function ClientSidebar() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem asChild>
+                <Link href="/cliente/configuracoes">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Configurações
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/cliente/carteirinha">
                   <CreditCard className="mr-2 h-4 w-4" />

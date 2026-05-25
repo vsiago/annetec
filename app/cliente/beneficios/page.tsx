@@ -60,7 +60,7 @@ export default function BeneficiosPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">Benefícios</h1>
-        <p className="text-muted-foreground">Conheça todos os benefícios do seu plano Annetech</p>
+        <p className="text-muted-foreground">Conheça todos os benefícios do seu plano Annetec</p>
       </div>
 
       {/* Highlight Cards */}

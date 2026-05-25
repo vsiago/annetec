@@ -5,10 +5,10 @@ import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Loader2, AlertCircle, ShieldCheck, HeartPulse, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+import { motion } from 'framer-motion'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -33,145 +33,208 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#1c3670]">
-      {/* Header */}
-      <header className="p-6">
-        <Link href="/" className="flex items-center gap-2">
-          <img
-            src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/%7B82016767-5B6D-4CD8-B07B-638D7240868D%7D-Moy5xJBbG54c1HGaaKwRGyMrOfjTCm.png"
-            alt="Annetec"
-            className="h-10"
-          />
-        </Link>
-      </header>
+    <div className="min-h-[100dvh] flex bg-white">
+      {/* Left Panel - Branding (hidden on mobile) */}
+      <div className="hidden lg:flex w-1/2 bg-[#1c3670] relative overflow-hidden flex-col justify-between p-12 lg:p-16">
+        {/* Background Gradients */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#1c3670] via-[#162a5c] to-[#0f1d40]" />
+        <div className="absolute -top-[30%] -right-[10%] w-[80%] h-[80%] rounded-full bg-gradient-radial from-[#e5375b]/20 to-transparent blur-3xl mix-blend-screen" />
+        <div className="absolute -bottom-[20%] -left-[10%] w-[60%] h-[60%] rounded-full bg-gradient-radial from-[#2563eb]/20 to-transparent blur-3xl mix-blend-screen" />
 
-      {/* Login Form */}
-      <main className="flex-1 flex items-center justify-center p-6">
-        <Card className="w-full max-w-md border-0 shadow-2xl">
-          <CardHeader className="space-y-1 text-center pb-2">
-            <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-[#1c3670]/10 flex items-center justify-center">
-              <svg
-                className="w-8 h-8 text-[#1c3670]"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                />
-              </svg>
+        <div className="relative z-10">
+          <Link href="/">
+            <img src="/annetec-light.svg" alt="Annetec" className="h-10" />
+          </Link>
+        </div>
+        
+        <div className="relative z-10 text-white max-w-lg mb-12">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.8 }}
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-sm font-medium mb-8 border border-white/10">
+              <Sparkles size={16} className="text-[#e5375b]" />
+              Plano de Assistência Familiar
             </div>
-            <CardTitle className="text-2xl font-bold text-[#1c3670]">
-              Bem-vindo à Annetech
-            </CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Entre com suas credenciais para acessar sua conta
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <Alert variant="destructive" className="border-red-200 bg-red-50">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
-                  Email
+            <h1 className="text-4xl lg:text-5xl font-bold mb-6 leading-tight tracking-tight">
+              Sua saúde e <span className="whitespace-nowrap">bem-estar</span> em <span className="text-[#e5375b]">um só lugar.</span>
+            </h1>
+            <p className="text-white/70 text-lg leading-relaxed">
+              Acesse seu painel para gerenciar benefícios, visualizar sua carteirinha digital e aproveitar a melhor rede conveniada do Brasil.
+            </p>
+
+            <div className="mt-12 grid grid-cols-2 gap-6">
+              <div className="flex items-center gap-4 bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/5">
+                <div className="w-12 h-12 rounded-xl bg-[#e5375b]/20 flex items-center justify-center">
+                  <ShieldCheck className="text-[#e5375b]" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white">Segurança</h3>
+                  <p className="text-xs text-white/60">Dados protegidos</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/5">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                  <HeartPulse className="text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white">Praticidade</h3>
+                  <p className="text-xs text-white/60">Tudo pelo celular</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="relative z-10">
+          <p className="text-white/40 text-sm">
+            &copy; {new Date().getFullYear()} Annetec. Todos os direitos reservados.
+          </p>
+        </div>
+      </div>
+
+      {/* Right Panel - Login Form */}
+      <div className="w-full lg:w-1/2 flex flex-col p-6 sm:p-12 relative">
+        <div className="absolute inset-0 bg-gradient-to-br from-white via-[#f8fafc] to-white -z-10" />
+        
+        <div className="lg:hidden mb-12">
+          <Link href="/">
+            <img src="/annetec.svg" alt="Annetec" className="h-10" />
+          </Link>
+        </div>
+        
+        <main className="flex-1 flex flex-col justify-center max-w-[420px] w-full mx-auto">
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1, duration: 0.6 }}
+            className="mb-10 text-center lg:text-left"
+          >
+            <h2 className="text-3xl font-extrabold text-[#1c3670] tracking-tight mb-3">Bem-vindo de volta</h2>
+            <p className="text-muted-foreground text-sm">
+              Entre com suas credenciais para acessar sua conta e aproveitar seus benefícios.
+            </p>
+          </motion.div>
+
+          <motion.form 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+            onSubmit={handleSubmit} 
+            className="space-y-5"
+          >
+            {error && (
+              <Alert variant="destructive" className="border-red-200 bg-red-50/50 rounded-xl">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-bold text-[#1c3670]">
+                E-mail de acesso
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="nome@exemplo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="h-14 px-4 rounded-xl border-gray-200 bg-gray-50/50 focus:bg-white focus:border-[#1c3670] focus:ring-[#1c3670]/20 transition-all text-base"
+                disabled={isSubmitting}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password" className="text-sm font-bold text-[#1c3670]">
+                  Sua senha
                 </Label>
+                <Link href="#" className="text-sm font-semibold text-[#e5375b] hover:underline">
+                  Esqueceu a senha?
+                </Link>
+              </div>
+              <div className="relative">
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-11"
+                  className="h-14 px-4 pr-12 rounded-xl border-gray-200 bg-gray-50/50 focus:bg-white focus:border-[#1c3670] focus:ring-[#1c3670]/20 transition-all text-base"
                   disabled={isSubmitting}
                 />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium">
-                  Senha
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Digite sua senha"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="h-11 pr-10"
-                    disabled={isSubmitting}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    tabIndex={-1}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full h-11 bg-[#e5375b] hover:bg-[#d42d50] text-white font-semibold"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Entrando...
-                  </>
-                ) : (
-                  'Entrar'
-                )}
-              </Button>
-            </form>
-
-            {/* Demo credentials */}
-            <div className="mt-6 pt-6 border-t border-border">
-              <p className="text-xs text-center text-muted-foreground mb-3">
-                Credenciais de demonstração:
-              </p>
-              <div className="grid gap-2 text-xs">
-                <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                  <span className="font-medium text-[#1c3670]">Admin</span>
-                  <span className="text-muted-foreground">admin@annetech.com.br / admin123</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                  <span className="font-medium text-[#1c3670]">Vendedor</span>
-                  <span className="text-muted-foreground">maria@annetech.com.br / seller123</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                  <span className="font-medium text-[#1c3670]">Cliente</span>
-                  <span className="text-muted-foreground">ana@email.com / client123</span>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1c3670] transition-colors p-1"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </main>
 
-      {/* Footer */}
-      <footer className="p-6 text-center">
-        <p className="text-white/60 text-sm">
-          &copy; {new Date().getFullYear()} Annetech by ANNETEC. Todos os direitos reservados.
-        </p>
-      </footer>
+            <Button
+              type="submit"
+              className="w-full h-14 mt-4 bg-[#e5375b] hover:bg-[#d42d50] text-white font-bold text-base rounded-xl shadow-[0_10px_20px_-10px_rgba(229,55,91,0.5)] hover:shadow-[0_15px_25px_-10px_rgba(229,55,91,0.6)] transition-all"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Conectando...
+                </>
+              ) : (
+                'Acessar minha conta'
+              )}
+            </Button>
+          </motion.form>
+
+          {/* Demo credentials */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4, duration: 0.6 }}
+            className="mt-12"
+          >
+            <div className="relative flex items-center justify-center mb-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200"></div>
+              </div>
+              <div className="relative bg-[#f8fafc] px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Acesso de Demonstração
+              </div>
+            </div>
+            
+            <div className="grid gap-3">
+              {[
+                { role: 'Admin', email: 'admin@annetec.com.br', pass: 'admin123', color: 'bg-[#1c3670]' },
+                { role: 'Vendedor', email: 'maria@annetec.com.br', pass: 'seller123', color: 'bg-[#e5375b]' },
+                { role: 'Cliente', email: 'ana@email.com', pass: 'client123', color: 'bg-teal-500' }
+              ].map((cred, idx) => (
+                <div 
+                  key={idx}
+                  className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm transition-all cursor-pointer group"
+                  onClick={() => { setEmail(cred.email); setPassword(cred.pass); }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${cred.color}`}></div>
+                    <span className="font-bold text-[#1c3670] text-sm">{cred.role}</span>
+                  </div>
+                  <span className="text-xs font-medium text-muted-foreground group-hover:text-gray-900 transition-colors">
+                    {cred.email} <span className="opacity-40">/</span> {cred.pass}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </main>
+      </div>
     </div>
   )
 }
+

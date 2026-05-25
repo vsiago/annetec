@@ -27,14 +27,12 @@ export function AboutSection() {
               <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-[#1c3670]/10 rounded-2xl" />
               
               {/* Main Image Container */}
-              <div className="relative w-full h-full rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-[#1c3670] to-[#2d4a8c]">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center text-white p-8">
-                    <Heart size={80} className="mx-auto mb-6 text-[#e5375b]" />
-                    <h3 className="text-2xl font-bold mb-4">Saúde & Bem-Estar</h3>
-                    <p className="text-white/80">Cuidando de você e sua família</p>
-                  </div>
-                </div>
+              <div className="relative w-full h-full rounded-3xl overflow-hidden shadow-2xl">
+                <img
+                  src="/about-image.png"
+                  alt="Saúde & Bem-Estar - Annetec"
+                  className="w-full h-full object-cover"
+                />
                 {/* Floating Cards */}
                 <motion.div
                   animate={{ y: [0, -10, 0] }}
@@ -69,7 +67,7 @@ export function AboutSection() {
           >
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#1c3670]/5 rounded-full text-[#1c3670] text-sm font-medium mb-6">
               <Shield size={16} className="text-[#e5375b]" />
-              Saiba mais sobre a Annetech
+              Saiba mais sobre a Annetec
             </div>
 
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#1c3670] leading-tight mb-6 text-balance">
@@ -78,23 +76,23 @@ export function AboutSection() {
 
             <div className="space-y-4 text-muted-foreground leading-relaxed">
               <p>
-                A Annetech é uma <strong className="text-[#1c3670]">ASSIST TECH</strong>, ou seja, 
+                A Annetec é uma <strong className="text-[#1c3670]">ASSIST TECH</strong>, ou seja, 
                 um Plano de Assistência familiar que tem como objetivo proporcionar melhoria da qualidade 
                 de vida e bem-estar aos seus associados por meio de uma gama de benefícios exclusivos, 
                 pensados cuidadosamente para toda a família.
               </p>
               <p>
                 Diferentemente de um plano de saúde, que é voltado principalmente para o tratamento 
-                de doenças, a Annetech é um <strong className="text-[#1c3670]">&quot;plano de assistências múltiplas&quot;</strong>; 
+                de doenças, a Annetec é um <strong className="text-[#1c3670]">&quot;plano de assistências múltiplas&quot;</strong>; 
                 um &quot;plano de bem-estar&quot;; um &quot;plano de qualidade de vida&quot;.
               </p>
               <p>
-                A Annetech também é um Clube de Benefícios que valoriza muito as ações que 
+                A Annetec também é um Clube de Benefícios que valoriza muito as ações que 
                 impactam na <strong className="text-[#e5375b]">Prevenção de Riscos e Doenças</strong> e 
                 na <strong className="text-[#e5375b]">Promoção da Saúde</strong>.
               </p>
               <p>
-                Além disso, a Annetech é uma forma divertida e conveniente de os membros 
+                Além disso, a Annetec é uma forma divertida e conveniente de os membros 
                 obterem ótimos negócios em vários setores, tais como saúde, lazer, esporte, educação, 
                 beleza, etc.
               </p>

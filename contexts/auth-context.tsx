@@ -22,7 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Check for existing session in localStorage
-    const storedUserId = localStorage.getItem('annetech_user_id')
+    const storedUserId = localStorage.getItem('annetec_user_id')
     if (storedUserId) {
       const foundUser = getUserById(storedUserId)
       if (foundUser) {
@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     setUser(foundUser)
-    localStorage.setItem('annetech_user_id', foundUser.id)
+    localStorage.setItem('annetec_user_id', foundUser.id)
     setIsLoading(false)
     
     // Redirect based on role
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem('annetech_user_id')
+    localStorage.removeItem('annetec_user_id')
     router.push('/login')
   }
 

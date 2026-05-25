@@ -62,7 +62,7 @@ export default function ClientesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
-          <p className="text-muted-foreground">Gerencie os associados da Annetech</p>
+          <p className="text-muted-foreground">Gerencie os associados da Annetec</p>
         </div>
         <Button className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
           <Plus className="h-4 w-4 mr-2" />

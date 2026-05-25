@@ -130,7 +130,7 @@ export default function SuportePage() {
                 <p className="text-muted-foreground text-sm">Resposta em até 24h</p>
               </div>
             </div>
-            <p className="text-lg font-medium text-[#1c3670]">suporte@annetech.com.br</p>
+            <p className="text-lg font-medium text-[#1c3670]">suporte@annetec.com.br</p>
           </CardContent>
         </Card>
       </div>

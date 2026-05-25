@@ -44,7 +44,7 @@ export function DentalSection() {
             </h2>
 
             <p className="text-lg text-white/80 mb-8 leading-relaxed">
-              Só na Annetech você tem acesso ao melhor da Odontologia, por 
+              Só na Annetec você tem acesso ao melhor da Odontologia, por 
               meio de um plano dental completo, com cobertura nacional, por apenas{" "}
               <span className="font-bold text-[#e5375b]">R$ 19,90 por mês</span>, por beneficiário.
             </p>
@@ -75,7 +75,7 @@ export function DentalSection() {
               <Button
                 size="lg"
                 variant="ghost"
-                className="border border-white/50 text-white hover:bg-white/10 hover:border-white/80 hover:text-white transition-all duration-300"
+                className="!bg-transparent border border-white/40 !text-white hover:bg-white/10 hover:border-white/80 transition-all duration-300"
                 asChild
               >
                 <Link href="#condicoes-odonto">Condições Gerais</Link>

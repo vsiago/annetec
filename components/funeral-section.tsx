@@ -53,12 +53,12 @@ export function FuneralSection() {
 
             <div className="space-y-4 text-muted-foreground leading-relaxed">
               <p>
-                A Annetech quer te ajudar, sem criar dificuldades ou excesso de burocracia 
+                A Annetec quer te ajudar, sem criar dificuldades ou excesso de burocracia 
                 para conseguir este benefício, pois sabemos o quanto é doloroso a perda de um 
                 ente querido.
               </p>
               <p>
-                O auxílio funeral é uma cobertura na qual a Annetech reembolsa todos os 
+                O auxílio funeral é uma cobertura na qual a Annetec reembolsa todos os 
                 custos referentes ao funeral em caso de falecimento do associado 
                 (excluídos cônjuge e filhos), até o limite de{" "}
                 <strong className="text-[#1c3670]">R$ 3.000,00</strong>.

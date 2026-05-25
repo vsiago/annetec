@@ -44,14 +44,14 @@ export function AdvantagesSection() {
 
             <div className="space-y-4 text-muted-foreground leading-relaxed mb-8">
               <p>
-                Só na Annetech, o Associado tem um completo Club de Vantagens que proporciona 
+                Só na Annetec, o Associado tem um completo Club de Vantagens que proporciona 
                 descontos em um enorme número de estabelecimentos comerciais, serviços gerais, 
                 serviços de saúde, medicamentos, educação, lazer e muito mais.
               </p>
               <p>
-                Além dos descontos e vantagens tradicionais, o Associado Annetech ainda conta 
+                Além dos descontos e vantagens tradicionais, o Associado Annetec ainda conta 
                 com diversas opções de parcerias celebradas especificamente para o nosso Club, 
-                com benefícios voltados exclusivamente para a família Annetech.
+                com benefícios voltados exclusivamente para a família Annetec.
               </p>
             </div>
 

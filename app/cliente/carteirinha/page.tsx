@@ -52,7 +52,7 @@ export default function CarteirinhaPage() {
             {/* Logo */}
             <div className="flex items-center justify-between mb-6">
               <img
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/%7B82016767-5B6D-4CD8-B07B-638D7240868D%7D-Moy5xJBbG54c1HGaaKwRGyMrOfjTCm.png"
+                src="/annetec-light.svg"
                 alt="Annetec"
                 className="h-8"
               />

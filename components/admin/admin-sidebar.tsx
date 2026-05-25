@@ -62,7 +62,7 @@ export function AdminSidebar() {
           <Menu className="h-6 w-6" />
         </button>
         <img
-          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/%7B82016767-5B6D-4CD8-B07B-638D7240868D%7D-Moy5xJBbG54c1HGaaKwRGyMrOfjTCm.png"
+          src="/annetec.svg"
           alt="Annetec"
           className="h-8"
         />
@@ -93,7 +93,7 @@ export function AdminSidebar() {
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/10">
           <Link href="/admin">
             <img
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/%7B82016767-5B6D-4CD8-B07B-638D7240868D%7D-Moy5xJBbG54c1HGaaKwRGyMrOfjTCm.png"
+              src="/annetec-light.svg"
               alt="Annetec"
               className="h-8"
             />

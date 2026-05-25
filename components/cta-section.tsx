@@ -77,7 +77,7 @@ export function CTASection() {
             <Button
               size="lg"
               variant="ghost"
-              className="border border-white/50 text-white hover:bg-white/10 hover:border-white/80 text-lg px-8 py-6 hover:text-white transition-all duration-300"
+              className="!bg-transparent border border-white/40 !text-white hover:bg-white/10 hover:border-white/80 text-lg px-8 py-6 transition-all duration-300"
               asChild
             >
               <Link href="#empresarial">Plano Empresarial</Link>

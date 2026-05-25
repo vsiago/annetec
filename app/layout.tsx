@@ -11,12 +11,12 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Annetech | Plano de Assistência Familiar - Saúde & Bem-Estar',
-  description: 'A Annetech é o primeiro Plano de Assistência com benefícios incríveis para cuidar da Saúde & Bem-Estar de toda a família. Consultas, odontologia, farmácia e muito mais por apenas R$ 14,90/mês.',
+  title: 'Annetec | Plano de Assistência Familiar - Saúde & Bem-Estar',
+  description: 'A Annetec é o primeiro Plano de Assistência com benefícios incríveis para cuidar da Saúde & Bem-Estar de toda a família. Consultas, odontologia, farmácia e muito mais por apenas R$ 14,90/mês.',
   keywords: ['plano de assistência', 'saúde', 'bem-estar', 'clube de benefícios', 'odontologia', 'consultas médicas', 'teleorientação'],
   authors: [{ name: 'ANNETEC' }],
   openGraph: {
-    title: 'Annetech | Plano de Assistência Familiar',
+    title: 'Annetec | Plano de Assistência Familiar',
     description: 'Benefícios incríveis para cuidar da Saúde & Bem-Estar de toda a família.',
     type: 'website',
     locale: 'pt_BR',

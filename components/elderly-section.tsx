@@ -7,12 +7,12 @@ const elderlyBenefits = [
   {
     icon: UserCheck,
     title: "Consulta Geriátrica Grátis Anual",
-    description: "Queremos que as pessoas mais maduras, com 50 anos de idade ou mais, não deixem de ir ao médico pelo menos uma vez ao ano. E para não ter mais desculpas, a Annetech oferece uma consulta anual, sem qualquer custo para o associado.",
+    description: "Queremos que as pessoas mais maduras, com 50 anos de idade ou mais, não deixem de ir ao médico pelo menos uma vez ao ano. E para não ter mais desculpas, a Annetec oferece uma consulta anual, sem qualquer custo para o associado.",
   },
   {
     icon: Gift,
     title: "Cesta Natalidade para Netos",
-    description: "No caso de nascimento de netos de associados da Annetech, independentemente de os pais serem ou não membros também, filho e mamãe ganham uma cesta com produtos para ambos.",
+    description: "No caso de nascimento de netos de associados da Annetec, independentemente de os pais serem ou não membros também, filho e mamãe ganham uma cesta com produtos para ambos.",
   },
   {
     icon: Phone,
@@ -46,7 +46,7 @@ export function ElderlySection() {
             <span className="text-[#e5375b]">Nós valorizamos sua experiência</span>
           </h2>
           <p className="text-lg text-white/80 max-w-3xl mx-auto">
-            Só na Annetech, a pessoa idosa tem um tratamento diferenciado, com benefícios 
+            Só na Annetec, a pessoa idosa tem um tratamento diferenciado, com benefícios 
             exclusivos para valorizar, incentivar e ajudar idosos e pessoas com mais de 50 anos de idade.
           </p>
         </motion.div>
@@ -97,7 +97,7 @@ export function ElderlySection() {
                 Sua maturidade, sua Saúde & Bem-Estar
               </h3>
               <p className="text-white/70">
-                A Annetech é o único Plano de Assistência a oferecer um conjunto de 
+                A Annetec é o único Plano de Assistência a oferecer um conjunto de 
                 vantagens, benefícios e coberturas voltadas completamente para esta faixa etária.
               </p>
             </div>
