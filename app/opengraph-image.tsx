@@ -8,7 +8,13 @@ export const contentType = 'image/png'
 
 export default function Image() {
   const logoPath = join(process.cwd(), 'public', 'annetec-light.svg')
-  const logoData = readFileSync(logoPath, 'utf8')
+  let logoData = readFileSync(logoPath, 'utf8')
+  
+  // Fix SVG for Satori/resvg by ensuring width and height are present
+  if (!logoData.includes('width=')) {
+    logoData = logoData.replace('<svg ', '<svg width="3558" height="982" ')
+  }
+  
   const logoDataUri = `data:image/svg+xml;base64,${Buffer.from(logoData).toString('base64')}`
 
   return new ImageResponse(
@@ -23,7 +29,7 @@ export default function Image() {
           justifyContent: 'center',
         }}
       >
-        <img src={logoDataUri} width="700" alt="Annetec Logo" />
+        <img src={logoDataUri} style={{ width: 700 }} alt="Annetec Logo" />
       </div>
     ),
     { ...size }
