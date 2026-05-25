@@ -30,7 +30,7 @@ export default function VendedorConfiguracoesPage() {
           <h1 className="text-2xl font-bold text-foreground">Minhas Configurações</h1>
           <p className="text-muted-foreground">Personalize seu perfil e suas preferências de notificações</p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving} className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+        <Button onClick={handleSave} disabled={isSaving} className="bg-[#e84364] hover:bg-[#d42d50] text-white">
           <Save className="h-4 w-4 mr-2" />
           {isSaving ? 'Salvando...' : 'Salvar Preferências'}
         </Button>
@@ -42,7 +42,7 @@ export default function VendedorConfiguracoesPage() {
           <Card className="border-0 shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5 text-[#1c3670]" />
+                <User className="h-5 w-5 text-[#26365f]" />
                 Dados do Perfil
               </CardTitle>
               <CardDescription>Informações públicas exibidas para seus clientes</CardDescription>
@@ -74,7 +74,7 @@ export default function VendedorConfiguracoesPage() {
           <Card className="border-0 shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-[#e5375b]" />
+                <Bell className="h-5 w-5 text-[#e84364]" />
                 Notificações e Alertas
               </CardTitle>
               <CardDescription>Como você deseja ser avisado sobre seus leads</CardDescription>

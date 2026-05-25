@@ -69,8 +69,8 @@ export default function MetasPage() {
                 <p className="text-sm text-muted-foreground">Meta do Mês</p>
                 <p className="text-2xl font-bold mt-1">R$ {(seller?.salesGoal || 0).toLocaleString('pt-BR')}</p>
               </div>
-              <div className="p-3 rounded-lg bg-[#1c3670]/10">
-                <Target className="h-5 w-5 text-[#1c3670]" />
+              <div className="p-3 rounded-lg bg-[#26365f]/10">
+                <Target className="h-5 w-5 text-[#26365f]" />
               </div>
             </div>
           </CardContent>
@@ -99,8 +99,8 @@ export default function MetasPage() {
                 <p className="text-2xl font-bold mt-1">R$ {totalCommission.toLocaleString('pt-BR')}</p>
                 <p className="text-sm text-muted-foreground mt-1">{((seller?.commissionRate || 0) * 100).toFixed(0)}% das vendas</p>
               </div>
-              <div className="p-3 rounded-lg bg-[#e5375b]/10">
-                <DollarSign className="h-5 w-5 text-[#e5375b]" />
+              <div className="p-3 rounded-lg bg-[#e84364]/10">
+                <DollarSign className="h-5 w-5 text-[#e84364]" />
               </div>
             </div>
           </CardContent>
@@ -136,7 +136,7 @@ export default function MetasPage() {
                 <span className="text-sm text-muted-foreground">
                   R$ {(seller?.totalSales || 0).toLocaleString('pt-BR')} de R$ {(seller?.salesGoal || 0).toLocaleString('pt-BR')}
                 </span>
-                <span className={`text-sm font-bold ${progressPercent >= 100 ? 'text-green-500' : 'text-[#1c3670]'}`}>
+                <span className={`text-sm font-bold ${progressPercent >= 100 ? 'text-green-500' : 'text-[#26365f]'}`}>
                   {progressPercent.toFixed(1)}%
                 </span>
               </div>
@@ -145,7 +145,7 @@ export default function MetasPage() {
                   className="h-full rounded-full transition-all duration-500 flex items-center justify-end pr-2"
                   style={{
                     width: `${progressPercent}%`,
-                    backgroundColor: progressPercent >= 100 ? '#22c55e' : '#1c3670',
+                    backgroundColor: progressPercent >= 100 ? '#22c55e' : '#26365f',
                   }}
                 >
                   {progressPercent >= 15 && (
@@ -161,8 +161,8 @@ export default function MetasPage() {
             {remaining > 0 && (
               <div className="p-4 bg-muted/50 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#1c3670]/10">
-                    <Target className="h-5 w-5 text-[#1c3670]" />
+                  <div className="p-2 rounded-lg bg-[#26365f]/10">
+                    <Target className="h-5 w-5 text-[#26365f]" />
                   </div>
                   <div>
                     <p className="font-medium">Meta Diária Sugerida</p>
@@ -217,7 +217,7 @@ export default function MetasPage() {
                     }}
                   />
                   <Bar dataKey="meta" fill="#94a3b8" radius={[4, 4, 0, 0]} name="Meta" />
-                  <Bar dataKey="realizado" fill="#1c3670" radius={[4, 4, 0, 0]} name="Realizado" />
+                  <Bar dataKey="realizado" fill="#26365f" radius={[4, 4, 0, 0]} name="Realizado" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -248,9 +248,9 @@ export default function MetasPage() {
                   <Line
                     type="monotone"
                     dataKey="comissao"
-                    stroke="#e5375b"
+                    stroke="#e84364"
                     strokeWidth={2}
-                    dot={{ fill: '#e5375b' }}
+                    dot={{ fill: '#e84364' }}
                   />
                 </LineChart>
               </ResponsiveContainer>

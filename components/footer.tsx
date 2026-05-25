@@ -33,7 +33,7 @@ const socialLinks = [
 
 export function Footer() {
   return (
-    <footer className="bg-[#1c3670] text-white">
+    <footer className="bg-[#26365f] text-white">
       {/* Main Footer */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-12">
@@ -51,14 +51,14 @@ export function Footer() {
             <div className="space-y-3">
               <a 
                 href="mailto:contato@annetec.com.br" 
-                className="flex items-center gap-3 text-white/70 hover:text-[#e5375b] transition-colors"
+                className="flex items-center gap-3 text-white/70 hover:text-[#e84364] transition-colors"
               >
                 <Mail size={18} />
                 <span>contato@annetec.com.br</span>
               </a>
               <a 
                 href="tel:08000000000" 
-                className="flex items-center gap-3 text-white/70 hover:text-[#e5375b] transition-colors"
+                className="flex items-center gap-3 text-white/70 hover:text-[#e84364] transition-colors"
               >
                 <Phone size={18} />
                 <span>0800 000 0000</span>
@@ -72,7 +72,7 @@ export function Footer() {
                   key={index}
                   href={social.href}
                   aria-label={social.label}
-                  className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-[#e5375b] transition-colors"
+                  className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-[#e84364] transition-colors"
                 >
                   <social.icon size={20} />
                 </a>
@@ -88,7 +88,7 @@ export function Footer() {
                 <li key={index}>
                   <Link 
                     href={link.href}
-                    className="text-white/70 hover:text-[#e5375b] transition-colors"
+                    className="text-white/70 hover:text-[#e84364] transition-colors"
                   >
                     {link.label}
                   </Link>
@@ -105,7 +105,7 @@ export function Footer() {
                 <li key={index}>
                   <Link 
                     href={link.href}
-                    className="text-white/70 hover:text-[#e5375b] transition-colors"
+                    className="text-white/70 hover:text-[#e84364] transition-colors"
                   >
                     {link.label}
                   </Link>
@@ -122,7 +122,7 @@ export function Footer() {
                 <li key={index}>
                   <Link 
                     href={link.href}
-                    className="text-white/70 hover:text-[#e5375b] transition-colors"
+                    className="text-white/70 hover:text-[#e84364] transition-colors"
                   >
                     {link.label}
                   </Link>
@@ -146,7 +146,7 @@ export function Footer() {
                 href="https://annetec.com.br" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-[#e5375b] hover:underline"
+                className="text-[#e84364] hover:underline"
               >
                 ANNETEC
               </a>

@@ -136,8 +136,8 @@ export default function AdminDashboard() {
                       </span>
                     </div>
                   </div>
-                  <div className="p-3 rounded-lg bg-[#1c3670]/10">
-                    <Icon className="h-5 w-5 text-[#1c3670]" />
+                  <div className="p-3 rounded-lg bg-[#26365f]/10">
+                    <Icon className="h-5 w-5 text-[#26365f]" />
                   </div>
                 </div>
               </CardContent>
@@ -167,14 +167,14 @@ export default function AdminDashboard() {
                       backgroundColor: '#ffffff',
                       border: '1px solid #e2e8f0',
                       borderRadius: '12px',
-                      boxShadow: '0 10px 15px -3px rgba(28,54,112,0.1)',
+                      boxShadow: '0 10px 15px -3px rgba(38,54,95,0.1)',
                       padding: '12px',
                     }}
-                    itemStyle={{ color: '#1c3670', fontWeight: 'bold', fontSize: '14px' }}
+                    itemStyle={{ color: '#26365f', fontWeight: 'bold', fontSize: '14px' }}
                     labelStyle={{ color: '#64748b', fontWeight: '600', fontSize: '13px', marginBottom: '4px' }}
-                    cursor={{ fill: 'rgba(28, 54, 112, 0.05)' }}
+                    cursor={{ fill: 'rgba(38, 54, 95, 0.05)' }}
                   />
-                  <Bar dataKey="vendas" fill="#1c3670" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="vendas" fill="#26365f" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -210,7 +210,7 @@ export default function AdminDashboard() {
                       backgroundColor: '#ffffff',
                       border: '1px solid #e2e8f0',
                       borderRadius: '12px',
-                      boxShadow: '0 10px 15px -3px rgba(28,54,112,0.1)',
+                      boxShadow: '0 10px 15px -3px rgba(38,54,95,0.1)',
                       padding: '12px',
                     }}
                     itemStyle={{ fontWeight: 'bold', fontSize: '14px' }}
@@ -245,7 +245,7 @@ export default function AdminDashboard() {
           <div className="space-y-4">
             {topSellers.map((seller, index) => (
               <div key={index} className="flex items-center gap-4">
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#1c3670] text-white text-sm font-bold">
+                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#26365f] text-white text-sm font-bold">
                   {index + 1}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -260,14 +260,14 @@ export default function AdminDashboard() {
                       className="h-full rounded-full transition-all"
                       style={{
                         width: `${Math.min(seller.percentual, 100)}%`,
-                        backgroundColor: seller.percentual >= 100 ? '#22c55e' : '#1c3670',
+                        backgroundColor: seller.percentual >= 100 ? '#22c55e' : '#26365f',
                       }}
                     />
                   </div>
                 </div>
                 <span
                   className={`text-sm font-medium ${
-                    seller.percentual >= 100 ? 'text-green-500' : 'text-[#1c3670]'
+                    seller.percentual >= 100 ? 'text-green-500' : 'text-[#26365f]'
                   }`}
                 >
                   {seller.percentual}%

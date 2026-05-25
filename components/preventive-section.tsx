@@ -10,21 +10,21 @@ const preventiveConsultations = [
     title: "Consulta Geriátrica e Gerontológica Grátis",
     description: "Na Annetec você que tem mais que 50 anos é super valorizado. Único Plano de Assistência a oferecer uma consulta Geriátrica e Gerontológica anual para você ficar em dia com a sua saúde global.",
     highlight: "Para 50+ anos",
-    color: "#1c3670",
+    color: "#26365f",
   },
   {
     icon: Heart,
     title: "Para as Mulheres, Prevenção é Fundamental",
     description: "Na Annetec cada Associada têm direito a uma consulta Ginecológica anual gratuita. Assim, você se previne e se mantém ativa para curtir a vida com Saúde & Bem-Estar.",
     highlight: "Ginecologia anual grátis",
-    color: "#e5375b",
+    color: "#e84364",
   },
   {
     icon: Baby,
     title: "As Crianças Também Têm Atenção Especial",
     description: "Queremos que seu filho também se previna de riscos e doenças típicas desta faixa etária. Por isso, Associados dependentes com menos que 12 anos têm direito à uma consulta Pediátrica grátis por ano de contrato.",
     highlight: "Pediatria até 12 anos",
-    color: "#1c3670",
+    color: "#26365f",
   },
 ]
 
@@ -32,7 +32,7 @@ export function PreventiveSection() {
   return (
     <section id="preventivas" className="py-20 lg:py-32 bg-white relative overflow-hidden">
       {/* Background Elements */}
-      <div className="absolute top-1/2 right-0 w-96 h-96 bg-[#e5375b]/5 rounded-full blur-3xl -translate-y-1/2" />
+      <div className="absolute top-1/2 right-0 w-96 h-96 bg-[#e84364]/5 rounded-full blur-3xl -translate-y-1/2" />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Section Header */}
@@ -43,13 +43,13 @@ export function PreventiveSection() {
           transition={{ duration: 0.6 }}
           className="text-center mb-16"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#1c3670]/10 rounded-full text-[#1c3670] text-sm font-medium mb-6">
-            <CheckCircle size={16} className="text-[#e5375b]" />
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#26365f]/10 rounded-full text-[#26365f] text-sm font-medium mb-6">
+            <CheckCircle size={16} className="text-[#e84364]" />
             Prevenção
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#1c3670] mb-6 text-balance">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#26365f] mb-6 text-balance">
             Consultas Médicas Preventivas: um incentivo à mais para{" "}
-            <span className="text-[#e5375b]">cuidar da sua saúde</span>
+            <span className="text-[#e84364]">cuidar da sua saúde</span>
           </h2>
         </motion.div>
 
@@ -85,7 +85,7 @@ export function PreventiveSection() {
                 </div>
 
                 {/* Content */}
-                <h3 className="text-xl font-bold text-[#1c3670] mb-4 leading-tight">
+                <h3 className="text-xl font-bold text-[#26365f] mb-4 leading-tight">
                   {item.title}
                 </h3>
                 <p className="text-muted-foreground leading-relaxed">
@@ -106,7 +106,7 @@ export function PreventiveSection() {
         >
           <Link 
             href="#regulamento-preventivas" 
-            className="inline-flex items-center gap-2 text-[#1c3670] hover:text-[#e5375b] font-medium transition-colors"
+            className="inline-flex items-center gap-2 text-[#26365f] hover:text-[#e84364] font-medium transition-colors"
           >
             Acesse aqui o Regulamento/Condições Gerais deste benefício
             <ArrowRight size={18} />

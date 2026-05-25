@@ -175,7 +175,7 @@ export default function VendedorClientesPage() {
           <h1 className="text-2xl font-bold text-foreground">Meus Clientes</h1>
           <p className="text-muted-foreground">Consulte e gerencie os clientes cadastrados por você</p>
         </div>
-        <Button onClick={() => setIsAddOpen(true)} className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+        <Button onClick={() => setIsAddOpen(true)} className="bg-[#e84364] hover:bg-[#d42d50] text-white">
           <Plus className="h-4 w-4 mr-2" />
           Novo Cliente
         </Button>
@@ -233,13 +233,13 @@ export default function VendedorClientesPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total em Vendas</p>
-                <p className="text-2xl font-bold mt-1 text-[#e5375b]">
+                <p className="text-2xl font-bold mt-1 text-[#e84364]">
                   R$ {totalSalesValue.toLocaleString('pt-BR')}
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">Volume acumulado</p>
               </div>
-              <div className="p-3 rounded-lg bg-[#e5375b]/10">
-                <DollarSign className="h-5 w-5 text-[#e5375b]" />
+              <div className="p-3 rounded-lg bg-[#e84364]/10">
+                <DollarSign className="h-5 w-5 text-[#e84364]" />
               </div>
             </div>
           </CardContent>
@@ -311,8 +311,8 @@ export default function VendedorClientesPage() {
                   <tr key={client.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10 bg-[#1c3670]">
-                          <AvatarFallback className="bg-[#1c3670] text-white text-sm">
+                        <Avatar className="h-10 w-10 bg-[#26365f]">
+                          <AvatarFallback className="bg-[#26365f] text-white text-sm">
                             {getInitials(client.name)}
                           </AvatarFallback>
                         </Avatar>
@@ -345,7 +345,7 @@ export default function VendedorClientesPage() {
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 text-sm">
-                        <CreditCard className="h-4 w-4 text-[#1c3670] shrink-0" />
+                        <CreditCard className="h-4 w-4 text-[#26365f] shrink-0" />
                         <span className="font-mono">{client.cardNumber}</span>
                       </div>
                     </td>
@@ -492,7 +492,7 @@ export default function VendedorClientesPage() {
               <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+              <Button type="submit" className="bg-[#e84364] hover:bg-[#d42d50] text-white">
                 Cadastrar Cliente
               </Button>
             </DialogFooter>
@@ -507,8 +507,8 @@ export default function VendedorClientesPage() {
             <div>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10 bg-[#1c3670]">
-                    <AvatarFallback className="bg-[#1c3670] text-white">
+                  <Avatar className="h-10 w-10 bg-[#26365f]">
+                    <AvatarFallback className="bg-[#26365f] text-white">
                       {getInitials(selectedClient.name)}
                     </AvatarFallback>
                   </Avatar>
@@ -548,7 +548,7 @@ export default function VendedorClientesPage() {
                 <div className="grid grid-cols-2 gap-4 border-b border-border pb-3">
                   <div>
                     <span className="text-xs text-muted-foreground block">Plano Contratado</span>
-                    <span className="font-medium text-[#1c3670]">{selectedClient.plan}</span>
+                    <span className="font-medium text-[#26365f]">{selectedClient.plan}</span>
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block">Número da Carteirinha</span>
@@ -581,7 +581,7 @@ export default function VendedorClientesPage() {
               </div>
 
               <DialogFooter>
-                <Button onClick={() => setIsDetailsOpen(false)} className="bg-[#1c3670] hover:bg-[#152a5c] text-white">
+                <Button onClick={() => setIsDetailsOpen(false)} className="bg-[#26365f] hover:bg-[#152a5c] text-white">
                   Fechar
                 </Button>
               </DialogFooter>

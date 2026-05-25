@@ -39,8 +39,8 @@ const monthlyData = [
 ]
 
 const planDistribution = [
-  { name: 'Individual', value: 45, color: '#1c3670' },
-  { name: 'Família', value: 35, color: '#e5375b' },
+  { name: 'Individual', value: 45, color: '#26365f' },
+  { name: 'Família', value: 35, color: '#e84364' },
   { name: 'Empresarial', value: 20, color: '#22c55e' },
 ]
 
@@ -151,8 +151,8 @@ export default function RelatoriosPage() {
                   <Area
                     type="monotone"
                     dataKey="vendas"
-                    stroke="#1c3670"
-                    fill="#1c3670"
+                    stroke="#26365f"
+                    fill="#26365f"
                     fillOpacity={0.1}
                   />
                 </AreaChart>
@@ -263,7 +263,7 @@ export default function RelatoriosPage() {
                       borderRadius: '8px',
                     }}
                   />
-                  <Bar dataKey="leads" fill="#e5375b" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="leads" fill="#e84364" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

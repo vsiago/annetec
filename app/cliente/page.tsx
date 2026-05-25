@@ -46,7 +46,7 @@ export default function ClientDashboard() {
             Bem-vindo ao seu painel Annetec
           </p>
         </div>
-        <Button className="bg-[#e5375b] hover:bg-[#d42d50] text-white" asChild>
+        <Button className="bg-[#e84364] hover:bg-[#d42d50] text-white" asChild>
           <Link href="/cliente/carteirinha">
             <CreditCard className="h-4 w-4 mr-2" />
             Ver Carteirinha
@@ -55,7 +55,7 @@ export default function ClientDashboard() {
       </div>
 
       {/* Status Card */}
-      <Card className="border-0 shadow-sm bg-gradient-to-r from-[#1c3670] to-[#2a4a8f] text-white">
+      <Card className="border-0 shadow-sm bg-gradient-to-r from-[#26365f] to-[#2a4a8f] text-white">
         <CardContent className="p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -96,8 +96,8 @@ export default function ClientDashboard() {
         <Card className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer" asChild>
           <Link href="/cliente/carteirinha">
             <CardContent className="p-6 flex items-center gap-4">
-              <div className="p-3 rounded-lg bg-[#1c3670]/10">
-                <CreditCard className="h-6 w-6 text-[#1c3670]" />
+              <div className="p-3 rounded-lg bg-[#26365f]/10">
+                <CreditCard className="h-6 w-6 text-[#26365f]" />
               </div>
               <div>
                 <p className="font-medium">Carteirinha</p>
@@ -110,8 +110,8 @@ export default function ClientDashboard() {
         <Card className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer" asChild>
           <Link href="/cliente/dependentes">
             <CardContent className="p-6 flex items-center gap-4">
-              <div className="p-3 rounded-lg bg-[#e5375b]/10">
-                <Users className="h-6 w-6 text-[#e5375b]" />
+              <div className="p-3 rounded-lg bg-[#e84364]/10">
+                <Users className="h-6 w-6 text-[#e84364]" />
               </div>
               <div>
                 <p className="font-medium">Dependentes</p>
@@ -163,11 +163,11 @@ export default function ClientDashboard() {
               return (
                 <div
                   key={benefit.id}
-                  className="p-4 rounded-lg border border-border hover:border-[#1c3670]/30 transition-colors"
+                  className="p-4 rounded-lg border border-border hover:border-[#26365f]/30 transition-colors"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-[#1c3670]/10">
-                      <Icon className="h-5 w-5 text-[#1c3670]" />
+                    <div className="p-2 rounded-lg bg-[#26365f]/10">
+                      <Icon className="h-5 w-5 text-[#26365f]" />
                     </div>
                     <div className="flex-1">
                       <p className="font-medium text-sm">{benefit.name}</p>
@@ -189,7 +189,7 @@ export default function ClientDashboard() {
       </Card>
 
       {/* Teleorientation */}
-      <Card className="border-0 shadow-sm bg-gradient-to-r from-[#e5375b] to-[#f05a7a] text-white">
+      <Card className="border-0 shadow-sm bg-gradient-to-r from-[#e84364] to-[#f05a7a] text-white">
         <CardContent className="p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-4">

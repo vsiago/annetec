@@ -79,7 +79,7 @@ export default function DependentesPage() {
         </div>
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+            <Button className="bg-[#e84364] hover:bg-[#d42d50] text-white">
               <Plus className="h-4 w-4 mr-2" />
               Adicionar Dependente
             </Button>
@@ -125,7 +125,7 @@ export default function DependentesPage() {
                 <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+                <Button type="submit" className="bg-[#e84364] hover:bg-[#d42d50] text-white">
                   Adicionar
                 </Button>
               </div>
@@ -135,7 +135,7 @@ export default function DependentesPage() {
       </div>
 
       {/* Summary Card */}
-      <Card className="border-0 shadow-sm bg-gradient-to-r from-[#1c3670] to-[#2a4a8f] text-white">
+      <Card className="border-0 shadow-sm bg-gradient-to-r from-[#26365f] to-[#2a4a8f] text-white">
         <CardContent className="p-6">
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-full bg-white/10">
@@ -160,8 +160,8 @@ export default function DependentesPage() {
             <Card key={dependent.id} className="border-0 shadow-sm">
               <CardContent className="p-6">
                 <div className="flex items-start gap-4">
-                  <Avatar className="h-14 w-14 bg-[#1c3670]">
-                    <AvatarFallback className="bg-[#1c3670] text-white">
+                  <Avatar className="h-14 w-14 bg-[#26365f]">
+                    <AvatarFallback className="bg-[#26365f] text-white">
                       {getInitials(dependent.name)}
                     </AvatarFallback>
                   </Avatar>
@@ -222,7 +222,7 @@ export default function DependentesPage() {
             <p className="text-muted-foreground mb-4">
               Adicione seus dependentes para que eles também possam usufruir dos benefícios do plano.
             </p>
-            <Button className="bg-[#e5375b] hover:bg-[#d42d50] text-white" onClick={() => setIsAddOpen(true)}>
+            <Button className="bg-[#e84364] hover:bg-[#d42d50] text-white" onClick={() => setIsAddOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Adicionar Dependente
             </Button>
@@ -238,19 +238,19 @@ export default function DependentesPage() {
         <CardContent>
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#1c3670] mt-1.5 flex-shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#26365f] mt-1.5 flex-shrink-0" />
               Dependentes têm acesso a todos os benefícios do plano
             </li>
             <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#1c3670] mt-1.5 flex-shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#26365f] mt-1.5 flex-shrink-0" />
               Cada dependente receberá sua própria carteirinha digital
             </li>
             <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#1c3670] mt-1.5 flex-shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#26365f] mt-1.5 flex-shrink-0" />
               A inclusão de dependentes pode alterar o valor mensal do plano
             </li>
             <li className="flex items-start gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#1c3670] mt-1.5 flex-shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#26365f] mt-1.5 flex-shrink-0" />
               Para dependentes menores de idade, o titular é responsável pelo uso dos benefícios
             </li>
           </ul>

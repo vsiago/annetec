@@ -11,7 +11,7 @@ const teleservices = [
     description: "Uma equipe de profissionais especializados estará pronta para tirar suas dúvidas, passar orientações seguras sobre a sua saúde e transmitir calma e tranquilidade para você.",
     phone: "0800 000 0000",
     availability: "24 horas por dia",
-    color: "#1c3670",
+    color: "#26365f",
   },
   {
     icon: UserCheck,
@@ -19,7 +19,7 @@ const teleservices = [
     description: "Pessoas com 50 anos de idade ou mais e os idosos, podem agendar uma orientação geral sobre cuidados especializados de Gerontologia e outros aspectos sobre prevenção e qualidade de vida.",
     phone: "0800 000 0000",
     availability: "Horário comercial",
-    color: "#e5375b",
+    color: "#e84364",
   },
 ]
 
@@ -38,13 +38,13 @@ export function TeleorientationSection() {
           transition={{ duration: 0.6 }}
           className="text-center mb-16"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#1c3670]/10 rounded-full text-[#1c3670] text-sm font-medium mb-6">
-            <Phone size={16} className="text-[#e5375b]" />
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#26365f]/10 rounded-full text-[#26365f] text-sm font-medium mb-6">
+            <Phone size={16} className="text-[#e84364]" />
             Teleorientação em Saúde
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#1c3670] mb-6 text-balance">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#26365f] mb-6 text-balance">
             Fique tranquilo que tem{" "}
-            <span className="text-[#e5375b]">profissionais de saúde 24 horas</span> por dia
+            <span className="text-[#e84364]">profissionais de saúde 24 horas</span> por dia
           </h2>
           <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
             Basta ligar para o telefone indicado que uma equipe de profissionais especializados 
@@ -91,7 +91,7 @@ export function TeleorientationSection() {
                 </div>
 
                 {/* Content */}
-                <h3 className="text-xl font-bold text-[#1c3670] mb-4">
+                <h3 className="text-xl font-bold text-[#26365f] mb-4">
                   {service.title}
                 </h3>
                 <p className="text-muted-foreground leading-relaxed">
@@ -108,7 +108,7 @@ export function TeleorientationSection() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6, delay: 0.4 }}
-          className="bg-gradient-to-r from-[#1c3670] to-[#2d4a8c] rounded-3xl p-8 lg:p-12"
+          className="bg-gradient-to-r from-[#26365f] to-[#3a4e82] rounded-3xl p-8 lg:p-12"
         >
           <div className="grid md:grid-cols-3 gap-8 text-center">
             {[

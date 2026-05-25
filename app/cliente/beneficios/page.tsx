@@ -66,7 +66,7 @@ export default function BeneficiosPage() {
       {/* Highlight Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Teleorientation */}
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-[#1c3670] to-[#2a4a8f] text-white">
+        <Card className="border-0 shadow-sm bg-gradient-to-br from-[#26365f] to-[#2a4a8f] text-white">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
               <div className="p-3 rounded-lg bg-white/10">
@@ -84,7 +84,7 @@ export default function BeneficiosPage() {
         </Card>
 
         {/* Pharmacy */}
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-[#e5375b] to-[#f05a7a] text-white">
+        <Card className="border-0 shadow-sm bg-gradient-to-br from-[#e84364] to-[#f05a7a] text-white">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
               <div className="p-3 rounded-lg bg-white/10">
@@ -133,10 +133,10 @@ export default function BeneficiosPage() {
             {healthServices.map((service, index) => {
               const Icon = service.icon
               return (
-                <div key={index} className="p-4 rounded-lg border border-border hover:border-[#1c3670]/30 transition-colors">
+                <div key={index} className="p-4 rounded-lg border border-border hover:border-[#26365f]/30 transition-colors">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 rounded-lg bg-[#1c3670]/10">
-                      <Icon className="h-5 w-5 text-[#1c3670]" />
+                    <div className="p-2 rounded-lg bg-[#26365f]/10">
+                      <Icon className="h-5 w-5 text-[#26365f]" />
                     </div>
                     <h4 className="font-medium">{service.name}</h4>
                   </div>
@@ -160,8 +160,8 @@ export default function BeneficiosPage() {
               const Icon = categoryIcons[benefit.category] || Gift
               return (
                 <div key={benefit.id} className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
-                  <div className="p-2 rounded-lg bg-[#1c3670]/10 flex-shrink-0">
-                    <Icon className="h-5 w-5 text-[#1c3670]" />
+                  <div className="p-2 rounded-lg bg-[#26365f]/10 flex-shrink-0">
+                    <Icon className="h-5 w-5 text-[#26365f]" />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-start justify-between">
@@ -193,12 +193,12 @@ export default function BeneficiosPage() {
             {discountPartners.map((partner, index) => {
               const Icon = partner.icon
               return (
-                <div key={index} className="p-4 rounded-lg border border-border text-center hover:border-[#e5375b]/30 transition-colors">
-                  <div className="inline-flex items-center justify-center p-3 rounded-full bg-[#e5375b]/10 mb-3">
-                    <Icon className="h-6 w-6 text-[#e5375b]" />
+                <div key={index} className="p-4 rounded-lg border border-border text-center hover:border-[#e84364]/30 transition-colors">
+                  <div className="inline-flex items-center justify-center p-3 rounded-full bg-[#e84364]/10 mb-3">
+                    <Icon className="h-6 w-6 text-[#e84364]" />
                   </div>
                   <h4 className="font-medium">{partner.name}</h4>
-                  <p className="text-2xl font-bold text-[#e5375b] mt-1">{partner.discount}</p>
+                  <p className="text-2xl font-bold text-[#e84364] mt-1">{partner.discount}</p>
                   <p className="text-xs text-muted-foreground">de desconto</p>
                 </div>
               )
@@ -215,8 +215,8 @@ export default function BeneficiosPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-muted/50 rounded-lg">
-            <div className="p-3 rounded-lg bg-[#1c3670]/10">
-              <Shield className="h-8 w-8 text-[#1c3670]" />
+            <div className="p-3 rounded-lg bg-[#26365f]/10">
+              <Shield className="h-8 w-8 text-[#26365f]" />
             </div>
             <div className="flex-1">
               <h4 className="font-medium text-lg">Reembolso de até R$ 3.000</h4>
@@ -226,7 +226,7 @@ export default function BeneficiosPage() {
               </p>
             </div>
             <div className="text-center md:text-right">
-              <p className="text-3xl font-bold text-[#1c3670]">R$ 3.000</p>
+              <p className="text-3xl font-bold text-[#26365f]">R$ 3.000</p>
               <p className="text-sm text-muted-foreground">reembolso máximo</p>
             </div>
           </div>

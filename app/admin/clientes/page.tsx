@@ -64,7 +64,7 @@ export default function ClientesPage() {
           <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
           <p className="text-muted-foreground">Gerencie os associados da Annetec</p>
         </div>
-        <Button className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+        <Button className="bg-[#e84364] hover:bg-[#d42d50] text-white">
           <Plus className="h-4 w-4 mr-2" />
           Novo Cliente
         </Button>
@@ -106,8 +106,8 @@ export default function ClientesPage() {
                   <tr key={client.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10 bg-[#1c3670]">
-                          <AvatarFallback className="bg-[#1c3670] text-white text-sm">
+                        <Avatar className="h-10 w-10 bg-[#26365f]">
+                          <AvatarFallback className="bg-[#26365f] text-white text-sm">
                             {getInitials(client.name)}
                           </AvatarFallback>
                         </Avatar>
@@ -140,7 +140,7 @@ export default function ClientesPage() {
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 text-sm">
-                        <CreditCard className="h-4 w-4 text-[#1c3670]" />
+                        <CreditCard className="h-4 w-4 text-[#26365f]" />
                         <span className="font-mono">{client.cardNumber}</span>
                       </div>
                     </td>

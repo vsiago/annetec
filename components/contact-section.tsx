@@ -33,8 +33,8 @@ export function ContactSection() {
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
           >
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#1c3670] mb-6 text-balance">
-              Fale <span className="text-[#e5375b]">Conosco</span>
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#26365f] mb-6 text-balance">
+              Fale <span className="text-[#e84364]">Conosco</span>
             </h2>
             <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
               Preencha o formulário ao lado, ou mande um e-mail diretamente para:
@@ -42,7 +42,7 @@ export function ContactSection() {
 
             <a 
               href="mailto:contato@annetec.com.br"
-              className="inline-flex items-center gap-3 p-4 bg-[#1c3670] rounded-xl text-white hover:bg-[#152a5c] transition-colors mb-8"
+              className="inline-flex items-center gap-3 p-4 bg-[#26365f] rounded-xl text-white hover:bg-[#152a5c] transition-colors mb-8"
             >
               <Mail size={24} />
               <span className="font-medium">contato@annetec.com.br</span>
@@ -50,10 +50,10 @@ export function ContactSection() {
 
             {/* What We Are */}
             <div className="p-6 bg-white rounded-2xl shadow-lg border border-border/50">
-              <h3 className="font-bold text-[#1c3670] mb-3">O que somos</h3>
+              <h3 className="font-bold text-[#26365f] mb-3">O que somos</h3>
               <p className="text-muted-foreground leading-relaxed">
-                A Annetec é um <strong className="text-[#1c3670]">Plano de Assistência</strong> e não um plano de saúde. 
-                É uma <strong className="text-[#e5375b]">&quot;Assist Tech&quot;</strong>, focada em múltiplos benefícios para 
+                A Annetec é um <strong className="text-[#26365f]">Plano de Assistência</strong> e não um plano de saúde. 
+                É uma <strong className="text-[#e84364]">&quot;Assist Tech&quot;</strong>, focada em múltiplos benefícios para 
                 melhorar a Saúde & Bem-Estar dos seus associados.
               </p>
             </div>
@@ -72,13 +72,13 @@ export function ContactSection() {
                   <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-4">
                     <CheckCircle size={32} className="text-green-600" />
                   </div>
-                  <h3 className="text-xl font-bold text-[#1c3670] mb-2">Mensagem Enviada!</h3>
+                  <h3 className="text-xl font-bold text-[#26365f] mb-2">Mensagem Enviada!</h3>
                   <p className="text-muted-foreground">Entraremos em contato em breve.</p>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div>
-                    <label htmlFor="name" className="block text-sm font-medium text-[#1c3670] mb-2">
+                    <label htmlFor="name" className="block text-sm font-medium text-[#26365f] mb-2">
                       Nome completo
                     </label>
                     <Input
@@ -93,7 +93,7 @@ export function ContactSection() {
                   </div>
 
                   <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-[#1c3670] mb-2">
+                    <label htmlFor="email" className="block text-sm font-medium text-[#26365f] mb-2">
                       E-mail
                     </label>
                     <Input
@@ -108,7 +108,7 @@ export function ContactSection() {
                   </div>
 
                   <div>
-                    <label htmlFor="phone" className="block text-sm font-medium text-[#1c3670] mb-2">
+                    <label htmlFor="phone" className="block text-sm font-medium text-[#26365f] mb-2">
                       Telefone
                     </label>
                     <Input
@@ -122,7 +122,7 @@ export function ContactSection() {
                   </div>
 
                   <div>
-                    <label htmlFor="message" className="block text-sm font-medium text-[#1c3670] mb-2">
+                    <label htmlFor="message" className="block text-sm font-medium text-[#26365f] mb-2">
                       Mensagem
                     </label>
                     <textarea
@@ -139,7 +139,7 @@ export function ContactSection() {
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full bg-[#e5375b] hover:bg-[#d12d4f] text-white h-14"
+                    className="w-full bg-[#e84364] hover:bg-[#d12d4f] text-white h-14"
                   >
                     <Send size={18} className="mr-2" />
                     Enviar Mensagem

@@ -59,7 +59,7 @@ export default function VendedoresPage() {
           <h1 className="text-2xl font-bold text-foreground">Vendedores</h1>
           <p className="text-muted-foreground">Gerencie a equipe de vendas</p>
         </div>
-        <Button className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+        <Button className="bg-[#e84364] hover:bg-[#d42d50] text-white">
           <Plus className="h-4 w-4 mr-2" />
           Novo Vendedor
         </Button>
@@ -90,8 +90,8 @@ export default function VendedoresPage() {
             <Card key={seller.id} className="border-0 shadow-sm">
               <CardContent className="p-6">
                 <div className="flex items-start gap-4">
-                  <Avatar className="h-14 w-14 bg-[#1c3670]">
-                    <AvatarFallback className="bg-[#1c3670] text-white text-lg">
+                  <Avatar className="h-14 w-14 bg-[#26365f]">
+                    <AvatarFallback className="bg-[#26365f] text-white text-lg">
                       {getInitials(seller.name)}
                     </AvatarFallback>
                   </Avatar>
@@ -141,7 +141,7 @@ export default function VendedoresPage() {
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-[#1c3670] rounded-full transition-all"
+                          className="h-full bg-[#26365f] rounded-full transition-all"
                           style={{ width: `${progressPercent}%` }}
                         />
                       </div>

@@ -135,7 +135,7 @@ export default function AdminUsuariosPage() {
           <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
           <p className="text-muted-foreground">Gerencie o acesso de todos os usuários do sistema</p>
         </div>
-        <Button onClick={() => setIsAddOpen(true)} className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+        <Button onClick={() => setIsAddOpen(true)} className="bg-[#e84364] hover:bg-[#d42d50] text-white">
           <Plus className="h-4 w-4 mr-2" />
           Novo Usuário
         </Button>
@@ -254,8 +254,8 @@ export default function AdminUsuariosPage() {
                   <tr key={user.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10 bg-[#1c3670]">
-                          <AvatarFallback className="bg-[#1c3670] text-white text-sm">
+                        <Avatar className="h-10 w-10 bg-[#26365f]">
+                          <AvatarFallback className="bg-[#26365f] text-white text-sm">
                             {getInitials(user.name)}
                           </AvatarFallback>
                         </Avatar>
@@ -383,7 +383,7 @@ export default function AdminUsuariosPage() {
               <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+              <Button type="submit" className="bg-[#e84364] hover:bg-[#d42d50] text-white">
                 Cadastrar Usuário
               </Button>
             </DialogFooter>
@@ -398,8 +398,8 @@ export default function AdminUsuariosPage() {
             <div>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10 bg-[#1c3670]">
-                    <AvatarFallback className="bg-[#1c3670] text-white">
+                  <Avatar className="h-10 w-10 bg-[#26365f]">
+                    <AvatarFallback className="bg-[#26365f] text-white">
                       {getInitials(selectedUser.name)}
                     </AvatarFallback>
                   </Avatar>
@@ -451,7 +451,7 @@ export default function AdminUsuariosPage() {
               </div>
 
               <DialogFooter>
-                <Button onClick={() => setIsDetailsOpen(false)} className="bg-[#1c3670] hover:bg-[#152a5c] text-white">
+                <Button onClick={() => setIsDetailsOpen(false)} className="bg-[#26365f] hover:bg-[#152a5c] text-white">
                   Fechar
                 </Button>
               </DialogFooter>

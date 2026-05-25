@@ -35,15 +35,15 @@ export default function LoginPage() {
   return (
     <div className="min-h-[100dvh] flex bg-white">
       {/* Left Panel - Branding (hidden on mobile) */}
-      <div className="hidden lg:flex w-1/2 bg-[#1c3670] relative overflow-hidden flex-col justify-between p-12 lg:p-16">
+      <div className="hidden lg:flex w-1/2 bg-[#e84364] relative overflow-hidden flex-col justify-between p-12 lg:p-16">
         {/* Background Gradients */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#1c3670] via-[#162a5c] to-[#0f1d40]" />
-        <div className="absolute -top-[30%] -right-[10%] w-[80%] h-[80%] rounded-full bg-gradient-radial from-[#e5375b]/20 to-transparent blur-3xl mix-blend-screen" />
-        <div className="absolute -bottom-[20%] -left-[10%] w-[60%] h-[60%] rounded-full bg-gradient-radial from-[#2563eb]/20 to-transparent blur-3xl mix-blend-screen" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#e84364] via-[#d12d4f] to-[#ba1a3d]" />
+        <div className="absolute -top-[30%] -right-[10%] w-[80%] h-[80%] rounded-full bg-gradient-radial from-[#26365f]/30 to-transparent blur-3xl mix-blend-screen" />
+        <div className="absolute -bottom-[20%] -left-[10%] w-[60%] h-[60%] rounded-full bg-gradient-radial from-white/20 to-transparent blur-3xl mix-blend-screen" />
 
         <div className="relative z-10">
           <Link href="/">
-            <img src="/annetec-light.svg" alt="Annetec" className="h-10" />
+            <img src="/annetec-light.svg" alt="Annetec" className="h-14" />
           </Link>
         </div>
         
@@ -54,33 +54,33 @@ export default function LoginPage() {
             transition={{ delay: 0.2, duration: 0.8 }}
           >
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-sm font-medium mb-8 border border-white/10">
-              <Sparkles size={16} className="text-[#e5375b]" />
+              <Sparkles size={16} className="text-[#26365f]" />
               Plano de Assistência Familiar
             </div>
             <h1 className="text-4xl lg:text-5xl font-bold mb-6 leading-tight tracking-tight">
-              Sua saúde e <span className="whitespace-nowrap">bem-estar</span> em <span className="text-[#e5375b]">um só lugar.</span>
+              Sua saúde e <span className="whitespace-nowrap">bem-estar</span> em <span className="text-[#26365f]">um só lugar.</span>
             </h1>
-            <p className="text-white/70 text-lg leading-relaxed">
+            <p className="text-white/80 text-lg leading-relaxed">
               Acesse seu painel para gerenciar benefícios, visualizar sua carteirinha digital e aproveitar a melhor rede conveniada do Brasil.
             </p>
 
             <div className="mt-12 grid grid-cols-2 gap-6">
-              <div className="flex items-center gap-4 bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/5">
-                <div className="w-12 h-12 rounded-xl bg-[#e5375b]/20 flex items-center justify-center">
-                  <ShieldCheck className="text-[#e5375b]" />
+              <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
+                <div className="w-12 h-12 rounded-xl bg-[#26365f]/20 flex items-center justify-center">
+                  <ShieldCheck className="text-[#26365f]" />
                 </div>
                 <div>
                   <h3 className="font-bold text-white">Segurança</h3>
-                  <p className="text-xs text-white/60">Dados protegidos</p>
+                  <p className="text-xs text-white/70">Dados protegidos</p>
                 </div>
               </div>
-              <div className="flex items-center gap-4 bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/5">
-                <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                  <HeartPulse className="text-blue-400" />
+              <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
+                <div className="w-12 h-12 rounded-xl bg-[#26365f]/20 flex items-center justify-center">
+                  <HeartPulse className="text-[#26365f]" />
                 </div>
                 <div>
                   <h3 className="font-bold text-white">Praticidade</h3>
-                  <p className="text-xs text-white/60">Tudo pelo celular</p>
+                  <p className="text-xs text-white/70">Tudo pelo celular</p>
                 </div>
               </div>
             </div>
@@ -88,7 +88,7 @@ export default function LoginPage() {
         </div>
 
         <div className="relative z-10">
-          <p className="text-white/40 text-sm">
+          <p className="text-white/60 text-sm">
             &copy; {new Date().getFullYear()} Annetec. Todos os direitos reservados.
           </p>
         </div>
@@ -100,7 +100,7 @@ export default function LoginPage() {
         
         <div className="lg:hidden mb-12">
           <Link href="/">
-            <img src="/annetec.svg" alt="Annetec" className="h-10" />
+            <img src="/annetec.svg" alt="Annetec" className="h-14" />
           </Link>
         </div>
         
@@ -111,7 +111,7 @@ export default function LoginPage() {
             transition={{ delay: 0.1, duration: 0.6 }}
             className="mb-10 text-center lg:text-left"
           >
-            <h2 className="text-3xl font-extrabold text-[#1c3670] tracking-tight mb-3">Bem-vindo de volta</h2>
+            <h2 className="text-3xl font-extrabold text-[#26365f] tracking-tight mb-3">Bem-vindo de volta</h2>
             <p className="text-muted-foreground text-sm">
               Entre com suas credenciais para acessar sua conta e aproveitar seus benefícios.
             </p>
@@ -132,7 +132,7 @@ export default function LoginPage() {
             )}
             
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-bold text-[#1c3670]">
+              <Label htmlFor="email" className="text-sm font-bold text-[#26365f]">
                 E-mail de acesso
               </Label>
               <Input
@@ -142,17 +142,17 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="h-14 px-4 rounded-xl border-gray-200 bg-gray-50/50 focus:bg-white focus:border-[#1c3670] focus:ring-[#1c3670]/20 transition-all text-base"
+                className="h-14 px-4 rounded-xl border-gray-200 bg-gray-50/50 focus:bg-white focus:border-[#26365f] focus:ring-[#26365f]/20 transition-all text-base"
                 disabled={isSubmitting}
               />
             </div>
             
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm font-bold text-[#1c3670]">
+                <Label htmlFor="password" className="text-sm font-bold text-[#26365f]">
                   Sua senha
                 </Label>
-                <Link href="#" className="text-sm font-semibold text-[#e5375b] hover:underline">
+                <Link href="#" className="text-sm font-semibold text-[#e84364] hover:underline">
                   Esqueceu a senha?
                 </Link>
               </div>
@@ -164,13 +164,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-14 px-4 pr-12 rounded-xl border-gray-200 bg-gray-50/50 focus:bg-white focus:border-[#1c3670] focus:ring-[#1c3670]/20 transition-all text-base"
+                  className="h-14 px-4 pr-12 rounded-xl border-gray-200 bg-gray-50/50 focus:bg-white focus:border-[#26365f] focus:ring-[#26365f]/20 transition-all text-base"
                   disabled={isSubmitting}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1c3670] transition-colors p-1"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#26365f] transition-colors p-1"
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -180,7 +180,7 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full h-14 mt-4 bg-[#e5375b] hover:bg-[#d42d50] text-white font-bold text-base rounded-xl shadow-[0_10px_20px_-10px_rgba(229,55,91,0.5)] hover:shadow-[0_15px_25px_-10px_rgba(229,55,91,0.6)] transition-all"
+              className="w-full h-14 mt-4 bg-[#e84364] hover:bg-[#d42d50] text-white font-bold text-base rounded-xl shadow-[0_10px_20px_-10px_rgba(229,55,91,0.5)] hover:shadow-[0_15px_25px_-10px_rgba(229,55,91,0.6)] transition-all"
               disabled={isSubmitting}
             >
               {isSubmitting ? (
@@ -212,8 +212,8 @@ export default function LoginPage() {
             
             <div className="grid gap-3">
               {[
-                { role: 'Admin', email: 'admin@annetec.com.br', pass: 'admin123', color: 'bg-[#1c3670]' },
-                { role: 'Vendedor', email: 'maria@annetec.com.br', pass: 'seller123', color: 'bg-[#e5375b]' },
+                { role: 'Admin', email: 'admin@annetec.com.br', pass: 'admin123', color: 'bg-[#26365f]' },
+                { role: 'Vendedor', email: 'maria@annetec.com.br', pass: 'seller123', color: 'bg-[#e84364]' },
                 { role: 'Cliente', email: 'ana@email.com', pass: 'client123', color: 'bg-teal-500' }
               ].map((cred, idx) => (
                 <div 
@@ -223,7 +223,7 @@ export default function LoginPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${cred.color}`}></div>
-                    <span className="font-bold text-[#1c3670] text-sm">{cred.role}</span>
+                    <span className="font-bold text-[#26365f] text-sm">{cred.role}</span>
                   </div>
                   <span className="text-xs font-medium text-muted-foreground group-hover:text-gray-900 transition-colors">
                     {cred.email} <span className="opacity-40">/</span> {cred.pass}

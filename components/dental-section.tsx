@@ -19,9 +19,9 @@ const dentalCoverages = [
 
 export function DentalSection() {
   return (
-    <section id="odonto" className="py-20 lg:py-32 bg-gradient-to-br from-[#1c3670] to-[#2d4a8c] relative overflow-hidden">
+    <section id="odonto" className="py-20 lg:py-32 bg-gradient-to-br from-[#26365f] to-[#3a4e82] relative overflow-hidden">
       {/* Background Elements */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-[#e5375b]/10 rounded-full blur-3xl" />
+      <div className="absolute top-0 right-0 w-96 h-96 bg-[#e84364]/10 rounded-full blur-3xl" />
       <div className="absolute bottom-0 left-0 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -34,19 +34,19 @@ export function DentalSection() {
             transition={{ duration: 0.8 }}
           >
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full text-white/90 text-sm font-medium mb-6">
-              <SmilePlus size={16} className="text-[#e5375b]" />
+              <SmilePlus size={16} className="text-[#e84364]" />
               Odontologia
             </div>
 
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-6 text-balance">
               Plano Odontológico Completo:{" "}
-              <span className="text-[#e5375b]">cuide da sua saúde oral</span>
+              <span className="text-[#e84364]">cuide da sua saúde oral</span>
             </h2>
 
             <p className="text-lg text-white/80 mb-8 leading-relaxed">
               Só na Annetec você tem acesso ao melhor da Odontologia, por 
               meio de um plano dental completo, com cobertura nacional, por apenas{" "}
-              <span className="font-bold text-[#e5375b]">R$ 19,90 por mês</span>, por beneficiário.
+              <span className="font-bold text-[#e84364]">R$ 19,90 por mês</span>, por beneficiário.
             </p>
 
             {/* Price Card */}
@@ -64,7 +64,7 @@ export function DentalSection() {
             <div className="flex flex-col sm:flex-row gap-4">
               <Button
                 size="lg"
-                className="bg-[#e5375b] hover:bg-[#d12d4f] text-white"
+                className="bg-[#e84364] hover:bg-[#d12d4f] text-white"
                 asChild
               >
                 <Link href="#adesao-wdental">
@@ -104,7 +104,7 @@ export function DentalSection() {
                     transition={{ delay: 0.3 + index * 0.05 }}
                     className="flex items-center gap-3"
                   >
-                    <CheckCircle size={20} className="text-[#e5375b] flex-shrink-0" />
+                    <CheckCircle size={20} className="text-[#e84364] flex-shrink-0" />
                     <span className="text-white/90">{coverage}</span>
                   </motion.div>
                 ))}

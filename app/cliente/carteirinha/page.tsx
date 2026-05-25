@@ -48,7 +48,7 @@ export default function CarteirinhaPage() {
       <div className="max-w-md mx-auto">
         <Card className="border-0 shadow-xl overflow-hidden">
           {/* Card Front */}
-          <div className="bg-gradient-to-br from-[#1c3670] via-[#2a4a8f] to-[#1c3670] text-white p-6 relative">
+          <div className="bg-gradient-to-br from-[#26365f] via-[#2a4a8f] to-[#26365f] text-white p-6 relative">
             {/* Logo */}
             <div className="flex items-center justify-between mb-6">
               <img
@@ -73,7 +73,7 @@ export default function CarteirinhaPage() {
             {/* User Info */}
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16 border-2 border-white/30">
-                <AvatarFallback className="bg-[#e5375b] text-white text-xl">
+                <AvatarFallback className="bg-[#e84364] text-white text-xl">
                   {client?.name ? getInitials(client.name) : 'CL'}
                 </AvatarFallback>
               </Avatar>
@@ -113,9 +113,9 @@ export default function CarteirinhaPage() {
 
             {/* QR Code */}
             <div className="flex flex-col items-center pt-4 border-t border-border">
-              <div className="p-4 bg-white border-2 border-dashed border-[#1c3670]/30 rounded-xl">
-                <div className="w-32 h-32 bg-[#1c3670]/5 rounded-lg flex items-center justify-center">
-                  <QrCode className="h-24 w-24 text-[#1c3670]" />
+              <div className="p-4 bg-white border-2 border-dashed border-[#26365f]/30 rounded-xl">
+                <div className="w-32 h-32 bg-[#26365f]/5 rounded-lg flex items-center justify-center">
+                  <QrCode className="h-24 w-24 text-[#26365f]" />
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-3 text-center">
@@ -130,8 +130,8 @@ export default function CarteirinhaPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-3xl mx-auto">
         <Card className="border-0 shadow-sm">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-[#1c3670]/10">
-              <CreditCard className="h-5 w-5 text-[#1c3670]" />
+            <div className="p-2 rounded-lg bg-[#26365f]/10">
+              <CreditCard className="h-5 w-5 text-[#26365f]" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Carteirinha</p>
@@ -142,8 +142,8 @@ export default function CarteirinhaPage() {
 
         <Card className="border-0 shadow-sm">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-[#e5375b]/10">
-              <Calendar className="h-5 w-5 text-[#e5375b]" />
+            <div className="p-2 rounded-lg bg-[#e84364]/10">
+              <Calendar className="h-5 w-5 text-[#e84364]" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Validade</p>
@@ -173,19 +173,19 @@ export default function CarteirinhaPage() {
         <CardContent>
           <ol className="space-y-3 text-sm text-muted-foreground">
             <li className="flex items-start gap-3">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#1c3670] text-white text-xs font-bold flex-shrink-0">1</span>
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#26365f] text-white text-xs font-bold flex-shrink-0">1</span>
               Apresente sua carteirinha digital ou física nos estabelecimentos parceiros
             </li>
             <li className="flex items-start gap-3">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#1c3670] text-white text-xs font-bold flex-shrink-0">2</span>
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#26365f] text-white text-xs font-bold flex-shrink-0">2</span>
               Informe o número da carteirinha ao ligar para a Teleorientação 24h
             </li>
             <li className="flex items-start gap-3">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#1c3670] text-white text-xs font-bold flex-shrink-0">3</span>
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#26365f] text-white text-xs font-bold flex-shrink-0">3</span>
               Nas farmácias parceiras, informe seu CPF para obter os descontos
             </li>
             <li className="flex items-start gap-3">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#1c3670] text-white text-xs font-bold flex-shrink-0">4</span>
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#26365f] text-white text-xs font-bold flex-shrink-0">4</span>
               Para consultas e exames, agende pelo app ou telefone com antecedência
             </li>
           </ol>

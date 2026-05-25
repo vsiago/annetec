@@ -19,12 +19,12 @@ export function FuneralSection() {
           >
             <div className="bg-gradient-to-br from-[#f8fafc] to-white rounded-3xl p-8 lg:p-12 shadow-xl border border-border/50">
               <div className="text-center">
-                <div className="w-24 h-24 bg-[#1c3670]/10 rounded-full mx-auto flex items-center justify-center mb-6">
-                  <Heart size={48} className="text-[#1c3670]" />
+                <div className="w-24 h-24 bg-[#26365f]/10 rounded-full mx-auto flex items-center justify-center mb-6">
+                  <Heart size={48} className="text-[#26365f]" />
                 </div>
-                <h3 className="text-2xl font-bold text-[#1c3670] mb-4">Auxílio Funeral</h3>
+                <h3 className="text-2xl font-bold text-[#26365f] mb-4">Auxílio Funeral</h3>
                 <p className="text-muted-foreground mb-6">Reembolso garantido de até</p>
-                <div className="inline-block bg-[#1c3670] rounded-2xl px-8 py-6">
+                <div className="inline-block bg-[#26365f] rounded-2xl px-8 py-6">
                   <span className="text-4xl lg:text-5xl font-bold text-white">R$ 3.000</span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-4">
@@ -41,14 +41,14 @@ export function FuneralSection() {
             viewport={{ once: true }}
             transition={{ duration: 0.8, delay: 0.2 }}
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#1c3670]/10 rounded-full text-[#1c3670] text-sm font-medium mb-6">
-              <Heart size={16} className="text-[#e5375b]" />
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#26365f]/10 rounded-full text-[#26365f] text-sm font-medium mb-6">
+              <Heart size={16} className="text-[#e84364]" />
               Proteção Familiar
             </div>
 
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#1c3670] mb-6 text-balance">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#26365f] mb-6 text-balance">
               Auxílio Funeral em dinheiro,{" "}
-              <span className="text-[#e5375b]">no momento em que você mais precisa</span>
+              <span className="text-[#e84364]">no momento em que você mais precisa</span>
             </h2>
 
             <div className="space-y-4 text-muted-foreground leading-relaxed">
@@ -61,7 +61,7 @@ export function FuneralSection() {
                 O auxílio funeral é uma cobertura na qual a Annetec reembolsa todos os 
                 custos referentes ao funeral em caso de falecimento do associado 
                 (excluídos cônjuge e filhos), até o limite de{" "}
-                <strong className="text-[#1c3670]">R$ 3.000,00</strong>.
+                <strong className="text-[#26365f]">R$ 3.000,00</strong>.
               </p>
               <p>
                 Somente é necessário que o familiar (cônjuge, companheiro(a), filho(a) 
@@ -70,7 +70,7 @@ export function FuneralSection() {
                 reembolso.
               </p>
               <p className="text-sm bg-[#f8fafc] p-4 rounded-xl border border-border/50">
-                <strong className="text-[#1c3670]">Importante:</strong> Neste tipo de serviço, 
+                <strong className="text-[#26365f]">Importante:</strong> Neste tipo de serviço, 
                 a família não tem nenhuma assistência em relação aos outros trâmites envolvidos 
                 no velório, transporte e preparo do corpo. Todas as decisões, assim como a escolha 
                 das empresas, ficam a cargo da família.
@@ -80,7 +80,7 @@ export function FuneralSection() {
             <div className="mt-8">
               <Link 
                 href="#condicoes-funeral" 
-                className="inline-flex items-center gap-2 text-[#e5375b] hover:text-[#d12d4f] font-medium transition-colors"
+                className="inline-flex items-center gap-2 text-[#e84364] hover:text-[#d12d4f] font-medium transition-colors"
               >
                 Consulte as Condições Gerais desta cobertura
                 <ArrowRight size={18} />

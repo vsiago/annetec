@@ -6,15 +6,19 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Menu, X, ChevronDown, Info, Landmark, Shield, UserCog, Building2, Building, Users, Briefcase, Store, HeartHandshake, FileEdit, BookDown, GraduationCap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
+const FaviconIcon = ({ className }: { className?: string }) => (
+  <img src="/favicon.png" alt="" className={className} style={{ objectFit: 'contain' }} />
+)
+
 const navItems = [
   {
     label: "A Associação",
     href: "#associacao",
     dropdown: [
       {
-        icon: Info,
-        iconColor: "text-white",
-        iconBg: "bg-pink-200",
+        icon: FaviconIcon,
+        iconColor: "",
+        iconBg: "bg-pink-100",
         label: "Sobre nós",
         href: "#sobre-nos"
       },
@@ -53,9 +57,9 @@ const navItems = [
     href: "#club-beneficios",
     dropdown: [
       {
-        icon: Info,
-        iconColor: "text-white",
-        iconBg: "bg-pink-200",
+        icon: FaviconIcon,
+        iconColor: "",
+        iconBg: "bg-pink-100",
         label: "Planos para sua associação",
         href: "#planos-associacao"
       },
@@ -164,7 +168,7 @@ export function Navbar() {
       transition={{ duration: 0.5 }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled
-          ? "bg-white/80 backdrop-blur-md border-b border-border/50 shadow-sm"
+          ? "bg-[#e84364] shadow-md"
           : "bg-transparent"
       }`}
     >
@@ -172,7 +176,7 @@ export function Navbar() {
         <nav className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <img src="/annetec.svg" alt="Annetec" className="h-8" />
+            <img src={isScrolled ? "/annetec-light.svg" : "/annetec.svg"} alt="Annetec" className="h-12" />
           </Link>
 
           {/* Desktop Navigation */}
@@ -181,10 +185,16 @@ export function Navbar() {
               <div key={item.label} className="relative group">
                 <Link
                   href={item.href}
-                  className="flex items-center gap-1.5 py-6 text-[15px] font-bold text-gray-900 hover:text-[#e5375b] transition-colors"
+                  className={`flex items-center gap-1.5 py-6 text-[15px] font-bold transition-colors ${
+                    isScrolled
+                      ? "text-white hover:text-white/80"
+                      : "text-gray-900 hover:text-[#e84364]"
+                  }`}
                 >
                   {item.label}
-                  <ChevronDown className="w-4 h-4 text-gray-400 group-hover:rotate-180 transition-transform duration-200" />
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 group-hover:rotate-180 ${
+                    isScrolled ? "text-white/70" : "text-gray-400"
+                  }`} />
                 </Link>
 
                 {/* Dropdown Menu */}
@@ -197,9 +207,13 @@ export function Navbar() {
                           href={subItem.href}
                           className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors"
                         >
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${subItem.iconBg}`}>
-                            <subItem.icon className={`w-5 h-5 ${subItem.iconColor}`} strokeWidth={2} />
-                          </div>
+                          {subItem.icon === FaviconIcon ? (
+                            <subItem.icon className="w-8 h-8 shrink-0 object-contain" />
+                          ) : (
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${subItem.iconBg}`}>
+                              <subItem.icon className={`w-5 h-5 ${subItem.iconColor}`} strokeWidth={2} />
+                            </div>
+                          )}
                           <span className="font-bold text-[16px] text-gray-900 leading-tight">
                             {subItem.label}
                           </span>
@@ -216,13 +230,21 @@ export function Navbar() {
           <div className="hidden lg:flex items-center gap-3">
             <Button
               variant="ghost"
-              className="text-[#1c3670] font-bold hover:text-[#e5375b] hover:bg-[#e5375b]/5"
+              className={`font-bold transition-colors ${
+                isScrolled
+                  ? "text-white hover:text-white hover:bg-white/10"
+                  : "text-[#26365f] hover:text-[#e84364] hover:bg-[#e84364]/5"
+              }`}
               asChild
             >
               <Link href="/login">Entrar</Link>
             </Button>
             <Button
-              className="bg-[#e5375b] hover:bg-[#d12d4f] text-white font-bold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 rounded-full px-6"
+              className={`font-bold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 rounded-full px-6 ${
+                isScrolled
+                  ? "bg-white text-[#e84364] hover:bg-gray-100"
+                  : "bg-[#e84364] text-white hover:bg-[#d12d4f]"
+              }`}
               asChild
             >
               <Link href="#contrate">Contrate Agora!</Link>
@@ -231,7 +253,9 @@ export function Navbar() {
 
           {/* Mobile Menu Button */}
           <button
-            className="lg:hidden p-2 text-[#1c3670]"
+            className={`lg:hidden p-2 transition-colors ${
+              isScrolled ? "text-white" : "text-[#26365f]"
+            }`}
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label={isMobileMenuOpen ? "Fechar menu" : "Abrir menu"}
           >
@@ -255,7 +279,7 @@ export function Navbar() {
                 <div key={item.label} className="space-y-1">
                   <Link
                     href={item.href}
-                    className="flex items-center justify-between px-4 py-3 text-sm font-bold text-gray-900 hover:text-[#e5375b] hover:bg-[#e5375b]/5 rounded-lg transition-colors"
+                    className="flex items-center justify-between px-4 py-3 text-sm font-bold text-gray-900 hover:text-[#e84364] hover:bg-[#e84364]/5 rounded-lg transition-colors"
                     onClick={() => !item.dropdown?.length && setIsMobileMenuOpen(false)}
                   >
                     {item.label}
@@ -270,7 +294,7 @@ export function Navbar() {
                         <Link
                           key={subItem.label}
                           href={subItem.href}
-                          className="flex items-center gap-3 py-2 text-sm font-semibold text-gray-600 hover:text-[#e5375b]"
+                          className="flex items-center gap-3 py-2 text-sm font-semibold text-gray-600 hover:text-[#e84364]"
                           onClick={() => setIsMobileMenuOpen(false)}
                         >
                           <subItem.icon className="w-4 h-4" />
@@ -284,13 +308,13 @@ export function Navbar() {
               <div className="pt-4 space-y-2 border-t border-border/50">
                 <Button
                   variant="ghost"
-                  className="w-full justify-center text-[#1c3670] font-bold"
+                  className="w-full justify-center text-[#26365f] font-bold"
                   asChild
                 >
                   <Link href="/login">Entrar</Link>
                 </Button>
                 <Button
-                  className="w-full bg-[#e5375b] hover:bg-[#d12d4f] text-white font-bold rounded-full"
+                  className="w-full bg-[#e84364] hover:bg-[#d12d4f] text-white font-bold rounded-full"
                   asChild
                 >
                   <Link href="#contrate">Contrate Agora!</Link>

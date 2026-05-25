@@ -79,7 +79,7 @@ export default function SuportePage() {
       {/* Contact Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Teleorientation */}
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-[#e5375b] to-[#f05a7a] text-white">
+        <Card className="border-0 shadow-sm bg-gradient-to-br from-[#e84364] to-[#f05a7a] text-white">
           <CardContent className="p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-3 rounded-lg bg-white/10">
@@ -99,7 +99,7 @@ export default function SuportePage() {
         </Card>
 
         {/* Central de Atendimento */}
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-[#1c3670] to-[#2a4a8f] text-white">
+        <Card className="border-0 shadow-sm bg-gradient-to-br from-[#26365f] to-[#2a4a8f] text-white">
           <CardContent className="p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-3 rounded-lg bg-white/10">
@@ -122,15 +122,15 @@ export default function SuportePage() {
         <Card className="border-0 shadow-sm">
           <CardContent className="p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 rounded-lg bg-[#1c3670]/10">
-                <Mail className="h-6 w-6 text-[#1c3670]" />
+              <div className="p-3 rounded-lg bg-[#26365f]/10">
+                <Mail className="h-6 w-6 text-[#26365f]" />
               </div>
               <div>
                 <h3 className="font-bold">Email</h3>
                 <p className="text-muted-foreground text-sm">Resposta em até 24h</p>
               </div>
             </div>
-            <p className="text-lg font-medium text-[#1c3670]">suporte@annetec.com.br</p>
+            <p className="text-lg font-medium text-[#26365f]">suporte@annetec.com.br</p>
           </CardContent>
         </Card>
       </div>
@@ -189,7 +189,7 @@ export default function SuportePage() {
                 />
               </div>
               <div className="flex justify-end">
-                <Button type="submit" className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+                <Button type="submit" className="bg-[#e84364] hover:bg-[#d42d50] text-white">
                   <Send className="h-4 w-4 mr-2" />
                   Enviar Mensagem
                 </Button>
@@ -203,7 +203,7 @@ export default function SuportePage() {
       <Card className="border-0 shadow-sm">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <HelpCircle className="h-5 w-5 text-[#1c3670]" />
+            <HelpCircle className="h-5 w-5 text-[#26365f]" />
             <CardTitle className="text-lg">Perguntas Frequentes</CardTitle>
           </div>
           <CardDescription>Encontre respostas para as dúvidas mais comuns</CardDescription>
@@ -228,35 +228,35 @@ export default function SuportePage() {
       <Card className="border-0 shadow-sm">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-[#1c3670]" />
+            <FileText className="h-5 w-5 text-[#26365f]" />
             <CardTitle className="text-lg">Documentos Úteis</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2">
             <Button variant="outline" className="justify-start h-auto py-4">
-              <FileText className="h-5 w-5 mr-3 text-[#1c3670]" />
+              <FileText className="h-5 w-5 mr-3 text-[#26365f]" />
               <div className="text-left">
                 <p className="font-medium">Contrato do Plano</p>
                 <p className="text-xs text-muted-foreground">Termos e condições</p>
               </div>
             </Button>
             <Button variant="outline" className="justify-start h-auto py-4">
-              <FileText className="h-5 w-5 mr-3 text-[#1c3670]" />
+              <FileText className="h-5 w-5 mr-3 text-[#26365f]" />
               <div className="text-left">
                 <p className="font-medium">Rede Credenciada</p>
                 <p className="text-xs text-muted-foreground">Lista de parceiros</p>
               </div>
             </Button>
             <Button variant="outline" className="justify-start h-auto py-4">
-              <FileText className="h-5 w-5 mr-3 text-[#1c3670]" />
+              <FileText className="h-5 w-5 mr-3 text-[#26365f]" />
               <div className="text-left">
                 <p className="font-medium">Manual do Associado</p>
                 <p className="text-xs text-muted-foreground">Guia completo de uso</p>
               </div>
             </Button>
             <Button variant="outline" className="justify-start h-auto py-4">
-              <FileText className="h-5 w-5 mr-3 text-[#1c3670]" />
+              <FileText className="h-5 w-5 mr-3 text-[#26365f]" />
               <div className="text-left">
                 <p className="font-medium">Política de Privacidade</p>
                 <p className="text-xs text-muted-foreground">LGPD e dados</p>

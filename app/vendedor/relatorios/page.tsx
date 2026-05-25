@@ -53,8 +53,8 @@ export default function RelatoriosVendedorPage() {
   ]
 
   const sourceData = [
-    { source: 'Website', value: 3, color: '#1c3670' },
-    { source: 'Indicação', value: 2, color: '#e5375b' },
+    { source: 'Website', value: 3, color: '#26365f' },
+    { source: 'Indicação', value: 2, color: '#e84364' },
     { source: 'Instagram', value: 1, color: '#22c55e' },
     { source: 'LinkedIn', value: 1, color: '#eab308' },
   ]
@@ -151,8 +151,8 @@ export default function RelatoriosVendedorPage() {
                       borderRadius: '8px',
                     }}
                   />
-                  <Bar yAxisId="left" dataKey="vendas" fill="#1c3670" radius={[4, 4, 0, 0]} name="Vendas (R$)" />
-                  <Bar yAxisId="right" dataKey="leads" fill="#e5375b" radius={[4, 4, 0, 0]} name="Leads" />
+                  <Bar yAxisId="left" dataKey="vendas" fill="#26365f" radius={[4, 4, 0, 0]} name="Vendas (R$)" />
+                  <Bar yAxisId="right" dataKey="leads" fill="#e84364" radius={[4, 4, 0, 0]} name="Leads" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -228,8 +228,8 @@ export default function RelatoriosVendedorPage() {
                     borderRadius: '8px',
                   }}
                 />
-                <Line type="monotone" dataKey="ligacoes" stroke="#1c3670" strokeWidth={2} name="Ligações" />
-                <Line type="monotone" dataKey="emails" stroke="#e5375b" strokeWidth={2} name="Emails" />
+                <Line type="monotone" dataKey="ligacoes" stroke="#26365f" strokeWidth={2} name="Ligações" />
+                <Line type="monotone" dataKey="emails" stroke="#e84364" strokeWidth={2} name="Emails" />
                 <Line type="monotone" dataKey="reunioes" stroke="#22c55e" strokeWidth={2} name="Reuniões" />
               </LineChart>
             </ResponsiveContainer>

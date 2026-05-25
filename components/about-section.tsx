@@ -8,8 +8,8 @@ export function AboutSection() {
   return (
     <section id="sobre" className="py-20 lg:py-32 bg-white relative overflow-hidden">
       {/* Background Elements */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-[#e5375b]/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#1c3670]/5 rounded-full blur-3xl" />
+      <div className="absolute top-0 right-0 w-96 h-96 bg-[#e84364]/5 rounded-full blur-3xl" />
+      <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#26365f]/5 rounded-full blur-3xl" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
@@ -23,8 +23,8 @@ export function AboutSection() {
           >
             <div className="relative aspect-square max-w-lg mx-auto">
               {/* Decorative elements */}
-              <div className="absolute -top-4 -left-4 w-24 h-24 bg-[#e5375b]/10 rounded-2xl" />
-              <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-[#1c3670]/10 rounded-2xl" />
+              <div className="absolute -top-4 -left-4 w-24 h-24 bg-[#e84364]/10 rounded-2xl" />
+              <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-[#26365f]/10 rounded-2xl" />
               
               {/* Main Image Container */}
               <div className="relative w-full h-full rounded-3xl overflow-hidden shadow-2xl">
@@ -40,8 +40,8 @@ export function AboutSection() {
                   className="absolute top-8 right-8 bg-white/95 rounded-xl p-3 shadow-lg"
                 >
                   <div className="flex items-center gap-2">
-                    <Activity size={20} className="text-[#e5375b]" />
-                    <span className="text-sm font-semibold text-[#1c3670]">Prevenção</span>
+                    <Activity size={20} className="text-[#e84364]" />
+                    <span className="text-sm font-semibold text-[#26365f]">Prevenção</span>
                   </div>
                 </motion.div>
                 <motion.div
@@ -50,8 +50,8 @@ export function AboutSection() {
                   className="absolute bottom-8 left-8 bg-white/95 rounded-xl p-3 shadow-lg"
                 >
                   <div className="flex items-center gap-2">
-                    <Sparkles size={20} className="text-[#1c3670]" />
-                    <span className="text-sm font-semibold text-[#1c3670]">Qualidade de Vida</span>
+                    <Sparkles size={20} className="text-[#26365f]" />
+                    <span className="text-sm font-semibold text-[#26365f]">Qualidade de Vida</span>
                   </div>
                 </motion.div>
               </div>
@@ -65,31 +65,31 @@ export function AboutSection() {
             viewport={{ once: true }}
             transition={{ duration: 0.8, delay: 0.2 }}
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#1c3670]/5 rounded-full text-[#1c3670] text-sm font-medium mb-6">
-              <Shield size={16} className="text-[#e5375b]" />
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#26365f]/5 rounded-full text-[#26365f] text-sm font-medium mb-6">
+              <Shield size={16} className="text-[#e84364]" />
               Saiba mais sobre a Annetec
             </div>
 
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#1c3670] leading-tight mb-6 text-balance">
-              Uma <span className="text-[#e5375b]">ASSIST TECH</span> focada na sua qualidade de vida
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#26365f] leading-tight mb-6 text-balance">
+              Uma <span className="text-[#e84364]">ASSIST TECH</span> focada na sua qualidade de vida
             </h2>
 
             <div className="space-y-4 text-muted-foreground leading-relaxed">
               <p>
-                A Annetec é uma <strong className="text-[#1c3670]">ASSIST TECH</strong>, ou seja, 
+                A Annetec é uma <strong className="text-[#26365f]">ASSIST TECH</strong>, ou seja, 
                 um Plano de Assistência familiar que tem como objetivo proporcionar melhoria da qualidade 
                 de vida e bem-estar aos seus associados por meio de uma gama de benefícios exclusivos, 
                 pensados cuidadosamente para toda a família.
               </p>
               <p>
                 Diferentemente de um plano de saúde, que é voltado principalmente para o tratamento 
-                de doenças, a Annetec é um <strong className="text-[#1c3670]">&quot;plano de assistências múltiplas&quot;</strong>; 
+                de doenças, a Annetec é um <strong className="text-[#26365f]">&quot;plano de assistências múltiplas&quot;</strong>; 
                 um &quot;plano de bem-estar&quot;; um &quot;plano de qualidade de vida&quot;.
               </p>
               <p>
                 A Annetec também é um Clube de Benefícios que valoriza muito as ações que 
-                impactam na <strong className="text-[#e5375b]">Prevenção de Riscos e Doenças</strong> e 
-                na <strong className="text-[#e5375b]">Promoção da Saúde</strong>.
+                impactam na <strong className="text-[#e84364]">Prevenção de Riscos e Doenças</strong> e 
+                na <strong className="text-[#e84364]">Promoção da Saúde</strong>.
               </p>
               <p>
                 Além disso, a Annetec é uma forma divertida e conveniente de os membros 
@@ -113,7 +113,7 @@ export function AboutSection() {
                   transition={{ delay: 0.4 + index * 0.1 }}
                   className="text-center"
                 >
-                  <p className="text-3xl font-bold text-[#e5375b]">{stat.number}</p>
+                  <p className="text-3xl font-bold text-[#e84364]">{stat.number}</p>
                   <p className="text-sm text-muted-foreground">{stat.label}</p>
                 </motion.div>
               ))}

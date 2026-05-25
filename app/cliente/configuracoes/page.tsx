@@ -30,7 +30,7 @@ export default function ClienteConfiguracoesPage() {
           <h1 className="text-2xl font-bold text-foreground">Minha Conta</h1>
           <p className="text-muted-foreground">Gerencie seus dados pessoais, senha e preferências de comunicação</p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving} className="bg-[#1c3670] hover:bg-[#152a5c] text-white">
+        <Button onClick={handleSave} disabled={isSaving} className="bg-[#26365f] hover:bg-[#152a5c] text-white">
           <Save className="h-4 w-4 mr-2" />
           {isSaving ? 'Salvando...' : 'Salvar Alterações'}
         </Button>
@@ -42,7 +42,7 @@ export default function ClienteConfiguracoesPage() {
           <Card className="border-0 shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5 text-[#1c3670]" />
+                <User className="h-5 w-5 text-[#26365f]" />
                 Dados Cadastrais
               </CardTitle>
               <CardDescription>Mantenha suas informações atualizadas para contato</CardDescription>

@@ -99,7 +99,7 @@ export default function PipelinePage() {
         </div>
         <Dialog open={isNewLeadOpen} onOpenChange={setIsNewLeadOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+            <Button className="bg-[#e84364] hover:bg-[#d42d50] text-white">
               <Plus className="h-4 w-4 mr-2" />
               Novo Lead
             </Button>
@@ -156,7 +156,7 @@ export default function PipelinePage() {
                 <Button type="button" variant="outline" onClick={() => setIsNewLeadOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+                <Button type="submit" className="bg-[#e84364] hover:bg-[#d42d50] text-white">
                   Adicionar
                 </Button>
               </div>
@@ -233,7 +233,7 @@ export default function PipelinePage() {
                               <Badge variant="outline" className="text-xs">
                                 {lead.source}
                               </Badge>
-                              <span className="text-xs font-medium text-[#1c3670]">
+                              <span className="text-xs font-medium text-[#26365f]">
                                 R$ {lead.value.toLocaleString('pt-BR')}
                               </span>
                             </div>

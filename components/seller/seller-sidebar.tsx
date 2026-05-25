@@ -71,7 +71,7 @@ export function SellerSidebar() {
         <div className="flex items-center gap-2">
           <button className="p-2 text-muted-foreground hover:text-foreground relative">
             <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-[#e5375b] rounded-full" />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-[#26365f] rounded-full" />
           </button>
         </div>
       </header>
@@ -87,7 +87,7 @@ export function SellerSidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed top-0 left-0 h-full w-64 bg-[#1c3670] z-50 flex flex-col transition-transform duration-300 lg:translate-x-0',
+          'fixed top-0 left-0 h-full w-64 bg-[#e84364] z-50 flex flex-col transition-transform duration-300 lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
@@ -140,8 +140,8 @@ export function SellerSidebar() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
-                <Avatar className="h-9 w-9 bg-[#e5375b]">
-                  <AvatarFallback className="bg-[#e5375b] text-white text-sm">
+                <Avatar className="h-9 w-9 bg-[#26365f]">
+                  <AvatarFallback className="bg-[#26365f] text-white text-sm">
                     {user?.name ? getInitials(user.name) : 'VD'}
                   </AvatarFallback>
                 </Avatar>

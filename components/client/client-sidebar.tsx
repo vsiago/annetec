@@ -85,7 +85,7 @@ export function ClientSidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed top-0 left-0 h-full w-64 bg-[#1c3670] z-50 flex flex-col transition-transform duration-300 lg:translate-x-0',
+          'fixed top-0 left-0 h-full w-64 bg-[#e84364] z-50 flex flex-col transition-transform duration-300 lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
@@ -107,7 +107,7 @@ export function ClientSidebar() {
         </div>
 
         {/* Teleorientation Banner */}
-        <div className="mx-4 mt-4 p-3 rounded-lg bg-[#e5375b]/20 border border-[#e5375b]/30">
+        <div className="mx-4 mt-4 p-3 rounded-lg bg-[#26365f]/20 border border-[#26365f]/30">
           <div className="flex items-center gap-2 text-white">
             <Phone className="h-4 w-4" />
             <span className="text-sm font-medium">Teleorientação 24h</span>
@@ -147,8 +147,8 @@ export function ClientSidebar() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
-                <Avatar className="h-9 w-9 bg-[#e5375b]">
-                  <AvatarFallback className="bg-[#e5375b] text-white text-sm">
+                <Avatar className="h-9 w-9 bg-[#26365f]">
+                  <AvatarFallback className="bg-[#26365f] text-white text-sm">
                     {user?.name ? getInitials(user.name) : 'CL'}
                   </AvatarFallback>
                 </Avatar>

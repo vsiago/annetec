@@ -69,7 +69,7 @@ export default function LeadsPage() {
           <h1 className="text-2xl font-bold text-foreground">Leads</h1>
           <p className="text-muted-foreground">Gerencie todos os seus leads</p>
         </div>
-        <Button className="bg-[#e5375b] hover:bg-[#d42d50] text-white">
+        <Button className="bg-[#e84364] hover:bg-[#d42d50] text-white">
           <Plus className="h-4 w-4 mr-2" />
           Novo Lead
         </Button>
@@ -149,7 +149,7 @@ export default function LeadsPage() {
                       <Badge variant="outline">{lead.source}</Badge>
                     </td>
                     <td className="py-4 px-6">
-                      <span className="font-medium text-[#1c3670]">
+                      <span className="font-medium text-[#26365f]">
                         R$ {lead.value.toLocaleString('pt-BR')}
                       </span>
                     </td>

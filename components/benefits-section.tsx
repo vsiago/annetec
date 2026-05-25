@@ -17,42 +17,42 @@ const benefits = [
     icon: Stethoscope,
     title: "Plano Odontológico Completo",
     description: "Cobertura nacional por apenas R$ 19,90/mês por beneficiário",
-    color: "#1c3670",
+    color: "#26365f",
     href: "#odonto",
   },
   {
     icon: FlaskConical,
     title: "Consultas e Exames",
     description: "Consultas a partir de R$ 40,00 em nossa rede conveniada",
-    color: "#e5375b",
+    color: "#e84364",
     href: "#consultas",
   },
   {
     icon: Pill,
     title: "Benefício Farmácia",
     description: "Até 60% de desconto em mais de 1.000 farmácias parceiras",
-    color: "#1c3670",
+    color: "#26365f",
     href: "#farmacia",
   },
   {
     icon: Heart,
     title: "Consultas Médicas Preventivas",
     description: "Ginecologia, Pediatria e Geriatria grátis anualmente",
-    color: "#e5375b",
+    color: "#e84364",
     href: "#preventivas",
   },
   {
     icon: Cross,
     title: "Auxílio Funeral",
     description: "Reembolso de até R$ 3.000,00 em caso de falecimento",
-    color: "#1c3670",
+    color: "#26365f",
     href: "#funeral",
   },
   {
     icon: UserCheck,
     title: "Benefícios ao Idoso",
     description: "Atenção especial para pessoas com 50+ anos",
-    color: "#e5375b",
+    color: "#e84364",
     href: "#idoso",
   },
 ]
@@ -69,13 +69,13 @@ export function BenefitsSection() {
           transition={{ duration: 0.6 }}
           className="text-center mb-16"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#e5375b]/10 rounded-full text-[#e5375b] text-sm font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#e84364]/10 rounded-full text-[#e84364] text-sm font-medium mb-6">
             <Heart size={16} />
             Benefícios Múltiplos
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#1c3670] mb-6 text-balance">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#26365f] mb-6 text-balance">
             Só na Annetec você conta com{" "}
-            <span className="text-[#e5375b]">diversos benefícios</span>
+            <span className="text-[#e84364]">diversos benefícios</span>
           </h2>
           <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
             Nossa prioridade é criar condições para que você e sua família tenham 
@@ -94,20 +94,20 @@ export function BenefitsSection() {
               transition={{ duration: 0.6, delay: index * 0.1 }}
             >
               <Link href={benefit.href} className="block group">
-                <div className="h-full p-6 bg-white rounded-2xl shadow-lg border border-border/50 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 hover:border-[#e5375b]/30">
+                <div className="h-full p-6 bg-white rounded-2xl shadow-lg border border-border/50 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 hover:border-[#e84364]/30">
                   <div 
                     className="w-14 h-14 rounded-xl flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-110"
                     style={{ backgroundColor: `${benefit.color}15` }}
                   >
                     <benefit.icon size={28} style={{ color: benefit.color }} />
                   </div>
-                  <h3 className="text-xl font-bold text-[#1c3670] mb-2 group-hover:text-[#e5375b] transition-colors">
+                  <h3 className="text-xl font-bold text-[#26365f] mb-2 group-hover:text-[#e84364] transition-colors">
                     {benefit.title}
                   </h3>
                   <p className="text-muted-foreground mb-4">
                     {benefit.description}
                   </p>
-                  <div className="flex items-center gap-2 text-sm font-medium text-[#e5375b] group-hover:gap-3 transition-all">
+                  <div className="flex items-center gap-2 text-sm font-medium text-[#e84364] group-hover:gap-3 transition-all">
                     Saiba mais
                     <ArrowRight size={16} />
                   </div>
@@ -127,7 +127,7 @@ export function BenefitsSection() {
         >
           <Link 
             href="#condicoes-gerais" 
-            className="inline-flex items-center gap-2 text-[#1c3670] hover:text-[#e5375b] font-medium transition-colors"
+            className="inline-flex items-center gap-2 text-[#26365f] hover:text-[#e84364] font-medium transition-colors"
           >
             Acesse aqui as Condições Gerais dos benefícios
             <ArrowRight size={18} />

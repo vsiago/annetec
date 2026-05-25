@@ -26,7 +26,7 @@ export default function AdminConfiguracoesPage() {
           <h1 className="text-2xl font-bold text-foreground">Configurações do Sistema</h1>
           <p className="text-muted-foreground">Gerencie os parâmetros globais da plataforma Administrativa</p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving} className="bg-[#1c3670] hover:bg-[#152a5c] text-white">
+        <Button onClick={handleSave} disabled={isSaving} className="bg-[#26365f] hover:bg-[#152a5c] text-white">
           <Save className="h-4 w-4 mr-2" />
           {isSaving ? 'Salvando...' : 'Salvar Alterações'}
         </Button>
@@ -64,11 +64,11 @@ export default function AdminConfiguracoesPage() {
             <CardContent className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#1c3670]">Annetec Individual</label>
+                  <label className="text-sm font-medium text-[#26365f]">Annetec Individual</label>
                   <Input type="number" step="0.01" defaultValue="19.90" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#e5375b]">Annetec Família</label>
+                  <label className="text-sm font-medium text-[#e84364]">Annetec Família</label>
                   <Input type="number" step="0.01" defaultValue="49.90" />
                 </div>
               </div>

@@ -8,7 +8,7 @@ export function PharmacySection() {
   return (
     <section id="farmacia" className="py-20 lg:py-32 bg-[#f8fafc] relative overflow-hidden">
       {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#e5375b]/5 via-transparent to-[#1c3670]/5" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#e84364]/5 via-transparent to-[#26365f]/5" />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
@@ -20,14 +20,14 @@ export function PharmacySection() {
             transition={{ duration: 0.8 }}
             className="order-2 lg:order-1"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#e5375b]/10 rounded-full text-[#e5375b] text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#e84364]/10 rounded-full text-[#e84364] text-sm font-medium mb-6">
               <Pill size={16} />
               Benefício Farmácia
             </div>
 
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#1c3670] mb-6 text-balance">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#26365f] mb-6 text-balance">
               Bons descontos de até{" "}
-              <span className="text-[#e5375b]">60% na compra de medicamentos</span>
+              <span className="text-[#e84364]">60% na compra de medicamentos</span>
             </h2>
 
             <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
@@ -50,17 +50,17 @@ export function PharmacySection() {
                   transition={{ delay: 0.2 + index * 0.1 }}
                   className="flex items-center gap-4 p-4 bg-white rounded-xl shadow-sm"
                 >
-                  <div className="w-10 h-10 bg-[#1c3670]/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <feature.icon size={20} className="text-[#1c3670]" />
+                  <div className="w-10 h-10 bg-[#26365f]/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <feature.icon size={20} className="text-[#26365f]" />
                   </div>
-                  <span className="text-[#1c3670] font-medium">{feature.text}</span>
+                  <span className="text-[#26365f] font-medium">{feature.text}</span>
                 </motion.div>
               ))}
             </div>
 
             <Link 
               href="#rede-farmacias" 
-              className="inline-flex items-center gap-2 text-[#e5375b] hover:text-[#d12d4f] font-medium transition-colors"
+              className="inline-flex items-center gap-2 text-[#e84364] hover:text-[#d12d4f] font-medium transition-colors"
             >
               Ver rede de farmácias parceiras
               <ArrowRight size={18} />
@@ -77,7 +77,7 @@ export function PharmacySection() {
           >
             <div className="relative">
               {/* Main Card */}
-              <div className="bg-gradient-to-br from-[#1c3670] to-[#2d4a8c] rounded-3xl p-8 shadow-2xl">
+              <div className="bg-gradient-to-br from-[#26365f] to-[#3a4e82] rounded-3xl p-8 shadow-2xl">
                 <div className="text-center mb-8">
                   <div className="w-20 h-20 bg-white/10 rounded-2xl mx-auto flex items-center justify-center mb-4">
                     <Pill size={40} className="text-white" />
@@ -90,7 +90,7 @@ export function PharmacySection() {
                 <motion.div
                   animate={{ scale: [1, 1.05, 1] }}
                   transition={{ duration: 2, repeat: Infinity }}
-                  className="bg-[#e5375b] rounded-2xl p-6 text-center"
+                  className="bg-[#e84364] rounded-2xl p-6 text-center"
                 >
                   <p className="text-white/90 text-sm mb-1">Desconto de até</p>
                   <span className="text-5xl font-bold text-white">60%</span>
@@ -110,14 +110,14 @@ export function PharmacySection() {
                 transition={{ duration: 3, repeat: Infinity }}
                 className="absolute -top-4 -right-4 bg-white rounded-2xl p-3.5 shadow-[0_15px_30px_-10px_rgba(229,55,91,0.2)] border border-white"
               >
-                <Pill size={32} className="text-[#e5375b]" strokeWidth={2.5} />
+                <Pill size={32} className="text-[#e84364]" strokeWidth={2.5} />
               </motion.div>
               <motion.div
                 animate={{ y: [0, 10, 0] }}
                 transition={{ duration: 3.5, repeat: Infinity }}
                 className="absolute -bottom-4 -left-4 bg-white rounded-2xl p-3.5 shadow-[0_15px_30px_-10px_rgba(229,55,91,0.2)] border border-white"
               >
-                <Heart size={32} className="text-[#e5375b]" strokeWidth={2.5} />
+                <Heart size={32} className="text-[#e84364]" strokeWidth={2.5} />
               </motion.div>
             </div>
           </motion.div>

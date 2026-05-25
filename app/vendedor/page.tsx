@@ -88,7 +88,7 @@ export default function SellerDashboard() {
           <Button variant="outline" asChild>
             <Link href="/vendedor/pipeline">Ver Pipeline</Link>
           </Button>
-          <Button className="bg-[#e5375b] hover:bg-[#d42d50] text-white" asChild>
+          <Button className="bg-[#e84364] hover:bg-[#d42d50] text-white" asChild>
             <Link href="/vendedor/leads">Novo Lead</Link>
           </Button>
         </div>
@@ -134,8 +134,8 @@ export default function SellerDashboard() {
                 <p className="text-2xl font-bold mt-1">R$ {totalCommission.toLocaleString('pt-BR')}</p>
                 <p className="text-sm text-muted-foreground mt-1">{(seller?.commissionRate || 0) * 100}% sobre vendas</p>
               </div>
-              <div className="p-3 rounded-lg bg-[#e5375b]/10">
-                <DollarSign className="h-5 w-5 text-[#e5375b]" />
+              <div className="p-3 rounded-lg bg-[#e84364]/10">
+                <DollarSign className="h-5 w-5 text-[#e84364]" />
               </div>
             </div>
           </CardContent>
@@ -151,8 +151,8 @@ export default function SellerDashboard() {
                   R$ {(seller?.totalSales || 0).toLocaleString('pt-BR')} / R$ {(seller?.salesGoal || 0).toLocaleString('pt-BR')}
                 </p>
               </div>
-              <div className="p-3 rounded-lg bg-[#1c3670]/10">
-                <Target className="h-5 w-5 text-[#1c3670]" />
+              <div className="p-3 rounded-lg bg-[#26365f]/10">
+                <Target className="h-5 w-5 text-[#26365f]" />
               </div>
             </div>
           </CardContent>
@@ -164,7 +164,7 @@ export default function SellerDashboard() {
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold">Progresso da Meta Mensal</h3>
-            <span className={`text-sm font-medium ${progressPercent >= 100 ? 'text-green-500' : 'text-[#1c3670]'}`}>
+            <span className={`text-sm font-medium ${progressPercent >= 100 ? 'text-green-500' : 'text-[#26365f]'}`}>
               {progressPercent.toFixed(0)}%
             </span>
           </div>
@@ -173,7 +173,7 @@ export default function SellerDashboard() {
               className="h-full rounded-full transition-all duration-500"
               style={{
                 width: `${progressPercent}%`,
-                backgroundColor: progressPercent >= 100 ? '#22c55e' : '#1c3670',
+                backgroundColor: progressPercent >= 100 ? '#22c55e' : '#26365f',
               }}
             />
           </div>

@@ -37,8 +37,8 @@ export function FAQSection() {
           transition={{ duration: 0.6 }}
           className="text-center mb-16"
         >
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#1c3670] mb-6">
-            Perguntas <span className="text-[#e5375b]">Frequentes</span>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#26365f] mb-6">
+            Perguntas <span className="text-[#e84364]">Frequentes</span>
           </h2>
           <p className="text-lg text-muted-foreground">
             Tire suas dúvidas sobre a Annetec
@@ -58,18 +58,18 @@ export function FAQSection() {
               <div 
                 className={`border rounded-2xl overflow-hidden transition-all duration-300 ${
                   openIndex === index 
-                    ? "border-[#e5375b]/30 shadow-lg" 
-                    : "border-border hover:border-[#1c3670]/30"
+                    ? "border-[#e84364]/30 shadow-lg" 
+                    : "border-border hover:border-[#26365f]/30"
                 }`}
               >
                 <button
                   onClick={() => setOpenIndex(openIndex === index ? null : index)}
                   className="w-full px-6 py-5 flex items-center justify-between text-left"
                 >
-                  <span className="font-semibold text-[#1c3670] pr-4">{faq.question}</span>
+                  <span className="font-semibold text-[#26365f] pr-4">{faq.question}</span>
                   <ChevronDown 
                     size={20} 
-                    className={`text-[#e5375b] flex-shrink-0 transition-transform duration-300 ${
+                    className={`text-[#e84364] flex-shrink-0 transition-transform duration-300 ${
                       openIndex === index ? "rotate-180" : ""
                     }`} 
                   />

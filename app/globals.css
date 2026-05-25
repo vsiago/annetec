@@ -5,38 +5,38 @@
 
 :root {
   /* ANNETEC Brand Colors */
-  --annetec-blue: #1c3670;
-  --annetec-fuchsia: #e5375b;
-  --annetec-blue-light: rgba(28, 54, 112, 0.1);
-  --annetec-fuchsia-light: rgba(229, 55, 91, 0.1);
+  --annetec-blue: #26365f;
+  --annetec-fuchsia: #e84364;
+  --annetec-blue-light: rgba(38, 54, 95, 0.1);
+  --annetec-fuchsia-light: rgba(232, 67, 100, 0.1);
   
   /* Base */
   --background: #ffffff;
-  --foreground: #1c3670;
+  --foreground: #26365f;
   
   /* Card */
   --card: #ffffff;
-  --card-foreground: #1c3670;
+  --card-foreground: #26365f;
   
   /* Popover */
   --popover: #ffffff;
-  --popover-foreground: #1c3670;
+  --popover-foreground: #26365f;
   
-  /* Primary - Blue */
-  --primary: #1c3670;
+  /* Primary - Fuchsia */
+  --primary: #e84364;
   --primary-foreground: #ffffff;
   
-  /* Secondary - Light Blue */
-  --secondary: #f0f4f9;
-  --secondary-foreground: #1c3670;
+  /* Secondary - Blue */
+  --secondary: #26365f;
+  --secondary-foreground: #ffffff;
   
   /* Muted */
   --muted: #f8fafc;
   --muted-foreground: #64748b;
   
-  /* Accent - Fuchsia */
-  --accent: #e5375b;
-  --accent-foreground: #ffffff;
+  /* Accent */
+  --accent: #f0f4f9;
+  --accent-foreground: #26365f;
   
   /* Destructive */
   --destructive: #ef4444;
@@ -45,11 +45,11 @@
   /* Border & Input */
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #1c3670;
+  --ring: #e84364;
   
   /* Charts */
-  --chart-1: #1c3670;
-  --chart-2: #e5375b;
+  --chart-1: #e84364;
+  --chart-2: #26365f;
   --chart-3: #3b82f6;
   --chart-4: #10b981;
   --chart-5: #f59e0b;
@@ -118,12 +118,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1c3670;
+  background: var(--primary);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #152a5c;
+  background: var(--secondary);
 }
 
 /* Glassmorphism utility */
@@ -135,20 +135,20 @@
 
 /* Gradient backgrounds */
 .gradient-primary {
-  background: linear-gradient(135deg, #1c3670 0%, #2d4a8c 100%);
+  background: linear-gradient(135deg, #e84364 0%, #ff6b8b 100%);
 }
 
 .gradient-accent {
-  background: linear-gradient(135deg, #e5375b 0%, #f25c7c 100%);
+  background: linear-gradient(135deg, #26365f 0%, #3a4e82 100%);
 }
 
 /* Glow effects */
 .glow-fuchsia {
-  box-shadow: 0 0 40px rgba(229, 55, 91, 0.3);
+  box-shadow: 0 0 40px rgba(232, 67, 100, 0.3);
 }
 
 .glow-blue {
-  box-shadow: 0 0 40px rgba(28, 54, 112, 0.2);
+  box-shadow: 0 0 40px rgba(38, 54, 95, 0.2);
 }
 
 /* Animation utilities */
@@ -167,10 +167,10 @@
 
 @keyframes pulse-glow {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(229, 55, 91, 0.3);
+    box-shadow: 0 0 20px rgba(232, 67, 100, 0.3);
   }
   50% {
-    box-shadow: 0 0 40px rgba(229, 55, 91, 0.5);
+    box-shadow: 0 0 40px rgba(232, 67, 100, 0.5);
   }
 }
 
