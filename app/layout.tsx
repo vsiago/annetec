@@ -29,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="pt-BR" className={`${inter.variable} bg-background`}>
+    <html lang="pt-BR" className={`${inter.variable} bg-background`} suppressHydrationWarning>
       <body className="font-sans antialiased">
         <Providers>
           {children}
