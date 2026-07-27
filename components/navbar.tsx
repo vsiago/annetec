@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
-import { Menu, X, ChevronDown, Info, Landmark, Shield, UserCog, Building2, Building, Users, Briefcase, Store, HeartHandshake, FileEdit, BookDown, GraduationCap } from "lucide-react"
+import { Menu, X, ChevronDown, Info, Landmark, Shield, UserCog, Building2, Building, Users, Briefcase, Store, HeartHandshake, FileEdit, BookDown, GraduationCap, Stethoscope } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const FaviconIcon = ({ className }: { className?: string }) => (
@@ -13,188 +13,188 @@ const FaviconIcon = ({ className }: { className?: string }) => (
 const navItems = [
   {
     label: "A Associação",
-    href: "#associacao",
+    href: "/#sobre",
     dropdown: [
       {
         icon: FaviconIcon,
         iconColor: "",
         iconBg: "bg-pink-100",
         label: "Sobre nós",
-        href: "#sobre-nos"
+        href: "/#sobre"
       },
       {
         icon: Landmark,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Servidor Público",
-        href: "#servidor-publico"
+        href: "/#publico-servidor"
       },
       {
         icon: Shield,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Militar",
-        href: "#militar"
+        href: "/#publico-militar"
       },
       {
         icon: UserCog,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Profissional, Técnico e Tecnólogo",
-        href: "#profissional"
+        href: "/#publico-profissional"
       },
       {
         icon: Building2,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Entidades Associativas",
-        href: "#entidades"
+        href: "/#publico-entidades"
       }
     ]
   },
   {
-    label: "Club de Benefícios",
-    href: "#club-beneficios",
+    label: "Club de Saúde & Benefícios",
+    href: "/planos",
     dropdown: [
+      {
+        icon: Stethoscope,
+        iconColor: "text-gray-700",
+        iconBg: "bg-transparent",
+        label: "Gestão de Saúde",
+        href: "/planos#gestao"
+      },
       {
         icon: FaviconIcon,
         iconColor: "",
         iconBg: "bg-pink-100",
         label: "Planos para sua associação",
-        href: "#planos-associacao"
+        href: "/planos#associacao"
       },
       {
         icon: Building,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Planos para sua empresa",
-        href: "#planos-empresa"
+        href: "/planos#empresa"
       },
       {
         icon: Users,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Planos para você",
-        href: "#planos-voce"
+        href: "/planos#voce"
       }
     ]
   },
   {
     label: "Entidades Conveniadas",
-    href: "#entidades-conveniadas",
+    href: "/entidades",
     dropdown: [
       {
         icon: Briefcase,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Associações Comerciais",
-        href: "#associacoes-comerciais"
+        href: "/entidades#associacoes-comerciais"
       },
       {
         icon: Store,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "CDL - Câmaras Lojistas",
-        href: "#cdl"
+        href: "/entidades#cdl"
       },
       {
         icon: Users,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Sindicatos",
-        href: "#sindicatos"
+        href: "/entidades#sindicatos"
       },
       {
         icon: Building2,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Outras associações",
-        href: "#outras-associacoes"
+        href: "/entidades#outras-associacoes"
       },
       {
         icon: HeartHandshake,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Parcerias na saúde, odonto e bem-estar",
-        href: "#parcerias-saude"
+        href: "/entidades#parcerias-saude"
       }
     ]
   },
   {
     label: "Materiais Gratuitos",
-    href: "#materiais-gratuitos",
+    href: "/materiais",
     dropdown: [
       {
         icon: FileEdit,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Blog",
-        href: "#blog"
+        href: "/materiais#blog"
       },
       {
         icon: BookDown,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "eBook",
-        href: "#ebook"
+        href: "/materiais#ebooks"
       },
       {
         icon: GraduationCap,
         iconColor: "text-gray-700",
         iconBg: "bg-transparent",
         label: "Cursos gratuitos",
-        href: "#cursos"
+        href: "/materiais#cursos"
       }
     ]
+  },
+  {
+    label: "Cadastre-se",
+    href: "/cadastro",
+    dropdown: []
+  },
+  {
+    label: "Contato",
+    href: "/#contato",
+    dropdown: []
   },
 ]
 
 export function Navbar() {
-  const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20)
-    }
-    window.addEventListener("scroll", handleScroll)
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
 
   return (
     <motion.header
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5 }}
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled
-          ? "bg-[#e84364] shadow-md"
-          : "bg-transparent"
-      }`}
+      className="fixed top-0 left-0 right-0 z-50 bg-[#e84364] shadow-md transition-all duration-300"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
         <nav className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <img src={isScrolled ? "/annetec-light.svg" : "/annetec.svg"} alt="Annetec" className="h-12" />
+          <Link href="/" className="flex items-center gap-2 shrink-0">
+            <img src="/annetec-light.svg" alt="Annetec" className="h-10 md:h-12 object-contain" />
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden lg:flex items-center gap-2 xl:gap-6">
+          <div className="hidden lg:flex items-center gap-3 xl:gap-5">
             {navItems.map((item) => (
-              <div key={item.label} className="relative group">
+              <div key={item.label} className="relative group shrink-0">
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-1.5 py-6 text-[15px] font-bold transition-colors ${
-                    isScrolled
-                      ? "text-white hover:text-white/80"
-                      : "text-gray-900 hover:text-[#e84364]"
-                  }`}
+                  className="flex items-center gap-1.5 py-6 text-[15px] font-bold text-white hover:text-white/80 transition-colors whitespace-nowrap"
                 >
                   {item.label}
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 group-hover:rotate-180 ${
-                    isScrolled ? "text-white/70" : "text-gray-400"
-                  }`} />
+                  {item.dropdown && item.dropdown.length > 0 && (
+                    <ChevronDown className="w-4 h-4 text-white/80 transition-transform duration-200 group-hover:rotate-180" />
+                  )}
                 </Link>
 
                 {/* Dropdown Menu */}
@@ -227,35 +227,24 @@ export function Navbar() {
           </div>
 
           {/* Desktop CTA */}
-          <div className="hidden lg:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-4 shrink-0">
+            <Link
+              href="/login"
+              className="text-white hover:text-white/80 font-bold text-[15px] transition-colors px-3 py-2 whitespace-nowrap"
+            >
+              Login
+            </Link>
             <Button
-              variant="ghost"
-              className={`font-bold transition-colors ${
-                isScrolled
-                  ? "text-white hover:text-white hover:bg-white/10"
-                  : "text-[#26365f] hover:text-[#e84364] hover:bg-[#e84364]/5"
-              }`}
+              className="bg-white text-[#e84364] hover:bg-gray-100 font-extrabold shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105 rounded-full px-7 py-2.5 text-sm uppercase tracking-wider whitespace-nowrap"
               asChild
             >
-              <Link href="/login">Entrar</Link>
-            </Button>
-            <Button
-              className={`font-bold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 rounded-full px-6 ${
-                isScrolled
-                  ? "bg-white text-[#e84364] hover:bg-gray-100"
-                  : "bg-[#e84364] text-white hover:bg-[#d12d4f]"
-              }`}
-              asChild
-            >
-              <Link href="#contrate">Contrate Agora!</Link>
+              <Link href="/#contrate">ASSOCIE-SE</Link>
             </Button>
           </div>
 
           {/* Mobile Menu Button */}
           <button
-            className={`lg:hidden p-2 transition-colors ${
-              isScrolled ? "text-white" : "text-[#26365f]"
-            }`}
+            className="lg:hidden p-2 text-white hover:text-white/80 transition-colors"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label={isMobileMenuOpen ? "Fechar menu" : "Abrir menu"}
           >
@@ -317,7 +306,7 @@ export function Navbar() {
                   className="w-full bg-[#e84364] hover:bg-[#d12d4f] text-white font-bold rounded-full"
                   asChild
                 >
-                  <Link href="#contrate">Contrate Agora!</Link>
+                  <Link href="/#contrate">Contrate Agora!</Link>
                 </Button>
               </div>
             </div>

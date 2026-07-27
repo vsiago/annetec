@@ -1,6 +1,7 @@
 import { Navbar } from "@/components/navbar"
 import { HeroSection } from "@/components/hero-section"
 import { AboutSection } from "@/components/about-section"
+import { AudienceSection } from "@/components/audience-section"
 import { BenefitsSection } from "@/components/benefits-section"
 import { PreventiveSection } from "@/components/preventive-section"
 import { DentalSection } from "@/components/dental-section"
@@ -21,6 +22,7 @@ export default function HomePage() {
       <Navbar />
       <HeroSection />
       <AboutSection />
+      <AudienceSection />
       <BenefitsSection />
       <PreventiveSection />
       <DentalSection />
