@@ -6,7 +6,7 @@ import { ArrowRight, CheckCircle2 } from "lucide-react"
 
 export function HeroSection() {
   return (
-    <section className="relative min-h-[85vh] lg:min-h-[88vh] flex items-center overflow-hidden bg-gradient-to-br from-white via-[#f2f6fa] to-[#d6e5f5] pt-24 pb-12">
+    <section className="relative min-h-screen min-h-[100dvh] flex flex-col justify-center overflow-hidden bg-gradient-to-br from-white via-[#f2f6fa] to-[#d6e5f5] pt-16 md:pt-20 pb-6 md:pb-10">
       {/* Soft Ambient Background Glows */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute top-1/4 -left-20 w-96 h-96 bg-[#e84364]/10 rounded-full blur-3xl" />
