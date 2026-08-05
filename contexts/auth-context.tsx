@@ -3,10 +3,13 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import type { User, Seller, Client, UserRole } from '@/lib/types'
-import { mockCredentials, getUserById } from '@/lib/mock-data'
+import { useTenant } from './tenant-context'
+import { getUserById, loginTenantUser, getRoleRedirectPath } from '@/lib/actions/tenant-users'
+
+type TenantUser = User | Seller | Client
 
 interface AuthContextType {
-  user: User | Seller | Client | null
+  user: TenantUser | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => void
@@ -15,59 +18,62 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Tenant-scoped auth (admin/seller/client of a single tenant). Must be
+// rendered under TenantProvider — the session is scoped per-tenant so a
+// login on /clinica-vida/... never leaks into /annetec/....
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | Seller | Client | null>(null)
+  const { tenant } = useTenant()
+  const [user, setUser] = useState<TenantUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
+  const storageKey = tenant ? `annetec_session_${tenant.id}` : null
+
   useEffect(() => {
-    // Check for existing session in localStorage
-    const storedUserId = localStorage.getItem('annetec_user_id')
+    if (!storageKey) return
+    const storedUserId = localStorage.getItem(storageKey)
     if (storedUserId) {
-      const foundUser = getUserById(storedUserId)
-      if (foundUser) {
-        setUser(foundUser)
-      }
+      getUserById(storedUserId).then(result => {
+        // Re-check tenant ownership: the stored id could point at a user that
+        // was deleted, or that belongs to another tenant if the key was
+        // tampered with. Never restore a session across tenant boundaries.
+        if (result.success && result.data && result.data.tenantId === tenant?.id) {
+          setUser(result.data)
+        } else {
+          localStorage.removeItem(storageKey)
+          setUser(null)
+        }
+        setIsLoading(false)
+      })
+    } else {
+      setUser(null)
+      setIsLoading(false)
     }
-    setIsLoading(false)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey])
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    if (!tenant || !storageKey) {
+      return { success: false, error: 'Inquilino não carregado' }
+    }
     setIsLoading(true)
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    const credential = mockCredentials.find(
-      cred => cred.email.toLowerCase() === email.toLowerCase() && cred.password === password
-    )
-    
-    if (!credential) {
+    const result = await loginTenantUser(tenant.id, email, password)
+    if (!result.success) {
       setIsLoading(false)
-      return { success: false, error: 'Email ou senha inválidos' }
+      return { success: false, error: result.error }
     }
-    
-    const foundUser = getUserById(credential.userId)
-    if (!foundUser) {
-      setIsLoading(false)
-      return { success: false, error: 'Usuário não encontrado' }
-    }
-    
-    setUser(foundUser)
-    localStorage.setItem('annetec_user_id', foundUser.id)
+
+    setUser(result.data)
+    localStorage.setItem(storageKey, result.data.id)
     setIsLoading(false)
-    
-    // Redirect based on role
-    const redirectPath = getRedirectPath(foundUser.role)
-    router.push(redirectPath)
-    
+    router.push(getRoleRedirectPath(tenant.slug, result.data.role))
     return { success: true }
   }
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem('annetec_user_id')
-    router.push('/login')
+    if (storageKey) localStorage.removeItem(storageKey)
+    if (tenant) router.push(`/${tenant.slug}/login`)
   }
 
   return (
@@ -93,15 +99,6 @@ export function useAuth() {
   return context
 }
 
-export function getRedirectPath(role: UserRole): string {
-  switch (role) {
-    case 'admin':
-      return '/admin'
-    case 'seller':
-      return '/vendedor'
-    case 'client':
-      return '/cliente'
-    default:
-      return '/login'
-  }
+export function getRedirectPath(tenantSlug: string, role: UserRole): string {
+  return getRoleRedirectPath(tenantSlug, role)
 }

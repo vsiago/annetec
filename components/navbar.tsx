@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import { Menu, X, ChevronDown, Info, Landmark, Shield, UserCog, Building2, Building, Users, Briefcase, Store, HeartHandshake, FileEdit, BookDown, GraduationCap, Stethoscope } from "lucide-react"
@@ -170,10 +170,7 @@ export function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   return (
-    <motion.header
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.5 }}
+    <header
       className="fixed top-0 left-0 right-0 z-50 bg-[#e84364] shadow-md transition-all duration-300"
     >
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -313,6 +310,6 @@ export function Navbar() {
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.header>
+    </header>
   )
 }

@@ -178,22 +178,31 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Gradient backgrounds */
+/* Gradient backgrounds — the --gradient-* vars are overridden per tenant by
+   lib/theme.ts, so these fall back to Annetec's brand outside /[tenant]. */
 .gradient-primary {
-  background: linear-gradient(135deg, #e84364 0%, #ff6b8b 100%);
+  background: linear-gradient(
+    135deg,
+    var(--gradient-primary-from, #e84364) 0%,
+    var(--gradient-primary-to, #ff6b8b) 100%
+  );
 }
 
 .gradient-accent {
-  background: linear-gradient(135deg, #26365f 0%, #3a4e82 100%);
+  background: linear-gradient(
+    135deg,
+    var(--gradient-accent-from, #26365f) 0%,
+    var(--gradient-accent-to, #3a4e82) 100%
+  );
 }
 
 /* Glow effects */
 .glow-fuchsia {
-  box-shadow: 0 0 40px rgba(232, 67, 100, 0.3);
+  box-shadow: 0 0 40px var(--brand-primary-soft, rgba(232, 67, 100, 0.3));
 }
 
 .glow-blue {
-  box-shadow: 0 0 40px rgba(38, 54, 95, 0.2);
+  box-shadow: 0 0 40px var(--brand-secondary-soft, rgba(38, 54, 95, 0.2));
 }
 
 /* Animation utilities */

@@ -4,133 +4,117 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
-import { Save } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { useTenants } from '@/contexts/tenants-context'
+import { createPlan } from '@/lib/actions/tenant-plans'
+import { Plus, Wallet } from 'lucide-react'
 
-export default function AdminConfiguracoesPage() {
-  const [isSaving, setIsSaving] = useState(false)
+export default function PlatformConfiguracoesPage() {
+  const { plans, refresh } = useTenants()
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [priceMonthly, setPriceMonthly] = useState('')
+  const [memberLimit, setMemberLimit] = useState('')
+  const [featuresText, setFeaturesText] = useState('')
 
-  const handleSave = () => {
-    setIsSaving(true)
-    setTimeout(() => {
-      setIsSaving(false)
-      alert('Configurações salvas com sucesso!')
-    }, 1000)
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name || !priceMonthly) return
+    await createPlan({
+      name,
+      priceMonthly: Number(priceMonthly),
+      memberLimit: Number(memberLimit) || 0,
+      features: featuresText.split(',').map(f => f.trim()).filter(Boolean),
+    })
+    await refresh()
+    setIsAddOpen(false)
+    setName('')
+    setPriceMonthly('')
+    setMemberLimit('')
+    setFeaturesText('')
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Configurações do Sistema</h1>
-          <p className="text-muted-foreground">Gerencie os parâmetros globais da plataforma Administrativa</p>
+          <h1 className="text-2xl font-bold text-foreground">Catálogo de Planos</h1>
+          <p className="text-muted-foreground">Planos de assinatura oferecidos aos inquilinos da plataforma</p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving} className="bg-[#26365f] hover:bg-[#152a5c] text-white">
-          <Save className="h-4 w-4 mr-2" />
-          {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+        <Button className="bg-primary hover:opacity-90 text-white" onClick={() => setIsAddOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Plano
         </Button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="space-y-6">
-          <Card className="border-0 shadow-sm">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {plans.map(plan => (
+          <Card key={plan.id} className="border-0 shadow-sm">
             <CardHeader>
-              <CardTitle>Informações do Sistema</CardTitle>
-              <CardDescription>Configurações básicas da plataforma</CardDescription>
+              <div className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-secondary" />
+                <CardTitle className="text-lg">{plan.name}</CardTitle>
+              </div>
+              <CardDescription>Até {plan.memberLimit.toLocaleString('pt-BR')} associados</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Nome da Plataforma</label>
-                <Input defaultValue="Annetec" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">E-mail de Suporte Padrão</label>
-                <Input defaultValue="suporte@annetec.com.br" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Fuso Horário</label>
-                <Input defaultValue="América/São_Paulo (BRT)" disabled />
-                <p className="text-xs text-muted-foreground">Usado para base de cálculos e relatórios.</p>
+            <CardContent>
+              <p className="text-2xl font-bold text-primary mb-4">
+                R$ {plan.priceMonthly.toLocaleString('pt-BR')}<span className="text-sm text-muted-foreground">/mês</span>
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {plan.features.map((f, i) => (
+                  <Badge key={i} variant="outline">{f}</Badge>
+                ))}
               </div>
             </CardContent>
           </Card>
-
-          <Card className="border-0 shadow-sm">
-            <CardHeader>
-              <CardTitle>Precificação Global</CardTitle>
-              <CardDescription>Valores base dos planos</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#26365f]">Annetec Individual</label>
-                  <Input type="number" step="0.01" defaultValue="19.90" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#e84364]">Annetec Família</label>
-                  <Input type="number" step="0.01" defaultValue="49.90" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card className="border-0 shadow-sm">
-            <CardHeader>
-              <CardTitle>Segurança Global</CardTitle>
-              <CardDescription>Políticas aplicadas a todos os usuários</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-medium">Autenticação em Duas Etapas (2FA)</h4>
-                  <p className="text-sm text-muted-foreground">Exigir validação adicional no login.</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-medium">Log de Auditoria</h4>
-                  <p className="text-sm text-muted-foreground">Registrar ações de administradores no sistema.</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-medium">Forçar Senha Forte</h4>
-                  <p className="text-sm text-muted-foreground">Exigir uso de caracteres especiais em senhas.</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-0 shadow-sm">
-            <CardHeader>
-              <CardTitle>Integrações e Notificações</CardTitle>
-              <CardDescription>Comunicações automáticas do sistema</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-medium">Bloqueio Automático</h4>
-                  <p className="text-sm text-muted-foreground">Suspender planos após 30 dias de inadimplência.</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-medium">E-mails Transacionais</h4>
-                  <p className="text-sm text-muted-foreground">Ativar serviço de e-mail (SendGrid/AWS SES).</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        ))}
       </div>
+
+      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <form onSubmit={handleAdd}>
+            <DialogHeader>
+              <DialogTitle>Novo Plano</DialogTitle>
+              <DialogDescription>Adicione um novo plano ao catálogo da plataforma</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Nome *</label>
+                <Input value={name} onChange={e => setName(e.target.value)} required />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Preço mensal (R$) *</label>
+                <Input type="number" value={priceMonthly} onChange={e => setPriceMonthly(e.target.value)} required />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Limite de associados</label>
+                <Input type="number" value={memberLimit} onChange={e => setMemberLimit(e.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Recursos (separados por vírgula)</label>
+                <Input value={featuresText} onChange={e => setFeaturesText(e.target.value)} placeholder="Ex: Carteirinha digital, Suporte prioritário" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" className="bg-primary hover:opacity-90 text-white">
+                Criar Plano
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

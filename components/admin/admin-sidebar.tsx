@@ -4,13 +4,15 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { useTenant } from '@/contexts/tenant-context'
+import { cn, getInitials } from '@/lib/utils'
 import {
   LayoutDashboard,
   Users,
   UserCog,
   UsersRound,
+  Handshake,
+  Wallet,
   BarChart3,
   Settings,
   LogOut,
@@ -28,28 +30,25 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
-const sidebarLinks = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/usuarios', label: 'Usuários', icon: Users },
-  { href: '/admin/vendedores', label: 'Vendedores', icon: UserCog },
-  { href: '/admin/clientes', label: 'Clientes', icon: UsersRound },
-  { href: '/admin/relatorios', label: 'Relatórios', icon: BarChart3 },
-  { href: '/admin/configuracoes', label: 'Configurações', icon: Settings },
-]
-
 export function AdminSidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
+  const { tenant } = useTenant()
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
-  }
+  if (!tenant) return null
+
+  const base = `/${tenant.slug}/admin`
+  const sidebarLinks = [
+    { href: base, label: 'Dashboard', icon: LayoutDashboard },
+    { href: `${base}/usuarios`, label: 'Usuários', icon: Users },
+    { href: `${base}/vendedores`, label: 'Vendedores', icon: UserCog },
+    { href: `${base}/clientes`, label: 'Clientes', icon: UsersRound },
+    { href: `${base}/parceiros`, label: 'Parceiros', icon: Handshake },
+    { href: `${base}/planos`, label: 'Planos', icon: Wallet },
+    { href: `${base}/relatorios`, label: 'Relatórios', icon: BarChart3 },
+    { href: `${base}/configuracoes`, label: 'Configurações', icon: Settings },
+  ]
 
   return (
     <>
@@ -61,15 +60,15 @@ export function AdminSidebar() {
         >
           <Menu className="h-6 w-6" />
         </button>
-        <img
-          src="/annetec.svg"
-          alt="Annetec"
-          className="h-8"
-        />
+        {tenant.branding.logoUrl ? (
+          <img src={tenant.branding.logoUrl} alt={tenant.name} className="h-8" />
+        ) : (
+          <span className="font-bold text-foreground">{tenant.name}</span>
+        )}
         <div className="flex items-center gap-2">
           <button className="p-2 text-muted-foreground hover:text-foreground relative">
             <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-[#26365f] rounded-full" />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-secondary rounded-full" />
           </button>
         </div>
       </header>
@@ -85,18 +84,18 @@ export function AdminSidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed top-0 left-0 h-full w-64 bg-[#e84364] z-50 flex flex-col transition-transform duration-300 lg:translate-x-0',
+          'fixed top-0 left-0 h-full w-64 bg-primary z-50 flex flex-col transition-transform duration-300 lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/10">
-          <Link href="/admin">
-            <img
-              src="/annetec-light.svg"
-              alt="Annetec"
-              className="h-8"
-            />
+          <Link href={base}>
+            {tenant.branding.logoUrl ? (
+              <img src={tenant.branding.logoUrl} alt={tenant.name} className="h-8" />
+            ) : (
+              <span className="font-bold text-white text-lg">{tenant.name}</span>
+            )}
           </Link>
           <button
             onClick={() => setMobileOpen(false)}
@@ -138,8 +137,8 @@ export function AdminSidebar() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
-                <Avatar className="h-9 w-9 bg-[#26365f]">
-                  <AvatarFallback className="bg-[#26365f] text-white text-sm">
+                <Avatar className="h-9 w-9 bg-secondary">
+                  <AvatarFallback className="bg-secondary text-white text-sm">
                     {user?.name ? getInitials(user.name) : 'AD'}
                   </AvatarFallback>
                 </Avatar>
@@ -152,7 +151,7 @@ export function AdminSidebar() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem asChild>
-                <Link href="/admin/configuracoes">
+                <Link href={`${base}/configuracoes`}>
                   <Settings className="mr-2 h-4 w-4" />
                   Configurações
                 </Link>
