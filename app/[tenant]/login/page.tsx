@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Eye, EyeOff, Loader2, AlertCircle, ShieldCheck, HeartPulse, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
+import { DEMO_CREDENTIALS_BY_TENANT_SLUG } from '@/lib/demo-credentials'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -17,6 +18,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [demoLoadingEmail, setDemoLoadingEmail] = useState<string | null>(null)
   const { login } = useAuth()
   const { tenant } = useTenant()
 
@@ -34,7 +36,17 @@ export default function LoginPage() {
     setIsSubmitting(false)
   }
 
-  const isDemoTenant = tenant?.slug === 'annetec'
+  const demoAccounts = tenant ? DEMO_CREDENTIALS_BY_TENANT_SLUG[tenant.slug] : undefined
+
+  const handleDemoLogin = async (accountEmail: string, accountPassword: string) => {
+    setError('')
+    setDemoLoadingEmail(accountEmail)
+    const result = await login(accountEmail, accountPassword)
+    if (!result.success) {
+      setError(result.error || 'Erro ao fazer login')
+    }
+    setDemoLoadingEmail(null)
+  }
 
   return (
     <div className="min-h-[100dvh] flex bg-white">
@@ -206,8 +218,8 @@ export default function LoginPage() {
             </Button>
           </motion.form>
 
-          {/* Demo credentials */}
-          {isDemoTenant && (
+          {/* Demo credentials — clique loga direto e leva ao painel do perfil */}
+          {demoAccounts && demoAccounts.length > 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -219,30 +231,38 @@ export default function LoginPage() {
                   <div className="w-full border-t border-gray-200"></div>
                 </div>
                 <div className="relative bg-[#f8fafc] px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Acesso de Demonstração
+                  Visitar perfis de demonstração
                 </div>
               </div>
 
               <div className="grid gap-3">
-                {[
-                  { role: 'Admin', email: 'admin@annetec.com.br', pass: 'admin123', color: 'bg-secondary' },
-                  { role: 'Vendedor', email: 'maria@annetec.com.br', pass: 'seller123', color: 'bg-primary' },
-                  { role: 'Cliente', email: 'ana@email.com', pass: 'client123', color: 'bg-teal-500' }
-                ].map((cred, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm transition-all cursor-pointer group"
-                    onClick={() => { setEmail(cred.email); setPassword(cred.pass); }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${cred.color}`}></div>
-                      <span className="font-bold text-secondary text-sm">{cred.role}</span>
-                    </div>
-                    <span className="text-xs font-medium text-muted-foreground group-hover:text-gray-900 transition-colors">
-                      {cred.email} <span className="opacity-40">/</span> {cred.pass}
-                    </span>
-                  </div>
-                ))}
+                {demoAccounts.map((cred) => {
+                  const isLoadingThis = demoLoadingEmail === cred.email
+                  return (
+                    <button
+                      type="button"
+                      key={cred.email}
+                      disabled={demoLoadingEmail !== null}
+                      onClick={() => handleDemoLogin(cred.email, cred.password)}
+                      className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm transition-all cursor-pointer group disabled:opacity-60 disabled:cursor-wait text-left w-full"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${cred.colorClass}`}></div>
+                        <div>
+                          <span className="font-bold text-secondary text-sm block leading-tight">{cred.role}</span>
+                          <span className="text-xs text-muted-foreground">{cred.label}</span>
+                        </div>
+                      </div>
+                      {isLoadingThis ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      ) : (
+                        <span className="text-xs font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                          Entrar →
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </motion.div>
           )}

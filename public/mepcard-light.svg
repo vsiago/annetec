@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 60" width="260" height="60">
+  <!-- Compact checkered icon -->
+  <g fill="#C4737B" transform="translate(4, 2)">
+    <rect x="28" y="0" width="8" height="8" rx="1" opacity="0.5" />
+    <rect x="38" y="0" width="8" height="8" rx="1" opacity="0.4" />
+    <rect x="33" y="9" width="8" height="8" rx="1" opacity="0.6" />
+
+    <rect x="18" y="10" width="10" height="10" rx="1" />
+    <rect x="29" y="10" width="10" height="10" rx="1" opacity="0.85" />
+
+    <rect x="6" y="22" width="12" height="12" rx="1" />
+    <rect x="19" y="22" width="12" height="12" rx="1" opacity="0.85" />
+
+    <rect x="-6" y="36" width="12" height="12" rx="1" opacity="0.7" />
+    <rect x="7" y="36" width="12" height="12" rx="1" opacity="0.9" />
+
+    <rect x="-16" y="48" width="10" height="10" rx="1" opacity="0.5" />
+    <rect x="-5" y="48" width="10" height="10" rx="1" opacity="0.65" />
+  </g>
+
+  <!-- "mepcard" text -->
+  <text x="62" y="42" font-family="'Poppins', 'Montserrat', system-ui, sans-serif" font-weight="700" font-size="30" fill="#C4737B" letter-spacing="1">
+    mepcard
+  </text>
+</svg>

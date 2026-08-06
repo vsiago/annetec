@@ -11,6 +11,7 @@ import type {
   Benefit,
   Partner,
   Appointment,
+  ClientPlan,
 } from './types'
 
 // ---------------------------------------------------------------------------
@@ -18,6 +19,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 export const ANNETEC_TENANT_ID = 'tenant-annetec'
+export const MEPCARD_TENANT_ID = 'tenant-mepcard'
 
 export const seedTenantPlans: TenantPlan[] = [
   {
@@ -68,6 +70,31 @@ export const seedTenants: Tenant[] = [
     planId: 'plan-enterprise',
     status: 'active',
     createdAt: new Date('2023-01-01'),
+  },
+  {
+    id: MEPCARD_TENANT_ID,
+    slug: 'mepcard',
+    name: 'MepCard',
+    legalName: 'MepCard Cartão de Benefícios & Saúde Ltda.',
+    document: '48.192.837/0001-15',
+    email: 'contato@mepcard.com.br',
+    phone: '(11) 3192-8000',
+    address: {
+      cep: '04543-011',
+      street: 'Av. Brig. Faria Lima',
+      number: '2200',
+      neighborhood: 'Jardim Paulistano',
+      city: 'São Paulo',
+      state: 'SP',
+    },
+    branding: {
+      logoUrl: '/mepcard-logo.svg',
+      primaryColor: '#C4737B',
+      secondaryColor: '#8B4A52',
+    },
+    planId: 'plan-enterprise',
+    status: 'active',
+    createdAt: new Date('2024-01-01'),
   },
 ]
 
@@ -182,6 +209,89 @@ export const seedUsers: (User | Seller | Client)[] = [
     dependents: [],
     createdAt: new Date('2024-02-20'),
   } as Client,
+  // MepCard Users
+  {
+    id: 'mep-admin-1',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Gustavo MepCard Admin',
+    email: 'admin@mepcard.com.br',
+    role: 'admin',
+    phone: '(11) 98888-0001',
+    createdAt: new Date('2024-01-01'),
+  },
+  {
+    id: 'mep-seller-1',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Juliana Mendes',
+    email: 'vendedor@mepcard.com.br',
+    role: 'seller',
+    phone: '(11) 98888-0002',
+    region: 'São Paulo - Faria Lima / Jardins',
+    salesGoal: 60000,
+    totalSales: 48500,
+    commissionRate: 0.15,
+    createdAt: new Date('2024-01-15'),
+  } as Seller,
+  {
+    id: 'mep-seller-2',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Felipe Rocha',
+    email: 'felipe@mepcard.com.br',
+    role: 'seller',
+    phone: '(11) 98888-0003',
+    region: 'Grande São Paulo & ABC',
+    salesGoal: 50000,
+    totalSales: 52000,
+    commissionRate: 0.12,
+    createdAt: new Date('2024-02-01'),
+  } as Seller,
+  {
+    id: 'mep-client-1',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Mariana Alves Costa',
+    email: 'cliente@mepcard.com.br',
+    role: 'client',
+    phone: '(11) 97654-3210',
+    cpf: '234.567.890-11',
+    plan: 'MepCard Família',
+    planStatus: 'active',
+    contractDate: new Date('2024-02-10'),
+    cardNumber: 'MEP-2024-88901',
+    sellerId: 'mep-seller-1',
+    dependents: [
+      {
+        id: 'mep-dep-1',
+        name: 'Lucas Alves Costa',
+        cpf: '345.678.901-22',
+        relationship: 'Filho',
+        birthDate: new Date('2016-04-12'),
+      },
+      {
+        id: 'mep-dep-2',
+        name: 'Camila Alves Costa',
+        cpf: '456.789.012-33',
+        relationship: 'Filha',
+        birthDate: new Date('2019-09-25'),
+      },
+    ],
+    createdAt: new Date('2024-02-10'),
+  } as Client,
+  {
+    id: 'mep-client-2',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Thiago Henrique Souza',
+    email: 'thiago@mepcard.com.br',
+    role: 'client',
+    phone: '(11) 91234-9988',
+    cpf: '876.543.210-99',
+    plan: 'MepCard VIP Premium',
+    planStatus: 'active',
+    contractDate: new Date('2024-03-01'),
+    cardNumber: 'MEP-2024-88902',
+    sellerId: 'mep-seller-2',
+    dependents: [],
+    createdAt: new Date('2024-03-01'),
+  } as Client,
 ]
 
 export const seedTenantCredentials = [
@@ -190,6 +300,12 @@ export const seedTenantCredentials = [
   { email: 'joao@annetec.com.br', password: 'seller123', userId: 'seller-2', tenantId: ANNETEC_TENANT_ID },
   { email: 'ana@email.com', password: 'client123', userId: 'client-1', tenantId: ANNETEC_TENANT_ID },
   { email: 'roberto@email.com', password: 'client123', userId: 'client-2', tenantId: ANNETEC_TENANT_ID },
+  // MepCard Credentials
+  { email: 'admin@mepcard.com.br', password: 'admin123', userId: 'mep-admin-1', tenantId: MEPCARD_TENANT_ID },
+  { email: 'vendedor@mepcard.com.br', password: 'seller123', userId: 'mep-seller-1', tenantId: MEPCARD_TENANT_ID },
+  { email: 'felipe@mepcard.com.br', password: 'seller123', userId: 'mep-seller-2', tenantId: MEPCARD_TENANT_ID },
+  { email: 'cliente@mepcard.com.br', password: 'client123', userId: 'mep-client-1', tenantId: MEPCARD_TENANT_ID },
+  { email: 'thiago@mepcard.com.br', password: 'client123', userId: 'mep-client-2', tenantId: MEPCARD_TENANT_ID },
 ]
 
 export const seedLeads: Lead[] = [
@@ -476,6 +592,45 @@ export const seedSales: Sale[] = [
   },
 ]
 
+export const seedClientPlans: ClientPlan[] = [
+  {
+    id: 'cplan-1',
+    tenantId: ANNETEC_TENANT_ID,
+    name: 'Annetec Individual',
+    priceMonthly: 49.9,
+    description: 'Plano individual de benefícios e consultas.',
+  },
+  {
+    id: 'cplan-2',
+    tenantId: ANNETEC_TENANT_ID,
+    name: 'Annetec Família',
+    priceMonthly: 99.9,
+    description: 'Titular + até 3 dependentes com cobertura total.',
+  },
+  // MepCard Client Plans
+  {
+    id: 'mep-cplan-1',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'MepCard Essencial',
+    priceMonthly: 39.9,
+    description: 'Telemedicina 24/7 sem carência, descontos em farmácias até 60% e rede odontológica credenciada.',
+  },
+  {
+    id: 'mep-cplan-2',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'MepCard Família',
+    priceMonthly: 89.9,
+    description: 'Inclui Titular + 3 dependentes com consultas presenciais em valor popular e rede completa de parceiros.',
+  },
+  {
+    id: 'mep-cplan-3',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'MepCard VIP Premium',
+    priceMonthly: 149.9,
+    description: 'Dependentes ilimitados, check-up anual preventivo, auxílio funeral completo e atendimento prioritário.',
+  },
+]
+
 export const seedSalesGoals: SalesGoal[] = [
   {
     id: 'goal-1',
@@ -495,6 +650,26 @@ export const seedSalesGoals: SalesGoal[] = [
     year: 2024,
     target: 40000,
     achieved: 42000,
+    commissionRate: 0.12,
+  },
+  {
+    id: 'mep-goal-1',
+    tenantId: MEPCARD_TENANT_ID,
+    sellerId: 'mep-seller-1',
+    month: 3,
+    year: 2024,
+    target: 60000,
+    achieved: 48500,
+    commissionRate: 0.15,
+  },
+  {
+    id: 'mep-goal-2',
+    tenantId: MEPCARD_TENANT_ID,
+    sellerId: 'mep-seller-2',
+    month: 3,
+    year: 2024,
+    target: 50000,
+    achieved: 52000,
     commissionRate: 0.12,
   },
 ]
@@ -543,6 +718,50 @@ export const seedBenefits: Benefit[] = [
     description: 'Descontos exclusivos em alimentação, lazer, educação e muito mais.',
     category: 'discount',
   },
+  // MepCard Benefits
+  {
+    id: 'mep-benefit-1',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Telemedicina MepCard 24/7',
+    description: 'Atendimento médico online imediato por videochamada 24 horas por dia, 7 dias por semana.',
+    category: 'health',
+  },
+  {
+    id: 'mep-benefit-2',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Desconto Farmácia Mep',
+    description: 'Até 60% de desconto em medicamentos genéricos e de marca na rede credenciada.',
+    category: 'pharmacy',
+    discount: 60,
+  },
+  {
+    id: 'mep-benefit-3',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Exames & Consultas Populares',
+    description: 'Consultas médicas presenciais a partir de R$ 35,00 e exames com tabela especial.',
+    category: 'health',
+  },
+  {
+    id: 'mep-benefit-4',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Rede Odontológica MepCare',
+    description: 'Limpeza, restaurações, tratamento de canal e ortodontia com valores exclusivos.',
+    category: 'dental',
+  },
+  {
+    id: 'mep-benefit-5',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'MepClub de Vantagens',
+    description: 'Descontos em cinemas, academias, cursos e mais de 500 lojas parceiras.',
+    category: 'discount',
+  },
+  {
+    id: 'mep-benefit-6',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Auxílio Funeral Familiar',
+    description: 'Assistência e cobertura completa para despesas de funeral em caso de imprevistos.',
+    category: 'funeral',
+  },
 ]
 
 export const seedPartners: Partner[] = [
@@ -576,6 +795,67 @@ export const seedPartners: Partner[] = [
     phone: '(11) 3333-3333',
     status: 'active',
   },
+  // MepCard Partners
+  {
+    id: 'mep-partner-1',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Clínica Mep Saúde & Diagnósticos',
+    category: 'health',
+    discountPercent: 40,
+    address: 'Av. Rebouças, 1500 - Pinheiros, São Paulo/SP',
+    phone: '(11) 3210-4000',
+    status: 'active',
+  },
+  {
+    id: 'mep-partner-2',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Drogaria São Paulo Mep Partner',
+    category: 'pharmacy',
+    discountPercent: 60,
+    address: 'Av. Paulista, 1100 - Bela Vista, São Paulo/SP',
+    phone: '(11) 3210-5000',
+    status: 'active',
+  },
+  {
+    id: 'mep-partner-3',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Sorrisos Mep Odontologia',
+    category: 'dental',
+    discountPercent: 35,
+    address: 'Rua dos Pinheiros, 450 - Pinheiros, São Paulo/SP',
+    phone: '(11) 3210-6000',
+    status: 'active',
+  },
+  {
+    id: 'mep-partner-4',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Academia SmartFit Mep Club',
+    category: 'wellness',
+    discountPercent: 25,
+    address: 'Av. Brig. Faria Lima, 1800 - Itaim Bibi, São Paulo/SP',
+    phone: '(11) 3210-7000',
+    status: 'active',
+  },
+  {
+    id: 'mep-partner-5',
+    tenantId: MEPCARD_TENANT_ID,
+    name: 'Laboratório Fleury Mep Exames',
+    category: 'health',
+    discountPercent: 50,
+    address: 'Alameda Santos, 900 - Cerqueira César, São Paulo/SP',
+    phone: '(11) 3210-8000',
+    status: 'active',
+  },
 ]
 
-export const seedAppointments: Appointment[] = []
+export const seedAppointments: Appointment[] = [
+  {
+    id: 'mep-apt-1',
+    tenantId: MEPCARD_TENANT_ID,
+    clientId: 'mep-client-1',
+    clientName: 'Mariana Alves Costa',
+    description: 'Clínica Geral / Telemedicina com Dr. Roberto Camargo',
+    status: 'concluido',
+    createdAt: new Date('2024-03-08'),
+  },
+]

@@ -37,7 +37,7 @@ export default function TenantLandingPage() {
       {/* Header */}
       <header className="h-20 flex items-center justify-between px-6 lg:px-12 border-b border-border">
         {tenant.branding.logoUrl ? (
-          <img src={tenant.branding.logoUrl} alt={tenant.name} className="h-9" />
+          <img src={tenant.branding.logoUrl} alt={tenant.name} className="h-14" />
         ) : (
           <span className="font-bold text-secondary text-xl">{tenant.name}</span>
         )}

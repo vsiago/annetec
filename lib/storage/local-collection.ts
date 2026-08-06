@@ -3,6 +3,11 @@
 // API/DB later means reimplementing this file (and lib/actions/*), nothing
 // above this layer (contexts, pages) needs to change.
 
+// Bump this version whenever the seed data changes (e.g. new tenants added).
+// When the stored version doesn't match, all collections are wiped so the
+// fresh seed takes effect.
+const SEED_VERSION = '2'
+
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
 
 function reviver(_key: string, value: unknown) {
@@ -11,6 +16,24 @@ function reviver(_key: string, value: unknown) {
   }
   return value
 }
+
+function ensureSeedVersion() {
+  if (typeof window === 'undefined') return
+  const stored = window.localStorage.getItem('annetec:seed-version')
+  if (stored !== SEED_VERSION) {
+    // Wipe every annetec:* key so fresh seeds are written
+    const keysToRemove: string[] = []
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i)
+      if (key?.startsWith('annetec:')) keysToRemove.push(key)
+    }
+    keysToRemove.forEach(k => window.localStorage.removeItem(k))
+    window.localStorage.setItem('annetec:seed-version', SEED_VERSION)
+  }
+}
+
+// Run once on module load (client-side only)
+ensureSeedVersion()
 
 export interface Collection<T extends { id: string }> {
   getAll(): T[]

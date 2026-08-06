@@ -1,8 +1,9 @@
 import type { ClientPlan } from '@/lib/types'
+import { seedClientPlans } from '@/lib/mock-seed'
 import { createEntityActions } from './_factory'
 import { delay, genId, type ActionResult } from './_shared'
 
-const clientPlans = createEntityActions<ClientPlan>('client-plans', [])
+const clientPlans = createEntityActions<ClientPlan>('client-plans', seedClientPlans)
 
 export const updateClientPlan = clientPlans.update
 export const deleteClientPlan = clientPlans.remove
