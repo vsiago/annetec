@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 60" width="260" height="60">
-  <!-- Compact checkered icon -->
-  <g fill="#C4737B" transform="translate(4, 2)">
+  <!-- Compact checkered icon (white version) -->
+  <g fill="#FFFFFF" transform="translate(4, 2)">
     <rect x="28" y="0" width="8" height="8" rx="1" opacity="0.5" />
     <rect x="38" y="0" width="8" height="8" rx="1" opacity="0.4" />
     <rect x="33" y="9" width="8" height="8" rx="1" opacity="0.6" />
@@ -18,8 +18,8 @@
     <rect x="-5" y="48" width="10" height="10" rx="1" opacity="0.65" />
   </g>
 
-  <!-- "mepcard" text -->
-  <text x="62" y="42" font-family="'Poppins', 'Montserrat', system-ui, sans-serif" font-weight="700" font-size="30" fill="#C4737B" letter-spacing="1">
+  <!-- "mepcard" text (white) -->
+  <text x="62" y="42" font-family="'Poppins', 'Montserrat', system-ui, sans-serif" font-weight="700" font-size="30" fill="#FFFFFF" letter-spacing="1">
     mepcard
   </text>
 </svg>

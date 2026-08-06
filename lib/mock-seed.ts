@@ -64,6 +64,7 @@ export const seedTenants: Tenant[] = [
     },
     branding: {
       logoUrl: '/annetec-light.svg',
+      logoLightUrl: '/annetec-light.svg',
       primaryColor: '#e84364',
       secondaryColor: '#26365f',
     },
@@ -89,6 +90,7 @@ export const seedTenants: Tenant[] = [
     },
     branding: {
       logoUrl: '/mepcard-logo.svg',
+      logoLightUrl: '/mepcard-light.svg',
       primaryColor: '#C4737B',
       secondaryColor: '#8B4A52',
     },

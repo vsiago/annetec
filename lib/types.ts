@@ -28,6 +28,7 @@ export interface TenantAddress {
 
 export interface TenantBranding {
   logoUrl?: string
+  logoLightUrl?: string
   primaryColor: string
   secondaryColor: string
 }

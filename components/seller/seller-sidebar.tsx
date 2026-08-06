@@ -89,8 +89,8 @@ export function SellerSidebar() {
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/10">
           <Link href={base}>
-            {tenant.branding.logoUrl ? (
-              <img src={tenant.branding.logoUrl} alt={tenant.name} className="h-8" />
+            {(tenant.branding.logoLightUrl || tenant.branding.logoUrl) ? (
+              <img src={tenant.branding.logoLightUrl || tenant.branding.logoUrl} alt={tenant.name} className="h-8" />
             ) : (
               <span className="font-bold text-white text-lg">{tenant.name}</span>
             )}
