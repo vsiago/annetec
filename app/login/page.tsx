@@ -128,7 +128,7 @@ export default function LoginPage() {
             transition={{ delay: 0.2, duration: 0.8 }}
           >
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-sm font-medium mb-8 border border-white/10">
-              <Sparkles size={16} />
+              <ShieldCheck size={16} />
               União Inteligente
             </div>
             <h1 className="text-4xl lg:text-5xl font-bold mb-6 leading-tight tracking-tight">
@@ -246,7 +246,7 @@ export default function LoginPage() {
                 <div className="mt-8 pt-6 border-t border-border/60">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-[#C4737B]" />
+                      <Building2 className="w-4 h-4 text-[#C4737B]" />
                       <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Exemplo de Inquilino Ativo
                       </span>
