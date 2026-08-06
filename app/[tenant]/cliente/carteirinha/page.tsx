@@ -19,6 +19,8 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 
+import { DigitalCardMockup } from '@/components/digital-card-mockup'
+
 export default function CarteirinhaPage() {
   const { user } = useAuth()
   const { tenant } = useTenant()
@@ -30,7 +32,7 @@ export default function CarteirinhaPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Carteirinha Digital</h1>
-          <p className="text-muted-foreground">Apresente sua carteirinha para acessar os benefícios</p>
+          <p className="text-muted-foreground">Apresente sua carteirinha digital para liberar benefícios e descontos</p>
         </div>
         <Button variant="outline">
           <Download className="h-4 w-4 mr-2" />
@@ -38,86 +40,20 @@ export default function CarteirinhaPage() {
         </Button>
       </div>
 
-      {/* Digital Card */}
-      <div className="max-w-md mx-auto">
-        <Card className="border-0 shadow-xl overflow-hidden">
-          {/* Card Front */}
-          <div className="bg-gradient-to-br from-secondary via-secondary/80 to-secondary text-white p-6 relative">
-            {/* Logo */}
-            <div className="flex items-center justify-between mb-6">
-              {tenant?.branding.logoUrl ? (
-                <img src={tenant.branding.logoUrl} alt={tenant.name} className="h-8" />
-              ) : (
-                <span className="font-bold text-lg">{tenant?.name}</span>
-              )}
-              <Badge className="bg-white/20 text-white border-0">
-                <Shield className="h-3 w-3 mr-1" />
-                Ativo
-              </Badge>
-            </div>
-
-            {/* Card Number */}
-            <div className="mb-6">
-              <p className="text-white/60 text-xs uppercase tracking-wider">Número da Carteirinha</p>
-              <p className="text-2xl font-mono font-bold tracking-wider mt-1">
-                {client?.cardNumber || 'CA-0000-00000'}
-              </p>
-            </div>
-
-            {/* User Info */}
-            <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16 border-2 border-white/30">
-                <AvatarFallback className="bg-primary text-white text-xl">
-                  {client?.name ? getInitials(client.name) : 'CL'}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-bold text-lg">{client?.name}</p>
-                <p className="text-white/70 text-sm">{client?.plan}</p>
-              </div>
-            </div>
-
-            {/* Decorative Elements */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-          </div>
-
-          {/* Card Details */}
-          <CardContent className="p-6 bg-white">
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
-                <p className="text-xs text-muted-foreground">CPF</p>
-                <p className="font-medium">{client?.cpf}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Associado desde</p>
-                <p className="font-medium">
-                  {client?.contractDate ? new Date(client.contractDate).toLocaleDateString('pt-BR') : '-'}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Telefone</p>
-                <p className="font-medium">{client?.phone}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Dependentes</p>
-                <p className="font-medium">{client?.dependents?.length || 0}</p>
-              </div>
-            </div>
-
-            {/* QR Code */}
-            <div className="flex flex-col items-center pt-4 border-t border-border">
-              <div className="p-4 bg-white border-2 border-dashed border-secondary/30 rounded-xl">
-                <div className="w-32 h-32 bg-secondary/5 rounded-lg flex items-center justify-center">
-                  <QrCode className="h-24 w-24 text-secondary" />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground mt-3 text-center">
-                Apresente este QR Code para validar sua carteirinha
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Digital Card Mockup */}
+      <div className="py-4">
+        <DigitalCardMockup
+          tenant={tenant}
+          clientName={client?.name || 'Mariana Alves Costa'}
+          cardNumber={client?.cardNumber || 'MEP-2024-88901'}
+          planName={client?.plan || 'MepCard Família'}
+          cpf={client?.cpf || '234.567.890-11'}
+          contractDate={client?.contractDate}
+          dependentsCount={client?.dependents?.length || 2}
+          size="lg"
+          interactive={true}
+          showFlip={true}
+        />
       </div>
 
       {/* Info Cards */}

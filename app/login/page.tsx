@@ -11,7 +11,6 @@ import {
   Loader2,
   AlertCircle,
   ArrowRight,
-  Sparkles,
   HeartPulse,
   Lock,
   ChevronLeft,

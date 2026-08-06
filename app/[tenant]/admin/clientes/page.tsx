@@ -9,6 +9,7 @@ import { useTenantData, getAllClients, getAllSellers } from '@/contexts/tenant-d
 import { useTenant } from '@/contexts/tenant-context'
 import { getInitials } from '@/lib/utils'
 import type { Client } from '@/lib/types'
+import { DigitalCardMockup } from '@/components/digital-card-mockup'
 import {
   Search,
   Plus,
@@ -51,6 +52,7 @@ export default function ClientesPage() {
   const sellers = getAllSellers(users)
 
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [viewCardClient, setViewCardClient] = useState<Client | null>(null)
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [newPhone, setNewPhone] = useState('')
@@ -225,7 +227,11 @@ export default function ClientesPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setViewCardClient(client)}>
+                            <CreditCard className="h-4 w-4 mr-2 text-primary" />
+                            Ver Carteirinha
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setViewCardClient(client)}>Ver Detalhes</DropdownMenuItem>
                           <DropdownMenuItem>Editar</DropdownMenuItem>
                           <DropdownMenuItem>Ver Dependentes</DropdownMenuItem>
                           <DropdownMenuItem>Histórico</DropdownMenuItem>
@@ -338,6 +344,32 @@ export default function ClientesPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Visualizar Carteirinha */}
+      <Dialog open={!!viewCardClient} onOpenChange={open => !open && setViewCardClient(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Carteirinha Digital do Associado</DialogTitle>
+            <DialogDescription>Visualização em tempo real da carteirinha de {viewCardClient?.name}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {viewCardClient && (
+              <DigitalCardMockup
+                tenant={tenant}
+                clientName={viewCardClient.name}
+                cardNumber={viewCardClient.cardNumber}
+                planName={viewCardClient.plan}
+                cpf={viewCardClient.cpf}
+                contractDate={viewCardClient.contractDate}
+                dependentsCount={viewCardClient.dependents?.length || 0}
+                size="md"
+                interactive={true}
+                showFlip={true}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

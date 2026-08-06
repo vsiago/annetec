@@ -90,7 +90,7 @@ export function SellerSidebar() {
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/10">
           <Link href={base}>
             {(tenant.branding.logoLightUrl || tenant.branding.logoUrl) ? (
-              <img src={tenant.branding.logoLightUrl || tenant.branding.logoUrl} alt={tenant.name} className="h-8" />
+              <img src={tenant.branding.logoLightUrl || tenant.branding.logoUrl} alt={tenant.name} className="h-9 object-contain" />
             ) : (
               <span className="font-bold text-white text-lg">{tenant.name}</span>
             )}

@@ -14,9 +14,11 @@ import {
   Gift,
   Phone,
   ShieldCheck,
-  Sparkles,
   ArrowRight,
+  CreditCard,
+  CheckCircle2,
 } from 'lucide-react'
+import { DigitalCardMockup } from '@/components/digital-card-mockup'
 
 const categoryIcons: Record<string, React.ElementType> = {
   health: Stethoscope,
@@ -56,7 +58,7 @@ export default function TenantLandingPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full text-primary text-sm font-medium mb-6">
-              <Sparkles size={16} />
+              <ShieldCheck size={16} />
               Clube de Benefícios {tenant.name}
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-6xl font-bold text-secondary mb-6 text-balance">
@@ -78,6 +80,60 @@ export default function TenantLandingPage() {
               </Button>
             </div>
           </motion.div>
+        </div>
+      </section>
+
+      {/* Carteirinha Digital Showcase */}
+      <section className="py-16 bg-white overflow-hidden border-y border-border/40">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-4">
+                <CreditCard className="w-4 h-4" />
+                <span>Carteirinha Digital Instantânea</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-secondary mb-4 leading-tight">
+                Sua carteirinha oficial <span className="text-primary">sempre no celular</span>
+              </h2>
+              <p className="text-muted-foreground text-base mb-6 leading-relaxed">
+                Ao se associar ao {tenant.name}, você recebe imediatamente sua carteirinha digital com QR Code e tecnologia para apresentar em toda a rede credenciada.
+              </p>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center gap-3 text-sm text-secondary font-medium">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <span>Acesso imediato sem necessidade de esperar cartão físico</span>
+                </li>
+                <li className="flex items-center gap-3 text-sm text-secondary font-medium">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <span>QR Code para validação rápida em consultas, exames e farmácias</span>
+                </li>
+                <li className="flex items-center gap-3 text-sm text-secondary font-medium">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <span>Inclusão e controle completo de dependentes</span>
+                </li>
+              </ul>
+              <Button size="lg" className="bg-primary hover:opacity-90 text-white" asChild>
+                <Link href={`/${tenant.slug}/cadastro`}>
+                  Garantir Minha Carteirinha
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Link>
+              </Button>
+            </div>
+
+            <div className="flex justify-center">
+              <DigitalCardMockup
+                tenant={tenant}
+                clientName="Mariana Alves Costa"
+                cardNumber={`${tenant.slug.toUpperCase().slice(0, 3)}-2024-88901`}
+                planName={`${tenant.name} Família`}
+                cpf="234.567.890-11"
+                dependentsCount={2}
+                size="md"
+                interactive={true}
+                showFlip={true}
+              />
+            </div>
+          </div>
         </div>
       </section>
 

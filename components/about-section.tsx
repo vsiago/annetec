@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Heart, Activity, Sparkles, Shield } from "lucide-react"
+import { Heart, Activity, HeartPulse, Shield } from "lucide-react"
 import Image from "next/image"
 
 export function AboutSection() {
@@ -50,7 +50,7 @@ export function AboutSection() {
                   className="absolute bottom-8 left-8 bg-white/95 rounded-xl p-3 shadow-lg"
                 >
                   <div className="flex items-center gap-2">
-                    <Sparkles size={20} className="text-[#26365f]" />
+                    <HeartPulse size={20} className="text-[#26365f]" />
                     <span className="text-sm font-semibold text-[#26365f]">Qualidade de Vida</span>
                   </div>
                 </motion.div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { Send, CheckCircle, UserPlus, Heart, Shield, Gift, Sparkles, ArrowRight } from "lucide-react"
+import { Send, CheckCircle, UserPlus, Heart, Shield, Gift, ShieldCheck, ArrowRight } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
@@ -333,7 +333,7 @@ export default function CadastroPage() {
               {/* Price Card */}
               <div className="bg-gradient-to-br from-[#26365f] to-[#3a4e82] rounded-3xl p-8 shadow-2xl text-center">
                 <div className="w-16 h-16 bg-white/10 rounded-2xl mx-auto flex items-center justify-center mb-4">
-                  <Sparkles size={28} className="text-[#e84364]" />
+                  <ShieldCheck size={28} className="text-[#e84364]" />
                 </div>
                 <p className="text-white/70 text-sm mb-1">A partir de</p>
                 <div className="flex items-baseline justify-center gap-1 mb-1">

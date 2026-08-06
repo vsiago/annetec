@@ -10,6 +10,7 @@ import { useTenant } from '@/contexts/tenant-context'
 import { useTenantData, getClientsBySellerId, getSalesBySellerId } from '@/contexts/tenant-data-context'
 import { getInitials } from '@/lib/utils'
 import type { Client, Seller, Dependent } from '@/lib/types'
+import { DigitalCardMockup } from '@/components/digital-card-mockup'
 import {
   Search,
   Plus,
@@ -551,6 +552,23 @@ export default function VendedorClientesPage() {
                     <span className="text-xs text-muted-foreground block">Telefone</span>
                     <span className="font-medium">{selectedClient.phone}</span>
                   </div>
+                </div>
+
+                {/* Digital Card Preview */}
+                <div className="pt-2">
+                  <span className="text-xs font-semibold text-muted-foreground block mb-2">Carteirinha Digital Oficial</span>
+                  <DigitalCardMockup
+                    tenant={tenant}
+                    clientName={selectedClient.name}
+                    cardNumber={selectedClient.cardNumber}
+                    planName={selectedClient.plan}
+                    cpf={selectedClient.cpf}
+                    contractDate={selectedClient.contractDate}
+                    dependentsCount={selectedClient.dependents?.length || 0}
+                    size="sm"
+                    interactive={true}
+                    showFlip={true}
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 border-b border-border pb-3">

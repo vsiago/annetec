@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Gift, Percent, ShoppingBag, Ticket, ArrowRight, Sparkles } from "lucide-react"
+import { Gift, Percent, ShoppingBag, Ticket, ArrowRight, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
@@ -61,7 +61,7 @@ export function AdvantagesSection() {
               asChild
             >
               <Link href="#club-vantagens">
-                <Sparkles size={18} className="mr-2" />
+                <ShieldCheck size={18} className="mr-2" />
                 Acesse o Club de Vantagens
               </Link>
             </Button>

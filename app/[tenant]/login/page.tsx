@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Eye, EyeOff, Loader2, AlertCircle, ShieldCheck, HeartPulse, Sparkles } from 'lucide-react'
+import { Eye, EyeOff, Loader2, AlertCircle, ShieldCheck, HeartPulse } from 'lucide-react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { DEMO_CREDENTIALS_BY_TENANT_SLUG } from '@/lib/demo-credentials'
@@ -74,7 +74,7 @@ export default function LoginPage() {
             transition={{ delay: 0.2, duration: 0.8 }}
           >
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full text-sm font-medium mb-8 border border-white/10">
-              <Sparkles size={16} className="text-secondary" />
+              <ShieldCheck size={16} className="text-secondary" />
               Clube de Benefícios {tenant?.name}
             </div>
             <h1 className="text-4xl lg:text-5xl font-bold mb-6 leading-tight tracking-tight">

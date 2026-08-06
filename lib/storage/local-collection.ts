@@ -6,7 +6,7 @@
 // Bump this version whenever the seed data changes (e.g. new tenants added).
 // When the stored version doesn't match, all collections are wiped so the
 // fresh seed takes effect.
-const SEED_VERSION = '4'
+const SEED_VERSION = '5'
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
 
