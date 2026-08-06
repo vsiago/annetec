@@ -15,6 +15,7 @@ import {
   HeartPulse,
   Lock,
   ChevronLeft,
+  ExternalLink,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -241,7 +242,55 @@ export default function LoginPage() {
                   ))}
                 </div>
 
-                <div className="mt-10 text-center">
+                {/* Exemplo de Inquilino: MepCard */}
+                <div className="mt-8 pt-6 border-t border-border/60">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-[#C4737B]" />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Exemplo de Inquilino Ativo
+                      </span>
+                    </div>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#C4737B]/10 text-[#C4737B] font-medium border border-[#C4737B]/20">
+                      MepCard
+                    </span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl border border-[#C4737B]/25 bg-gradient-to-br from-[#C4737B]/5 via-white to-white shadow-sm hover:shadow-md hover:border-[#C4737B]/40 transition-all duration-300">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <img src="/mepcard-logo.svg" alt="MepCard" className="h-8 object-contain" />
+                      <span className="text-[11px] text-muted-foreground font-mono">/mepcard</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                      Inquilino completo de demonstração com branding exclusivo, planos de saúde, rede credenciada e portais.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs font-medium border-[#C4737B]/30 text-[#C4737B] hover:bg-[#C4737B]/10 hover:text-[#C4737B]"
+                        asChild
+                      >
+                        <Link href="/mepcard" target="_blank">
+                          <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                          Visitar Site
+                        </Link>
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="w-full text-xs font-medium bg-[#C4737B] hover:bg-[#B5677A] text-white shadow-sm"
+                        asChild
+                      >
+                        <Link href="/mepcard/login">
+                          <ArrowRight className="w-3.5 h-3.5 mr-1.5" />
+                          Ir ao Login
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-8 text-center">
                   <Link
                     href="/"
                     className="text-sm text-muted-foreground hover:text-[#e84364] transition-colors"
