@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import type { TenantUser } from '@annetec/contracts'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -28,7 +29,7 @@ import {
   createOperatorSellerProdutorAction,
   deactivateOperatorSellerAction,
 } from '@/lib/actions/operator-api'
-import { Plus, Loader2, UserCog, Link2, CheckCircle2, Mail, Phone, UserX } from 'lucide-react'
+import { Plus, Loader2, UserCog, Link2, CheckCircle2, Mail, Phone, UserX, Receipt } from 'lucide-react'
 
 export default function OperatorVendedoresPage() {
   const [tenantSlug, setTenantSlug] = useState<string | null>(null)
@@ -161,6 +162,14 @@ export default function OperatorVendedoresPage() {
                         </td>
                         <td className="py-4 px-6 text-right">
                           <div className="flex justify-end gap-1">
+                            {seller.upstreamProdutorCodigo && (
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/admin/vendedores/${seller.id}/comissoes`}>
+                                  <Receipt className="h-4 w-4 mr-1.5" />
+                                  Comissões
+                                </Link>
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" onClick={() => setLinkOpen(seller)}>
                               <Link2 className="h-4 w-4 mr-1.5" />
                               {seller.upstreamProdutorCodigo ? 'Trocar' : 'Vincular'}
@@ -301,6 +310,8 @@ function LinkProdutorDialog({
   onLinked: () => void
 }) {
   const [codigo, setCodigo] = useState('')
+  const [login, setLogin] = useState('')
+  const [password, setPassword] = useState('')
   const [newNome, setNewNome] = useState(seller.name)
   const [newEmail, setNewEmail] = useState(seller.email)
   const [newDocumento, setNewDocumento] = useState('')
@@ -315,7 +326,11 @@ function LinkProdutorDialog({
       return
     }
     setSubmitting(true)
-    const result = await linkOperatorSellerProdutorAction(tenantSlug, seller.id, { codigo })
+    const result = await linkOperatorSellerProdutorAction(tenantSlug, seller.id, {
+      codigo,
+      login: login || undefined,
+      password: password || undefined,
+    })
     setSubmitting(false)
     if (!result.success) {
       setError(result.error)
@@ -366,6 +381,25 @@ function LinkProdutorDialog({
               <Label>Código do produtor</Label>
               <Input value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="Ex: C16KMF9F1R" />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label>Login do produtor</Label>
+                <Input value={login} onChange={e => setLogin(e.target.value)} placeholder="Opcional" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Senha do produtor</Label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Opcional"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Login e senha são só necessários para consultar recibos de comissão — sem isso, o vendedor pode
+              vender normalmente, mas a tela de Comissões não funciona para ele.
+            </p>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <DialogFooter>
               <Button onClick={handleLinkExisting} disabled={submitting}>

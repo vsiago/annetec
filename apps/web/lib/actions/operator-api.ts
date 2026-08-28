@@ -1,6 +1,7 @@
 'use server'
 
 import type {
+  CommissionReceipt,
   Contract,
   CreateContractInput,
   CreateTenantUserInput,
@@ -294,6 +295,20 @@ export async function createOperatorContractAction(
     const { data } = await apiFetch<Contract>(tenantPath(tenantSlug, '/contratos'), {
       method: 'POST',
       body: input,
+    })
+    return data
+  })
+}
+
+/** Recibos de comissão de um vendedor — exige produtor com login+senha vinculados. */
+export async function listOperatorCommissionReceiptsAction(
+  tenantSlug: string,
+  sellerId: string,
+  status: 'emitido' | 'pago',
+): Promise<ActionResult<CommissionReceipt[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<CommissionReceipt[]>(tenantPath(tenantSlug, '/financeiro/comissoes'), {
+      query: { vendedorId: sellerId, status },
     })
     return data
   })

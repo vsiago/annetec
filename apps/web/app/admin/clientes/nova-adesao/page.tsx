@@ -469,28 +469,43 @@ export default function NovaAdesaoPage() {
                       />
                     </div>
                     <div className="grid gap-1.5">
-                      <Label>Parentesco (código) *</Label>
-                      <Input
-                        type="number"
-                        value={dep.relationshipId}
-                        onChange={e => updateDependent(index, { relationshipId: e.target.value })}
-                        placeholder="Confira no cadastro da Digital Saúde"
-                      />
-                    </div>
-                    <div className="grid gap-1.5">
                       <Label>Vínculo</Label>
                       <Select
                         value={dep.kind}
-                        onValueChange={v => updateDependent(index, { kind: v as DependentForm['kind'] })}
+                        onValueChange={v => {
+                          const kind = v as DependentForm['kind']
+                          // "Agregado" é o único código de parentesco que confirmamos
+                          // com contratos reais (id 2) — pré-preenche pra evitar erro
+                          // de digitação. "Dependente" cobre cônjuge/filho/etc, cujos
+                          // códigos a Digital Saúde não documenta em lugar nenhum;
+                          // fica em aberto pro vendedor confirmar.
+                          updateDependent(index, {
+                            kind,
+                            relationshipId: kind === 'agregado' ? '2' : '',
+                          })
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="dependente">Dependente</SelectItem>
+                          <SelectItem value="dependente">Dependente (cônjuge, filho...)</SelectItem>
                           <SelectItem value="agregado">Agregado</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label>Parentesco (código) *</Label>
+                      <Input
+                        type="number"
+                        value={dep.relationshipId}
+                        onChange={e => updateDependent(index, { relationshipId: e.target.value })}
+                        placeholder={
+                          dep.kind === 'agregado'
+                            ? 'Confirmado: 2 = Agregado'
+                            : 'Não confirmado — verifique com a Digital Saúde'
+                        }
+                      />
                     </div>
                     <div className="grid gap-1.5">
                       <Label>Nome da mãe</Label>
