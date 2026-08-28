@@ -15,6 +15,7 @@ import {
   ChevronRight,
   BookOpenText,
   ChevronDown,
+  Activity,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -70,6 +71,12 @@ export function PlatformSidebar() {
               <Link href="/admin/configuracoes">
                 <Settings className="mr-2 h-4 w-4" />
                 Configurações
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/logs">
+                <Activity className="mr-2 h-4 w-4" />
+                Logs e Rastreabilidade
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
@@ -170,6 +177,36 @@ export function PlatformSidebar() {
 
         {/* Bottom Section */}
         <div className="p-3 border-t border-white/10 space-y-1">
+          {/* Logs e Rastreabilidade */}
+          {(() => {
+            const isLogsActive = pathname === '/admin/logs'
+            const logsElement = (
+              <Link
+                href="/admin/logs"
+                className={cn(
+                  'flex items-center rounded-lg text-sm font-medium transition-colors mb-2',
+                  isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
+                  isLogsActive
+                    ? 'bg-white/15 text-white shadow-sm font-semibold'
+                    : 'text-white/70 hover:bg-white/10 hover:text-white'
+                )}
+              >
+                <Activity className="h-5 w-5 shrink-0" />
+                {!isCollapsed && <span className="truncate">Logs e Rastreabilidade</span>}
+              </Link>
+            )
+
+            if (isCollapsed) {
+              return (
+                <Tooltip>
+                  <TooltipTrigger asChild>{logsElement}</TooltipTrigger>
+                  <TooltipContent side="right">Logs e Rastreabilidade</TooltipContent>
+                </Tooltip>
+              )
+            }
+            return logsElement
+          })()}
+
           {/* Dicionário TI */}
           {(() => {
             const isDictActive = pathname === '/admin/dicionario-ti'
@@ -254,6 +291,7 @@ export function PlatformSidebar() {
           { href: '/admin/inquilinos', label: 'Inquilinos', icon: Building2 },
           { href: '/admin/usuarios', label: 'Usuários', icon: Users },
           { href: '/admin/configuracoes', label: 'Config', icon: Settings },
+          { href: '/admin/logs', label: 'Logs', icon: Activity },
           { href: '/admin/dicionario-ti', label: 'Dicionário', icon: BookOpenText },
         ].map(link => {
           const Icon = link.icon

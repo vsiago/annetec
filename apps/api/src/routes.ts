@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { activityAdminController, activityIngestController } from '@/modules/activity/controller'
 import { authController } from '@/modules/auth/controller'
 import { billingController } from '@/modules/billing/controller'
 import { catalogController } from '@/modules/catalog/controller'
@@ -25,6 +26,8 @@ import type { AppEnv } from '@/http/types'
  */
 export const routes = new Hono<AppEnv>()
   .route('/', healthController)
+  .route('/api/v1/activity', activityIngestController)
+  .route('/api/v1/platform/activity', activityAdminController)
   .route('/api/v1/auth', authController)
   .route('/api/v1/platform/tenants', tenantsController)
   .route('/api/v1/platform/users', platformUsersController)

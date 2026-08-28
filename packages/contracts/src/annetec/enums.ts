@@ -91,3 +91,7 @@ export type AppointmentStatus = z.infer<typeof appointmentStatus>
 
 export const activeStatus = z.enum(['active', 'inactive'])
 export type ActiveStatus = z.infer<typeof activeStatus>
+
+/** 'page_view' = navegação; 'action' = evento pontual (login, logout, ...). */
+export const activityKind = z.enum(['page_view', 'action'])
+export type ActivityKind = z.infer<typeof activityKind>

@@ -1,4 +1,5 @@
 export * from './enums'
+export * from './activity'
 export * from './auth'
 export * from './platform-user'
 export * from './tenant'
