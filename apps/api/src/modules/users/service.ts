@@ -42,9 +42,13 @@ export const usersService = {
 
     const [rows, [totals]] = await Promise.all([
       db
-        .select({ member, user })
+        .select({ member, user, upstreamProdutorCodigo: sellerProfiles.upstreamProdutorCodigo })
         .from(member)
         .innerJoin(user, eq(user.id, member.userId))
+        .leftJoin(
+          sellerProfiles,
+          and(eq(sellerProfiles.userId, member.userId), eq(sellerProfiles.organizationId, member.organizationId)),
+        )
         .where(where)
         .orderBy(desc(member.createdAt))
         .limit(params.perPage)
@@ -52,13 +56,21 @@ export const usersService = {
       db.select({ value: count() }).from(member).innerJoin(user, eq(user.id, member.userId)).where(where),
     ])
 
-    return { items: rows.map(row => toDomain(row.member, row.user)), total: totals?.value ?? 0 }
+    return {
+      items: rows.map(row => toDomain(row.member, row.user, row.upstreamProdutorCodigo)),
+      total: totals?.value ?? 0,
+    }
   },
 
   async getById(tenantId: string, id: string): Promise<TenantUser> {
     const row = await findMembership(tenantId, id)
     if (!row) throw AppError.notFound('Usuário')
-    return toDomain(row.member, row.user)
+    const [seller] = await db
+      .select({ codigo: sellerProfiles.upstreamProdutorCodigo })
+      .from(sellerProfiles)
+      .where(and(eq(sellerProfiles.userId, id), eq(sellerProfiles.organizationId, tenantId)))
+      .limit(1)
+    return toDomain(row.member, row.user, seller?.codigo ?? null)
   },
 
   async create(tenantId: string, input: CreateTenantUserInput): Promise<TenantUser> {
@@ -274,7 +286,7 @@ function generateProvisionalPassword(): string {
 type MemberRow = typeof member.$inferSelect
 type UserRow = typeof user.$inferSelect
 
-function toDomain(memberRow: MemberRow, userRow: UserRow): TenantUser {
+function toDomain(memberRow: MemberRow, userRow: UserRow, upstreamProdutorCodigo?: string | null): TenantUser {
   return {
     id: userRow.id,
     tenantId: memberRow.organizationId,
@@ -285,5 +297,6 @@ function toDomain(memberRow: MemberRow, userRow: UserRow): TenantUser {
     avatarUrl: userRow.image,
     active: memberRow.active,
     createdAt: memberRow.createdAt.toISOString(),
+    upstreamProdutorCodigo: upstreamProdutorCodigo ?? null,
   }
 }

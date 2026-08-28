@@ -92,7 +92,9 @@ export const contractsService = {
 
   /**
    * Adesão. Monta o payload de `POST /contrato/` a partir do input de domínio,
-   * completando grupo/filial/convênio com a configuração do inquilino.
+   * completando grupo/filial com a configuração do inquilino e o convênio com
+   * `input.convenioCodigo` (ou o padrão do inquilino, se o input não trouxer —
+   * caso de quem só vende sob um convênio fixo).
    */
   async create(
     tenantId: string,
@@ -104,9 +106,10 @@ export const contractsService = {
       getIntegrationDefaults(tenantId),
     ])
 
-    if (!defaults.grupoCodigo || !defaults.filialCodigo || !defaults.convenioCodigo) {
+    const convenioCodigo = input.convenioCodigo ?? defaults.convenioCodigo
+    if (!defaults.grupoCodigo || !defaults.filialCodigo || !convenioCodigo) {
       throw AppError.businessRule(
-        'Configure grupo, filial e convênio padrão do inquilino antes de registrar adesões',
+        'Configure grupo e filial padrão do inquilino (e informe o convênio) antes de registrar adesões',
       )
     }
 
@@ -148,7 +151,7 @@ export const contractsService = {
       diaVencimento: input.dueDay,
       observacao: input.notes,
       plano: { codigo: input.planCodigo },
-      convenio: { codigo: defaults.convenioCodigo },
+      convenio: { codigo: convenioCodigo },
       produtor: { codigo: await resolveProdutorCodigo(tenantId, input.sellerId) },
       grupo: { codigo: defaults.grupoCodigo },
       filial: { codigo: defaults.filialCodigo },

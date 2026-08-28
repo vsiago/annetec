@@ -1,6 +1,15 @@
 'use server'
 
-import type { Contract, Invoice, Tenant } from '@annetec/contracts'
+import type {
+  Contract,
+  CreateContractInput,
+  CreateTenantUserInput,
+  Convenio,
+  HealthPlan,
+  Invoice,
+  Tenant,
+  TenantUser,
+} from '@annetec/contracts'
 import { ApiError, api, apiFetch, tenantPath } from '@/lib/api/client'
 
 /**
@@ -181,6 +190,108 @@ export async function registerOperatorPendencyAction(
 ): Promise<ActionResult<unknown>> {
   return run(async () => {
     const { data } = await apiFetch(tenantPath(tenantSlug, '/contratos/pendencias'), {
+      method: 'POST',
+      body: input,
+    })
+    return data
+  })
+}
+
+/**
+ * Vendedores da operadora — separado de `tenant-users-api.ts` de propósito:
+ * aquele arquivo devolve o formato `LegacyUser` (sem `upstreamProdutorCodigo`)
+ * porque é compartilhado com telas de inquilino que não precisam desse campo.
+ * Aqui usamos o `TenantUser` cru da API, que já carrega o vínculo do produtor.
+ */
+export async function listOperatorSellersAction(tenantSlug: string): Promise<ActionResult<TenantUser[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<TenantUser[]>(tenantPath(tenantSlug, '/usuarios'), {
+      query: { perPage: 200, role: 'seller' },
+    })
+    return data
+  })
+}
+
+export async function createOperatorSellerAction(
+  tenantSlug: string,
+  input: CreateTenantUserInput,
+): Promise<ActionResult<TenantUser>> {
+  return run(async () => {
+    const { data } = await apiFetch<TenantUser>(tenantPath(tenantSlug, '/usuarios'), {
+      method: 'POST',
+      body: input,
+    })
+    return data
+  })
+}
+
+export async function deactivateOperatorSellerAction(
+  tenantSlug: string,
+  sellerId: string,
+): Promise<ActionResult<null>> {
+  return run(async () => {
+    await apiFetch(tenantPath(tenantSlug, `/usuarios/${sellerId}`), { method: 'DELETE' })
+    return null
+  })
+}
+
+/** Vincula um vendedor da operadora a um produtor JÁ EXISTENTE na Digital Saúde. */
+export async function linkOperatorSellerProdutorAction(
+  tenantSlug: string,
+  sellerId: string,
+  input: { codigo: string; login?: string; password?: string },
+): Promise<ActionResult<{ codigo: string; nome: string | null }>> {
+  return run(async () => {
+    const { data } = await apiFetch<{ codigo: string; nome: string | null }>(
+      tenantPath(tenantSlug, `/usuarios/${sellerId}/produtor`),
+      { method: 'PUT', body: input },
+    )
+    return data
+  })
+}
+
+/** Cria o produtor na Digital Saúde e já vincula ao vendedor da operadora. */
+export async function createOperatorSellerProdutorAction(
+  tenantSlug: string,
+  sellerId: string,
+  input: { nome: string; email: string; numeroDocumento?: string; grupoProdutorCodigo: string },
+): Promise<ActionResult<{ codigo: string; nome: string | null }>> {
+  return run(async () => {
+    const { data } = await apiFetch<{ codigo: string; nome: string | null }>(
+      tenantPath(tenantSlug, `/usuarios/${sellerId}/produtor`),
+      { method: 'POST', body: input },
+    )
+    return data
+  })
+}
+
+export async function listOperatorConveniosAction(tenantSlug: string): Promise<ActionResult<Convenio[]>> {
+  return run(() => api<Convenio[]>(tenantPath(tenantSlug, '/catalogo/convenios')))
+}
+
+export async function listOperatorPlansAction(
+  tenantSlug: string,
+  codigoProduto: string,
+): Promise<ActionResult<HealthPlan[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<HealthPlan[]>(tenantPath(tenantSlug, '/catalogo/planos'), {
+      query: { codigoProduto },
+    })
+    return data
+  })
+}
+
+/**
+ * Registra a adesão de verdade na Digital Saúde (`POST /contrato/`) — ao
+ * contrário das outras ações deste arquivo, isto cria um contrato real e não
+ * tem desfazer.
+ */
+export async function createOperatorContractAction(
+  tenantSlug: string,
+  input: CreateContractInput,
+): Promise<ActionResult<Contract>> {
+  return run(async () => {
+    const { data } = await apiFetch<Contract>(tenantPath(tenantSlug, '/contratos'), {
       method: 'POST',
       body: input,
     })

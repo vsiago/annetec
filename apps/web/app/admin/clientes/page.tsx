@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { Contract } from '@annetec/contracts'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,7 +15,7 @@ import {
   searchOperatorContractByCpfAction,
   syncOperatorContractAction,
 } from '@/lib/actions/operator-api'
-import { Search, RefreshCw, Users, Loader2, CheckCircle2 } from 'lucide-react'
+import { Search, RefreshCw, Users, Loader2, CheckCircle2, Plus } from 'lucide-react'
 
 const STATUS_LABEL: Record<string, string> = {
   pendente: 'Pendente',
@@ -137,12 +138,19 @@ export default function OperatorClientesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
-        <p className="text-muted-foreground">
-          Contratos da Annetec como operadora, direto da Digital Saúde — não misturado com os
-          inquilinos.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
+          <p className="text-muted-foreground">
+            Contratos da Annetec como operadora, direto da Digital Saúde — não misturado com os
+            inquilinos.
+          </p>
+        </div>
+        <Button asChild className="bg-primary hover:opacity-90 text-white">
+          <Link href="/admin/clientes/nova-adesao">
+            <Plus className="h-4 w-4 mr-2" /> Nova adesão
+          </Link>
+        </Button>
       </div>
 
       {operatorError && (

@@ -13,11 +13,13 @@ export const tenantUser = z.object({
   avatarUrl: z.string().url().nullable(),
   active: z.boolean(),
   createdAt: z.string().datetime(),
+  /** Só populado para `role: 'seller'` — código do produtor vinculado na Digital Saúde. */
+  upstreamProdutorCodigo: z.string().nullable().optional(),
 })
 export type TenantUser = z.infer<typeof tenantUser>
 
 export const createTenantUserInput = tenantUser
-  .omit({ id: true, tenantId: true, createdAt: true, avatarUrl: true, active: true })
+  .omit({ id: true, tenantId: true, createdAt: true, avatarUrl: true, active: true, upstreamProdutorCodigo: true })
   .extend({
     password: z.string().min(8).optional(),
     active: z.boolean().default(true),
@@ -115,6 +117,13 @@ export const createContractInput = z.object({
   signedAt: dateOnly,
   dueDay: z.number().int().min(1).max(31),
   planCodigo: z.string().min(1),
+  /**
+   * Convênio da adesão. Opcional porque um inquilino comum tem um único
+   * convênio fixo (configurado em `tenant_integrations`); a Annetec operando
+   * como operadora vende sob vários convênios ao mesmo tempo, então informa
+   * aqui qual — sem isso, cai no padrão do inquilino.
+   */
+  convenioCodigo: z.string().min(1).optional(),
   sellerId: uuid.optional(),
   notes: z.string().optional(),
   optionalCodes: z.array(z.string()).optional(),
