@@ -57,7 +57,8 @@ describe('mapContract', () => {
     codigo: '12345',
     nomeTitular: 'Ana Souza',
     numeroProposta: 'P-987',
-    dataAssinatura: '2026-01-15',
+    // Upstream manda DD/MM/YYYY, nunca ISO — ver teste de conversão abaixo.
+    dataAssinatura: '15/01/2026',
     diaVencimento: 10,
     valor: 189.9,
     saldoDevedor: 0,
@@ -75,6 +76,8 @@ describe('mapContract', () => {
         celular: '999998888',
         mensalidade: 129.9,
         linkCarteiraProvisoria: 'https://exemplo/carteira.pdf',
+        dataNascimento: '24/08/1999',
+        dataVigencia: '10/11/2025',
       },
       {
         codigo: 'B2',
@@ -106,6 +109,22 @@ describe('mapContract', () => {
     expect(result.beneficiaries).toEqual([])
     expect(result.holderName).toBeNull()
     expect(result.status).toBe('desconhecido')
+  })
+
+  /**
+   * Bug real encontrado em produção: essas datas viram colunas `date` do
+   * Postgres. Sem converter DD/MM/YYYY → ISO, dia > 12 derruba o insert (mês
+   * inválido) e dia/mês ambos ≤ 12 INVERTEM em silêncio — sem erro nenhum.
+   * `24/08/1999` (dia 24, só existe como DD/MM) prova a primeira metade;
+   * `10/11/2025` prova que não vira `2025-10-11` por engano.
+   */
+  it('converte datas DD/MM/YYYY do upstream para ISO antes de persistir', () => {
+    const result = mapContract(contrato)
+    expect(result.signedAt).toBe('2026-01-15')
+
+    const holder = result.beneficiaries[0]!
+    expect(holder.birthDate).toBe('1999-08-24')
+    expect(holder.effectiveDate).toBe('2025-11-10')
   })
 })
 

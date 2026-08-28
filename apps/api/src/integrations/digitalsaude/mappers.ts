@@ -44,6 +44,22 @@ const str = (value: unknown): string | null => {
   return text === '' ? null : text
 }
 
+/**
+ * O upstream manda datas em `DD/MM/YYYY`; colunas `date` do Postgres exigem
+ * ISO (`YYYY-MM-DD`). Sem essa conversão o insert quebra pra qualquer dia >
+ * 12 (fora do range de mês) e SILENCIOSAMENTE inverte dia/mês quando os dois
+ * são ≤ 12 — corrompendo a data sem erro nenhum. Usado em todo campo que
+ * termina numa coluna `date` (nascimento, vigência, assinatura).
+ */
+const brDate = (value: unknown): string | null => {
+  const text = str(value)
+  if (!text) return null
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text)
+  if (!match) return text // já veio em outro formato — deixa passar em vez de descartar
+  const [, day, month, year] = match
+  return `${year}-${month}-${day}`
+}
+
 const normalize = (value: string | null | undefined) =>
   (value ?? '')
     .normalize('NFD')
@@ -124,14 +140,14 @@ export function mapBeneficiary(source: DsBeneficiario): MappedBeneficiary {
     kind: toBeneficiaryKind(source.tipoBeneficiario?.id),
     name: str(source.nome) ?? 'Sem nome',
     cpf: str(source.cpf)?.replace(/\D/g, '') ?? null,
-    birthDate: str(source.dataNascimento),
+    birthDate: brDate(source.dataNascimento),
     motherName: str(source.nomeMae),
     relationship: str(source.parentesco?.nome),
     gender: str(source.sexo?.nome),
     email: str(source.email),
     phone: joinPhone(source.dddCelular, source.celular) ?? joinPhone(source.dddTelefone, source.telefone),
     monthlyFee: num(source.mensalidade),
-    effectiveDate: str(source.dataVigencia),
+    effectiveDate: brDate(source.dataVigencia),
     provisionalCardUrl: str(source.linkCarteiraProvisoria),
     status: str(source.statusBeneficiario?.nome),
     raw: source,
@@ -169,7 +185,7 @@ export function mapContract(source: DsContrato): MappedContract {
     holderCpf: holder?.cpf ?? str(source.cpfResponsavel)?.replace(/\D/g, '') ?? null,
     status: toContractStatus(source.statusContrato?.nome),
     upstreamStatus: str(source.statusContrato?.nome),
-    signedAt: str(source.dataAssinatura),
+    signedAt: brDate(source.dataAssinatura),
     dueDay: source.diaVencimento ?? null,
     monthlyValue: num(source.valor),
     outstandingBalance: num(source.saldoDevedor),

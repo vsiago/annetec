@@ -1,6 +1,6 @@
 'use server'
 
-import type { Contract, Tenant } from '@annetec/contracts'
+import type { Contract, Invoice, Tenant } from '@annetec/contracts'
 import { ApiError, api, apiFetch, tenantPath } from '@/lib/api/client'
 
 /**
@@ -72,6 +72,118 @@ export async function syncOperatorContractAction(
       tenantPath(tenantSlug, `/contratos/${encodeURIComponent(upstreamCodigo)}/sync`),
       { method: 'POST' },
     )
+    return data
+  })
+}
+
+/**
+ * Faturas vencidas de toda a carteira. A Digital Saúde não tem listagem em
+ * lote pra fatura — a API hidrata cada código individualmente (ver
+ * `billingService.listOverdueInvoices`), então isso pode levar alguns
+ * segundos numa carteira grande.
+ */
+export async function listOperatorOverdueInvoicesAction(
+  tenantSlug: string,
+): Promise<ActionResult<Invoice[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<Invoice[]>(tenantPath(tenantSlug, '/financeiro/faturas/vencidas'))
+    return data
+  })
+}
+
+/** Um contrato específico do espelho local — usado na tela de detalhe. */
+export async function getOperatorContractAction(
+  tenantSlug: string,
+  upstreamCodigo: string,
+): Promise<ActionResult<Contract>> {
+  return run(() =>
+    api<Contract>(tenantPath(tenantSlug, `/contratos/${encodeURIComponent(upstreamCodigo)}`)),
+  )
+}
+
+/** Todas as faturas de UM contrato (não só as vencidas). */
+export async function listOperatorContractInvoicesAction(
+  tenantSlug: string,
+  contratoCodigo: string,
+): Promise<ActionResult<Invoice[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<Invoice[]>(tenantPath(tenantSlug, '/financeiro/faturas'), {
+      query: { contratoCodigo },
+    })
+    return data
+  })
+}
+
+/** Muda o contrato de PENDENTE para PRODUZIDO no ERP e regrava o espelho. */
+export async function markOperatorContractProducedAction(
+  tenantSlug: string,
+  upstreamCodigo: string,
+): Promise<ActionResult<Contract>> {
+  return run(async () => {
+    const { data } = await apiFetch<Contract>(
+      tenantPath(tenantSlug, `/contratos/${encodeURIComponent(upstreamCodigo)}/produzido`),
+      { method: 'POST' },
+    )
+    return data
+  })
+}
+
+/** Dispara o e-mail da carteirinha provisória pelo próprio ERP. */
+export async function sendOperatorMembershipCardAction(
+  tenantSlug: string,
+  upstreamCodigo: string,
+): Promise<ActionResult<{ message: string }>> {
+  return run(async () => {
+    const { data } = await apiFetch<{ message: string }>(
+      tenantPath(tenantSlug, `/contratos/${encodeURIComponent(upstreamCodigo)}/carteirinha/email`),
+      { method: 'POST' },
+    )
+    return data
+  })
+}
+
+export async function attachOperatorDocumentAction(
+  tenantSlug: string,
+  input: { contractUpstreamCodigo: string; fileName: string; fileUrl: string },
+): Promise<ActionResult<unknown>> {
+  return run(async () => {
+    const { data } = await apiFetch(tenantPath(tenantSlug, '/contratos/anexos'), {
+      method: 'POST',
+      body: input,
+    })
+    return data
+  })
+}
+
+export async function declareOperatorPathologyAction(
+  tenantSlug: string,
+  input: {
+    beneficiaryUpstreamCodigo: string
+    name: string
+    cid?: string
+    description?: string
+    eventYear?: string
+    questionNumber?: string
+  },
+): Promise<ActionResult<unknown>> {
+  return run(async () => {
+    const { data } = await apiFetch(tenantPath(tenantSlug, '/contratos/patologias'), {
+      method: 'POST',
+      body: input,
+    })
+    return data
+  })
+}
+
+export async function registerOperatorPendencyAction(
+  tenantSlug: string,
+  input: { contractCodigo: string; pendencyCode: string },
+): Promise<ActionResult<unknown>> {
+  return run(async () => {
+    const { data } = await apiFetch(tenantPath(tenantSlug, '/contratos/pendencias'), {
+      method: 'POST',
+      body: input,
+    })
     return data
   })
 }

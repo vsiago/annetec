@@ -48,13 +48,21 @@ type InputOf<K extends DigitalSaudeEndpointName> =
 
 type OutputOf<K extends DigitalSaudeEndpointName> = z.output<Endpoints[K]['response']>
 
+/**
+ * Colapsa `T[]` para `T` (`T` sozinho passa direto). Precisa ser um alias à
+ * parte — não dá pra escrever a mesma checagem inline em `one()` — porque só
+ * distribui sobre union (`Fatura | Fatura[]` → `Fatura | Fatura`) quando `T`
+ * é o parâmetro nu do próprio alias genérico.
+ */
+type UnwrapOne<T> = T extends readonly (infer E)[] ? E : T
+
 export interface DigitalSaudeClient {
   call<K extends DigitalSaudeEndpointName>(name: K, input?: InputOf<K>): Promise<OutputOf<K>>
-  /** Atalho para endpoints que devolvem array de um elemento. */
+  /** Atalho para endpoints "por código" único — array de um elemento OU objeto nu, o upstream varia por entidade. */
   one<K extends DigitalSaudeEndpointName>(
     name: K,
     input?: InputOf<K>,
-  ): Promise<OutputOf<K> extends readonly (infer T)[] ? T | null : never>
+  ): Promise<UnwrapOne<OutputOf<K>> | null>
   /** Chamada leve usada pela tela de configuração para validar credenciais. */
   healthCheck(): Promise<boolean>
 }

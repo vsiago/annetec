@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Contract } from '@annetec/contracts'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,7 @@ function money(value: number | null) {
 }
 
 export default function OperatorClientesPage() {
+  const router = useRouter()
   const [tenantSlug, setTenantSlug] = useState<string | null>(null)
   const [loadingOperator, setLoadingOperator] = useState(true)
   const [operatorError, setOperatorError] = useState('')
@@ -207,7 +209,11 @@ export default function OperatorClientesPage() {
                 </thead>
                 <tbody>
                   {contracts.map(contract => (
-                    <tr key={contract.id} className="border-b border-border last:border-0">
+                    <tr
+                      key={contract.id}
+                      onClick={() => router.push(`/admin/clientes/${encodeURIComponent(contract.upstreamCodigo)}`)}
+                      className="border-b border-border last:border-0 cursor-pointer hover:bg-muted/40 transition-colors"
+                    >
                       <td className="py-4 px-6">
                         <p className="text-sm font-medium text-foreground">{contract.holderName ?? '—'}</p>
                         <p className="text-xs text-muted-foreground">{contract.upstreamCodigo}</p>
@@ -229,7 +235,10 @@ export default function OperatorClientesPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => handleResync(contract.upstreamCodigo)}
+                          onClick={e => {
+                            e.stopPropagation()
+                            handleResync(contract.upstreamCodigo)
+                          }}
                           disabled={syncingCodigo === contract.upstreamCodigo}
                         >
                           {syncingCodigo === contract.upstreamCodigo ? (

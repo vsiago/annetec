@@ -11,6 +11,7 @@ import {
   mapInvoice,
   mapPaymentStatement,
 } from '@/integrations/digitalsaude/mappers'
+import { logger } from '@/lib/logger'
 import { sellersService } from '@/modules/users/service'
 
 /**
@@ -69,11 +70,30 @@ export const billingService = {
     return mapInvoice(result)
   },
 
-  /** Faturas vencidas de toda a carteira — visão de cobrança do admin. */
+  /**
+   * Faturas vencidas de toda a carteira — visão de cobrança do admin.
+   *
+   * `faturaVencidas` só devolve os códigos (confirmado batendo no upstream:
+   * é o único endpoint de fatura que foge do padrão objeto-completo), então
+   * cada um precisa ser buscado em `faturaPorCodigo`. A carteira pode ter
+   * centenas de faturas vencidas — hidrata em lotes para não abrir uma
+   * rajada de centenas de requisições simultâneas contra o ERP.
+   */
   async listOverdueInvoices(tenantId: string): Promise<Invoice[]> {
     const client = await getDigitalSaudeClient(tenantId)
-    const result = await client.call('faturaVencidas')
-    return result.map(item => mapInvoice(item)).sort(byDueDateDesc)
+    const codes = await client.call('faturaVencidas')
+
+    const invoices = await mapWithConcurrency(codes, 10, async codigo => {
+      try {
+        const fatura = await client.one('faturaPorCodigo', { codigoFatura: codigo })
+        return fatura ? mapInvoice(fatura) : null
+      } catch (error) {
+        logger.warn({ tenantId, codigo, err: error }, 'Falha ao buscar fatura vencida individual')
+        return null
+      }
+    })
+
+    return invoices.filter((invoice): invoice is Invoice => invoice !== null).sort(byDueDateDesc)
   },
 
   async sendOverdueInvoicesByEmail(tenantId: string, contractCodigo: string): Promise<string> {
@@ -138,4 +158,24 @@ export const billingService = {
 
 function byDueDateDesc(a: Invoice, b: Invoice) {
   return (b.dueAt ?? '').localeCompare(a.dueAt ?? '')
+}
+
+/** Roda `fn` sobre `items` com no máximo `limit` chamadas em voo ao mesmo tempo. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let cursor = 0
+
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor++
+      results[index] = await fn(items[index]!)
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
 }

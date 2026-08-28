@@ -11,11 +11,23 @@ import {
  * cliente HTTP (apps/api/src/integrations/digitalsaude/client.ts) seja gerado
  * a partir daqui e não de strings soltas.
  *
- * Observação importante sobre o upstream: TODAS as respostas de sucesso são
- * arrays, inclusive as buscas por chave única (`/contrato/{codigoContrato}`
- * devolve um array de um elemento). Os endpoints de envio de e-mail devolvem
- * uma string simples.
+ * Observação importante sobre o upstream: a maioria das respostas de sucesso
+ * é array, inclusive buscas por chave única (`/contrato/{codigoContrato}`
+ * devolve um array de um elemento) — MAS não é universal: confirmado batendo
+ * direto no servidor que `/fatura/{codigo}` e `/convenio/{codigo}` devolvem o
+ * objeto NU, sem array. Por isso todo endpoint "por código" único usa
+ * `oneOrMany()` abaixo em vez de `z.array()` puro — aceita as duas formas e
+ * `client.one()` já sabia normalizar ambas, só a validação barrava a segunda.
+ * `/fatura/procurarPorVencida` foge do padrão de vez: devolve só os códigos
+ * (`string[]`), não faturas completas — cada uma precisa de um
+ * `faturaPorCodigo` à parte (ver `billingService.listOverdueInvoices`).
+ * Os endpoints de envio de e-mail devolvem uma string simples.
  */
+
+/** Endpoint "por código" único: o upstream ora devolve o objeto nu, ora um array de um elemento. */
+function oneOrMany<T extends z.ZodTypeAny>(schema: T) {
+  return z.union([schema, z.array(schema)])
+}
 
 const codigoContratoQuery = z.object({ codigoContrato: z.string().min(1) })
 
@@ -47,7 +59,7 @@ export const digitalSaudeEndpoints = {
     method: 'GET',
     path: '/atendimento/{protocolo}',
     params: z.object({ protocolo: z.string().min(1) }),
-    response: z.array(dsAtendimento),
+    response: oneOrMany(dsAtendimento),
   },
 
   // ------------------------------------------------------------- carencia
@@ -61,7 +73,7 @@ export const digitalSaudeEndpoints = {
     method: 'GET',
     path: '/carencia/{codigoCarencia}',
     params: z.object({ codigoCarencia: z.string().min(1) }),
-    response: z.array(dsCarencia),
+    response: oneOrMany(dsCarencia),
   },
 
   // --------------------------------------------------------------- tabela
@@ -75,7 +87,7 @@ export const digitalSaudeEndpoints = {
     method: 'GET',
     path: '/tabela/{codigoTabela}',
     params: z.object({ codigoTabela: z.string().min(1) }),
-    response: z.array(dsTabela),
+    response: oneOrMany(dsTabela),
   },
 
   // ------------------------------------------------------------- contrato
@@ -97,7 +109,7 @@ export const digitalSaudeEndpoints = {
     method: 'GET',
     path: '/contrato/{codigoContrato}',
     params: codigoContratoQuery,
-    response: z.array(dsContrato),
+    response: oneOrMany(dsContrato),
   },
   contratoEnviarCarteira: {
     method: 'GET',
@@ -160,7 +172,7 @@ export const digitalSaudeEndpoints = {
     method: 'GET',
     path: '/convenio/{codigoConvenio}',
     params: z.object({ codigoConvenio: z.string().min(1) }),
-    response: z.array(dsConvenio),
+    response: oneOrMany(dsConvenio),
   },
   convenioListar: {
     method: 'GET',
@@ -173,7 +185,7 @@ export const digitalSaudeEndpoints = {
     method: 'GET',
     path: '/demonstrativoPagamento/{codigoDemonstrativoPagamento}',
     params: z.object({ codigoDemonstrativoPagamento: z.string().min(1) }),
-    response: z.array(dsDemonstrativoPagamento),
+    response: oneOrMany(dsDemonstrativoPagamento),
   },
   demonstrativoPorContrato: {
     method: 'GET',
@@ -198,16 +210,23 @@ export const digitalSaudeEndpoints = {
     }),
     response: z.array(dsFatura),
   },
+  /**
+   * Diferente dos outros endpoints de fatura: devolve só o `codigo` de cada
+   * fatura vencida (array de string), não o objeto completo — confirmado
+   * batendo direto no upstream. Quem quiser os dados cheios busca cada
+   * código em `faturaPorCodigo` (é o que `billingService.listOverdueInvoices`
+   * faz).
+   */
   faturaVencidas: {
     method: 'GET',
     path: '/fatura/procurarPorVencida',
-    response: z.array(dsFatura),
+    response: z.array(z.string()),
   },
   faturaPorCodigo: {
     method: 'GET',
     path: '/fatura/{codigoFatura}',
     params: z.object({ codigoFatura: z.string().min(1) }),
-    response: z.array(dsFatura),
+    response: oneOrMany(dsFatura),
   },
 
   // ---------------------------------------------------------------- plano
@@ -221,7 +240,7 @@ export const digitalSaudeEndpoints = {
     method: 'GET',
     path: '/plano/{codigoPlano}',
     params: z.object({ codigoPlano: z.string().min(1) }),
-    response: z.array(dsPlano),
+    response: oneOrMany(dsPlano),
   },
 
   // ------------------------------------------------------------ patologia
@@ -268,7 +287,7 @@ export const digitalSaudeEndpoints = {
     method: 'GET',
     path: '/produtor/{codigoProdutor}',
     params: z.object({ codigoProdutor: z.string().min(1) }),
-    response: z.array(dsProdutor),
+    response: oneOrMany(dsProdutor),
   },
   produtorIncluir: {
     method: 'POST',
@@ -313,7 +332,7 @@ export const digitalSaudeEndpoints = {
     method: 'GET',
     path: '/recibo/{codigoRecibo}',
     params: z.object({ codigoRecibo: z.string().min(1) }),
-    response: z.array(dsRecibo),
+    response: oneOrMany(dsRecibo),
   },
   /**
    * Atenção: o upstream exige login+senha do produtor em QUERY STRING. A API
