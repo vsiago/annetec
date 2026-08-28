@@ -23,4 +23,9 @@ export const config = {
   runtime: 'nodejs',
 }
 
-export default handle(createApp())
+// Exportar como `fetch` (não `default`) é o que faz a Vercel reconhecer a
+// assinatura Web-padrão `(req: Request) => Response` sem ambiguidade — com
+// `export default` ela tentou tratar isso como a assinatura antiga
+// `(req, res) => void` e descartava o `Response` retornado, deixando a
+// requisição pendurada até estourar o timeout.
+export const fetch = handle(createApp())

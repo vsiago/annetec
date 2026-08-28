@@ -19,6 +19,9 @@ node_modules
 # Build output
 dist/
 *.tsbuildinfo
+# Gerado pelo tsup a cada deploy (Serverless Function da Vercel) — nada de
+# fonte mora aqui, é tudo `src/vercel.ts` compilado.
+apps/api/api/
 
 # Env
 .env
