@@ -18,6 +18,23 @@ export const tenantStatus = z.enum(['trial', 'active', 'suspended', 'cancelled']
 export type TenantStatus = z.infer<typeof tenantStatus>
 
 /**
+ * O que a organização é dentro do modelo híbrido da Annetec.
+ *
+ *  - `operator`: administradora que contrata a plataforma (o inquilino
+ *    clássico). Opera em `/[tenant]/*` com as próprias credenciais da Digital
+ *    Saúde;
+ *  - `platform`: a própria Annetec operando como operadora, com seus clientes
+ *    diretos. Opera em `/admin/*`. Existe no MESMO registro de organizações
+ *    justamente para reaproveitar contratos, financeiro e catálogo sem
+ *    duplicar regra — só o espaço de rota e o guard de sessão mudam.
+ *
+ * Só pode haver UMA organização `platform` (garantido por índice único
+ * parcial na migração).
+ */
+export const tenantKind = z.enum(['operator', 'platform'])
+export type TenantKind = z.infer<typeof tenantKind>
+
+/**
  * Status de contrato normalizado. A Digital Saúde devolve
  * `statusContrato: { id, nome }` com texto livre; o mapper reduz para este
  * conjunto e guarda o original em `upstreamStatus`.

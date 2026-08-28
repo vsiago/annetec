@@ -1,7 +1,7 @@
-import { relations } from 'drizzle-orm'
-import { boolean, integer, jsonb, numeric, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { relations, sql } from 'drizzle-orm'
+import { boolean, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 import type { TenantAddress, TenantBranding } from '@annetec/contracts'
-import { tenantStatusEnum } from './enums'
+import { tenantKindEnum, tenantStatusEnum } from './enums'
 import { organization } from './auth'
 
 /**
@@ -22,22 +22,36 @@ export const tenantPlans = pgTable('tenant_plans', {
  * identidade e o slug moram lá; aqui vive tudo que a Digital Saúde e o Better
  * Auth não sabem: CNPJ, endereço, marca, plano contratado, status comercial.
  */
-export const tenantProfiles = pgTable('tenant_profiles', {
-  organizationId: text('organization_id')
-    .primaryKey()
-    .references(() => organization.id, { onDelete: 'cascade' }),
-  legalName: text('legal_name').notNull(),
-  document: text('document').notNull(),
-  email: text('email').notNull(),
-  phone: text('phone').notNull(),
-  address: jsonb('address').$type<TenantAddress>().notNull(),
-  branding: jsonb('branding').$type<TenantBranding>().notNull(),
-  planId: text('plan_id').references(() => tenantPlans.id, { onDelete: 'set null' }),
-  status: tenantStatusEnum('status').notNull().default('trial'),
-  trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const tenantProfiles = pgTable(
+  'tenant_profiles',
+  {
+    organizationId: text('organization_id')
+      .primaryKey()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    legalName: text('legal_name').notNull(),
+    document: text('document').notNull(),
+    email: text('email').notNull(),
+    phone: text('phone').notNull(),
+    address: jsonb('address').$type<TenantAddress>().notNull(),
+    branding: jsonb('branding').$type<TenantBranding>().notNull(),
+    planId: text('plan_id').references(() => tenantPlans.id, { onDelete: 'set null' }),
+    status: tenantStatusEnum('status').notNull().default('trial'),
+    /**
+     * `operator` (padrão) = inquilino contratante. `platform` = a própria
+     * Annetec operando como operadora — no máximo uma linha com este valor
+     * (índice único parcial abaixo).
+     */
+    kind: tenantKindEnum('kind').notNull().default('operator'),
+    trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [
+    uniqueIndex('tenant_profiles_single_platform')
+      .on(table.kind)
+      .where(sql`${table.kind} = 'platform'`),
+  ],
+)
 
 /**
  * Credenciais da Digital Saúde por inquilino. `appToken` e `apiPassword` são

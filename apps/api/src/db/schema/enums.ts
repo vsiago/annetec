@@ -11,6 +11,9 @@ import { pgEnum } from 'drizzle-orm/pg-core'
  */
 export const tenantStatusEnum = pgEnum('tenant_status', ['trial', 'active', 'suspended', 'cancelled'])
 
+/** `operator` = inquilino/administradora; `platform` = a própria Annetec operando. */
+export const tenantKindEnum = pgEnum('tenant_kind', ['operator', 'platform'])
+
 export const contractStatusEnum = pgEnum('contract_status', [
   'pendente',
   'produzido',

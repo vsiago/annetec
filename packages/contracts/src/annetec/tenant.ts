@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { cep, cnpj, email, hexColor, slug, telefone, uf, uuid } from '../common/primitives'
-import { tenantStatus } from './enums'
+import { tenantKind, tenantStatus } from './enums'
 
 export const tenantAddress = z.object({
   cep,
@@ -62,13 +62,14 @@ export const tenant = z.object({
   branding: tenantBranding,
   planId: uuid,
   status: tenantStatus,
+  kind: tenantKind.default('operator'),
   createdAt: z.string().datetime(),
   trialEndsAt: z.string().datetime().nullable(),
 })
 export type Tenant = z.infer<typeof tenant>
 
 export const createTenantInput = tenant
-  .omit({ id: true, createdAt: true, status: true, trialEndsAt: true })
+  .omit({ id: true, createdAt: true, status: true, trialEndsAt: true, kind: true })
   .extend({
     status: tenantStatus.default('trial'),
     /** Usuário admin criado junto com o inquilino (fluxo do wizard). */

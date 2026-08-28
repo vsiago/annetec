@@ -28,7 +28,9 @@ import { logger } from '@/lib/logger'
  */
 export const tenantsService = {
   async list(params: { page: number; perPage: number; status?: string; search?: string }) {
-    const filters: SQL[] = []
+    // A operadora (`kind: 'platform'`) não é um inquilino contratante — não
+    // aparece na lista que o superadmin gerencia em /admin/inquilinos.
+    const filters: SQL[] = [eq(tenantProfiles.kind, 'operator')]
     if (params.status) filters.push(eq(tenantProfiles.status, params.status as 'active'))
     if (params.search) {
       const term = `%${params.search}%`
@@ -64,6 +66,17 @@ export const tenantsService = {
     const row = await findByOrgId(id)
     if (!row) throw AppError.notFound('Inquilino')
     return toDomain(row.organization, row.tenant_profiles)
+  },
+
+  /** A própria Annetec operando como operadora — no máximo uma linha existe. */
+  async getOperator(): Promise<Tenant | null> {
+    const [row] = await db
+      .select()
+      .from(organization)
+      .innerJoin(tenantProfiles, eq(tenantProfiles.organizationId, organization.id))
+      .where(eq(tenantProfiles.kind, 'platform'))
+      .limit(1)
+    return row ? toDomain(row.organization, row.tenant_profiles) : null
   },
 
   async getBySlug(slug: string): Promise<Tenant> {
@@ -310,6 +323,7 @@ function toDomain(org: OrgRow, profile: ProfileRow): Tenant {
     branding: profile.branding,
     planId: profile.planId!,
     status: profile.status,
+    kind: profile.kind,
     createdAt: profile.createdAt.toISOString(),
     trialEndsAt: profile.trialEndsAt?.toISOString() ?? null,
   }

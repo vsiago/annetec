@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Building2,
   Users,
+  UsersRound,
   Settings,
   LogOut,
   ChevronLeft,
@@ -35,6 +36,7 @@ import {
 const sidebarLinks = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/inquilinos', label: 'Inquilinos', icon: Building2 },
+  { href: '/admin/clientes', label: 'Clientes', icon: UsersRound },
   { href: '/admin/usuarios', label: 'Usuários da Plataforma', icon: Users },
   { href: '/admin/configuracoes', label: 'Configurações', icon: Settings },
 ]
@@ -289,6 +291,7 @@ export function PlatformSidebar() {
         {[
           { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
           { href: '/admin/inquilinos', label: 'Inquilinos', icon: Building2 },
+          { href: '/admin/clientes', label: 'Clientes', icon: UsersRound },
           { href: '/admin/usuarios', label: 'Usuários', icon: Users },
           { href: '/admin/configuracoes', label: 'Config', icon: Settings },
           { href: '/admin/logs', label: 'Logs', icon: Activity },

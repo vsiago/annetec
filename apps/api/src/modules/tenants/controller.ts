@@ -36,6 +36,18 @@ export const tenantsController = new Hono<AppEnv>()
     return created(c, { tenant, ownerPassword })
   })
 
+  /**
+   * A Annetec operando como operadora — clientes diretos, fora da lista de
+   * inquilinos. O frontend usa o `slug` devolvido aqui para reaproveitar as
+   * mesmas rotas `/api/v1/t/:tenantSlug/*` (contratos, financeiro, catálogo)
+   * já existentes: sessão de plataforma passa livre por `requireTenantRole`.
+   */
+  .get('/operador', async c => {
+    const operator = await tenantsService.getOperator()
+    if (!operator) return ok(c, null)
+    return ok(c, operator)
+  })
+
   .get('/:id', param(idParam), async c => ok(c, await tenantsService.getById(c.req.valid('param').id)))
 
   .patch('/:id', param(idParam), json(updateTenantInput), async c =>

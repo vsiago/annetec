@@ -8,6 +8,13 @@
       "when": 1787874447782,
       "tag": "0000_clammy_lifeguard",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787935264709,
+      "tag": "0001_fancy_stardust",
+      "breakpoints": true
     }
   ]
 }
