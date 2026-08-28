@@ -19,5 +19,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "drizzle.config.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "api/**/*.ts", "tests/**/*.ts", "drizzle.config.ts", "vitest.config.ts"]
 }

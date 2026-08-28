@@ -6,6 +6,7 @@ import { db } from '@/db/client'
 import { clientProfiles, member, organization } from '@/db/schema'
 import { mapContract } from '@/integrations/digitalsaude/mappers'
 import { getDigitalSaudeClient } from '@/integrations/digitalsaude/provider'
+import { runInBackground } from '@/lib/background'
 import { logger } from '@/lib/logger'
 
 /**
@@ -106,13 +107,12 @@ export function clientPortal() {
 
           // Sincroniza o espelho local de contratos em segundo plano — o
           // login não deve esperar por isso.
-          void import('@/modules/contracts/service')
-            .then(({ contractsService }) =>
+          runInBackground(
+            import('@/modules/contracts/service').then(({ contractsService }) =>
               contractsService.syncContracts(tenant.id, contracts, { clientUserId: authUser!.id }),
-            )
-            .catch(error =>
-              logger.error({ err: error, tenantId: tenant.id }, 'Falha ao sincronizar contratos no login'),
-            )
+            ),
+            error => logger.error({ err: error, tenantId: tenant.id }, 'Falha ao sincronizar contratos no login'),
+          )
 
           return ctx.json({ token: session.token, user: authUser })
         },

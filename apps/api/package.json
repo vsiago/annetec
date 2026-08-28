@@ -23,6 +23,7 @@
     "@annetec/contracts": "workspace:*",
     "@hono/node-server": "^1.14.0",
     "@hono/zod-validator": "^0.4.3",
+    "@vercel/functions": "^3.9.5",
     "better-auth": "^1.7.2",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
