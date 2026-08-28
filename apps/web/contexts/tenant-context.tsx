@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useParams } from 'next/navigation'
 import type { Tenant } from '@/lib/types'
-import { getTenantBySlug } from '@/lib/actions/tenants'
+import { getTenantPublicAction } from '@/lib/actions/tenant-public-api'
 
 interface TenantContextType {
   tenant: Tenant | null
@@ -26,8 +26,8 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const load = async () => {
     if (!slug) return
     setIsLoading(true)
-    const result = await getTenantBySlug(slug)
-    setTenant(result.success ? result.data ?? null : null)
+    const result = await getTenantPublicAction(slug)
+    setTenant(result.success ? result.data : null)
     setIsLoading(false)
   }
 

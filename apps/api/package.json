@@ -1,0 +1,42 @@
+{
+  "name": "@annetec/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --target node22 --clean --sourcemap",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx src/db/seed.ts",
+    "platform:create-admin": "tsx src/db/create-platform-admin.ts",
+    "openapi": "tsx src/openapi/generate.ts"
+  },
+  "dependencies": {
+    "@annetec/contracts": "workspace:*",
+    "@hono/node-server": "^1.14.0",
+    "@hono/zod-validator": "^0.4.3",
+    "better-auth": "^1.7.2",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.7.4",
+    "jose": "^6.0.8",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "drizzle-kit": "^0.31.10",
+    "tsup": "^8.4.0",
+    "tsx": "^4.23.8",
+    "typescript": "5.7.3",
+    "vitest": "^3.0.8"
+  }
+}

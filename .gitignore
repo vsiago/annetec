@@ -16,3 +16,14 @@ node_modules
 
 # Wireframe/design source files (kept locally, not versioned)
 *.pptx
+# Build output
+dist/
+*.tsbuildinfo
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Test/coverage
+coverage/

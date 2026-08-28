@@ -1,15 +1,15 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import type { User, Seller, Client, UserRole } from '@/lib/types'
+import type { SessionUser } from '@annetec/contracts'
+import type { User, UserRole } from '@/lib/types'
 import { useTenant } from './tenant-context'
-import { getUserById, loginTenantUser, getRoleRedirectPath } from '@/lib/actions/tenant-users'
-
-type TenantUser = User | Seller | Client
+import { loginAction, logoutAction, meAction } from '@/lib/actions/auth-api'
+import { getRoleRedirectPath } from '@/lib/actions/tenant-users'
 
 interface AuthContextType {
-  user: TenantUser | null
+  user: User | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => void
@@ -18,61 +18,68 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Tenant-scoped auth (admin/seller/client of a single tenant). Must be
-// rendered under TenantProvider — the session is scoped per-tenant so a
-// login on /clinica-vida/... never leaks into /annetec/....
+/**
+ * Auth escopado ao inquilino (admin/vendedor deste `/[tenant]/...`).
+ *
+ * A sessão em si é uma só (o cookie do Better Auth, global — ver
+ * `lib/api/session.ts`), não uma por inquilino: por isso toda leitura aqui
+ * confere se `tenantSlug` da sessão bate com o inquilino da URL atual antes
+ * de considerar autenticado. Uma conta logada no inquilino A nunca aparece
+ * autenticada em `/[tenant-b]/...`, mesmo com o cookie presente.
+ *
+ * Associados (papel `client`) não têm senha — entram pelo portal em `/login`
+ * (CPF + e-mail); uma vez logados, chegam aqui já com sessão válida e esta
+ * tela só precisa reconhecê-la, não pedir login de novo.
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { tenant } = useTenant()
-  const [user, setUser] = useState<TenantUser | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
-  const storageKey = tenant ? `annetec_session_${tenant.id}` : null
-
-  useEffect(() => {
-    if (!storageKey) return
-    const storedUserId = localStorage.getItem(storageKey)
-    if (storedUserId) {
-      getUserById(storedUserId).then(result => {
-        // Re-check tenant ownership: the stored id could point at a user that
-        // was deleted, or that belongs to another tenant if the key was
-        // tampered with. Never restore a session across tenant boundaries.
-        if (result.success && result.data && result.data.tenantId === tenant?.id) {
-          setUser(result.data)
-        } else {
-          localStorage.removeItem(storageKey)
-          setUser(null)
-        }
-        setIsLoading(false)
-      })
+  const loadSession = useCallback(async () => {
+    if (!tenant) return
+    setIsLoading(true)
+    const result = await meAction()
+    if (result.success && result.data.scope === 'tenant' && result.data.tenantSlug === tenant.slug) {
+      setUser(toLegacyUser(result.data))
     } else {
       setUser(null)
-      setIsLoading(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey])
+    setIsLoading(false)
+  }, [tenant])
+
+  useEffect(() => {
+    loadSession()
+  }, [loadSession])
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    if (!tenant || !storageKey) {
+    if (!tenant) {
       return { success: false, error: 'Inquilino não carregado' }
     }
     setIsLoading(true)
-    const result = await loginTenantUser(tenant.id, email, password)
+    const result = await loginAction({ email, password, tenantSlug: tenant.slug })
     if (!result.success) {
       setIsLoading(false)
       return { success: false, error: result.error }
     }
+    if (result.data.scope !== 'tenant' || result.data.tenantSlug !== tenant.slug) {
+      // Conta existe mas não tem vínculo de admin/vendedor com ESTE
+      // inquilino (é da plataforma, ou é admin/vendedor de outro clube).
+      await logoutAction()
+      setIsLoading(false)
+      return { success: false, error: 'Esta conta não tem acesso a este inquilino' }
+    }
 
-    setUser(result.data)
-    localStorage.setItem(storageKey, result.data.id)
+    setUser(toLegacyUser(result.data))
     setIsLoading(false)
-    router.push(getRoleRedirectPath(tenant.slug, result.data.role))
+    router.push(getRoleRedirectPath(tenant.slug, result.data.tenantRole as UserRole))
     return { success: true }
   }
 
   const logout = () => {
     setUser(null)
-    if (storageKey) localStorage.removeItem(storageKey)
+    void logoutAction()
     if (tenant) router.push(`/${tenant.slug}/login`)
   }
 
@@ -101,4 +108,19 @@ export function useAuth() {
 
 export function getRedirectPath(tenantSlug: string, role: UserRole): string {
   return getRoleRedirectPath(tenantSlug, role)
+}
+
+function toLegacyUser(sessionUser: SessionUser): User {
+  return {
+    id: sessionUser.id,
+    tenantId: sessionUser.tenantId!,
+    name: sessionUser.name,
+    email: sessionUser.email,
+    role: sessionUser.tenantRole as UserRole,
+    avatar: sessionUser.avatarUrl ?? undefined,
+    // A sessão não carrega a data de criação da conta — nenhuma tela lê este
+    // campo a partir do usuário logado (só da listagem de usuários, que vem
+    // de tenant-users-api.ts com o valor real).
+    createdAt: new Date(),
+  }
 }

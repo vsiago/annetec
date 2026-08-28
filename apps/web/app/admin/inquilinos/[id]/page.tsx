@@ -9,9 +9,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useTenants } from '@/contexts/tenants-context'
 import type { Tenant, TenantStatus } from '@/lib/types'
-import { ArrowLeft, ExternalLink, Save } from 'lucide-react'
+import type { UF } from '@annetec/contracts'
+import { AlertCircle, ArrowLeft, ExternalLink, Save } from 'lucide-react'
 
 const statusLabel: Record<TenantStatus, string> = {
   trial: 'Trial',
@@ -26,6 +28,7 @@ export default function InquilinoDetailPage() {
   const { tenants, plans, updateTenant, isLoading } = useTenants()
   const [tenant, setTenant] = useState<Tenant | undefined>()
   const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     setTenant(tenants.find(t => t.id === params.id))
@@ -46,13 +49,25 @@ export default function InquilinoDetailPage() {
   }
 
   const handleSave = async () => {
+    setError('')
     setIsSaving(true)
-    await updateTenant(tenant.id, tenant)
+    const result = await updateTenant(tenant.id, {
+      name: tenant.name,
+      legalName: tenant.legalName,
+      document: tenant.document,
+      email: tenant.email,
+      phone: tenant.phone,
+      address: { ...tenant.address, state: tenant.address.state as UF },
+      branding: tenant.branding,
+      planId: tenant.planId,
+      status: tenant.status,
+    })
     setIsSaving(false)
+    if (!result.success) setError(result.error || 'Não foi possível salvar as alterações')
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <Link href="/admin/inquilinos" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-2">
@@ -68,7 +83,14 @@ export default function InquilinoDetailPage() {
         <Badge>{statusLabel[tenant.status]}</Badge>
       </div>
 
-      <Card className="border-0 shadow-sm">
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <Card className="border border-border/80 shadow-xs bg-card">
         <CardHeader>
           <CardTitle>Dados Principais</CardTitle>
         </CardHeader>
@@ -111,7 +133,7 @@ export default function InquilinoDetailPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-0 shadow-sm">
+      <Card className="border border-border/80 shadow-xs bg-card">
         <CardHeader>
           <CardTitle>Endereço</CardTitle>
         </CardHeader>
@@ -143,7 +165,7 @@ export default function InquilinoDetailPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-0 shadow-sm">
+      <Card className="border border-border/80 shadow-xs bg-card">
         <CardHeader>
           <CardTitle>Marca</CardTitle>
         </CardHeader>
@@ -188,7 +210,7 @@ export default function InquilinoDetailPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-0 shadow-sm border-red-200">
+      <Card className="border border-red-200 shadow-xs bg-card">
         <CardHeader>
           <CardTitle className="text-red-600">Zona de Risco</CardTitle>
           <CardDescription>Alterar o status afeta imediatamente o acesso deste inquilino</CardDescription>

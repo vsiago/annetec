@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePlatformAuth } from '@/contexts/platform-auth-context'
-import type { PlatformRole } from '@/lib/types'
+import type { PlatformRole } from '@annetec/contracts'
 import { Loader2 } from 'lucide-react'
 
 interface ProtectedPlatformRouteProps {
@@ -21,8 +21,8 @@ export function ProtectedPlatformRoute({
   useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated) {
-        router.push('/admin/login')
-      } else if (user && !allowedRoles.includes(user.role)) {
+        router.push('/login')
+      } else if (user?.platformRole && !allowedRoles.includes(user.platformRole)) {
         router.push('/admin')
       }
     }
@@ -39,7 +39,7 @@ export function ProtectedPlatformRoute({
     )
   }
 
-  if (!isAuthenticated || (user && !allowedRoles.includes(user.role))) {
+  if (!isAuthenticated || (user?.platformRole && !allowedRoles.includes(user.platformRole))) {
     return null
   }
 

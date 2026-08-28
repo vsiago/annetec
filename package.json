@@ -1,0 +1,27 @@
+{
+  "name": "annetec",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "dev:web": "pnpm --filter @annetec/web dev",
+    "dev:api": "pnpm --filter @annetec/api dev",
+    "build": "pnpm --filter @annetec/contracts build && pnpm --filter @annetec/api build && pnpm --filter @annetec/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:api": "pnpm --filter @annetec/api test",
+    "db:generate": "pnpm --filter @annetec/api db:generate",
+    "db:migrate": "pnpm --filter @annetec/api db:migrate",
+    "db:studio": "pnpm --filter @annetec/api db:studio",
+    "db:seed": "pnpm --filter @annetec/api db:seed"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

@@ -1,14 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { useTenantData } from '@/contexts/tenant-data-context'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useTenant } from '@/contexts/tenant-context'
+import { listTenantUsersAction, createTenantUserAction } from '@/lib/actions/tenant-users-api'
 import { getInitials } from '@/lib/utils'
 import type { User, Seller, Client, UserRole } from '@/lib/types'
+import { AlertCircle } from 'lucide-react'
 import {
   Search,
   Plus,
@@ -48,7 +50,9 @@ import {
 
 export default function AdminUsuariosPage() {
   const { tenant } = useTenant()
-  const { users, createUser } = useTenantData()
+  const [users, setUsers] = useState<User[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
 
@@ -62,6 +66,20 @@ export default function AdminUsuariosPage() {
   const [newEmail, setNewEmail] = useState('')
   const [newPhone, setNewPhone] = useState('')
   const [newRole, setNewRole] = useState<UserRole>('client')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const loadUsers = useCallback(async () => {
+    if (!tenant) return
+    setIsLoading(true)
+    const result = await listTenantUsersAction(tenant.slug)
+    if (result.success) setUsers(result.data)
+    else setError(result.error)
+    setIsLoading(false)
+  }, [tenant])
+
+  useEffect(() => {
+    loadUsers()
+  }, [loadUsers])
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -91,44 +109,28 @@ export default function AdminUsuariosPage() {
   // Handle adding user
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     if (!newName || !newEmail || !tenant) {
-      alert('Por favor, preencha nome e e-mail.')
+      setError('Preencha nome e e-mail.')
       return
     }
 
-    const base = {
-      id: '',
-      tenantId: tenant.id,
+    setIsSubmitting(true)
+    const result = await createTenantUserAction(tenant.slug, {
       name: newName,
       email: newEmail,
-      phone: newPhone || '(11) 99999-9999',
-      createdAt: new Date(),
-    }
+      phone: newPhone || null,
+      role: newRole,
+      active: true,
+    })
+    setIsSubmitting(false)
 
-    const roleSpecific =
-      newRole === 'seller'
-        ? { role: 'seller' as const, region: 'A definir', salesGoal: 0, totalSales: 0, commissionRate: 0.1 }
-        : newRole === 'client'
-        ? {
-            role: 'client' as const,
-            cpf: '',
-            plan: 'A definir',
-            planStatus: 'pending' as const,
-            contractDate: new Date(),
-            cardNumber: `CA-${new Date().getFullYear()}-${Math.floor(Math.random() * 100000)
-              .toString()
-              .padStart(5, '0')}`,
-            dependents: [],
-            sellerId: '',
-          }
-        : { role: 'admin' as const }
-
-    const result = await createUser({ ...base, ...roleSpecific, password: 'trocar123' } as any)
     if (!result.success) {
-      alert(result.error || 'Não foi possível criar o usuário')
+      setError(result.error || 'Não foi possível criar o usuário')
       return
     }
 
+    await loadUsers()
     setIsAddOpen(false)
     setNewName('')
     setNewEmail('')
@@ -155,6 +157,13 @@ export default function AdminUsuariosPage() {
           Novo Usuário
         </Button>
       </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -334,7 +343,7 @@ export default function AdminUsuariosPage() {
         </CardContent>
       </Card>
 
-      {filteredUsers.length === 0 && (
+      {!isLoading && filteredUsers.length === 0 && (
         <Card className="border-0 shadow-sm">
           <CardContent className="p-12 text-center">
             <p className="text-muted-foreground">Nenhum usuário encontrado</p>
@@ -398,8 +407,8 @@ export default function AdminUsuariosPage() {
               <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-primary hover:opacity-90 text-white">
-                Cadastrar Usuário
+              <Button type="submit" className="bg-primary hover:opacity-90 text-white" disabled={isSubmitting}>
+                {isSubmitting ? 'Cadastrando...' : 'Cadastrar Usuário'}
               </Button>
             </DialogFooter>
           </form>
@@ -458,7 +467,7 @@ export default function AdminUsuariosPage() {
                       </div>
                       <div>
                         <span className="text-xs text-muted-foreground block">Comissão</span>
-                        <span className="font-medium">{((selectedUser as Seller).commissionRate * 100).toFixed(0)}%</span>
+                        <span className="font-medium">{(((selectedUser as Seller).commissionRate ?? 0) * 100).toFixed(0)}%</span>
                       </div>
                     </div>
                   </div>

@@ -10,15 +10,17 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Eye, EyeOff, Loader2, AlertCircle, ShieldCheck, HeartPulse } from 'lucide-react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { DEMO_CREDENTIALS_BY_TENANT_SLUG } from '@/lib/demo-credentials'
 
+// Login com marca do inquilino — só admin/vendedor (senha). O slug já é
+// conhecido pela URL, então é passado direto ao backend: sem ambiguidade,
+// sem precisar da detecção automática que o /login genérico usa. Associado
+// não tem senha (entra por CPF + e-mail): vai para o portal único em /login.
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [demoLoadingEmail, setDemoLoadingEmail] = useState<string | null>(null)
   const { login } = useAuth()
   const { tenant } = useTenant()
 
@@ -34,18 +36,6 @@ export default function LoginPage() {
     }
 
     setIsSubmitting(false)
-  }
-
-  const demoAccounts = tenant ? DEMO_CREDENTIALS_BY_TENANT_SLUG[tenant.slug] : undefined
-
-  const handleDemoLogin = async (accountEmail: string, accountPassword: string) => {
-    setError('')
-    setDemoLoadingEmail(accountEmail)
-    const result = await login(accountEmail, accountPassword)
-    if (!result.success) {
-      setError(result.error || 'Erro ao fazer login')
-    }
-    setDemoLoadingEmail(null)
   }
 
   return (
@@ -172,14 +162,9 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm font-bold text-secondary">
-                  Sua senha
-                </Label>
-                <Link href="#" className="text-sm font-semibold text-primary hover:underline">
-                  Esqueceu a senha?
-                </Link>
-              </div>
+              <Label htmlFor="password" className="text-sm font-bold text-secondary">
+                Sua senha
+              </Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -218,54 +203,12 @@ export default function LoginPage() {
             </Button>
           </motion.form>
 
-          {/* Demo credentials — clique loga direto e leva ao painel do perfil */}
-          {demoAccounts && demoAccounts.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4, duration: 0.6 }}
-              className="mt-12"
-            >
-              <div className="relative flex items-center justify-center mb-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200"></div>
-                </div>
-                <div className="relative bg-[#f8fafc] px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Visitar perfis de demonstração
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                {demoAccounts.map((cred) => {
-                  const isLoadingThis = demoLoadingEmail === cred.email
-                  return (
-                    <button
-                      type="button"
-                      key={cred.email}
-                      disabled={demoLoadingEmail !== null}
-                      onClick={() => handleDemoLogin(cred.email, cred.password)}
-                      className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm transition-all cursor-pointer group disabled:opacity-60 disabled:cursor-wait text-left w-full"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${cred.colorClass}`}></div>
-                        <div>
-                          <span className="font-bold text-secondary text-sm block leading-tight">{cred.role}</span>
-                          <span className="text-xs text-muted-foreground">{cred.label}</span>
-                        </div>
-                      </div>
-                      {isLoadingThis ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                      ) : (
-                        <span className="text-xs font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                          Entrar →
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </motion.div>
-          )}
+          <p className="mt-8 text-center text-sm text-muted-foreground">
+            É associado do clube?{' '}
+            <Link href="/login" className="font-semibold text-primary hover:underline">
+              Entrar com CPF
+            </Link>
+          </p>
         </main>
       </div>
     </div>

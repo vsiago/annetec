@@ -42,7 +42,7 @@ export default function InquilinosPage() {
         </Button>
       </div>
 
-      <Card className="border-0 shadow-sm">
+      <Card className="border border-border/80 shadow-xs bg-card">
         <CardContent className="p-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -56,7 +56,7 @@ export default function InquilinosPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-0 shadow-sm">
+      <Card className="border border-border/80 shadow-xs bg-card">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full">

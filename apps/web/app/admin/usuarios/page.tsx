@@ -64,7 +64,7 @@ export default function PlatformUsuariosPage() {
         </Button>
       </div>
 
-      <Card className="border-0 shadow-sm">
+      <Card className="border border-border/80 shadow-xs bg-card">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full">

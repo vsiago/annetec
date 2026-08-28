@@ -50,51 +50,51 @@
 
 :root {
   /* ANNETEC Brand Colors */
-  --annetec-blue: #26365f;
+  --annetec-blue: #1e2a4a;
   --annetec-fuchsia: #e84364;
-  --annetec-blue-light: rgba(38, 54, 95, 0.1);
-  --annetec-fuchsia-light: rgba(232, 67, 100, 0.1);
+  --annetec-blue-light: rgba(30, 42, 74, 0.08);
+  --annetec-fuchsia-light: rgba(232, 67, 100, 0.08);
   
-  /* Base */
-  --background: #ffffff;
-  --foreground: #26365f;
+  /* Base - Pastel blue nuance main page background & high-contrast navy foreground */
+  --background: #eff3f8;
+  --foreground: #101d36;
   
   /* Card */
   --card: #ffffff;
-  --card-foreground: #26365f;
+  --card-foreground: #101d36;
   
   /* Popover */
   --popover: #ffffff;
-  --popover-foreground: #26365f;
+  --popover-foreground: #101d36;
   
   /* Primary - Fuchsia */
   --primary: #e84364;
   --primary-foreground: #ffffff;
   
   /* Secondary - Blue */
-  --secondary: #26365f;
+  --secondary: #1e2a4a;
   --secondary-foreground: #ffffff;
   
   /* Muted */
-  --muted: #f8fafc;
-  --muted-foreground: #64748b;
+  --muted: #e2e8f0;
+  --muted-foreground: #475569;
   
   /* Accent */
-  --accent: #f0f4f9;
-  --accent-foreground: #26365f;
+  --accent: #e5edf5;
+  --accent-foreground: #101d36;
   
   /* Destructive */
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   
   /* Border & Input */
-  --border: #e2e8f0;
-  --input: #e2e8f0;
+  --border: #d4e0ed;
+  --input: #d4e0ed;
   --ring: #e84364;
   
   /* Charts */
   --chart-1: #e84364;
-  --chart-2: #26365f;
+  --chart-2: #1e2a4a;
   --chart-3: #3b82f6;
   --chart-4: #10b981;
   --chart-5: #f59e0b;
@@ -153,22 +153,50 @@
   }
 }
 
-/* Custom scrollbar */
+/* Custom translucent scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--primary);
-  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--secondary);
+  background: rgba(148, 163, 184, 0.55);
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+/* Scrollbar Utility Classes */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.scrollbar-translucent::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.scrollbar-translucent::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
 }
 
 /* Glassmorphism utility */

@@ -8,9 +8,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useTenants } from '@/contexts/tenants-context'
-import { createTenantUser } from '@/lib/actions/tenant-users'
-import { AlertCircle, ArrowLeft, Building2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Building2, Check, Copy } from 'lucide-react'
 import Link from 'next/link'
 
 function slugify(value: string) {
@@ -27,6 +34,8 @@ export default function NovoInquilinoPage() {
   const { plans, createTenant } = useTenants()
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [created, setCreated] = useState<{ id: string; ownerPassword: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
@@ -48,7 +57,6 @@ export default function NovoInquilinoPage() {
 
   const [adminName, setAdminName] = useState('')
   const [adminEmail, setAdminEmail] = useState('')
-  const [adminPassword, setAdminPassword] = useState('')
 
   const handleNameChange = (value: string) => {
     setName(value)
@@ -59,52 +67,47 @@ export default function NovoInquilinoPage() {
     e.preventDefault()
     setError('')
 
-    if (!name || !slug || !email || !planId || !adminName || !adminEmail || !adminPassword) {
+    if (!name || !slug || !email || !planId || !adminName || !adminEmail) {
       setError('Preencha todos os campos obrigatórios (*)')
       return
     }
 
     setIsSubmitting(true)
 
-    const tenantResult = await createTenant({
+    const result = await createTenant({
       name,
       legalName: legalName || name,
       slug,
       document,
       email,
       phone,
-      address: { cep, street, number, neighborhood, city, state },
+      address: { cep, street, number, neighborhood, city, state: state.toUpperCase() as never },
       branding: { primaryColor, secondaryColor, logoUrl: logoUrl || undefined },
       planId,
+      status: 'trial',
+      ownerName: adminName,
+      ownerEmail: adminEmail,
     })
 
-    if (!tenantResult.success || !tenantResult.data) {
-      setError(tenantResult.error || 'Não foi possível criar o inquilino')
-      setIsSubmitting(false)
+    setIsSubmitting(false)
+
+    if (!result.success || !result.data || !result.ownerPassword) {
+      setError(result.error || 'Não foi possível criar o inquilino')
       return
     }
 
-    const adminResult = await createTenantUser({
-      id: '',
-      tenantId: tenantResult.data.id,
-      name: adminName,
-      email: adminEmail,
-      role: 'admin',
-      createdAt: new Date(),
-      password: adminPassword,
-    })
+    setCreated({ id: result.data.id, ownerPassword: result.ownerPassword })
+  }
 
-    if (!adminResult.success) {
-      setError(adminResult.error || 'Inquilino criado, mas não foi possível criar o administrador')
-      setIsSubmitting(false)
-      return
-    }
-
-    router.push(`/admin/inquilinos/${tenantResult.data.id}`)
+  const copyPassword = async () => {
+    if (!created) return
+    await navigator.clipboard.writeText(created.ownerPassword)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <div>
         <Link href="/admin/inquilinos" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-2">
           <ArrowLeft className="h-4 w-4" />
@@ -191,7 +194,7 @@ export default function NovoInquilinoPage() {
             </div>
             <div className="space-y-2">
               <Label>Estado (UF)</Label>
-              <Input value={state} onChange={e => setState(e.target.value)} maxLength={2} />
+              <Input value={state} onChange={e => setState(e.target.value.toUpperCase())} maxLength={2} placeholder="RJ" />
             </div>
           </CardContent>
         </Card>
@@ -242,9 +245,12 @@ export default function NovoInquilinoPage() {
         <Card className="border-0 shadow-sm">
           <CardHeader>
             <CardTitle>Administrador Inicial</CardTitle>
-            <CardDescription>Primeiro usuário admin deste inquilino</CardDescription>
+            <CardDescription>
+              Primeiro usuário admin deste inquilino — a senha de acesso é gerada automaticamente e mostrada
+              uma única vez, ao concluir.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-3">
+          <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Nome *</Label>
               <Input value={adminName} onChange={e => setAdminName(e.target.value)} required />
@@ -252,10 +258,6 @@ export default function NovoInquilinoPage() {
             <div className="space-y-2">
               <Label>E-mail *</Label>
               <Input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label>Senha inicial *</Label>
-              <Input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} required />
             </div>
           </CardContent>
         </Card>
@@ -269,6 +271,32 @@ export default function NovoInquilinoPage() {
           </Button>
         </div>
       </form>
+
+      <Dialog open={!!created} onOpenChange={open => { if (!open && created) router.push(`/admin/inquilinos/${created.id}`) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Inquilino criado</DialogTitle>
+            <DialogDescription>
+              Copie a senha provisória do administrador agora — ela só aparece nesta tela.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/40">
+            <code className="flex-1 text-sm font-mono">{created?.ownerPassword}</code>
+            <Button type="button" size="sm" variant="outline" onClick={copyPassword}>
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              className="bg-primary hover:opacity-90 text-white"
+              onClick={() => created && router.push(`/admin/inquilinos/${created.id}`)}
+            >
+              Concluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
