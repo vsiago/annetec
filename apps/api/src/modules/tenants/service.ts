@@ -1,6 +1,7 @@
 import {
   ERROR_CODES,
   type CreateTenantInput,
+  type IntegrationDiscovery,
   type Tenant,
   type TenantIntegration,
   type TenantIntegrationPublic,
@@ -220,10 +221,14 @@ export const tenantsService = {
       defaultGrupoCodigo: row.defaultGrupoCodigo ?? undefined,
       defaultFilialCodigo: row.defaultFilialCodigo ?? undefined,
       defaultConvenioCodigo: row.defaultConvenioCodigo ?? undefined,
+      defaultProdutoCodigo: row.defaultProdutoCodigo ?? undefined,
+      defaultGrupoProdutorCodigo: row.defaultGrupoProdutorCodigo ?? undefined,
       enabled: row.enabled,
       configured: true,
       lastCheckedAt: row.lastCheckedAt?.toISOString() ?? null,
       lastCheckOk: row.lastCheckOk,
+      capabilities: row.capabilities ?? null,
+      capabilitiesCheckedAt: row.capabilitiesCheckedAt?.toISOString() ?? null,
     }
   },
 
@@ -274,6 +279,157 @@ export const tenantsService = {
       .where(eq(tenantIntegrations.organizationId, tenantId))
     return ok
   },
+
+  /**
+   * Lê no ERP tudo que antes era copiado do portal na mão.
+   *
+   * A Digital Saúde não tem `GET /grupo/`, `GET /filial/` nem
+   * `GET /grupoProdutor/`, e é por isso que esses códigos viravam campo de
+   * texto no formulário. Mas eles aparecem DENTRO de outras respostas:
+   * filial em `convenio.filialList`, grupo em `tabela.grupoApi`, e
+   * grupoProdutor no cadastro completo de um produtor. Esta função percorre
+   * essa trilha e devolve as opções — o admin escolhe em vez de digitar.
+   */
+  async discoverIntegrationDefaults(tenantId: string): Promise<IntegrationDiscovery> {
+    const { getDigitalSaudeClient } = await import('@/integrations/digitalsaude/provider')
+    const client = await getDigitalSaudeClient(tenantId)
+    const avisos: string[] = []
+
+    const convenios = new Map<string, string>()
+    const produtos = new Map<string, string>()
+    const filiais = new Map<string, string>()
+    const grupos = new Map<string, string>()
+    const gruposProdutor = new Map<string, string>()
+    const estipulantes = new Map<string, string>()
+
+    const lista = await client.call('convenioListar')
+    for (const convenio of lista) {
+      if (convenio.codigo) convenios.set(convenio.codigo, convenio.nome ?? '')
+      if (convenio.produto?.codigo) produtos.set(convenio.produto.codigo, convenio.produto.nome ?? '')
+      if (convenio.estipulante?.codigo) {
+        estipulantes.set(convenio.estipulante.codigo, convenio.estipulante.nome ?? '')
+      }
+      for (const filial of convenio.filialList ?? []) {
+        if (filial.codigo) filiais.set(filial.codigo, filial.nome ?? '')
+      }
+    }
+
+    // O grupo só aparece dentro da tabela de preço; varremos alguns convênios.
+    for (const codigo of [...convenios.keys()].slice(0, 8)) {
+      try {
+        const tabelas = await client.call('tabelaPorConvenio', { codigoConvenio: codigo })
+        for (const tabela of tabelas) {
+          const grupo = tabela.grupoApi ?? tabela.grupo
+          if (grupo?.codigo) grupos.set(grupo.codigo, grupo.nome ?? '')
+        }
+      } catch {
+        // Convênio sem tabela não impede a descoberta dos demais.
+      }
+    }
+
+    // `grupoProdutor` só existe no cadastro de um produtor; chegamos até um
+    // pela trilha fatura vencida → CPF do titular → contrato → produtor.
+    try {
+      const vencidas = await client.call('faturaVencidas')
+      const codigoFatura = vencidas[0]
+      const fatura = codigoFatura ? await client.one('faturaPorCodigo', { codigoFatura }) : null
+      const cpf = fatura?.beneficiario?.cpf?.replace(/\D/g, '')
+      const contratos = cpf ? await client.call('contratoPorCpfTitular', { cpf }) : []
+      const codigoProdutor = contratos[0]?.produtor?.codigo
+      if (codigoProdutor) {
+        const produtor = await client.one('produtorPorCodigo', { codigoProdutor })
+        if (produtor?.grupoProdutor?.codigo) {
+          gruposProdutor.set(produtor.grupoProdutor.codigo, produtor.grupoProdutor.nome ?? '')
+        }
+      }
+      if (gruposProdutor.size === 0) {
+        avisos.push(
+          'Não foi possível descobrir o grupo de produtor: a carteira ainda não tem contrato com produtor vinculado. Informe o código manualmente até a primeira venda.',
+        )
+      }
+    } catch {
+      avisos.push('A trilha de descoberta do grupo de produtor falhou; informe o código manualmente.')
+    }
+
+    if (grupos.size === 0) {
+      avisos.push('Nenhum grupo encontrado nas tabelas de preço — confira se o convênio tem tabela vigente.')
+    }
+
+    const unico = (mapa: Map<string, string>) => (mapa.size === 1 ? [...mapa.keys()][0]! : null)
+
+    return {
+      convenios: toOptions(convenios),
+      produtos: toOptions(produtos),
+      filiais: toOptions(filiais),
+      grupos: toOptions(grupos),
+      gruposProdutor: toOptions(gruposProdutor),
+      estipulantes: toOptions(estipulantes),
+      sugestao: {
+        defaultConvenioCodigo: unico(convenios),
+        defaultProdutoCodigo: unico(produtos),
+        defaultFilialCodigo: unico(filiais),
+        defaultGrupoCodigo: unico(grupos),
+        defaultGrupoProdutorCodigo: unico(gruposProdutor),
+      },
+      avisos,
+    }
+  },
+
+  /**
+   * Descobre quais operações o token do inquilino pode executar de fato.
+   *
+   * O 401 da Digital Saúde é por endpoint: o mesmo par que lê todo o catálogo
+   * recebe 401 em `POST /calculo/`. Sem esta apuração, a cotação só falha na
+   * frente do cliente. Só chama operação de leitura (mais `calculo`, que é
+   * simulação e não grava nada).
+   */
+  async probeCapabilities(tenantId: string): Promise<Record<string, boolean>> {
+    const { getDigitalSaudeClient } = await import('@/integrations/digitalsaude/provider')
+    const client = await getDigitalSaudeClient(tenantId)
+    const capabilities: Record<string, boolean> = {}
+
+    const convenios = await client.call('convenioListar').catch(() => null)
+    capabilities.convenioListar = convenios !== null
+
+    const codigoConvenio = convenios?.[0]?.codigo
+    const codigoProduto = convenios?.[0]?.produto?.codigo
+
+    if (codigoProduto) {
+      capabilities.planoPorProduto = await ok(() => client.call('planoPorProduto', { codigoProduto }))
+    }
+    if (codigoConvenio) {
+      capabilities.tabelaPorConvenio = await ok(() => client.call('tabelaPorConvenio', { codigoConvenio }))
+      capabilities.carenciaPorConvenio = await ok(() => client.call('carenciaPorConvenio', { codigoConvenio }))
+    }
+    capabilities.faturaVencidas = await ok(() => client.call('faturaVencidas'))
+    capabilities.calculoSimular = await ok(() =>
+      client.call('calculoSimular', {
+        nome: 'Sondagem Annetec',
+        uf: 'RJ',
+        calculoVidaList: [{ idade: 30, parentesco: { id: 1 } }],
+      }),
+    )
+
+    await db
+      .update(tenantIntegrations)
+      .set({ capabilities, capabilitiesCheckedAt: new Date() })
+      .where(eq(tenantIntegrations.organizationId, tenantId))
+
+    return capabilities
+  },
+}
+
+function toOptions(mapa: Map<string, string>) {
+  return [...mapa].map(([codigo, nome]) => ({ codigo, nome }))
+}
+
+async function ok(operation: () => Promise<unknown>): Promise<boolean> {
+  try {
+    await operation()
+    return true
+  } catch {
+    return false
+  }
 }
 
 function findByOrgId(id: string) {
@@ -296,6 +452,8 @@ function toIntegrationRow(organizationId: string, input: TenantIntegration) {
     defaultGrupoCodigo: input.defaultGrupoCodigo ?? null,
     defaultFilialCodigo: input.defaultFilialCodigo ?? null,
     defaultConvenioCodigo: input.defaultConvenioCodigo ?? null,
+    defaultProdutoCodigo: input.defaultProdutoCodigo ?? null,
+    defaultGrupoProdutorCodigo: input.defaultGrupoProdutorCodigo ?? null,
     enabled: input.enabled,
   }
 }

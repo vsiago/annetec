@@ -68,9 +68,25 @@ export const tenantIntegrations = pgTable('tenant_integrations', {
   defaultGrupoCodigo: text('default_grupo_codigo'),
   defaultFilialCodigo: text('default_filial_codigo'),
   defaultConvenioCodigo: text('default_convenio_codigo'),
+  /**
+   * Exigido por `GET /plano/procurarPorProduto` e por `POST /produtor/`. Não
+   * ficavam guardados: `codigoProduto` vinha de quem chamasse a rota e
+   * `grupoProdutorCodigo` era digitado à mão em cada cadastro de vendedor.
+   * Ambos são descobríveis no ERP (ver `discoverIntegrationDefaults`).
+   */
+  defaultProdutoCodigo: text('default_produto_codigo'),
+  defaultGrupoProdutorCodigo: text('default_grupo_produtor_codigo'),
   enabled: boolean('enabled').notNull().default(true),
   lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
   lastCheckOk: boolean('last_check_ok'),
+  /**
+   * Quais operações o token deste inquilino realmente pode executar. O 401 da
+   * Digital Saúde é por endpoint, não por credencial: o mesmo par que lê todo
+   * o catálogo recebe 401 em `POST /calculo/`. Guardar o resultado da sonda
+   * evita descobrir isso na frente do cliente, no meio de uma cotação.
+   */
+  capabilities: jsonb('capabilities').$type<Record<string, boolean>>(),
+  capabilitiesCheckedAt: timestamp('capabilities_checked_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 

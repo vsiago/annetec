@@ -27,3 +27,6 @@ dist/
 
 # Test/coverage
 coverage/
+
+# Saída das sondas do ERP: contém dado real de produção (nomes, contratos).
+apps/api/probe-digitalsaude.json

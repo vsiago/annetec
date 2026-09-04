@@ -37,6 +37,9 @@ export const tenantIntegration = z.object({
   defaultGrupoCodigo: z.string().optional(),
   defaultFilialCodigo: z.string().optional(),
   defaultConvenioCodigo: z.string().optional(),
+  /** Exigidos por `/plano/procurarPorProduto` e `POST /produtor/`. */
+  defaultProdutoCodigo: z.string().optional(),
+  defaultGrupoProdutorCodigo: z.string().optional(),
   enabled: z.boolean().default(true),
 })
 export type TenantIntegration = z.infer<typeof tenantIntegration>
@@ -47,8 +50,35 @@ export const tenantIntegrationPublic = tenantIntegration
     configured: z.boolean(),
     lastCheckedAt: z.string().datetime().nullable(),
     lastCheckOk: z.boolean().nullable(),
+    /** Mapa operação → permitido, apurado contra o ERP. */
+    capabilities: z.record(z.boolean()).nullable(),
+    capabilitiesCheckedAt: z.string().datetime().nullable(),
   })
 export type TenantIntegrationPublic = z.infer<typeof tenantIntegrationPublic>
+
+/**
+ * O que dá para descobrir sozinho no ERP na hora de configurar um inquilino.
+ * Antes disto, grupo/filial/convênio/produto/grupoProdutor eram copiados do
+ * portal da Digital Saúde na mão — e `grupoProdutor` nem campo tinha.
+ */
+export const integrationDiscovery = z.object({
+  convenios: z.array(z.object({ codigo: z.string(), nome: z.string() })),
+  produtos: z.array(z.object({ codigo: z.string(), nome: z.string() })),
+  filiais: z.array(z.object({ codigo: z.string(), nome: z.string() })),
+  grupos: z.array(z.object({ codigo: z.string(), nome: z.string() })),
+  gruposProdutor: z.array(z.object({ codigo: z.string(), nome: z.string() })),
+  estipulantes: z.array(z.object({ codigo: z.string(), nome: z.string() })),
+  /** Preenchido quando a descoberta encontrou uma única opção. */
+  sugestao: z.object({
+    defaultConvenioCodigo: z.string().nullable(),
+    defaultProdutoCodigo: z.string().nullable(),
+    defaultFilialCodigo: z.string().nullable(),
+    defaultGrupoCodigo: z.string().nullable(),
+    defaultGrupoProdutorCodigo: z.string().nullable(),
+  }),
+  avisos: z.array(z.string()),
+})
+export type IntegrationDiscovery = z.infer<typeof integrationDiscovery>
 
 export const tenant = z.object({
   id: uuid,

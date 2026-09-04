@@ -25,6 +25,12 @@ import { sellersService } from '@/modules/users/service'
  */
 const KNOWN_UPSTREAM_INVOICE_STATUS_IDS = [1, 2, 3, 4]
 
+/**
+ * Quantas faturas hidratar em paralelo. Estava em 10 e derrubava o token no
+ * limite de chamadas do ERP; 4 passou na carteira de 287 vencidas.
+ */
+const OVERDUE_HYDRATION_CONCURRENCY = 4
+
 export const billingService = {
   async listInvoicesByContract(
     tenantId: string,
@@ -73,17 +79,27 @@ export const billingService = {
   /**
    * Faturas vencidas de toda a carteira — visão de cobrança do admin.
    *
-   * `faturaVencidas` só devolve os códigos (confirmado batendo no upstream:
-   * é o único endpoint de fatura que foge do padrão objeto-completo), então
-   * cada um precisa ser buscado em `faturaPorCodigo`. A carteira pode ter
-   * centenas de faturas vencidas — hidrata em lotes para não abrir uma
-   * rajada de centenas de requisições simultâneas contra o ERP.
+   * `faturaVencidas` só devolve os CÓDIGOS (é o único endpoint de fatura que
+   * foge do padrão objeto-completo), então cada um precisa de um
+   * `faturaPorCodigo`. E aí mora o problema: a carteira real devolveu 287
+   * códigos, e hidratar todos de uma vez estourou o limite por token da
+   * Digital Saúde ("Ultrapassado Rate Limit para o TOKEN ..."), devolvendo
+   * uma lista cheia de buracos. Por isso hidratamos só a página pedida, com
+   * concorrência baixa — `total` continua vindo da contagem completa de
+   * códigos, que é barata (uma chamada só).
    */
-  async listOverdueInvoices(tenantId: string): Promise<Invoice[]> {
+  async listOverdueInvoices(
+    tenantId: string,
+    params: { page?: number; perPage?: number } = {},
+  ): Promise<{ items: Invoice[]; total: number }> {
     const client = await getDigitalSaudeClient(tenantId)
     const codes = await client.call('faturaVencidas')
 
-    const invoices = await mapWithConcurrency(codes, 10, async codigo => {
+    const page = Math.max(1, params.page ?? 1)
+    const perPage = Math.min(Math.max(1, params.perPage ?? 25), 50)
+    const slice = codes.slice((page - 1) * perPage, page * perPage)
+
+    const invoices = await mapWithConcurrency(slice, OVERDUE_HYDRATION_CONCURRENCY, async codigo => {
       try {
         const fatura = await client.one('faturaPorCodigo', { codigoFatura: codigo })
         return fatura ? mapInvoice(fatura) : null
@@ -93,7 +109,10 @@ export const billingService = {
       }
     })
 
-    return invoices.filter((invoice): invoice is Invoice => invoice !== null).sort(byDueDateDesc)
+    return {
+      items: invoices.filter((invoice): invoice is Invoice => invoice !== null).sort(byDueDateDesc),
+      total: codes.length,
+    }
   },
 
   async sendOverdueInvoicesByEmail(tenantId: string, contractCodigo: string): Promise<string> {

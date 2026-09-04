@@ -171,3 +171,84 @@ describe('retry', () => {
     expect(attempts).toBe(1)
   })
 })
+
+/**
+ * Regressões apuradas contra o ambiente de produção em 04/09/2026 pela sonda
+ * `scripts/probe-digitalsaude.ts`. Cada caso aqui reproduz um comportamento
+ * real do upstream que antes derrubava uma tela.
+ */
+describe('comportamentos reais do upstream', () => {
+  it('trata 400 "Nenhum X foi localizado" como lista vazia, não como erro', async () => {
+    stubFetch(
+      () =>
+        new Response('400 - Requisição Inválida\r\nNenhum atendimento foi localizado', {
+          status: 400,
+          headers: { 'content-type': 'text/plain;charset=ISO-8859-1' },
+        }),
+    )
+
+    const resultado = await createDigitalSaudeClient(credentials).call('atendimentoPorContrato', {
+      codigoContrato: 'C1',
+      codigoTipoAtendimento: '1',
+    })
+
+    expect(resultado).toEqual([])
+  })
+
+  it('devolve null em busca por chave única sem resultado', async () => {
+    stubFetch(
+      () =>
+        new Response('Nenhum produtor foi localizado com o código informado', {
+          status: 400,
+          headers: { 'content-type': 'text/plain' },
+        }),
+    )
+
+    const resultado = await createDigitalSaudeClient(credentials).one('produtorPorCodigo', {
+      codigoProdutor: 'X',
+    })
+
+    expect(resultado).toBeNull()
+  })
+
+  it('mantém 400 de verdade como erro', async () => {
+    stubFetch(
+      () =>
+        new Response('400 - Requisição Inválida\r\nCampo obrigatório ausente', {
+          status: 400,
+          headers: { 'content-type': 'text/plain' },
+        }),
+    )
+
+    await expect(
+      createDigitalSaudeClient(credentials).call('convenioListar'),
+    ).rejects.toMatchObject({ code: 'UPSTREAM_ERROR' })
+  })
+
+  it('nomeia a operação no 401 — o 401 do upstream é por endpoint, não por credencial', async () => {
+    stubFetch(() => new Response('401 - Acesso Não Autorizado', { status: 401 }))
+
+    await expect(
+      createDigitalSaudeClient(credentials).call('calculoSimular', {
+        nome: 'Teste',
+        uf: 'RJ',
+        calculoVidaList: [{ idade: 30, parentesco: { id: 1 } }],
+      }),
+    ).rejects.toThrow(/calculoSimular/)
+  })
+
+  it('reconhece o limite de chamadas por token e desiste com código próprio', async () => {
+    const spy = stubFetch(
+      () =>
+        new Response('Ultrapassado Rate Limit para o TOKEN ABC123', {
+          status: 429,
+          headers: { 'content-type': 'text/plain' },
+        }),
+    )
+
+    const promessa = createDigitalSaudeClient(credentials).call('faturaVencidas')
+    await expect(promessa).rejects.toMatchObject({ code: 'UPSTREAM_RATE_LIMITED' })
+    // Tentou de novo antes de desistir, em vez de falhar na primeira.
+    expect(spy.mock.calls.length).toBeGreaterThan(1)
+  }, 20_000)
+})

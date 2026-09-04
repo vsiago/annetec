@@ -1,10 +1,10 @@
-import { invoiceStatus } from '@annetec/contracts'
+import { invoiceStatus, paginationQuery } from '@annetec/contracts'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { AppError } from '@/http/errors'
 import { requireAuth, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
-import { ok } from '@/http/respond'
+import { ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, param, query } from '@/http/validate'
 import { contractsService } from '@/modules/contracts/service'
@@ -40,9 +40,17 @@ export const billingController = new Hono<AppEnv>()
     )
   })
 
-  .get('/faturas/vencidas', requireTenantRole('admin'), async c =>
-    ok(c, await billingService.listOverdueInvoices(tenantOf(c).id)),
-  )
+  /**
+   * Paginada de propósito: a carteira real tem centenas de vencidas e cada
+   * uma exige uma chamada ao ERP, que limita por token. Sem página, a tela
+   * de cobrança estourava o limite e vinha incompleta.
+   */
+  .get('/faturas/vencidas', requireTenantRole('admin'), query(paginationQuery), async c => {
+    const { page, perPage } = c.req.valid('query')
+    const { items, total } = await billingService.listOverdueInvoices(tenantOf(c).id, { page, perPage })
+    const result = paginate(items, page, perPage, total)
+    return ok(c, result.items, result.meta)
+  })
 
   .get('/faturas/:codigo', param(codigoParam), requireTenantRole('admin', 'seller'), async c =>
     ok(c, await billingService.getInvoice(tenantOf(c).id, c.req.valid('param').codigo)),

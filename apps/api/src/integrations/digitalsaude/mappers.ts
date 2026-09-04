@@ -131,6 +131,7 @@ export interface MappedBeneficiary {
   effectiveDate: string | null
   provisionalCardUrl: string | null
   status: string | null
+  maritalStatus: string | null
   raw: DsBeneficiario
 }
 
@@ -150,6 +151,9 @@ export function mapBeneficiary(source: DsBeneficiario): MappedBeneficiary {
     effectiveDate: brDate(source.dataVigencia),
     provisionalCardUrl: str(source.linkCarteiraProvisoria),
     status: str(source.statusBeneficiario?.nome),
+    // O Swagger diz `estatoCivil`; o servidor manda `estadoCivil`. Lendo só a
+    // grafia do Swagger, este campo era sempre nulo.
+    maritalStatus: str(source.estadoCivil?.nome) ?? str(source.estatoCivil?.nome),
     raw: source,
   }
 }
@@ -170,6 +174,20 @@ export interface MappedContract {
   convenioCodigo: string | null
   convenioName: string | null
   sellerUpstreamCodigo: string | null
+  /**
+   * Cadeia comercial do contrato. É ela que define o rateio da comissão; até
+   * a sonda de 04/09/2026 só o produtor da ponta era lido, porque o Swagger
+   * não declara corretora/supervisor/gerente/angariador.
+   */
+  brokerUpstreamCodigo: string | null
+  brokerName: string | null
+  supervisorUpstreamCodigo: string | null
+  managerUpstreamCodigo: string | null
+  groupCodigo: string | null
+  groupName: string | null
+  branchCodigo: string | null
+  registrationNumber: string | null
+  cancelledAt: string | null
   beneficiaries: MappedBeneficiary[]
   raw: DsContrato
 }
@@ -194,6 +212,15 @@ export function mapContract(source: DsContrato): MappedContract {
     convenioCodigo: str(source.convenio?.codigo),
     convenioName: str(source.convenio?.nome),
     sellerUpstreamCodigo: str(source.produtor?.codigo),
+    brokerUpstreamCodigo: str(source.corretora?.codigo),
+    brokerName: str(source.corretora?.nome),
+    supervisorUpstreamCodigo: str(source.supervisor?.codigo),
+    managerUpstreamCodigo: str(source.gerente?.codigo),
+    groupCodigo: str(source.grupo?.codigo),
+    groupName: str(source.grupo?.nome),
+    branchCodigo: str(source.filial?.codigo),
+    registrationNumber: str(source.matricula),
+    cancelledAt: brDate(source.dataExclusao),
     beneficiaries,
     raw: source,
   }
@@ -208,7 +235,13 @@ export function mapPlan(source: DsPlano): HealthPlan {
     operatorName: str(source.produto?.operadora?.nome),
     operatorAns: str(source.produto?.operadora?.numeroAns),
     operatorLogoUrl: str(source.produto?.operadora?.linkLogo),
-    accommodation: str(source.acomodacao?.nome),
+    // `acomodacao` é o campo do Swagger; produção preenche `acomodacaoApi`.
+    accommodation: str(source.acomodacao?.nome) ?? str(source.acomodacaoApi?.nome),
+    ansRegistration: str(source.registroAns),
+    coverage: str(source.abrangencia?.nome),
+    status: str(source.statusPlanoApi?.nome),
+    networkUrl: str(source.produto?.linkRedeCredenciada),
+    manualUrl: str(source.produto?.linkManualUsuario),
   }
 }
 
@@ -217,32 +250,58 @@ export function mapConvenio(source: DsConvenio): Convenio {
     codigo: str(source.codigo) ?? '',
     name: str(source.nome) ?? 'Sem nome',
     registrationFee: num(source.valorTaxaCadastro),
-    registrationFeeKind: toRegistrationFeeKind(source.tipoTaxaCadastro?.id),
+    registrationFeeKind: toRegistrationFeeKind(
+      source.tipoTaxaCadastro?.id ?? source.tipoTaxaCadastroApi?.id,
+    ),
     productCodigo: str(source.produto?.codigo),
     branches: (source.filialList ?? []).map(branch => ({
       codigo: str(branch.codigo) ?? '',
       name: str(branch.nome) ?? '',
     })),
+    stipulatorCodigo: str(source.estipulante?.codigo),
+    stipulatorName: str(source.estipulante?.nome),
+    nextAdjustmentDate: str(source.dataProximoReajuste),
+    effectiveDay: source.diaVigencia ?? null,
   }
 }
 
+/**
+ * Preço vem em duas listas: `tabelaPrecoList` (documentada, sempre vazia em
+ * produção) e `tabelaPrecoApiList` (não documentada, é a que tem as faixas).
+ * Lemos a que estiver preenchida — se um dia o upstream voltar a popular a
+ * antiga, continua funcionando sem mexer aqui.
+ */
 export function mapPriceTable(source: DsTabela): PriceTable {
+  const legacy = (source.tabelaPrecoList ?? []).map(entry => ({
+    id: entry.id ?? null,
+    planCodigo: str(entry.plano?.codigo),
+    planName: str(entry.plano?.nome),
+    ageRangeName: str(entry.faixaEtaria?.nome),
+    ageFrom: entry.faixaEtaria?.idadeInicial ?? null,
+    ageTo: entry.faixaEtaria?.idadeFinal ?? null,
+    chargeValue: num(entry.valorCobranca),
+    netValue: num(entry.valorNet),
+    effectiveDate: str(entry.dataVigencia),
+  }))
+
+  const current = (source.tabelaPrecoApiList ?? []).map(entry => ({
+    id: null,
+    planCodigo: str(entry.planoApi?.codigo),
+    planName: str(entry.planoApi?.nome),
+    ageRangeName: str(entry.faixaEtariaApi?.nome),
+    ageFrom: entry.faixaEtariaApi?.idadeInicial ?? null,
+    ageTo: entry.faixaEtariaApi?.idadeFinal ?? null,
+    chargeValue: num(entry.valorCobranca),
+    netValue: num(entry.valorNet),
+    effectiveDate: str(source.dataVigencia),
+  }))
+
   return {
     codigo: str(source.codigo) ?? '',
     name: str(source.nome) ?? '',
     effectiveDate: str(source.dataVigencia),
-    groupCodigo: str(source.grupo?.codigo),
-    entries: (source.tabelaPrecoList ?? []).map(entry => ({
-      id: entry.id ?? null,
-      planCodigo: str(entry.plano?.codigo),
-      planName: str(entry.plano?.nome),
-      ageRangeName: str(entry.faixaEtaria?.nome),
-      ageFrom: entry.faixaEtaria?.idadeInicial ?? null,
-      ageTo: entry.faixaEtaria?.idadeFinal ?? null,
-      chargeValue: num(entry.valorCobranca),
-      netValue: num(entry.valorNet),
-      effectiveDate: str(entry.dataVigencia),
-    })),
+    groupCodigo: str(source.grupo?.codigo) ?? str(source.grupoApi?.codigo),
+    entries: legacy.length > 0 ? legacy : current,
   }
 }
 
@@ -263,6 +322,7 @@ export function mapInvoice(source: DsFatura, contractCodigo?: string | null): In
     receiptUrl: str(source.linkReciboPagamento),
     barcodeLine: str(source.linhaDigitavel),
     beneficiaryName: str(source.beneficiario?.nome),
+    beneficiaryCpf: str(source.beneficiario?.cpf)?.replace(/\D/g, '') ?? null,
   }
 }
 

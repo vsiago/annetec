@@ -23,6 +23,14 @@ import {
   ArrowUpDown,
 } from 'lucide-react'
 
+/**
+ * Tamanho de página da cobrança. Cada fatura vencida é uma chamada ao ERP
+ * (a Digital Saúde só devolve os códigos em `/fatura/procurarPorVencida`), e
+ * o token tem limite de chamadas — puxar a carteira inteira de uma vez fazia
+ * a lista voltar furada.
+ */
+const PER_PAGE = 25
+
 const STATUS_LABEL: Record<InvoiceStatus, string> = {
   aberta: 'Aberta',
   paga: 'Paga',
@@ -74,6 +82,10 @@ export default function OperatorFinanceiroPage() {
   const [invoices, setInvoices] = useState<Invoice[] | null>(null)
   const [loadingInvoices, setLoadingInvoices] = useState(false)
   const [invoicesError, setInvoicesError] = useState('')
+  // A listagem é paginada porque cada fatura custa uma chamada ao ERP, que
+  // limita por token — ver `billingService.listOverdueInvoices`.
+  const [invoicesPage, setInvoicesPage] = useState(1)
+  const [invoicesTotal, setInvoicesTotal] = useState(0)
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'todas'>('todas')
@@ -98,20 +110,22 @@ export default function OperatorFinanceiroPage() {
     })
   }, [])
 
-  const loadInvoices = async (slug: string) => {
+  const loadInvoices = async (slug: string, page = 1) => {
     setLoadingInvoices(true)
     setInvoicesError('')
-    const result = await listOperatorOverdueInvoicesAction(slug)
+    const result = await listOperatorOverdueInvoicesAction(slug, { page, perPage: PER_PAGE })
     setLoadingInvoices(false)
     if (!result.success) {
       setInvoicesError(result.error)
       return
     }
-    setInvoices(result.data)
+    setInvoices(result.data.items)
+    setInvoicesTotal(result.data.total)
+    setInvoicesPage(page)
   }
 
   useEffect(() => {
-    if (tenantSlug) loadInvoices(tenantSlug)
+    if (tenantSlug) loadInvoices(tenantSlug, 1)
   }, [tenantSlug])
 
   /** Uma linha por status realmente presente nos dados — o mini-BI acima da tabela. */
@@ -386,6 +400,33 @@ export default function OperatorFinanceiroPage() {
                   </table>
                 </div>
               ) : null}
+
+              {invoicesTotal > PER_PAGE && (
+                <div className="flex items-center justify-between border-t pt-4 mt-4 text-sm">
+                  <span className="text-muted-foreground">
+                    {(invoicesPage - 1) * PER_PAGE + 1}–{Math.min(invoicesPage * PER_PAGE, invoicesTotal)} de{' '}
+                    {invoicesTotal} vencida(s)
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={invoicesPage <= 1 || loadingInvoices}
+                      onClick={() => tenantSlug && loadInvoices(tenantSlug, invoicesPage - 1)}
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={invoicesPage * PER_PAGE >= invoicesTotal || loadingInvoices}
+                      onClick={() => tenantSlug && loadInvoices(tenantSlug, invoicesPage + 1)}
+                    >
+                      Próxima
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>

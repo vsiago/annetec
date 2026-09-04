@@ -104,6 +104,101 @@ apenas disponível para uso futuro (**disponível**).
 | `GET /atendimento/{protocolo}` | — | **disponível** |
 | `POST /notificacao/` | — | **disponível** — depende de mapear `Usuario.codigo` do ERP |
 
+## Apuração contra o ambiente de produção (04/09/2026)
+
+Tudo acima foi levantado a partir do **Swagger publicado**. Rodando as sondas
+(`apps/api/scripts/probe-digitalsaude.ts`, `diag-schema-drift.ts`,
+`diag-tabela-preco.ts`, `diag-calculo.ts`) contra o servidor real com o token da
+Annetec, o Swagger se mostrou defasado em pontos que quebravam funcionalidade.
+
+### O Swagger está desatualizado: 64 campos não documentados
+
+O servidor devolve 64 campos a mais do que os `definitions` declaram. Como o Zod
+descartava chave desconhecida em silêncio — inclusive dentro de `contracts.raw`,
+que guarda a saída já validada — esses campos sumiam sem erro. Agora todo modelo
+usa `.passthrough()` e os relevantes estão declarados. Os que mais importam:
+
+| Entidade | Campo | Por que importa |
+| --- | --- | --- |
+| `tabela` | `tabelaPrecoApiList` | **Onde os preços realmente estão.** `tabelaPrecoList` (a documentada) vem sempre vazia — a Annetec exibia tabela de preço sem nenhuma faixa |
+| `tabela` | `grupoApi` | Único lugar da API que revela o código do grupo; `grupo` vem ausente |
+| `beneficiario` | `estadoCivil` | O Swagger diz `estatoCivil` (sic) e o servidor manda `estadoCivil` — o campo chegava sempre nulo |
+| `plano` | `registroAns`, `abrangencia`, `statusPlanoApi` | Registro ANS é obrigatório em material de venda; `statusPlanoApi` diz se o plano pode ser vendido |
+| `contrato` | `corretora`, `supervisor`, `gerente`, `angariador` | A cadeia comercial inteira, que define o rateio da comissão |
+| `contrato` | `pendenciaList`, `matricula`, `dataExclusao` | Pendência era só escrita (`POST /pendencia/`); dá para ler |
+| `produtor` | `grupoProdutor`, `login`, `filial`, `chavePix` | `grupoProdutor` é obrigatório em `POST /produtor/` e era digitado à mão |
+| `convenio` | `estipulante`, `dataProximoReajuste`, `diaVigencia` | Contratante do coletivo e a data do próximo reajuste |
+| `fatura` | `pixList`, `dataVencimentoCobranca` | Meio de pagamento do associado |
+
+### "Não achei nada" é 400, não lista vazia
+
+`GET /atendimento/procurarPorContrato` e `GET /produtor/procurarPorLogin`
+devolvem `400` com texto (`"Nenhum atendimento foi localizado"`) quando não há
+resultado. O cliente traduzia isso em erro e derrubava a tela; agora reconhece o
+padrão e devolve lista vazia (ou `null` em busca por chave). `400` de verdade
+continua sendo erro.
+
+### O 401 é por operação, não por credencial
+
+`POST /calculo/` responde **401 para qualquer payload** com o mesmo token que lê
+todo o catálogo — confirmado testando sete formatos de corpo diferentes contra
+um controle `GET /convenio/` que devolveu 200. **A cotação está bloqueada até a
+Digital Saúde liberar o endpoint para este token.** `tenant_integrations.capabilities`
+guarda o resultado dessa apuração para a interface avisar antes de o vendedor
+tentar cotar.
+
+### Existe limite de chamadas por token
+
+`"Ultrapassado Rate Limit para o TOKEN <token>"`. Apanhado hidratando as 287
+faturas vencidas da carteira: `/fatura/procurarPorVencida` devolve só os códigos
+e cada um exige um `GET /fatura/{codigo}`. A lista voltava furada. Correções:
+a rota de vencidas passou a ser paginada, a concorrência caiu de 10 para 4 e o
+cliente reconhece o limite (`UPSTREAM_RATE_LIMITED`, com espera antes de repetir).
+
+### Grupo, filial e grupo de produtor são descobríveis
+
+Não existe `GET /grupo/`, `GET /filial/` nem `GET /grupoProdutor/`, e por isso
+esses códigos eram copiados do portal na mão. Mas eles aparecem dentro de outras
+respostas, e `GET /platform/tenants/:id/integration/discovery` percorre a trilha:
+
+```
+convenioListar          → convênios, produtos, filiais (filialList), estipulantes
+tabelaPorConvenio       → grupos (grupoApi)            ... 27 encontrados
+faturaVencidas → faturaPorCodigo → CPF do titular
+                → contratoPorCpfTitular → produtor.codigo
+                → produtorPorCodigo → grupoProdutor
+```
+
+### Não há carga inicial da carteira — mas há uma trilha
+
+Nenhum endpoint lista contratos. A única listagem sem chave é
+`/fatura/procurarPorVencida`, e ela abre caminho até os contratos pelo CPF do
+titular (por isso `Invoice.beneficiaryCpf` passou a ser exposto). Cobre apenas
+quem tem fatura vencida — o resto da carteira só entra quando o associado faz o
+primeiro acesso ou alguém busca por CPF.
+
+### Tabelas de status observadas
+
+| Tabela | Valores confirmados em produção |
+| --- | --- |
+| `idStatusFatura` | `4 = Vencida` (1, 2, 3 existem mas não retornaram na amostra) |
+| `statusContrato` | `3 = Suspenso` |
+
+Continua sem documentação oficial; o `KNOWN_UPSTREAM_INVOICE_STATUS_IDS = [1,2,3,4]`
+segue como varredura.
+
+### O que só existe no portal, nunca na API
+
+O portal operacional tem módulos que a API v2 não expõe de forma alguma —
+visíveis no menu: **Grade de Comissões**, **Declaração de Saúde**, **Grupos**,
+Propostas Web/PME, Movimentação, Migração de Dados, Relatórios, Integração. O
+cadastro de convênio do portal tem dezenas de campos sem contrapartida na API
+(regras de multa e juros, dia de corte/faturamento/vencimento, remessa bancária,
+faixas de estorno de comissão). Esses endpoints internos autenticam por
+`JSESSIONID` — sessão de navegador criada por login com reCAPTCHA Enterprise;
+`token`/`senhaApi` não valem nada neles. Servem para levantamento manual, não
+como caminho de integração.
+
 ## O que a Digital Saúde **não** cobre
 
 Estas áreas são regra de negócio nova, com o Postgres da Annetec como fonte da verdade:

@@ -15,6 +15,13 @@
       "when": 1787935264709,
       "tag": "0001_fancy_stardust",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788523839262,
+      "tag": "0002_rainy_supernaut",
+      "breakpoints": true
     }
   ]
 }

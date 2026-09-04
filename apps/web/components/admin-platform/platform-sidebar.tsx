@@ -22,6 +22,7 @@ import {
   BookOpenText,
   ChevronDown,
   Activity,
+  Layers,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -42,6 +43,7 @@ const sidebarLinks = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/inquilinos', label: 'Inquilinos', icon: Building2 },
   { href: '/admin/clientes', label: 'Clientes', icon: UsersRound },
+  { href: '/admin/catalogo', label: 'Catálogo Digital Saúde', icon: Layers },
   { href: '/admin/vendedores', label: 'Vendedores', icon: UserCog },
   { href: '/admin/leads', label: 'Leads', icon: Kanban },
   { href: '/admin/financeiro', label: 'Financeiro', icon: Receipt },

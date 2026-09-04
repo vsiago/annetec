@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  mapBeneficiary,
   mapContract,
   mapInvoice,
   mapCommissionReceipt,
+  mapPlan,
+  mapPriceTable,
   toBeneficiaryKind,
   toContractStatus,
   toInvoiceStatus,
@@ -170,5 +173,122 @@ describe('mapCommissionReceipt', () => {
     expect(receipt.entries).toHaveLength(1)
     expect(receipt.entries[0]!.installmentAmount).toBe(450)
     expect(receipt.entries[0]!.kind).toBe('Comissão')
+  })
+})
+
+/**
+ * Regressões do drift entre o Swagger publicado e o servidor de produção
+ * (apuradas por `scripts/diag-schema-drift.ts` em 04/09/2026).
+ */
+describe('divergências Swagger x produção', () => {
+  it('lê preço de tabelaPrecoApiList quando tabelaPrecoList vem vazia', () => {
+    const tabela = mapPriceTable({
+      codigo: 'T1',
+      nome: 'TABELA IDEAL PME 2',
+      dataVigencia: '01/06/2025',
+      grupo: null,
+      tabelaPrecoList: [],
+      grupoApi: { codigo: 'G1', nome: 'IDEAL PME 2' },
+      tabelaPrecoApiList: [
+        {
+          valorCobranca: 85.79,
+          valorNet: 80.93,
+          faixaEtariaApi: { nome: '00 a 18 Anos', idadeInicial: 0, idadeFinal: 18 },
+          planoApi: { codigo: 'P1', nome: 'IDEAL PME 2' },
+        },
+      ],
+    } as never)
+
+    expect(tabela.entries).toHaveLength(1)
+    expect(tabela.entries[0]!.chargeValue).toBe(85.79)
+    expect(tabela.entries[0]!.ageRangeName).toBe('00 a 18 Anos')
+    // Grupo também só existe na variante nova.
+    expect(tabela.groupCodigo).toBe('G1')
+  })
+
+  it('prefere a lista documentada quando ela vier preenchida', () => {
+    const tabela = mapPriceTable({
+      codigo: 'T1',
+      nome: 'T',
+      dataVigencia: null,
+      grupo: { codigo: 'GLEGADO', nome: 'x' },
+      tabelaPrecoList: [
+        {
+          id: 9,
+          valorCobranca: 10,
+          valorNet: 9,
+          dataVigencia: '01/01/2026',
+          plano: { codigo: 'PL', nome: 'Plano' },
+          faixaEtaria: { id: 1, nome: '0 a 18', idadeInicial: 0, idadeFinal: 18 },
+        },
+      ],
+      tabelaPrecoApiList: [{ valorCobranca: 99, valorNet: 90 }],
+    } as never)
+
+    expect(tabela.entries[0]!.chargeValue).toBe(10)
+    expect(tabela.groupCodigo).toBe('GLEGADO')
+  })
+
+  it('lê estadoCivil (servidor) e não só estatoCivil (grafia do Swagger)', () => {
+    const comGrafiaCerta = mapBeneficiary({
+      nome: 'Fulana',
+      estadoCivil: { id: 4, nome: 'Solteiro' },
+    } as never)
+    expect(comGrafiaCerta.maritalStatus).toBe('Solteiro')
+
+    const comGrafiaDoSwagger = mapBeneficiary({
+      nome: 'Fulana',
+      estatoCivil: { id: 2, nome: 'Casado' },
+    } as never)
+    expect(comGrafiaDoSwagger.maritalStatus).toBe('Casado')
+  })
+
+  it('extrai a cadeia comercial do contrato, não só o produtor da ponta', () => {
+    const contrato = mapContract({
+      codigo: 'C1',
+      nomeTitular: 'Titular',
+      produtor: { codigo: 'PR1', nome: 'Produtor' },
+      corretora: { codigo: 'CO1', nome: 'VEXCOR' },
+      supervisor: { codigo: 'SU1', nome: 'Supervisor' },
+      gerente: { codigo: 'GE1', nome: 'Gerente' },
+      grupo: { codigo: 'GR1', nome: 'ANNETEC' },
+      filial: { codigo: 'FI1', nome: 'MATRIZ' },
+      beneficiarioList: [],
+    } as never)
+
+    expect(contrato.sellerUpstreamCodigo).toBe('PR1')
+    expect(contrato.brokerName).toBe('VEXCOR')
+    expect(contrato.supervisorUpstreamCodigo).toBe('SU1')
+    expect(contrato.managerUpstreamCodigo).toBe('GE1')
+    expect(contrato.groupName).toBe('ANNETEC')
+    expect(contrato.branchCodigo).toBe('FI1')
+  })
+
+  it('traz registro ANS, abrangência e status do plano', () => {
+    const plano = mapPlan({
+      codigo: 'P1',
+      nome: 'IDEAL PME 2',
+      registroAns: '498477243',
+      abrangencia: { id: 4, nome: 'Grupo de Municípios' },
+      statusPlanoApi: { id: 1, nome: 'Aberto' },
+      acomodacaoApi: { id: 3, nome: 'Ambulatorial' },
+      produto: { codigo: 'PD1', nome: 'Produto', linkRedeCredenciada: 'https://exemplo/rede' },
+    } as never)
+
+    expect(plano.ansRegistration).toBe('498477243')
+    expect(plano.coverage).toBe('Grupo de Municípios')
+    expect(plano.status).toBe('Aberto')
+    // `acomodacao` (Swagger) ausente, `acomodacaoApi` (servidor) presente.
+    expect(plano.accommodation).toBe('Ambulatorial')
+    expect(plano.networkUrl).toBe('https://exemplo/rede')
+  })
+
+  it('expõe o CPF do titular na fatura — é a ponte para achar o contrato', () => {
+    const fatura = mapInvoice({
+      codigo: 'F1',
+      beneficiario: { nome: 'Titular', cpf: '123.456.789-00' },
+    } as never)
+
+    expect(fatura.beneficiaryCpf).toBe('12345678900')
   })
 })

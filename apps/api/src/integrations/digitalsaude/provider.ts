@@ -58,12 +58,22 @@ export async function getIntegrationDefaults(tenantId: string) {
       grupoCodigo: tenantIntegrations.defaultGrupoCodigo,
       filialCodigo: tenantIntegrations.defaultFilialCodigo,
       convenioCodigo: tenantIntegrations.defaultConvenioCodigo,
+      produtoCodigo: tenantIntegrations.defaultProdutoCodigo,
+      grupoProdutorCodigo: tenantIntegrations.defaultGrupoProdutorCodigo,
     })
     .from(tenantIntegrations)
     .where(eq(tenantIntegrations.organizationId, tenantId))
     .limit(1)
 
-  return row ?? { grupoCodigo: null, filialCodigo: null, convenioCodigo: null }
+  return (
+    row ?? {
+      grupoCodigo: null,
+      filialCodigo: null,
+      convenioCodigo: null,
+      produtoCodigo: null,
+      grupoProdutorCodigo: null,
+    }
+  )
 }
 
 export function invalidateDigitalSaudeClient(tenantId: string) {

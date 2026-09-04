@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useTenants } from '@/contexts/tenants-context'
-import { createPlan } from '@/lib/actions/tenant-plans'
+import { createTenantPlanAction } from '@/lib/actions/tenants-api'
 import { Plus, Wallet } from 'lucide-react'
 
 export default function PlatformConfiguracoesPage() {
@@ -24,16 +24,28 @@ export default function PlatformConfiguracoesPage() {
   const [priceMonthly, setPriceMonthly] = useState('')
   const [memberLimit, setMemberLimit] = useState('')
   const [featuresText, setFeaturesText] = useState('')
+  const [error, setError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     if (!name || !priceMonthly) return
-    await createPlan({
+
+    setIsSaving(true)
+    const result = await createTenantPlanAction({
       name,
       priceMonthly: Number(priceMonthly),
-      memberLimit: Number(memberLimit) || 0,
+      memberLimit: Number(memberLimit) || 1,
       features: featuresText.split(',').map(f => f.trim()).filter(Boolean),
     })
+    setIsSaving(false)
+
+    if (!result.success) {
+      setError(result.error ?? 'Não foi possível criar o plano')
+      return
+    }
+
     await refresh()
     setIsAddOpen(false)
     setName('')
@@ -103,13 +115,22 @@ export default function PlatformConfiguracoesPage() {
                 <label className="text-sm font-medium">Recursos (separados por vírgula)</label>
                 <Input value={featuresText} onChange={e => setFeaturesText(e.target.value)} placeholder="Ex: Carteirinha digital, Suporte prioritário" />
               </div>
+              {error && (
+                <p className="text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              )}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-primary hover:opacity-90 text-white">
-                Criar Plano
+              <Button
+                type="submit"
+                disabled={isSaving}
+                className="bg-primary hover:opacity-90 text-white"
+              >
+                {isSaving ? 'Criando…' : 'Criar Plano'}
               </Button>
             </DialogFooter>
           </form>

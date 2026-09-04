@@ -17,6 +17,14 @@ export const healthPlan = z.object({
   operatorAns: z.string().nullable(),
   operatorLogoUrl: z.string().nullable(),
   accommodation: z.string().nullable(),
+  /** Registro do PRODUTO na ANS — obrigatório em material de venda. */
+  ansRegistration: z.string().nullable(),
+  /** Ex.: "Grupo de Municípios", "Nacional". */
+  coverage: z.string().nullable(),
+  /** "Aberto" / "Fechado": plano fechado não pode ser vendido. */
+  status: z.string().nullable(),
+  networkUrl: z.string().nullable(),
+  manualUrl: z.string().nullable(),
 })
 export type HealthPlan = z.infer<typeof healthPlan>
 
@@ -27,6 +35,11 @@ export const convenio = z.object({
   registrationFeeKind: registrationFeeKind.nullable(),
   productCodigo: z.string().nullable(),
   branches: z.array(z.object({ codigo: z.string(), name: z.string() })),
+  /** Contratante do plano coletivo. */
+  stipulatorCodigo: z.string().nullable(),
+  stipulatorName: z.string().nullable(),
+  nextAdjustmentDate: z.string().nullable(),
+  effectiveDay: z.number().int().nullable(),
 })
 export type Convenio = z.infer<typeof convenio>
 

@@ -8,8 +8,10 @@ import type {
   Convenio,
   HealthPlan,
   Invoice,
+  PriceTable,
   Tenant,
   TenantUser,
+  WaitingPeriod,
 } from '@annetec/contracts'
 import { ApiError, api, apiFetch, tenantPath } from '@/lib/api/client'
 
@@ -87,17 +89,24 @@ export async function syncOperatorContractAction(
 }
 
 /**
- * Faturas vencidas de toda a carteira. A Digital Saúde não tem listagem em
- * lote pra fatura — a API hidrata cada código individualmente (ver
- * `billingService.listOverdueInvoices`), então isso pode levar alguns
- * segundos numa carteira grande.
+ * Faturas vencidas de toda a carteira, PAGINADA.
+ *
+ * A Digital Saúde não tem listagem em lote de fatura: `/fatura/procurarPorVencida`
+ * devolve só os códigos e cada um exige um `GET /fatura/{codigo}`. Buscar
+ * todos de uma vez estoura o limite de chamadas por token do ERP (a carteira
+ * real tem 287), então a API hidrata só a página pedida e devolve o total à
+ * parte.
  */
 export async function listOperatorOverdueInvoicesAction(
   tenantSlug: string,
-): Promise<ActionResult<Invoice[]>> {
+  params?: { page?: number; perPage?: number },
+): Promise<ActionResult<{ items: Invoice[]; total: number }>> {
   return run(async () => {
-    const { data } = await apiFetch<Invoice[]>(tenantPath(tenantSlug, '/financeiro/faturas/vencidas'))
-    return data
+    const { data, meta } = await apiFetch<Invoice[]>(
+      tenantPath(tenantSlug, '/financeiro/faturas/vencidas'),
+      { query: { page: params?.page ?? 1, perPage: params?.perPage ?? 25 } },
+    )
+    return { items: data, total: meta?.total ?? data.length }
   })
 }
 
@@ -277,6 +286,30 @@ export async function listOperatorPlansAction(
   return run(async () => {
     const { data } = await apiFetch<HealthPlan[]>(tenantPath(tenantSlug, '/catalogo/planos'), {
       query: { codigoProduto },
+    })
+    return data
+  })
+}
+
+export async function listOperatorPriceTablesAction(
+  tenantSlug: string,
+  codigoConvenio: string,
+): Promise<ActionResult<PriceTable[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<PriceTable[]>(tenantPath(tenantSlug, '/catalogo/tabelas'), {
+      query: { codigoConvenio },
+    })
+    return data
+  })
+}
+
+export async function listOperatorWaitingPeriodsAction(
+  tenantSlug: string,
+  codigoConvenio: string,
+): Promise<ActionResult<WaitingPeriod[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<WaitingPeriod[]>(tenantPath(tenantSlug, '/catalogo/carencias'), {
+      query: { codigoConvenio },
     })
     return data
   })

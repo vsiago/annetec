@@ -55,18 +55,12 @@ export function HeroSection() {
 
             {/* Main Headline */}
             <h1 className="text-[2.5rem] sm:text-[3.25rem] lg:text-[3.5rem] xl:text-[4rem] font-extrabold text-white leading-[1.08] tracking-tight">
-              A melhor plataforma de{" "}
-              <span className="relative inline-block">
-                <span className="relative z-10 text-[#26365f]">benefícios</span>
-                <span className="absolute bottom-1 left-0 w-full h-3 bg-white/40 rounded-sm -z-0" />
-              </span>{" "}
-              para os associados
+              Saúde, proteção e benefícios para pessoas e organizações.
             </h1>
 
             {/* Subheadline */}
             <p className="mt-7 text-lg sm:text-xl text-white/80 leading-relaxed max-w-xl font-medium">
-              Planos de Saúde, Odontológicos e Assistência Familiar com a força da{" "}
-              <strong className="text-white">União Inteligente</strong>.
+              Planos de saúde e benefícios para você. Soluções para entidades. Estratégia e tecnologia para quem quer criar seu próprio cartão de benefícios.
             </p>
 
             {/* Brand Tagline */}
@@ -84,7 +78,7 @@ export function HeroSection() {
                 asChild
               >
                 <Link href="#contrate">
-                  ASSOCIE-SE
+                  EXPLORE AS POSSIBILIDADES
                   <ArrowRight className="w-5 h-5" />
                 </Link>
               </Button>
@@ -94,7 +88,7 @@ export function HeroSection() {
                 className="bg-transparent border-2 border-white/40 text-white hover:bg-white hover:text-[#26365f] hover:border-white text-base sm:text-lg font-bold px-10 py-7 rounded-full transition-all duration-300 flex items-center justify-center backdrop-blur-sm"
                 asChild
               >
-                <Link href="#beneficios">Conheça os Benefícios</Link>
+                <Link href="#contato">FALE COM A ANNETEC</Link>
               </Button>
             </div>
 

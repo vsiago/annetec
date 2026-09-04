@@ -69,3 +69,16 @@ export const tenantsController = new Hono<AppEnv>()
   .post('/:id/integration/test', param(idParam), async c =>
     ok(c, { ok: await tenantsService.testIntegration(c.req.valid('param').id) }),
   )
+
+  /**
+   * Lê no ERP os códigos que antes eram copiados do portal na mão (grupo,
+   * filial, convênio, produto, grupo de produtor). Só leitura.
+   */
+  .get('/:id/integration/discovery', param(idParam), async c =>
+    ok(c, await tenantsService.discoverIntegrationDefaults(c.req.valid('param').id)),
+  )
+
+  /** Apura quais operações o token do inquilino pode executar de fato. */
+  .post('/:id/integration/capabilities', param(idParam), async c =>
+    ok(c, await tenantsService.probeCapabilities(c.req.valid('param').id)),
+  )

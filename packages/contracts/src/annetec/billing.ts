@@ -26,6 +26,13 @@ export const invoice = z.object({
   /** Linha digitável do boleto. */
   barcodeLine: z.string().nullable(),
   beneficiaryName: z.string().nullable(),
+  /**
+   * CPF do titular da fatura. A tela de cobrança precisa dele para abrir o
+   * contrato correspondente — `/fatura/procurarPorVencida` não devolve o
+   * código do contrato, então o CPF é a única ponte entre uma fatura vencida
+   * e a carteira.
+   */
+  beneficiaryCpf: z.string().nullable(),
 })
 export type Invoice = z.infer<typeof invoice>
 

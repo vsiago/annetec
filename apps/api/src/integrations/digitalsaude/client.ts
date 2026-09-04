@@ -39,6 +39,30 @@ export interface DigitalSaudeCredentials {
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
 const MAX_ATTEMPTS = 3
 
+/**
+ * "Não achei nada" no upstream vem como 400 com texto, não como 200 + lista
+ * vazia nem como 404 — confirmado em produção:
+ *   GET /atendimento/procurarPorContrato → 400 "Nenhum atendimento foi localizado"
+ *   GET /produtor/procurarPorLogin       → 400 "Nenhum produtor foi localizado"
+ * Tratar isso como erro fazia uma busca sem resultado derrubar a tela. Vira
+ * resultado vazio; 400 de verdade (payload inválido) continua sendo erro.
+ */
+const EMPTY_RESULT_PATTERN = /nenhum[a]?\s.+\s(foi\s)?(localizad|encontrad)|não\s+(foi\s+)?(localizad|encontrad)/i
+
+/** Sentinela devolvida por `request` quando o 400 era só "não achei nada". */
+const UPSTREAM_EMPTY = Symbol('upstream-empty')
+
+/**
+ * A Digital Saúde limita chamadas POR TOKEN e avisa em texto, não em status
+ * dedicado: "Ultrapassado Rate Limit para o TOKEN XXXX". Apanhado em produção
+ * ao hidratar as 287 faturas vencidas da carteira. Sem reconhecer isso, o
+ * erro virava um `UPSTREAM_ERROR` genérico e a tela de cobrança aparecia
+ * meio vazia sem explicar por quê.
+ */
+const RATE_LIMIT_PATTERN = /rate\s*limit/i
+/** Backoff mais largo que o de rede: limite por token não passa em 250ms. */
+const RATE_LIMIT_BACKOFF_MS = 2_000
+
 type Endpoints = typeof digitalSaudeEndpoints
 
 type InputOf<K extends DigitalSaudeEndpointName> =
@@ -96,6 +120,11 @@ export function createDigitalSaudeClient(credentials: DigitalSaudeCredentials): 
 
     const body = endpoint.body ? parseInput(endpoint.body, raw, name, 'body') : undefined
     const payload = await request(endpoint.method, url, body, name)
+    if (payload === UPSTREAM_EMPTY) {
+      // Lista vazia para endpoint de listagem; `null` para busca por chave —
+      // que é exatamente o que `one()` já sabe interpretar.
+      return (endpoint.response instanceof z.ZodArray ? [] : null) as OutputOf<K>
+    }
     return validateResponse(endpoint.response, payload, name) as OutputOf<K>
   }
 
@@ -139,24 +168,54 @@ export function createDigitalSaudeClient(credentials: DigitalSaudeCredentials): 
         if (response.ok) return parseJsonBody(text)
 
         if (response.status === 401 || response.status === 403) {
+          // O 401 do upstream é por OPERAÇÃO, não só por credencial: com o
+          // mesmo par token/senhaApi que lê todo o catálogo, `POST /calculo/`
+          // responde 401 para qualquer payload (verificado em 04/09/2026).
+          // A mensagem antiga mandava o admin conferir a senha, que estava
+          // certa — o que falta é liberação do endpoint no lado da DS.
           throw new AppError(
             ERROR_CODES.UPSTREAM_UNAUTHORIZED,
-            'Credenciais da Digital Saúde recusadas para este inquilino',
+            `A Digital Saúde recusou a operação "${name}" (401). Se outras chamadas funcionam com as mesmas credenciais, o token não tem permissão para este endpoint — peça liberação à Digital Saúde.`,
           )
         }
         if (response.status === 404) throw AppError.notFound('Registro na Digital Saúde')
         if (response.status === 400) {
-          throw new AppError(ERROR_CODES.UPSTREAM_ERROR, upstreamMessage(text, 'Requisição recusada pela Digital Saúde'))
+          const message = upstreamMessage(text, 'Requisição recusada pela Digital Saúde')
+          if (EMPTY_RESULT_PATTERN.test(message)) {
+            logger.debug(
+              { integration: 'digitalsaude', tenant: credentials.label, endpoint: name, message },
+              'upstream sem resultado (400 tratado como vazio)',
+            )
+            return UPSTREAM_EMPTY
+          }
+          throw new AppError(ERROR_CODES.UPSTREAM_ERROR, message)
         }
+        const message = upstreamMessage(text, `Digital Saúde respondeu ${response.status}`)
+
+        // Limite por token: vale esperar de verdade antes de tentar de novo, e
+        // vale um código próprio para a UI dizer "tente em instantes".
+        if (RATE_LIMIT_PATTERN.test(message)) {
+          if (attempt < maxAttempts) {
+            logger.warn(
+              { integration: 'digitalsaude', tenant: credentials.label, endpoint: name, attempt },
+              'rate limit da Digital Saúde; aguardando antes de repetir',
+            )
+            lastError = new Error(message)
+            await sleep(RATE_LIMIT_BACKOFF_MS * attempt)
+            continue
+          }
+          throw new AppError(
+            ERROR_CODES.UPSTREAM_RATE_LIMITED,
+            'A Digital Saúde limitou as chamadas deste token. Aguarde alguns instantes e tente de novo.',
+          )
+        }
+
         if (RETRYABLE_STATUS.has(response.status) && attempt < maxAttempts) {
           lastError = new Error(`HTTP ${response.status}`)
           await backoff(attempt)
           continue
         }
-        throw new AppError(
-          ERROR_CODES.UPSTREAM_ERROR,
-          upstreamMessage(text, `Digital Saúde respondeu ${response.status}`),
-        )
+        throw new AppError(ERROR_CODES.UPSTREAM_ERROR, message)
       } catch (error) {
         if (error instanceof AppError) throw error
         const isTimeout = error instanceof DOMException && error.name === 'TimeoutError'
@@ -296,6 +355,9 @@ function upstreamMessage(text: string, fallback: string): string {
 }
 
 function backoff(attempt: number): Promise<void> {
-  const delay = 250 * 2 ** (attempt - 1)
-  return new Promise(resolve => setTimeout(resolve, delay))
+  return sleep(250 * 2 ** (attempt - 1))
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }

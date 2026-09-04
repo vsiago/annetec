@@ -1,6 +1,12 @@
 'use server'
 
-import type { CreateTenantInput, Tenant, TenantPlan, UpdateTenantInput } from '@annetec/contracts'
+import type {
+  CreateTenantInput,
+  CreateTenantPlanInput,
+  Tenant,
+  TenantPlan,
+  UpdateTenantInput,
+} from '@annetec/contracts'
 import { ApiError, apiFetch } from '@/lib/api/client'
 import type { Tenant as LegacyTenant, TenantPlan as LegacyTenantPlan } from '@/lib/types'
 
@@ -69,6 +75,24 @@ export async function listTenantPlansAction(): Promise<ActionResult<LegacyTenant
   return run(async () => {
     const { data } = await apiFetch<TenantPlan[]>('/api/v1/platform/plans')
     return data.map(toLegacyPlan)
+  })
+}
+
+/**
+ * Cria o plano de assinatura no banco. A tela de Configurações chamava o
+ * `createPlan` de `lib/actions/tenant-plans.ts`, que é o mock em localStorage:
+ * o plano aparecia por um instante e sumia no `refresh()` seguinte, que já
+ * lia da API — sem erro nenhum na tela.
+ */
+export async function createTenantPlanAction(
+  input: CreateTenantPlanInput,
+): Promise<ActionResult<LegacyTenantPlan>> {
+  return run(async () => {
+    const { data } = await apiFetch<TenantPlan>('/api/v1/platform/plans', {
+      method: 'POST',
+      body: input,
+    })
+    return toLegacyPlan(data)
   })
 }
 
