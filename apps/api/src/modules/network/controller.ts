@@ -3,6 +3,8 @@ import {
   createPartnerInput,
   paginationQuery,
   partnerCategory,
+  updateBenefitInput,
+  updatePartnerInput,
   type Benefit,
   type Partner,
 } from '@annetec/contracts'
@@ -16,6 +18,7 @@ import { requireAuth, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
 import { created, noContent, ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
+import { recordAudit } from '@/lib/audit'
 import { json, param, query } from '@/http/validate'
 
 const idParam = z.object({ id: z.string().uuid() })
@@ -79,6 +82,12 @@ export const networkController = new Hono<AppEnv>()
         status: input.status,
       })
       .returning()
+    await recordAudit(c, {
+      action: 'partner.created',
+      resource: 'partner',
+      resourceId: row!.id,
+      metadata: { name: input.name, category: input.category },
+    })
     return created(c, toPartner(row!))
   })
 
@@ -86,7 +95,7 @@ export const networkController = new Hono<AppEnv>()
     '/parceiros/:id',
     requireTenantRole('admin'),
     param(idParam),
-    json(createPartnerInput.partial()),
+    json(updatePartnerInput),
     async c => {
       const input = c.req.valid('json')
       const [row] = await db
@@ -107,6 +116,12 @@ export const networkController = new Hono<AppEnv>()
         .returning()
 
       if (!row) throw AppError.notFound('Parceiro')
+      await recordAudit(c, {
+        action: 'partner.updated',
+        resource: 'partner',
+        resourceId: row.id,
+        metadata: { campos: Object.keys(input) },
+      })
       return ok(c, toPartner(row))
     },
   )
@@ -117,6 +132,11 @@ export const networkController = new Hono<AppEnv>()
       .where(and(eq(partners.organizationId, tenantOf(c).id), eq(partners.id, c.req.valid('param').id)))
       .returning({ id: partners.id })
     if (deleted.length === 0) throw AppError.notFound('Parceiro')
+    await recordAudit(c, {
+      action: 'partner.removed',
+      resource: 'partner',
+      resourceId: c.req.valid('param').id,
+    })
     return noContent(c)
   })
 
@@ -143,8 +163,47 @@ export const networkController = new Hono<AppEnv>()
         locations: input.locations,
       })
       .returning()
+    await recordAudit(c, {
+      action: 'benefit.created',
+      resource: 'benefit',
+      resourceId: row!.id,
+      metadata: { name: input.name, category: input.category },
+    })
     return created(c, toBenefit(row!))
   })
+
+  .patch(
+    '/beneficios/:id',
+    requireTenantRole('admin'),
+    param(idParam),
+    json(updateBenefitInput),
+    async c => {
+      const input = c.req.valid('json')
+      const [row] = await db
+        .update(benefits)
+        .set({
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.description !== undefined ? { description: input.description } : {}),
+          ...(input.category !== undefined ? { category: input.category } : {}),
+          ...(input.discountPercent !== undefined
+            ? { discountPercent: input.discountPercent === null ? null : String(input.discountPercent) }
+            : {}),
+          ...(input.provider !== undefined ? { provider: input.provider } : {}),
+          ...(input.locations !== undefined ? { locations: input.locations } : {}),
+        })
+        .where(and(eq(benefits.organizationId, tenantOf(c).id), eq(benefits.id, c.req.valid('param').id)))
+        .returning()
+
+      if (!row) throw AppError.notFound('Benefício')
+      await recordAudit(c, {
+        action: 'benefit.updated',
+        resource: 'benefit',
+        resourceId: row.id,
+        metadata: { campos: Object.keys(input) },
+      })
+      return ok(c, toBenefit(row))
+    },
+  )
 
   .delete('/beneficios/:id', requireTenantRole('admin'), param(idParam), async c => {
     const deleted = await db
@@ -152,6 +211,11 @@ export const networkController = new Hono<AppEnv>()
       .where(and(eq(benefits.organizationId, tenantOf(c).id), eq(benefits.id, c.req.valid('param').id)))
       .returning({ id: benefits.id })
     if (deleted.length === 0) throw AppError.notFound('Benefício')
+    await recordAudit(c, {
+      action: 'benefit.removed',
+      resource: 'benefit',
+      resourceId: c.req.valid('param').id,
+    })
     return noContent(c)
   })
 

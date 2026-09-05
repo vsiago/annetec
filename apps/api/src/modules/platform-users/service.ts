@@ -1,4 +1,9 @@
-import { ERROR_CODES, type CreatePlatformUserInput, type PlatformUser } from '@annetec/contracts'
+import {
+  ERROR_CODES,
+  type CreatePlatformUserInput,
+  type PlatformUser,
+  type UpdatePlatformUserInput,
+} from '@annetec/contracts'
 import { and, count, desc, eq, ilike, inArray, or, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { user } from '@/db/schema'
@@ -68,6 +73,74 @@ export const platformUsersService = {
     if (!row) throw AppError.businessRule('Falha ao carregar a conta recém-criada')
     return toDomain(row)
   },
+
+  async getById(id: string): Promise<PlatformUser> {
+    const [row] = await db
+      .select()
+      .from(user)
+      .where(and(eq(user.id, id), inArray(user.role, PLATFORM_ROLES)))
+      .limit(1)
+    if (!row) throw AppError.notFound('Usuário da plataforma')
+    return toDomain(row)
+  },
+
+  /**
+   * Edita nome, telefone, papel e ativação.
+   *
+   * Desativar usa `user.banned` do plugin `admin` do Better Auth em vez de uma
+   * coluna nossa: é o campo que o próprio Better Auth consulta no login, então
+   * a conta desativada para de entrar de fato, e não só na nossa listagem.
+   * Apagar não é opção — a conta assina o histórico da trilha de auditoria.
+   *
+   * `actorId` impede dois pés no próprio pé: ninguém se autodesativa nem se
+   * autorrebaixa, o que deixaria a plataforma sem superadmin.
+   */
+  async update(id: string, input: UpdatePlatformUserInput, actorId?: string): Promise<PlatformUser> {
+    const alvo = await this.getById(id)
+
+    if (actorId === id) {
+      if (input.active === false) {
+        throw AppError.businessRule('Você não pode desativar a própria conta')
+      }
+      if (input.role && input.role !== alvo.role) {
+        throw AppError.businessRule('Você não pode alterar o próprio papel')
+      }
+    }
+
+    // Rebaixar ou desativar o último superadmin trancaria todo mundo para fora.
+    const perdendoSuperadmin =
+      alvo.role === 'superadmin' &&
+      ((input.role !== undefined && input.role !== 'superadmin') || input.active === false)
+
+    if (perdendoSuperadmin) {
+      const [ativos] = await db
+        .select({ value: count() })
+        .from(user)
+        .where(and(eq(user.role, 'superadmin'), eq(user.banned, false)))
+      if ((ativos?.value ?? 0) <= 1) {
+        throw AppError.businessRule('A plataforma precisa de pelo menos um superadmin ativo')
+      }
+    }
+
+    await db
+      .update(user)
+      .set({
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.role !== undefined ? { role: input.role } : {}),
+        ...(input.active !== undefined
+          ? {
+              banned: !input.active,
+              banReason: input.active ? null : 'Desativado pela equipe Annetec',
+              banExpires: null,
+            }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(user.id, id))
+
+    return this.getById(id)
+  },
 }
 
 type UserRow = typeof user.$inferSelect
@@ -80,6 +153,7 @@ function toDomain(row: UserRow): PlatformUser {
     phone: row.phone ?? null,
     role: row.role as PlatformUser['role'],
     avatarUrl: row.image,
+    active: row.banned !== true,
     createdAt: row.createdAt.toISOString(),
   }
 }

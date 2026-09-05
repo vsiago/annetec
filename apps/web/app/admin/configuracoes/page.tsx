@@ -14,8 +14,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useTenants } from '@/contexts/tenants-context'
-import { createTenantPlanAction } from '@/lib/actions/tenants-api'
-import { Plus, Wallet } from 'lucide-react'
+import {
+  createTenantPlanAction,
+  deleteTenantPlanAction,
+  updateTenantPlanAction,
+} from '@/lib/actions/tenants-api'
+import { Plus, Wallet, Pencil, Trash2 } from 'lucide-react'
 
 export default function PlatformConfiguracoesPage() {
   const { plans, refresh } = useTenants()
@@ -26,32 +30,77 @@ export default function PlatformConfiguracoesPage() {
   const [featuresText, setFeaturesText] = useState('')
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  /** `null` = criando; com id = editando aquele plano. */
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+  const [listError, setListError] = useState('')
+
+  const abrirNovo = () => {
+    setEditingId(null)
+    setName('')
+    setPriceMonthly('')
+    setMemberLimit('')
+    setFeaturesText('')
+    setError('')
+    setIsAddOpen(true)
+  }
+
+  const abrirEdicao = (plan: (typeof plans)[number]) => {
+    setEditingId(plan.id)
+    setName(plan.name)
+    setPriceMonthly(String(plan.priceMonthly))
+    setMemberLimit(String(plan.memberLimit))
+    setFeaturesText(plan.features.join(', '))
+    setError('')
+    setIsAddOpen(true)
+  }
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     if (!name || !priceMonthly) return
 
-    setIsSaving(true)
-    const result = await createTenantPlanAction({
+    const payload = {
       name,
       priceMonthly: Number(priceMonthly),
       memberLimit: Number(memberLimit) || 1,
       features: featuresText.split(',').map(f => f.trim()).filter(Boolean),
-    })
+    }
+
+    setIsSaving(true)
+    const result = editingId
+      ? await updateTenantPlanAction(editingId, payload)
+      : await createTenantPlanAction(payload)
     setIsSaving(false)
 
     if (!result.success) {
-      setError(result.error ?? 'Não foi possível criar o plano')
+      setError(result.error ?? 'Não foi possível salvar o plano')
       return
     }
 
     await refresh()
     setIsAddOpen(false)
+    setEditingId(null)
     setName('')
     setPriceMonthly('')
     setMemberLimit('')
     setFeaturesText('')
+  }
+
+  /**
+   * Remover só vale para plano que ninguém contratou — a API recusa com 422 e
+   * a contagem de inquilinos em uso, que é o que aparece aqui.
+   */
+  const handleRemove = async (id: string) => {
+    setListError('')
+    setRemovingId(id)
+    const result = await deleteTenantPlanAction(id)
+    setRemovingId(null)
+    if (!result.success) {
+      setListError(result.error ?? 'Não foi possível remover o plano')
+      return
+    }
+    await refresh()
   }
 
   return (
@@ -61,11 +110,17 @@ export default function PlatformConfiguracoesPage() {
           <h1 className="text-2xl font-bold text-foreground">Catálogo de Planos</h1>
           <p className="text-muted-foreground">Planos de assinatura oferecidos aos inquilinos da plataforma</p>
         </div>
-        <Button className="bg-primary hover:opacity-90 text-white" onClick={() => setIsAddOpen(true)}>
+        <Button className="bg-primary hover:opacity-90 text-white" onClick={abrirNovo}>
           <Plus className="h-4 w-4 mr-2" />
           Novo Plano
         </Button>
       </div>
+
+      {listError && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {listError}
+        </p>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {plans.map(plan => (
@@ -86,6 +141,22 @@ export default function PlatformConfiguracoesPage() {
                   <Badge key={i} variant="outline">{f}</Badge>
                 ))}
               </div>
+              <div className="mt-4 flex gap-2 border-t pt-4">
+                <Button variant="outline" size="sm" onClick={() => abrirEdicao(plan)}>
+                  <Pencil className="mr-2 h-3.5 w-3.5" />
+                  Editar
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => handleRemove(plan.id)}
+                  disabled={removingId === plan.id}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  {removingId === plan.id ? 'Removendo…' : 'Remover'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -95,8 +166,12 @@ export default function PlatformConfiguracoesPage() {
         <DialogContent className="sm:max-w-[425px]">
           <form onSubmit={handleAdd}>
             <DialogHeader>
-              <DialogTitle>Novo Plano</DialogTitle>
-              <DialogDescription>Adicione um novo plano ao catálogo da plataforma</DialogDescription>
+              <DialogTitle>{editingId ? 'Editar plano' : 'Novo plano'}</DialogTitle>
+              <DialogDescription>
+                {editingId
+                  ? 'Alterar preço ou limite vale para os inquilinos que já usam este plano.'
+                  : 'Adicione um novo plano ao catálogo da plataforma'}
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
@@ -130,7 +205,7 @@ export default function PlatformConfiguracoesPage() {
                 disabled={isSaving}
                 className="bg-primary hover:opacity-90 text-white"
               >
-                {isSaving ? 'Criando…' : 'Criar Plano'}
+                {isSaving ? 'Salvando…' : editingId ? 'Salvar plano' : 'Criar plano'}
               </Button>
             </DialogFooter>
           </form>

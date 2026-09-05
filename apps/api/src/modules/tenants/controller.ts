@@ -1,6 +1,7 @@
 import {
   createTenantInput,
   paginationQuery,
+  resetTenantUserPasswordInput,
   tenantIntegration,
   tenantStatus,
   updateTenantInput,
@@ -8,12 +9,14 @@ import {
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { requireAuth, requirePlatformRole } from '@/http/middleware/auth'
+import { recordAudit } from '@/lib/audit'
 import { created, ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, param, query } from '@/http/validate'
 import { tenantsService } from './service'
 
 const idParam = z.object({ id: z.string().uuid() })
+const userParam = z.object({ id: z.string().uuid(), userId: z.string() })
 const listQuery = paginationQuery.extend({ status: tenantStatus.optional() })
 
 /**
@@ -32,6 +35,13 @@ export const tenantsController = new Hono<AppEnv>()
 
   .post('/', json(createTenantInput), async c => {
     const { tenant, ownerPassword } = await tenantsService.create(c.req.valid('json'))
+    await recordAudit(c, {
+      action: 'tenant.created',
+      resource: 'tenant',
+      resourceId: tenant.id,
+      organizationId: tenant.id,
+      metadata: { slug: tenant.slug, document: tenant.document, status: tenant.status },
+    })
     // A senha provisória aparece UMA vez, na resposta do wizard.
     return created(c, { tenant, ownerPassword })
   })
@@ -50,21 +60,59 @@ export const tenantsController = new Hono<AppEnv>()
 
   .get('/:id', param(idParam), async c => ok(c, await tenantsService.getById(c.req.valid('param').id)))
 
-  .patch('/:id', param(idParam), json(updateTenantInput), async c =>
-    ok(c, await tenantsService.update(c.req.valid('param').id, c.req.valid('json'))),
-  )
+  .patch('/:id', param(idParam), json(updateTenantInput), async c => {
+    const { id } = c.req.valid('param')
+    const patch = c.req.valid('json')
+    const tenant = await tenantsService.update(id, patch)
+    await recordAudit(c, {
+      action: 'tenant.updated',
+      resource: 'tenant',
+      resourceId: id,
+      organizationId: id,
+      metadata: { campos: Object.keys(patch), status: tenant.status },
+    })
+    return ok(c, tenant)
+  })
 
-  .delete('/:id', param(idParam), async c =>
-    ok(c, await tenantsService.cancel(c.req.valid('param').id)),
-  )
+  .delete('/:id', param(idParam), async c => {
+    const { id } = c.req.valid('param')
+    const tenant = await tenantsService.cancel(id)
+    await recordAudit(c, {
+      action: 'tenant.cancelled',
+      resource: 'tenant',
+      resourceId: id,
+      organizationId: id,
+      metadata: { slug: tenant.slug },
+    })
+    return ok(c, tenant)
+  })
 
   .get('/:id/integration', param(idParam), async c =>
     ok(c, await tenantsService.getIntegration(c.req.valid('param').id)),
   )
 
-  .put('/:id/integration', param(idParam), json(tenantIntegration), async c =>
-    ok(c, await tenantsService.saveIntegration(c.req.valid('param').id, c.req.valid('json'))),
-  )
+  /**
+   * Auditado sem o corpo: `appToken` e `apiPassword` passam por aqui e não
+   * podem cair na trilha. Só os códigos padrão, que não são segredo.
+   */
+  .put('/:id/integration', param(idParam), json(tenantIntegration), async c => {
+    const { id } = c.req.valid('param')
+    const input = c.req.valid('json')
+    const integration = await tenantsService.saveIntegration(id, input)
+    await recordAudit(c, {
+      action: 'tenant.integration_saved',
+      resource: 'tenant_integration',
+      resourceId: id,
+      organizationId: id,
+      metadata: {
+        baseUrl: input.baseUrl,
+        enabled: input.enabled,
+        defaultConvenioCodigo: input.defaultConvenioCodigo ?? null,
+        defaultGrupoCodigo: input.defaultGrupoCodigo ?? null,
+      },
+    })
+    return ok(c, integration)
+  })
 
   .post('/:id/integration/test', param(idParam), async c =>
     ok(c, { ok: await tenantsService.testIntegration(c.req.valid('param').id) }),
@@ -76,6 +124,45 @@ export const tenantsController = new Hono<AppEnv>()
    */
   .get('/:id/integration/discovery', param(idParam), async c =>
     ok(c, await tenantsService.discoverIntegrationDefaults(c.req.valid('param').id)),
+  )
+
+  /**
+   * Usuários do inquilino vistos pela plataforma. A rota equivalente do
+   * inquilino é por slug; esta é por id, que é a chave da tela de gestão.
+   */
+  .get('/:id/usuarios', param(idParam), async c =>
+    ok(c, await tenantsService.listUsers(c.req.valid('param').id)),
+  )
+
+  /**
+   * Reset administrativo de senha. Omitir `password` gera uma provisória e
+   * devolve UMA vez — a partir daí ela não existe mais em lugar nenhum
+   * legível, igual à senha do wizard de criação.
+   */
+  .post(
+    '/:id/usuarios/:userId/senha',
+    requirePlatformRole('superadmin'),
+    param(userParam),
+    json(resetTenantUserPasswordInput),
+    async c => {
+      const { id, userId } = c.req.valid('param')
+      const { password } = c.req.valid('json')
+      const resultado = await tenantsService.resetUserPassword(
+        id,
+        userId,
+        c.req.raw.headers,
+        password,
+      )
+      // A senha em si nunca entra na trilha — só o fato de ter sido trocada.
+      await recordAudit(c, {
+        action: 'tenant_user.password_reset',
+        resource: 'tenant_user',
+        resourceId: userId,
+        organizationId: id,
+        metadata: { email: resultado.email, gerada: !password },
+      })
+      return ok(c, resultado)
+    },
   )
 
   /** Apura quais operações o token do inquilino pode executar de fato. */

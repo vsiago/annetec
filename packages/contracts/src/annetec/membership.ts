@@ -15,6 +15,13 @@ export const tenantUser = z.object({
   createdAt: z.string().datetime(),
   /** Só populado para `role: 'seller'` — código do produtor vinculado na Digital Saúde. */
   upstreamProdutorCodigo: z.string().nullable().optional(),
+  /**
+   * Se a senha do produtor está guardada. `/recibo/procurarPorEmitido|Pago` do
+   * ERP exige login e senha do produtor em query string, então sem ela a tela
+   * de comissões só consegue mostrar erro. A senha em si nunca sai da API —
+   * este booleano existe para a interface avisar antes de alguém clicar.
+   */
+  hasProdutorCredentials: z.boolean().optional(),
 })
 export type TenantUser = z.infer<typeof tenantUser>
 
@@ -28,6 +35,19 @@ export type CreateTenantUserInput = z.infer<typeof createTenantUserInput>
 
 export const updateTenantUserInput = createTenantUserInput.partial()
 export type UpdateTenantUserInput = z.infer<typeof updateTenantUserInput>
+
+/**
+ * Redefinição de senha de um usuário de inquilino pela equipe Annetec.
+ *
+ * Sem senha atual de propósito: é um reset administrativo, não uma troca do
+ * próprio dono da conta (essa é `POST /auth/password`). Omitir `password`
+ * faz a API gerar uma provisória e devolvê-la uma única vez — o mesmo padrão
+ * do wizard de criação de inquilino.
+ */
+export const resetTenantUserPasswordInput = z.object({
+  password: z.string().min(8).optional(),
+})
+export type ResetTenantUserPasswordInput = z.infer<typeof resetTenantUserPasswordInput>
 
 /** Perfil comercial de um usuário com papel `seller`. */
 export const sellerProfile = z.object({

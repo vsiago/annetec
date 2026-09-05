@@ -126,3 +126,6 @@ export type TenantPlan = z.infer<typeof tenantPlan>
 
 export const createTenantPlanInput = tenantPlan.omit({ id: true })
 export type CreateTenantPlanInput = z.infer<typeof createTenantPlanInput>
+
+export const updateTenantPlanInput = createTenantPlanInput.partial()
+export type UpdateTenantPlanInput = z.infer<typeof updateTenantPlanInput>

@@ -110,6 +110,23 @@ export async function listOperatorOverdueInvoicesAction(
   })
 }
 
+/**
+ * Reenvia por e-mail as faturas vencidas de um contrato. Sai da plataforma:
+ * o e-mail vai para o titular do contrato no ERP, e não tem desfazer.
+ */
+export async function sendOperatorOverdueInvoicesAction(
+  tenantSlug: string,
+  contratoCodigo: string,
+): Promise<ActionResult<{ message: string }>> {
+  return run(async () => {
+    const { data } = await apiFetch<{ message: string }>(
+      tenantPath(tenantSlug, '/financeiro/faturas/enviar-vencidas'),
+      { method: 'POST', body: { contratoCodigo } },
+    )
+    return data
+  })
+}
+
 /** Um contrato específico do espelho local — usado na tela de detalhe. */
 export async function getOperatorContractAction(
   tenantSlug: string,

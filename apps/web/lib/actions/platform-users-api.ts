@@ -1,6 +1,10 @@
 'use server'
 
-import type { CreatePlatformUserInput, PlatformUser } from '@annetec/contracts'
+import type {
+  CreatePlatformUserInput,
+  PlatformUser,
+  UpdatePlatformUserInput,
+} from '@annetec/contracts'
 import { ApiError, apiFetch } from '@/lib/api/client'
 import type { PlatformUser as LegacyPlatformUser } from '@/lib/types'
 
@@ -25,6 +29,7 @@ function toLegacyShape(user: PlatformUser): LegacyPlatformUser {
     role: user.role,
     phone: user.phone ?? undefined,
     avatar: user.avatarUrl ?? undefined,
+    active: user.active,
     createdAt: new Date(user.createdAt),
   }
 }
@@ -47,6 +52,24 @@ export async function createPlatformUserAction(
       body: input,
     }).then(r => r.data)
     return toLegacyShape(user)
+  })
+}
+
+/**
+ * Edita nome, telefone, papel e ativação. A API barra os dois tiros no pé —
+ * autodesativação e ficar sem nenhum superadmin ativo — devolvendo 422 com a
+ * explicação, que a tela mostra como está.
+ */
+export async function updatePlatformUserAction(
+  id: string,
+  patch: UpdatePlatformUserInput,
+): Promise<ActionResult<LegacyPlatformUser>> {
+  return run(async () => {
+    const { data } = await apiFetch<PlatformUser>(`/api/v1/platform/users/${id}`, {
+      method: 'PATCH',
+      body: patch,
+    })
+    return toLegacyShape(data)
   })
 }
 

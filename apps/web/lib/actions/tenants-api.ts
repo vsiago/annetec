@@ -3,9 +3,14 @@
 import type {
   CreateTenantInput,
   CreateTenantPlanInput,
+  IntegrationDiscovery,
+  ResetTenantUserPasswordInput,
   Tenant,
+  TenantIntegration,
+  TenantIntegrationPublic,
   TenantPlan,
   UpdateTenantInput,
+  UpdateTenantPlanInput,
 } from '@annetec/contracts'
 import { ApiError, apiFetch } from '@/lib/api/client'
 import type { Tenant as LegacyTenant, TenantPlan as LegacyTenantPlan } from '@/lib/types'
@@ -93,6 +98,132 @@ export async function createTenantPlanAction(
       body: input,
     })
     return toLegacyPlan(data)
+  })
+}
+
+export async function updateTenantPlanAction(
+  id: string,
+  patch: UpdateTenantPlanInput,
+): Promise<ActionResult<LegacyTenantPlan>> {
+  return run(async () => {
+    const { data } = await apiFetch<TenantPlan>(`/api/v1/platform/plans/${id}`, {
+      method: 'PATCH',
+      body: patch,
+    })
+    return toLegacyPlan(data)
+  })
+}
+
+/** A API recusa remover plano em uso — a mensagem dela é a que aparece na tela. */
+export async function deleteTenantPlanAction(id: string): Promise<ActionResult<null>> {
+  return run(async () => {
+    await apiFetch(`/api/v1/platform/plans/${id}`, { method: 'DELETE' })
+    return null
+  })
+}
+
+// ---------------------------------------------------------------- integração
+//
+// Diagnóstico da ligação com a Digital Saúde por inquilino. Existia só na API;
+// sem tela, ninguém via se a credencial estava boa nem quais operações o token
+// realmente podia executar.
+
+export async function getTenantIntegrationAction(
+  tenantId: string,
+): Promise<ActionResult<TenantIntegrationPublic | null>> {
+  return run(async () => {
+    const { data } = await apiFetch<TenantIntegrationPublic | null>(
+      `/api/v1/platform/tenants/${tenantId}/integration`,
+    )
+    return data
+  })
+}
+
+export async function saveTenantIntegrationAction(
+  tenantId: string,
+  input: TenantIntegration,
+): Promise<ActionResult<TenantIntegrationPublic>> {
+  return run(async () => {
+    const { data } = await apiFetch<TenantIntegrationPublic>(
+      `/api/v1/platform/tenants/${tenantId}/integration`,
+      { method: 'PUT', body: input },
+    )
+    return data
+  })
+}
+
+export async function testTenantIntegrationAction(
+  tenantId: string,
+): Promise<ActionResult<{ ok: boolean }>> {
+  return run(async () => {
+    const { data } = await apiFetch<{ ok: boolean }>(
+      `/api/v1/platform/tenants/${tenantId}/integration/test`,
+      { method: 'POST' },
+    )
+    return data
+  })
+}
+
+/** Lê no ERP os códigos que antes eram copiados do portal na mão. */
+export async function discoverTenantIntegrationAction(
+  tenantId: string,
+): Promise<ActionResult<IntegrationDiscovery>> {
+  return run(async () => {
+    const { data } = await apiFetch<IntegrationDiscovery>(
+      `/api/v1/platform/tenants/${tenantId}/integration/discovery`,
+    )
+    return data
+  })
+}
+
+/** Apura operação a operação o que o token deste inquilino pode fazer. */
+export async function probeTenantCapabilitiesAction(
+  tenantId: string,
+): Promise<ActionResult<Record<string, boolean>>> {
+  return run(async () => {
+    const { data } = await apiFetch<Record<string, boolean>>(
+      `/api/v1/platform/tenants/${tenantId}/integration/capabilities`,
+      { method: 'POST' },
+    )
+    return data
+  })
+}
+
+/** Usuário de um inquilino, na visão da plataforma. */
+export interface TenantMember {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  role: 'admin' | 'seller' | 'client'
+  active: boolean
+  createdAt: string
+}
+
+export async function listTenantMembersAction(
+  tenantId: string,
+): Promise<ActionResult<TenantMember[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<TenantMember[]>(`/api/v1/platform/tenants/${tenantId}/usuarios`)
+    return data
+  })
+}
+
+/**
+ * Reset administrativo de senha. Sem `password`, a API gera uma provisória e
+ * devolve UMA vez — depois disso ela não é mais legível em lugar nenhum.
+ */
+export async function resetTenantMemberPasswordAction(
+  tenantId: string,
+  userId: string,
+  input: ResetTenantUserPasswordInput = {},
+): Promise<ActionResult<{ password: string; email: string }>> {
+  return run(async () => {
+    const { data } = await apiFetch<{ password: string; email: string }>(
+      `/api/v1/platform/tenants/${tenantId}/usuarios/${userId}/senha`,
+      { method: 'POST', body: input },
+    )
+    return data
   })
 }
 

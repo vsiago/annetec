@@ -110,6 +110,9 @@ export type Partner = z.infer<typeof partner>
 export const createPartnerInput = partner.omit({ id: true, tenantId: true })
 export type CreatePartnerInput = z.infer<typeof createPartnerInput>
 
+export const updatePartnerInput = createPartnerInput.partial()
+export type UpdatePartnerInput = z.infer<typeof updatePartnerInput>
+
 export const benefit = z.object({
   id: uuid,
   tenantId: uuid,
@@ -124,3 +127,6 @@ export type Benefit = z.infer<typeof benefit>
 
 export const createBenefitInput = benefit.omit({ id: true, tenantId: true })
 export type CreateBenefitInput = z.infer<typeof createBenefitInput>
+
+export const updateBenefitInput = createBenefitInput.partial()
+export type UpdateBenefitInput = z.infer<typeof updateBenefitInput>

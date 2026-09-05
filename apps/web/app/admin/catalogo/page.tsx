@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { Convenio, HealthPlan, PriceTable, WaitingPeriod } from '@annetec/contracts'
+import { useAdminScope } from '@/contexts/admin-scope-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +10,6 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { EmptyStateCard } from '@/components/dashboard/empty-state'
 import {
-  getOperatorAction,
   listOperatorConveniosAction,
   listOperatorPlansAction,
   listOperatorPriceTablesAction,
@@ -34,9 +34,11 @@ function money(value: number | null) {
 }
 
 export default function CatalogoPage() {
-  const [tenantSlug, setTenantSlug] = useState<string | null>(null)
+  const { slug: tenantSlug, isLoading: carregandoEscopo, error: scopeError } = useAdminScope()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const mensagemErro = scopeError || error
 
   const [convenios, setConvenios] = useState<Convenio[]>([])
   const [busca, setBusca] = useState('')
@@ -48,27 +50,23 @@ export default function CatalogoPage() {
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false)
 
   useEffect(() => {
-    getOperatorAction().then(async result => {
-      if (!result.success) {
-        setError(result.error)
-        setLoading(false)
-        return
-      }
-      if (!result.data) {
-        setError('A Annetec ainda não está configurada como operadora.')
-        setLoading(false)
-        return
-      }
-      setTenantSlug(result.data.slug)
-      const lista = await listOperatorConveniosAction(result.data.slug)
+    if (!tenantSlug) {
+      setLoading(carregandoEscopo)
+      return
+    }
+    // Trocar de inquilino recarrega o catálogo: cada um tem seu próprio ERP.
+    setLoading(true)
+    setSelecionado(null)
+    listOperatorConveniosAction(tenantSlug).then(lista => {
       setLoading(false)
       if (!lista.success) {
         setError(lista.error)
         return
       }
+      setError('')
       setConvenios(lista.data)
     })
-  }, [])
+  }, [tenantSlug, carregandoEscopo])
 
   async function abrir(convenio: Convenio) {
     if (!tenantSlug) return
@@ -117,10 +115,10 @@ export default function CatalogoPage() {
         </p>
       </div>
 
-      {error && (
+      {mensagemErro && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{mensagemErro}</AlertDescription>
         </Alert>
       )}
 
@@ -141,7 +139,11 @@ export default function CatalogoPage() {
           </CardHeader>
           <CardContent className="space-y-1 max-h-[520px] overflow-y-auto">
             {filtrados.length === 0 && (
-              <p className="text-sm text-muted-foreground py-6 text-center">Nenhum convênio encontrado.</p>
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                {convenios.length === 0
+                  ? 'Este inquilino não tem convênio ativo no ERP — confira a integração em Inquilinos.'
+                  : 'Nenhum convênio bate com o filtro.'}
+              </p>
             )}
             {filtrados.map(convenio => (
               <button

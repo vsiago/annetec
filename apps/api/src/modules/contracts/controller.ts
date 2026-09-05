@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { AppError } from '@/http/errors'
 import { requireAuth, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
+import { recordAudit } from '@/lib/audit'
 import { created, ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, param, query } from '@/http/validate'
@@ -53,7 +54,15 @@ export const contractsController = new Hono<AppEnv>()
 
   .post('/:codigo/sync', param(codigoParam), requireTenantRole('admin', 'seller'), async c => {
     const tenant = tenantOf(c)
-    return ok(c, await contractsService.refreshFromUpstream(tenant.id, c.req.valid('param').codigo))
+    const { codigo } = c.req.valid('param')
+    const contract = await contractsService.refreshFromUpstream(tenant.id, codigo)
+    await recordAudit(c, {
+      action: 'contract.synced',
+      resource: 'contract',
+      resourceId: codigo,
+      metadata: { status: contract.status, vidas: contract.beneficiaries?.length ?? 0 },
+    })
+    return ok(c, contract)
   })
 
   .post('/', requireTenantRole('admin', 'seller'), json(createContractInput), async c => {
@@ -62,12 +71,28 @@ export const contractsController = new Hono<AppEnv>()
     const contract = await contractsService.create(tenant.id, c.req.valid('json'), {
       sellerUserId: auth?.membership.tenantRole === 'seller' ? auth.user.id : null,
     })
+    // Adesão é a escrita mais consequente do sistema: cria contrato e cobrança
+    // reais no ERP, e a Digital Saúde não tem desfazer.
+    await recordAudit(c, {
+      action: 'contract.created',
+      resource: 'contract',
+      resourceId: contract.upstreamCodigo,
+      metadata: {
+        proposalNumber: contract.proposalNumber,
+        holderName: contract.holderName,
+        planCodigo: contract.planCodigo,
+        convenioCodigo: contract.convenioCodigo,
+      },
+    })
     return created(c, contract)
   })
 
   .post('/:codigo/produzido', param(codigoParam), requireTenantRole('admin'), async c => {
     const tenant = tenantOf(c)
-    return ok(c, await contractsService.markAsProduced(tenant.id, c.req.valid('param').codigo))
+    const { codigo } = c.req.valid('param')
+    const contract = await contractsService.markAsProduced(tenant.id, codigo)
+    await recordAudit(c, { action: 'contract.marked_produced', resource: 'contract', resourceId: codigo })
+    return ok(c, contract)
   })
 
   .post('/:codigo/carteirinha/email', param(codigoParam), async c => {
@@ -75,6 +100,12 @@ export const contractsController = new Hono<AppEnv>()
     const contract = await contractsService.getByCodigo(tenant.id, c.req.valid('param').codigo)
     assertCanSee(c, contract)
     const message = await contractsService.sendMembershipCardByEmail(tenant.id, contract.upstreamCodigo)
+    // Dispara e-mail para o titular — sai da plataforma, então entra na trilha.
+    await recordAudit(c, {
+      action: 'contract.membership_card_emailed',
+      resource: 'contract',
+      resourceId: contract.upstreamCodigo,
+    })
     return ok(c, { message })
   })
 

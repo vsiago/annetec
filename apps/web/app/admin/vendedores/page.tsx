@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { TenantUser } from '@annetec/contracts'
+import { useAdminScope } from '@/contexts/admin-scope-context'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -20,9 +22,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { EmptyStateCard } from '@/components/dashboard/empty-state'
+import {
+  discoverTenantIntegrationAction,
+  getTenantIntegrationAction,
+} from '@/lib/actions/tenants-api'
 import { getInitials } from '@/lib/utils'
 import {
-  getOperatorAction,
   listOperatorSellersAction,
   createOperatorSellerAction,
   linkOperatorSellerProdutorAction,
@@ -32,9 +37,13 @@ import {
 import { Plus, Loader2, UserCog, Link2, CheckCircle2, Mail, Phone, UserX, Receipt } from 'lucide-react'
 
 export default function OperatorVendedoresPage() {
-  const [tenantSlug, setTenantSlug] = useState<string | null>(null)
-  const [loadingOperator, setLoadingOperator] = useState(true)
-  const [operatorError, setOperatorError] = useState('')
+  // De qual inquilino são os dados desta tela — ver AdminScopeProvider.
+  const {
+    slug: tenantSlug,
+    tenantId,
+    isLoading: loadingOperator,
+    error: operatorError,
+  } = useAdminScope()
 
   const [sellers, setSellers] = useState<TenantUser[]>([])
   const [loadingSellers, setLoadingSellers] = useState(false)
@@ -42,20 +51,6 @@ export default function OperatorVendedoresPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [linkOpen, setLinkOpen] = useState<TenantUser | null>(null)
 
-  useEffect(() => {
-    getOperatorAction().then(result => {
-      setLoadingOperator(false)
-      if (!result.success) {
-        setOperatorError(result.error)
-        return
-      }
-      if (!result.data) {
-        setOperatorError('A Annetec ainda não está configurada como operadora.')
-        return
-      }
-      setTenantSlug(result.data.slug)
-    })
-  }, [])
 
   const refresh = async (slug: string) => {
     setLoadingSellers(true)
@@ -80,7 +75,7 @@ export default function OperatorVendedoresPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Vendedores</h1>
           <p className="text-muted-foreground">
-            Vendedores da Annetec como operadora, vinculados a um produtor na Digital Saúde.
+            Vendedores do inquilino selecionado acima, vinculados a um produtor na Digital Saúde.
           </p>
         </div>
         {tenantSlug && (
@@ -196,6 +191,7 @@ export default function OperatorVendedoresPage() {
 
       {linkOpen && tenantSlug && (
         <LinkProdutorDialog
+          tenantId={tenantId}
           seller={linkOpen}
           tenantSlug={tenantSlug}
           onOpenChange={open => !open && setLinkOpen(null)}
@@ -301,14 +297,23 @@ function AddSellerDialog({
 function LinkProdutorDialog({
   seller,
   tenantSlug,
+  tenantId,
   onOpenChange,
   onLinked,
 }: {
   seller: TenantUser
   tenantSlug: string
+  tenantId: string | null
   onOpenChange: (open: boolean) => void
   onLinked: () => void
 }) {
+  // O grupo de produtor é obrigatório no POST /produtor/ e a Digital Saúde
+  // não tem endpoint que o liste — vem da descoberta, que o encontra dentro do
+  // cadastro de um produtor existente. Enquanto não vier, o campo aceita
+  // digitação, porque um inquilino novo pode não ter produtor nenhum ainda.
+  const [gruposProdutor, setGruposProdutor] = useState<{ codigo: string; nome: string }[]>([])
+  const [carregandoGrupos, setCarregandoGrupos] = useState(false)
+
   const [codigo, setCodigo] = useState('')
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
@@ -338,6 +343,22 @@ function LinkProdutorDialog({
     }
     onLinked()
   }
+
+  useEffect(() => {
+    if (!tenantId) return
+    setCarregandoGrupos(true)
+    getTenantIntegrationAction(tenantId).then(async result => {
+      const salvo = result.success ? result.data?.defaultGrupoProdutorCodigo : undefined
+      if (salvo) setGrupoProdutorCodigo(atual => atual || salvo)
+
+      const descoberta = await discoverTenantIntegrationAction(tenantId)
+      setCarregandoGrupos(false)
+      if (!descoberta.success) return
+      setGruposProdutor(descoberta.data.gruposProdutor)
+      const sugerido = descoberta.data.sugestao.defaultGrupoProdutorCodigo
+      if (sugerido) setGrupoProdutorCodigo(atual => atual || sugerido)
+    })
+  }, [tenantId])
 
   const handleCreateNew = async () => {
     setError('')
@@ -423,8 +444,34 @@ function LinkProdutorDialog({
               <Input value={newDocumento} onChange={e => setNewDocumento(e.target.value)} />
             </div>
             <div className="grid gap-1.5">
-              <Label>Código do grupo produtor *</Label>
-              <Input value={grupoProdutorCodigo} onChange={e => setGrupoProdutorCodigo(e.target.value)} />
+              <Label>Grupo de produtor *</Label>
+              {gruposProdutor.length > 0 ? (
+                <Select value={grupoProdutorCodigo} onValueChange={setGrupoProdutorCodigo}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o grupo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {gruposProdutor.map(grupo => (
+                      <SelectItem key={grupo.codigo} value={grupo.codigo}>
+                        {grupo.nome || grupo.codigo} · {grupo.codigo}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <>
+                  <Input
+                    value={grupoProdutorCodigo}
+                    onChange={e => setGrupoProdutorCodigo(e.target.value)}
+                    placeholder={carregandoGrupos ? 'Procurando no ERP…' : 'Ex: HE83KX6KA2'}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {carregandoGrupos
+                      ? 'Procurando os grupos disponíveis na Digital Saúde…'
+                      : 'Nenhum grupo encontrado no ERP ainda — a descoberta precisa de pelo menos um produtor já cadastrado. Informe o código do painel da Digital Saúde.'}
+                  </p>
+                </>
+              )}
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <DialogFooter>

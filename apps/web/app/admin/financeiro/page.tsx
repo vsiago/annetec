@@ -10,7 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { EmptyStateCard } from '@/components/dashboard/empty-state'
 import { cn, getInitials } from '@/lib/utils'
-import { getOperatorAction, listOperatorOverdueInvoicesAction } from '@/lib/actions/operator-api'
+import { useAdminScope } from '@/contexts/admin-scope-context'
+import {
+  listOperatorOverdueInvoicesAction,
+  searchOperatorContractByCpfAction,
+  sendOperatorOverdueInvoicesAction,
+} from '@/lib/actions/operator-api'
 import {
   Search,
   Loader2,
@@ -21,6 +26,7 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Mail,
 } from 'lucide-react'
 
 /**
@@ -75,9 +81,8 @@ function toTimestamp(value: string | null) {
 }
 
 export default function OperatorFinanceiroPage() {
-  const [tenantSlug, setTenantSlug] = useState<string | null>(null)
-  const [loadingOperator, setLoadingOperator] = useState(true)
-  const [operatorError, setOperatorError] = useState('')
+  // De qual inquilino são os dados desta tela — ver AdminScopeProvider.
+  const { slug: tenantSlug, isLoading: loadingOperator, error: operatorError } = useAdminScope()
 
   const [invoices, setInvoices] = useState<Invoice[] | null>(null)
   const [loadingInvoices, setLoadingInvoices] = useState(false)
@@ -94,21 +99,10 @@ export default function OperatorFinanceiroPage() {
     direction: 'desc', // vencimentos mais recentes primeiro, por padrão
   })
   const [copiedCodigo, setCopiedCodigo] = useState<string | null>(null)
+  /** Envio de cobrança: código da fatura em andamento e o resultado da última. */
+  const [sendingCodigo, setSendingCodigo] = useState<string | null>(null)
+  const [sendFeedback, setSendFeedback] = useState<{ codigo: string; texto: string; erro: boolean } | null>(null)
 
-  useEffect(() => {
-    getOperatorAction().then(result => {
-      setLoadingOperator(false)
-      if (!result.success) {
-        setOperatorError(result.error)
-        return
-      }
-      if (!result.data) {
-        setOperatorError('A Annetec ainda não está configurada como operadora.')
-        return
-      }
-      setTenantSlug(result.data.slug)
-    })
-  }, [])
 
   const loadInvoices = async (slug: string, page = 1) => {
     setLoadingInvoices(true)
@@ -178,6 +172,44 @@ export default function OperatorFinanceiroPage() {
     }
   }
 
+  /**
+   * Reenvia a cobrança do contrato desta fatura.
+   *
+   * `/fatura/procurarPorVencida` não devolve o código do contrato — só o da
+   * fatura e os dados do titular. O caminho até o contrato é o CPF, que é
+   * justamente por isso que `Invoice.beneficiaryCpf` passou a ser exposto.
+   * Manda e-mail de verdade para o titular, então confirma antes.
+   */
+  const handleSendOverdue = async (invoice: Invoice) => {
+    if (!tenantSlug || !invoice.beneficiaryCpf) return
+    const nome = invoice.beneficiaryName ?? 'o titular'
+    if (!window.confirm(`Reenviar por e-mail as faturas vencidas de ${nome}? O e-mail sai pela Digital Saúde e não tem desfazer.`)) {
+      return
+    }
+
+    setSendingCodigo(invoice.upstreamCodigo)
+    setSendFeedback(null)
+
+    const contratos = await searchOperatorContractByCpfAction(tenantSlug, invoice.beneficiaryCpf)
+    if (!contratos.success || contratos.data.length === 0) {
+      setSendingCodigo(null)
+      setSendFeedback({
+        codigo: invoice.upstreamCodigo,
+        texto: contratos.success ? 'Nenhum contrato encontrado para este CPF.' : contratos.error,
+        erro: true,
+      })
+      return
+    }
+
+    const result = await sendOperatorOverdueInvoicesAction(tenantSlug, contratos.data[0]!.upstreamCodigo)
+    setSendingCodigo(null)
+    setSendFeedback({
+      codigo: invoice.upstreamCodigo,
+      texto: result.success ? 'Cobrança reenviada.' : result.error,
+      erro: !result.success,
+    })
+  }
+
   const SortHeader = ({ column, label }: { column: SortColumn; label: string }) => {
     const active = sort.column === column
     return (
@@ -209,7 +241,7 @@ export default function OperatorFinanceiroPage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Financeiro</h1>
         <p className="text-muted-foreground">
-          Faturas vencidas da carteira da Annetec como operadora, direto da Digital Saúde.
+          Faturas vencidas da carteira do inquilino selecionado acima, direto da Digital Saúde.
         </p>
       </div>
 
@@ -383,15 +415,43 @@ export default function OperatorFinanceiroPage() {
                             )}
                           </td>
                           <td className="py-4 px-6 text-right">
-                            {invoice.invoiceUrl && (
-                              <a
-                                href={invoice.invoiceUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                            <div className="flex items-center justify-end gap-2">
+                              {invoice.beneficiaryCpf && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={sendingCodigo === invoice.upstreamCodigo}
+                                  onClick={() => handleSendOverdue(invoice)}
+                                  title="Reenviar as faturas vencidas deste titular por e-mail"
+                                >
+                                  {sendingCodigo === invoice.upstreamCodigo ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Mail className="h-3.5 w-3.5" />
+                                  )}
+                                  <span className="sr-only">Reenviar cobrança</span>
+                                </Button>
+                              )}
+                              {invoice.invoiceUrl && (
+                                <a
+                                  href={invoice.invoiceUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                                >
+                                  Ver <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              )}
+                            </div>
+                            {sendFeedback?.codigo === invoice.upstreamCodigo && (
+                              <p
+                                className={cn(
+                                  'mt-1 text-xs',
+                                  sendFeedback.erro ? 'text-destructive' : 'text-emerald-700',
+                                )}
                               >
-                                Ver <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
+                                {sendFeedback.texto}
+                              </p>
                             )}
                           </td>
                         </tr>

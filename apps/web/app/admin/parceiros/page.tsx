@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { Benefit, BenefitCategory, Partner, PartnerCategory, UF } from '@annetec/contracts'
 import { UFS } from '@annetec/contracts'
+import { useAdminScope } from '@/contexts/admin-scope-context'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,16 +21,17 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { EmptyStateCard } from '@/components/dashboard/empty-state'
-import { getOperatorAction } from '@/lib/actions/operator-api'
 import {
   listOperatorPartnersAction,
   createOperatorPartnerAction,
+  updateOperatorPartnerAction,
   deleteOperatorPartnerAction,
   listOperatorBenefitsAction,
   createOperatorBenefitAction,
+  updateOperatorBenefitAction,
   deleteOperatorBenefitAction,
 } from '@/lib/actions/operator-network-api'
-import { Plus, Loader2, Handshake, Gift, Trash2, MapPin, Phone } from 'lucide-react'
+import { Plus, Loader2, Handshake, Gift, Trash2, MapPin, Phone, Pencil } from 'lucide-react'
 
 const PARTNER_CATEGORY_LABEL: Record<PartnerCategory, string> = {
   health: 'Saúde',
@@ -50,24 +52,9 @@ const BENEFIT_CATEGORY_LABEL: Record<BenefitCategory, string> = {
 }
 
 export default function OperatorRedePage() {
-  const [tenantSlug, setTenantSlug] = useState<string | null>(null)
-  const [loadingOperator, setLoadingOperator] = useState(true)
-  const [operatorError, setOperatorError] = useState('')
+  // De qual inquilino são os dados desta tela — ver AdminScopeProvider.
+  const { slug: tenantSlug, isLoading: loadingOperator, error: operatorError } = useAdminScope()
 
-  useEffect(() => {
-    getOperatorAction().then(result => {
-      setLoadingOperator(false)
-      if (!result.success) {
-        setOperatorError(result.error)
-        return
-      }
-      if (!result.data) {
-        setOperatorError('A Annetec ainda não está configurada como operadora.')
-        return
-      }
-      setTenantSlug(result.data.slug)
-    })
-  }, [])
 
   return (
     <div className="space-y-6">
@@ -101,6 +88,8 @@ export default function OperatorRedePage() {
 }
 
 function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
+  /** Parceiro em edição — `null` quando o diálogo está criando. */
+  const [editing, setEditing] = useState<Partner | null>(null)
   const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
@@ -124,7 +113,16 @@ function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <AddPartnerDialog open={addOpen} onOpenChange={setAddOpen} tenantSlug={tenantSlug} onCreated={refresh} />
+        <AddPartnerDialog
+          open={addOpen}
+          onOpenChange={aberto => {
+            setAddOpen(aberto)
+            if (!aberto) setEditing(null)
+          }}
+          tenantSlug={tenantSlug}
+          editing={editing}
+          onCreated={refresh}
+        />
       </div>
 
       {loading ? (
@@ -132,7 +130,11 @@ function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
           <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
         </div>
       ) : partners.length === 0 ? (
-        <EmptyStateCard icon={Handshake} title="Nenhum parceiro cadastrado" description='Clique em "Novo parceiro" para começar.' />
+        <EmptyStateCard
+          icon={Handshake}
+          title="Nenhum parceiro neste inquilino"
+          description="A rede credenciada é conteúdo próprio da Annetec — a Digital Saúde não tem equivalente, então cada inquilino monta a sua. Troque de inquilino no seletor acima para ver outra."
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {partners.map(partner => (
@@ -140,14 +142,29 @@ function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium text-foreground">{partner.name}</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(partner.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="flex shrink-0 gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => {
+                        setEditing(partner)
+                        setAddOpen(true)
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      <span className="sr-only">Editar {partner.name}</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(partner.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span className="sr-only">Remover {partner.name}</span>
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">{PARTNER_CATEGORY_LABEL[partner.category]}</Badge>
@@ -175,15 +192,18 @@ function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
   )
 }
 
+/** Cria ou edita — `editing` decide qual. */
 function AddPartnerDialog({
   open,
   onOpenChange,
   tenantSlug,
+  editing,
   onCreated,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   tenantSlug: string
+  editing: Partner | null
   onCreated: () => void
 }) {
   const [name, setName] = useState('')
@@ -196,6 +216,20 @@ function AddPartnerDialog({
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // Repõe o formulário sempre que o diálogo abre, para não carregar resíduo
+  // de um parceiro editado antes.
+  useEffect(() => {
+    if (!open) return
+    setError('')
+    setName(editing?.name ?? '')
+    setCategory(editing?.category ?? 'health')
+    setDiscountPercent(editing ? String(editing.discountPercent) : '')
+    setAddress(editing?.address ?? '')
+    setPhone(editing?.phone ?? '')
+    setCity(editing?.city ?? '')
+    setState((editing?.state as UF | null) ?? '')
+  }, [open, editing])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -203,8 +237,7 @@ function AddPartnerDialog({
       setError('Preencha nome e desconto')
       return
     }
-    setSubmitting(true)
-    const result = await createOperatorPartnerAction(tenantSlug, {
+    const payload = {
       name,
       category,
       discountPercent: Number(discountPercent),
@@ -212,8 +245,13 @@ function AddPartnerDialog({
       phone: phone || null,
       city: city || null,
       state: state || null,
-      status: 'active',
-    })
+      status: editing?.status ?? ('active' as const),
+    }
+
+    setSubmitting(true)
+    const result = editing
+      ? await updateOperatorPartnerAction(tenantSlug, editing.id, payload)
+      : await createOperatorPartnerAction(tenantSlug, payload)
     setSubmitting(false)
     if (!result.success) {
       setError(result.error)
@@ -238,7 +276,7 @@ function AddPartnerDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Novo parceiro</DialogTitle>
+          <DialogTitle>{editing ? 'Editar parceiro' : 'Novo parceiro'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-3">
           <div className="grid gap-1.5">
@@ -299,7 +337,7 @@ function AddPartnerDialog({
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Criar parceiro
+              {editing ? 'Salvar parceiro' : 'Criar parceiro'}
             </Button>
           </DialogFooter>
         </form>
@@ -309,6 +347,7 @@ function AddPartnerDialog({
 }
 
 function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
+  const [editing, setEditing] = useState<Benefit | null>(null)
   const [benefits, setBenefits] = useState<Benefit[]>([])
   const [loading, setLoading] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
@@ -332,7 +371,16 @@ function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <AddBenefitDialog open={addOpen} onOpenChange={setAddOpen} tenantSlug={tenantSlug} onCreated={refresh} />
+        <AddBenefitDialog
+          open={addOpen}
+          onOpenChange={aberto => {
+            setAddOpen(aberto)
+            if (!aberto) setEditing(null)
+          }}
+          tenantSlug={tenantSlug}
+          editing={editing}
+          onCreated={refresh}
+        />
       </div>
 
       {loading ? (
@@ -340,7 +388,11 @@ function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
           <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
         </div>
       ) : benefits.length === 0 ? (
-        <EmptyStateCard icon={Gift} title="Nenhum benefício cadastrado" description='Clique em "Novo benefício" para começar.' />
+        <EmptyStateCard
+          icon={Gift}
+          title="Nenhum benefício neste inquilino"
+          description="O clube de benefícios é conteúdo próprio da Annetec, cadastrado por inquilino."
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {benefits.map(benefit => (
@@ -348,14 +400,29 @@ function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium text-foreground">{benefit.name}</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(benefit.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="flex shrink-0 gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => {
+                        setEditing(benefit)
+                        setAddOpen(true)
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      <span className="sr-only">Editar {benefit.name}</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(benefit.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span className="sr-only">Remover {benefit.name}</span>
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">{BENEFIT_CATEGORY_LABEL[benefit.category]}</Badge>
@@ -374,15 +441,18 @@ function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
   )
 }
 
+/** Cria ou edita — `editing` decide qual. */
 function AddBenefitDialog({
   open,
   onOpenChange,
   tenantSlug,
+  editing,
   onCreated,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   tenantSlug: string
+  editing: Benefit | null
   onCreated: () => void
 }) {
   const [name, setName] = useState('')
@@ -393,6 +463,16 @@ function AddBenefitDialog({
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  useEffect(() => {
+    if (!open) return
+    setError('')
+    setName(editing?.name ?? '')
+    setDescription(editing?.description ?? '')
+    setCategory(editing?.category ?? 'discount')
+    setDiscountPercent(editing?.discountPercent != null ? String(editing.discountPercent) : '')
+    setProvider(editing?.provider ?? '')
+  }, [open, editing])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -400,15 +480,19 @@ function AddBenefitDialog({
       setError('Preencha nome e descrição')
       return
     }
-    setSubmitting(true)
-    const result = await createOperatorBenefitAction(tenantSlug, {
+    const payload = {
       name,
       description,
       category,
       discountPercent: discountPercent ? Number(discountPercent) : null,
       provider: provider || null,
-      locations: [],
-    })
+      locations: editing?.locations ?? [],
+    }
+
+    setSubmitting(true)
+    const result = editing
+      ? await updateOperatorBenefitAction(tenantSlug, editing.id, payload)
+      : await createOperatorBenefitAction(tenantSlug, payload)
     setSubmitting(false)
     if (!result.success) {
       setError(result.error)
@@ -431,7 +515,7 @@ function AddBenefitDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Novo benefício</DialogTitle>
+          <DialogTitle>{editing ? 'Editar benefício' : 'Novo benefício'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-3">
           <div className="grid gap-1.5">
@@ -471,7 +555,7 @@ function AddBenefitDialog({
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Criar benefício
+              {editing ? 'Salvar benefício' : 'Criar benefício'}
             </Button>
           </DialogFooter>
         </form>

@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { Contract } from '@annetec/contracts'
+import { useAdminScope } from '@/contexts/admin-scope-context'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { EmptyStateCard } from '@/components/dashboard/empty-state'
 import {
-  getOperatorAction,
   listOperatorContractsAction,
   searchOperatorContractByCpfAction,
   syncOperatorContractAction,
@@ -42,9 +42,8 @@ function money(value: number | null) {
 
 export default function OperatorClientesPage() {
   const router = useRouter()
-  const [tenantSlug, setTenantSlug] = useState<string | null>(null)
-  const [loadingOperator, setLoadingOperator] = useState(true)
-  const [operatorError, setOperatorError] = useState('')
+  // De qual inquilino são os dados desta tela — ver AdminScopeProvider.
+  const { slug: tenantSlug, isLoading: loadingOperator, error: operatorError } = useAdminScope()
 
   const [contracts, setContracts] = useState<Contract[]>([])
   const [loadingContracts, setLoadingContracts] = useState(false)
@@ -55,20 +54,6 @@ export default function OperatorClientesPage() {
   const [searchMessage, setSearchMessage] = useState('')
   const [syncingCodigo, setSyncingCodigo] = useState<string | null>(null)
 
-  useEffect(() => {
-    getOperatorAction().then(result => {
-      setLoadingOperator(false)
-      if (!result.success) {
-        setOperatorError(result.error)
-        return
-      }
-      if (!result.data) {
-        setOperatorError('A Annetec ainda não está configurada como operadora.')
-        return
-      }
-      setTenantSlug(result.data.slug)
-    })
-  }, [])
 
   useEffect(() => {
     if (!tenantSlug) return
@@ -142,7 +127,7 @@ export default function OperatorClientesPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
           <p className="text-muted-foreground">
-            Contratos da Annetec como operadora, direto da Digital Saúde — não misturado com os
+            Contratos do inquilino selecionado acima, direto da Digital Saúde — não misturado com os
             inquilinos.
           </p>
         </div>

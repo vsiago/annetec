@@ -19,7 +19,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { EmptyStateCard } from '@/components/dashboard/empty-state'
-import { getOperatorAction, listOperatorSellersAction } from '@/lib/actions/operator-api'
+import { useAdminScope } from '@/contexts/admin-scope-context'
+import { listOperatorSellersAction } from '@/lib/actions/operator-api'
 import { listOperatorLeadsAction, createOperatorLeadAction, updateOperatorLeadAction } from '@/lib/actions/operator-crm-api'
 import { Search, Loader2, Plus, UserPlus, Phone, Mail } from 'lucide-react'
 
@@ -40,9 +41,7 @@ function money(value: number | null) {
 
 export default function OperatorLeadsPage() {
   const router = useRouter()
-  const [tenantSlug, setTenantSlug] = useState<string | null>(null)
-  const [loadingOperator, setLoadingOperator] = useState(true)
-  const [operatorError, setOperatorError] = useState('')
+  const { slug: tenantSlug, isLoading: loadingOperator, error: operatorError } = useAdminScope()
 
   const [leads, setLeads] = useState<Lead[]>([])
   const [sellers, setSellers] = useState<TenantUser[]>([])
@@ -51,24 +50,13 @@ export default function OperatorLeadsPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [movingId, setMovingId] = useState<string | null>(null)
 
+  // Os vendedores do inquilino alimentam o seletor de responsável pelo lead.
   useEffect(() => {
-    getOperatorAction().then(async result => {
-      if (!result.success) {
-        setOperatorError(result.error)
-        setLoadingOperator(false)
-        return
-      }
-      if (!result.data) {
-        setOperatorError('A Annetec ainda não está configurada como operadora.')
-        setLoadingOperator(false)
-        return
-      }
-      setTenantSlug(result.data.slug)
-      const sellersResult = await listOperatorSellersAction(result.data.slug)
-      if (sellersResult.success) setSellers(sellersResult.data.filter(s => s.active))
-      setLoadingOperator(false)
+    if (!tenantSlug) return
+    listOperatorSellersAction(tenantSlug).then(result => {
+      if (result.success) setSellers(result.data.filter(s => s.active))
     })
-  }, [])
+  }, [tenantSlug])
 
   const refresh = async (slug: string) => {
     setLoadingLeads(true)
@@ -112,7 +100,7 @@ export default function OperatorLeadsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Leads</h1>
-          <p className="text-muted-foreground">Funil comercial da Annetec — antes de virar contrato.</p>
+          <p className="text-muted-foreground">Funil comercial do inquilino selecionado acima — antes de virar contrato.</p>
         </div>
         {tenantSlug && (
           <AddLeadDialog
@@ -150,8 +138,8 @@ export default function OperatorLeadsPage() {
           ) : leads.length === 0 ? (
             <EmptyStateCard
               icon={UserPlus}
-              title="Nenhum lead cadastrado"
-              description='Clique em "Novo lead" para começar o funil.'
+              title="Nenhum lead neste inquilino"
+              description='O funil é dado da Annetec, não vem da Digital Saúde — começa vazio até alguém criar o primeiro lead. Use "Novo lead", ou troque de inquilino no seletor acima.'
             />
           ) : (
             <div className="overflow-x-auto pb-2">

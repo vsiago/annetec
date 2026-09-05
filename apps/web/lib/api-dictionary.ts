@@ -93,6 +93,7 @@ export const annetecModules: ApiModule[] = [
           { method: 'GET', route: '/:id', description: 'Detalhe de um inquilino.', access: 'superadmin · platform_admin' },
           { method: 'PATCH', route: '/:id', description: 'Atualiza cadastro, marca (branding), plano contratado ou status comercial.', access: 'superadmin · platform_admin' },
           { method: 'DELETE', route: '/:id', description: 'Cancela o inquilino. Lógico — nada é apagado, o histórico continua acessível.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/operador', description: 'A Annetec operando como operadora (kind: platform) — no máximo uma linha existe. É o escopo padrão das telas de operação do /admin.', access: 'superadmin · platform_admin' },
         ],
       },
       {
@@ -101,6 +102,15 @@ export const annetecModules: ApiModule[] = [
           { method: 'GET', route: '/:id/integration', description: 'Configuração da integração do inquilino, sem os segredos.', access: 'superadmin · platform_admin' },
           { method: 'PUT', route: '/:id/integration', description: 'Grava token/senhaApi cifrados (AES-256-GCM) — valida contra o ERP antes de salvar.', access: 'superadmin · platform_admin' },
           { method: 'POST', route: '/:id/integration/test', description: 'Testa a integração já configurada e atualiza o último status.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/:id/integration/discovery', description: 'Lê no ERP os códigos que não têm endpoint próprio (grupo, filial, produto, grupo de produtor) percorrendo outras respostas. Só leitura.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/:id/integration/capabilities', description: 'Apura operação a operação o que o token do inquilino executa de fato — o 401 da Digital Saúde é por endpoint, não por credencial.', access: 'superadmin · platform_admin' },
+        ],
+      },
+      {
+        heading: 'Acesso ao inquilino',
+        items: [
+          { method: 'GET', route: '/:id/usuarios', description: 'Contas do inquilino pela ótica da plataforma. A rota equivalente do inquilino é por slug; esta é por id, que é a chave da tela de gestão.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/:id/usuarios/:userId/senha', description: 'Reset administrativo de senha, sem exigir a senha atual. Confere o vínculo com o inquilino antes (id de fora devolve 404) e registra na auditoria sem gravar a senha. Omitir o corpo gera uma provisória, devolvida uma única vez.', access: 'superadmin' },
         ],
       },
     ],
@@ -117,6 +127,56 @@ export const annetecModules: ApiModule[] = [
         items: [
           { method: 'GET', route: '/', description: 'Lista as contas de plataforma, com busca e filtro por papel.', access: 'superadmin · platform_admin' },
           { method: 'POST', route: '/', description: 'Cria uma conta de plataforma nova. Só superadmin — evita autopromoção.', access: 'superadmin' },
+          { method: 'GET', route: '/:id', description: 'Detalhe de uma conta de plataforma.', access: 'superadmin · platform_admin' },
+          { method: 'PATCH', route: '/:id', description: 'Edita nome, telefone, papel e ativação. Recusa autodesativação e recusa deixar a plataforma sem nenhum superadmin ativo. Desativar usa user.banned do Better Auth — a conta para de entrar de verdade, e continua assinando o histórico.', access: 'superadmin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Planos de Assinatura',
+    prefix: '/api/v1/platform/plans',
+    controllerRef: 'tenantPlansController',
+    summary:
+      'Catálogo de planos que a Annetec vende aos inquilinos — o que a tela /admin/configuracoes edita. Dado 100% Annetec: a Digital Saúde não sabe que a plataforma é vendida por assinatura.',
+    sections: [
+      {
+        heading: 'Catálogo',
+        items: [
+          { method: 'GET', route: '/', description: 'Lista os planos. Poucos registros — sem paginação.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/', description: 'Cria um plano.', access: 'superadmin' },
+          { method: 'PATCH', route: '/:id', description: 'Edita nome, preço, limite de associados ou recursos. Vale para quem já contratou o plano.', access: 'superadmin' },
+          { method: 'DELETE', route: '/:id', description: 'Remove um plano — recusado (422) enquanto houver inquilino usando, porque a FK é SET NULL e eles ficariam sem plano em silêncio.', access: 'superadmin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Rastreabilidade',
+    prefix: '/api/v1/platform/activity',
+    controllerRef: 'activityAdminController',
+    summary:
+      'Visitas de página e ações relevantes — alimenta /admin/logs. Eventos imutáveis: "online agora" e "visto por último" são derivados por consulta, não guardados à parte.',
+    sections: [
+      {
+        heading: 'Consulta',
+        items: [
+          { method: 'GET', route: '/overview', description: 'Panorama de atividade da plataforma.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/visitors', description: 'Visitantes e sessões, incluindo anônimos identificados por cookie antes de qualquer login.', access: 'superadmin · platform_admin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Ingestão de Atividade',
+    prefix: '/api/v1/activity',
+    controllerRef: 'activityIngestController',
+    summary: 'Por onde o frontend registra visita de página. Aberto: precisa aceitar visitante anônimo, antes de existir sessão.',
+    sections: [
+      {
+        heading: 'Registro',
+        items: [
+          { method: 'POST', route: '/events', description: 'Registra um evento de visita ou ação. Não exige sessão.', access: 'público' },
         ],
       },
     ],
@@ -323,7 +383,23 @@ export const annetecModules: ApiModule[] = [
         items: [
           { method: 'GET', route: '/beneficios', description: 'Benefícios do clube do inquilino.', access: 'admin · vendedor · cliente' },
           { method: 'POST', route: '/beneficios', description: 'Cadastra um benefício.', access: 'admin' },
+          { method: 'PATCH', route: '/beneficios/:id', description: 'Edita um benefício do clube.', access: 'admin' },
           { method: 'DELETE', route: '/beneficios/:id', description: 'Remove um benefício.', access: 'admin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Inquilino Público',
+    prefix: '/api/v1/t/:tenantSlug/public',
+    controllerRef: 'tenantPublicController',
+    summary:
+      'Marca e identidade do inquilino antes de qualquer login — é o que pinta a página institucional /[tenant] e a tela de entrada com as cores do clube. Inquilino cancelado não resolve aqui.',
+    sections: [
+      {
+        heading: 'Identidade',
+        items: [
+          { method: 'GET', route: '/', description: 'Nome, slug, marca e cores do inquilino. Sem sessão.', access: 'público' },
         ],
       },
     ],

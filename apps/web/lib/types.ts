@@ -11,6 +11,8 @@ export interface PlatformUser {
   role: PlatformRole
   phone?: string
   avatar?: string
+  /** Conta desativada continua existindo e assinando o histórico, mas não entra. */
+  active: boolean
   createdAt: Date
 }
 

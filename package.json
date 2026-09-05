@@ -17,7 +17,9 @@
     "db:generate": "pnpm --filter @annetec/api db:generate",
     "db:migrate": "pnpm --filter @annetec/api db:migrate",
     "db:studio": "pnpm --filter @annetec/api db:studio",
-    "db:seed": "pnpm --filter @annetec/api db:seed"
+    "db:seed": "pnpm --filter @annetec/api db:seed",
+    "dict:check": "pnpm --filter @annetec/api dict:check",
+    "e2e": "pnpm --filter @annetec/api e2e"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

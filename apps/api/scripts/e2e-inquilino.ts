@@ -571,12 +571,10 @@ function relatorio() {
   console.log('\n════════════ RELATÓRIO ════════════')
   console.table(passos.map(p => ({ ...p, detalhe: p.detalhe.slice(0, 70) })))
   console.log(
-    `
-${ok} OK · ${bloqueios.length} bloqueado(s) pela Digital Saúde · ${falhas.length} falha(s) · ${pulados} pulado(s)`,
+    `\n${ok} OK · ${bloqueios.length} bloqueado(s) pela Digital Saúde · ${falhas.length} falha(s) · ${pulados} pulado(s)`,
   )
   if (bloqueios.length > 0) {
-    console.log('
-Bloqueios do upstream (o código da Annetec está certo):')
+    console.log('\nBloqueios do upstream (o código da Annetec está certo):')
     for (const b of bloqueios) console.log(`  · [${b.fase}] ${b.passo}: ${b.detalhe.slice(0, 200)}`)
   }
   if (falhas.length > 0) {

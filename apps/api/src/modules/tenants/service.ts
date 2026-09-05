@@ -9,7 +9,7 @@ import {
 } from '@annetec/contracts'
 import { and, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { organization, tenantIntegrations, tenantProfiles } from '@/db/schema'
+import { member, organization, tenantIntegrations, tenantProfiles, user } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { auth } from '@/lib/auth'
 import { createDigitalSaudeClient } from '@/integrations/digitalsaude/client'
@@ -278,6 +278,75 @@ export const tenantsService = {
       .set({ lastCheckedAt: new Date(), lastCheckOk: ok })
       .where(eq(tenantIntegrations.organizationId, tenantId))
     return ok
+  },
+
+  /**
+   * Lista os usuários de um inquilino pela ótica da plataforma.
+   *
+   * As rotas de inquilino (`/t/:slug/usuarios`) já aceitam sessão de
+   * plataforma, mas a tela de gestão do inquilino é indexada por `id`, não
+   * por slug — e pedir o slug só para listar usuário obrigaria a tela a
+   * conhecer duas chaves da mesma coisa.
+   */
+  async listUsers(tenantId: string) {
+    const rows = await db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: member.role,
+        active: member.active,
+        createdAt: member.createdAt,
+      })
+      .from(member)
+      .innerJoin(user, eq(user.id, member.userId))
+      .where(eq(member.organizationId, tenantId))
+      .orderBy(member.createdAt)
+
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone ?? null,
+      role: row.role as 'admin' | 'seller' | 'client',
+      active: row.active,
+      createdAt: row.createdAt.toISOString(),
+    }))
+  },
+
+  /**
+   * Redefine a senha de um usuário do inquilino.
+   *
+   * Diferente de `auth.api.createUser`, o `setUserPassword` do plugin `admin`
+   * NÃO aceita chamada sem sessão — o middleware dele exige uma. Por isso os
+   * headers de quem chamou são repassados: quem chega aqui já passou por
+   * `requirePlatformRole('superadmin')`, e superadmin está em `adminRoles`,
+   * então a checagem do Better Auth aprova naturalmente.
+   *
+   * A conferência de vínculo abaixo é o que impede esta rota de virar um
+   * "resete a senha de qualquer conta do sistema" com um id chutado na URL.
+   */
+  async resetUserPassword(
+    tenantId: string,
+    userId: string,
+    headers: Headers,
+    password?: string,
+  ): Promise<{ password: string; email: string }> {
+    const [vinculo] = await db
+      .select({ email: user.email })
+      .from(member)
+      .innerJoin(user, eq(user.id, member.userId))
+      .where(and(eq(member.organizationId, tenantId), eq(member.userId, userId)))
+      .limit(1)
+
+    if (!vinculo) throw AppError.notFound('Usuário deste inquilino')
+
+    const novaSenha = password ?? generateProvisionalPassword()
+    await auth.api.setUserPassword({ body: { newPassword: novaSenha, userId }, headers })
+
+    logger.info({ tenantId, userId }, 'Senha redefinida pela equipe Annetec')
+    return { password: novaSenha, email: vinculo.email }
   },
 
   /**

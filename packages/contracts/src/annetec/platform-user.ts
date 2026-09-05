@@ -15,6 +15,8 @@ export const platformUser = z.object({
   phone: z.string().nullable(),
   role: platformRole,
   avatarUrl: z.string().nullable(),
+  /** Conta desativada continua existindo (e assinando o histórico), mas não entra. */
+  active: z.boolean(),
   createdAt: z.string().datetime(),
 })
 export type PlatformUser = z.infer<typeof platformUser>
@@ -27,3 +29,15 @@ export const createPlatformUserInput = z.object({
   password: z.string().min(8),
 })
 export type CreatePlatformUserInput = z.infer<typeof createPlatformUserInput>
+
+/**
+ * E-mail não entra: é a identidade da conta no Better Auth e trocá-lo é criar
+ * outra pessoa. Senha também não — troca de senha tem fluxo próprio.
+ */
+export const updatePlatformUserInput = z.object({
+  name: z.string().min(1).optional(),
+  phone: z.string().nullable().optional(),
+  role: platformRole.optional(),
+  active: z.boolean().optional(),
+})
+export type UpdatePlatformUserInput = z.infer<typeof updatePlatformUserInput>

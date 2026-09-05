@@ -17,7 +17,10 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
     "platform:create-admin": "tsx src/db/create-platform-admin.ts",
-    "openapi": "tsx src/openapi/generate.ts"
+    "openapi": "tsx src/openapi/generate.ts",
+    "dict:check": "tsx scripts/checar-dicionario.ts",
+    "e2e": "tsx scripts/e2e-inquilino.ts",
+    "probe:ds": "tsx scripts/probe-digitalsaude.ts"
   },
   "dependencies": {
     "@annetec/contracts": "workspace:*",

@@ -1,6 +1,12 @@
 'use server'
 
-import type { Benefit, CreateBenefitInput, CreatePartnerInput, Partner } from '@annetec/contracts'
+import type {
+  Benefit,
+  CreateBenefitInput,
+  CreatePartnerInput,
+  Partner,
+  UpdateBenefitInput,
+} from '@annetec/contracts'
 import { ApiError, apiFetch, tenantPath } from '@/lib/api/client'
 
 /**
@@ -73,6 +79,20 @@ export async function createOperatorBenefitAction(
     const { data } = await apiFetch<Benefit>(tenantPath(tenantSlug, '/rede/beneficios'), {
       method: 'POST',
       body: input,
+    })
+    return data
+  })
+}
+
+export async function updateOperatorBenefitAction(
+  tenantSlug: string,
+  id: string,
+  patch: UpdateBenefitInput,
+): Promise<ActionResult<Benefit>> {
+  return run(async () => {
+    const { data } = await apiFetch<Benefit>(tenantPath(tenantSlug, `/rede/beneficios/${id}`), {
+      method: 'PATCH',
+      body: patch,
     })
     return data
   })

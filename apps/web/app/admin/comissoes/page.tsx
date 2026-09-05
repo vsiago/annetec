@@ -9,33 +9,34 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { EmptyStateCard } from '@/components/dashboard/empty-state'
 import { getInitials } from '@/lib/utils'
-import { getOperatorAction, listOperatorSellersAction } from '@/lib/actions/operator-api'
+import { useAdminScope } from '@/contexts/admin-scope-context'
+import { listOperatorSellersAction } from '@/lib/actions/operator-api'
 import { Receipt, Loader2, UserCog, ArrowRight } from 'lucide-react'
 
 export default function OperatorComissoesPage() {
-  const [tenantSlug, setTenantSlug] = useState<string | null>(null)
+  const { slug: tenantSlug, error: scopeError } = useAdminScope()
   const [sellers, setSellers] = useState<TenantUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // Erro de escopo (sem operadora, sem inquilino) vem antes de qualquer outro.
+  const mensagemErro = scopeError || error
 
   useEffect(() => {
-    getOperatorAction().then(async result => {
+    if (!tenantSlug) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    listOperatorSellersAction(tenantSlug).then(result => {
+      setLoading(false)
       if (!result.success) {
         setError(result.error)
-        setLoading(false)
         return
       }
-      if (!result.data) {
-        setError('A Annetec ainda não está configurada como operadora.')
-        setLoading(false)
-        return
-      }
-      setTenantSlug(result.data.slug)
-      const sellersResult = await listOperatorSellersAction(result.data.slug)
-      setLoading(false)
-      if (sellersResult.success) setSellers(sellersResult.data)
+      setError('')
+      setSellers(result.data)
     })
-  }, [])
+  }, [tenantSlug])
 
   return (
     <div className="space-y-6">
@@ -44,13 +45,13 @@ export default function OperatorComissoesPage() {
         <p className="text-muted-foreground">Recibos de comissão por vendedor, direto da Digital Saúde.</p>
       </div>
 
-      {error && (
+      {mensagemErro && (
         <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">{error}</CardContent>
+          <CardContent className="py-4 text-sm text-destructive">{mensagemErro}</CardContent>
         </Card>
       )}
 
-      {!error && (
+      {!mensagemErro && (
         <Card className="border border-border/80 shadow-xs bg-card">
           <CardContent className="p-0">
             {loading ? (
@@ -60,8 +61,8 @@ export default function OperatorComissoesPage() {
             ) : sellers.length === 0 ? (
               <EmptyStateCard
                 icon={Receipt}
-                title="Nenhum vendedor cadastrado"
-                description="Cadastre vendedores primeiro na tela de Vendedores."
+                title="Nenhum vendedor neste inquilino"
+                description="Comissão vem dos recibos do produtor no ERP — sem vendedor com produtor vinculado, não há o que consultar."
                 action={
                   <Button variant="outline" size="sm" asChild>
                     <Link href="/admin/vendedores">Ir para Vendedores</Link>
@@ -87,9 +88,21 @@ export default function OperatorComissoesPage() {
                         ) : (
                           <Badge variant="outline" className="text-xs mt-0.5">Sem produtor vinculado</Badge>
                         )}
+                        {seller.upstreamProdutorCodigo && !seller.hasProdutorCredentials && (
+                          <p className="mt-1 text-xs text-amber-700">
+                            Falta a senha do produtor — o ERP exige login e senha para devolver os recibos.
+                          </p>
+                        )}
                       </div>
                     </div>
-                    {seller.upstreamProdutorCodigo ? (
+                    {/*
+                      Três estados, não dois. Ter o código do produtor não
+                      basta: `/recibo/procurarPorEmitido` do ERP exige login e
+                      senha do produtor em query string. Sem a senha guardada,
+                      "Ver comissões" só levava a um erro — agora a tela diz o
+                      que falta e leva direto para onde se resolve.
+                    */}
+                    {seller.upstreamProdutorCodigo && seller.hasProdutorCredentials ? (
                       <Button variant="outline" size="sm" asChild>
                         <Link href={`/admin/vendedores/${seller.id}/comissoes`}>
                           Ver comissões <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
@@ -98,7 +111,8 @@ export default function OperatorComissoesPage() {
                     ) : (
                       <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
                         <Link href="/admin/vendedores">
-                          <UserCog className="h-3.5 w-3.5 mr-1.5" /> Vincular produtor
+                          <UserCog className="h-3.5 w-3.5 mr-1.5" />
+                          {seller.upstreamProdutorCodigo ? 'Informar senha do produtor' : 'Vincular produtor'}
                         </Link>
                       </Button>
                     )}

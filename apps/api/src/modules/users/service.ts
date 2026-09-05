@@ -42,7 +42,13 @@ export const usersService = {
 
     const [rows, [totals]] = await Promise.all([
       db
-        .select({ member, user, upstreamProdutorCodigo: sellerProfiles.upstreamProdutorCodigo })
+        .select({
+          member,
+          user,
+          upstreamProdutorCodigo: sellerProfiles.upstreamProdutorCodigo,
+          // A senha cifrada nunca sai daqui — só se ela existe.
+          produtorPassword: sellerProfiles.upstreamProdutorPasswordEncrypted,
+        })
         .from(member)
         .innerJoin(user, eq(user.id, member.userId))
         .leftJoin(
@@ -57,7 +63,9 @@ export const usersService = {
     ])
 
     return {
-      items: rows.map(row => toDomain(row.member, row.user, row.upstreamProdutorCodigo)),
+      items: rows.map(row =>
+        toDomain(row.member, row.user, row.upstreamProdutorCodigo, Boolean(row.produtorPassword)),
+      ),
       total: totals?.value ?? 0,
     }
   },
@@ -66,11 +74,14 @@ export const usersService = {
     const row = await findMembership(tenantId, id)
     if (!row) throw AppError.notFound('Usuário')
     const [seller] = await db
-      .select({ codigo: sellerProfiles.upstreamProdutorCodigo })
+      .select({
+        codigo: sellerProfiles.upstreamProdutorCodigo,
+        senha: sellerProfiles.upstreamProdutorPasswordEncrypted,
+      })
       .from(sellerProfiles)
       .where(and(eq(sellerProfiles.userId, id), eq(sellerProfiles.organizationId, tenantId)))
       .limit(1)
-    return toDomain(row.member, row.user, seller?.codigo ?? null)
+    return toDomain(row.member, row.user, seller?.codigo ?? null, Boolean(seller?.senha))
   },
 
   async create(tenantId: string, input: CreateTenantUserInput): Promise<TenantUser> {
@@ -286,7 +297,12 @@ function generateProvisionalPassword(): string {
 type MemberRow = typeof member.$inferSelect
 type UserRow = typeof user.$inferSelect
 
-function toDomain(memberRow: MemberRow, userRow: UserRow, upstreamProdutorCodigo?: string | null): TenantUser {
+function toDomain(
+  memberRow: MemberRow,
+  userRow: UserRow,
+  upstreamProdutorCodigo?: string | null,
+  hasProdutorCredentials = false,
+): TenantUser {
   return {
     id: userRow.id,
     tenantId: memberRow.organizationId,
@@ -298,5 +314,6 @@ function toDomain(memberRow: MemberRow, userRow: UserRow, upstreamProdutorCodigo
     active: memberRow.active,
     createdAt: memberRow.createdAt.toISOString(),
     upstreamProdutorCodigo: upstreamProdutorCodigo ?? null,
+    hasProdutorCredentials,
   }
 }

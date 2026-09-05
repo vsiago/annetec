@@ -129,7 +129,7 @@ export function HeroSection() {
               
               <div className="relative rounded-[1.75rem] overflow-hidden shadow-2xl shadow-[#26365f]/15 border-4 border-white/60">
                 <img
-                  src="/images/hero-girl-clean.png"
+                  src="/images/mulher-hero.png"
                   alt="Associada ANNETEC"
                   className="w-full h-auto object-cover"
                 />

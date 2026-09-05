@@ -42,6 +42,7 @@ export async function createPlatformUser(input: CreatePlatformUserInput): Promis
     email: input.email,
     phone: input.phone,
     role: input.role,
+    active: true,
     createdAt: new Date(),
   }
   users.collection.create(user)
