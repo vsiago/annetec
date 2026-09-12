@@ -102,8 +102,28 @@
   --radius: 0.75rem;
 }
 
+/*
+ * Pilhas tipográficas. Ficam em :root (padrão shadcn: variável crua aqui,
+ * token do Tailwind em @theme apontando para ela) para que o portal
+ * white-label possa trocar a de títulos em tempo de execução — ver
+ * buildTenantThemeVars em lib/theme.ts.
+ *
+ * Correção embutida: a pilha antiga citava 'Inter' pelo NOME. O next/font
+ * registra a Inter com um nome gerado ('__Inter_xxxx'), exposto só pela
+ * variável --font-inter — então o nome literal só achava a Inter se ela
+ * estivesse instalada no computador de quem visita. E a Bw Modelica, logo
+ * antes, não carrega: os arquivos de /fonts nunca foram versionados e o
+ * servidor devolve 404. Na prática o site caía no system-ui (Segoe UI no
+ * Windows). Agora a Inter que já é baixada de fato entra.
+ */
+:root {
+  --body-font: 'Bw Modelica SS01', var(--font-inter), system-ui, sans-serif;
+  --display-font: var(--font-saira), var(--font-inter), system-ui, sans-serif;
+}
+
 @theme inline {
-  --font-sans: 'Bw Modelica SS01', 'Inter', 'Inter Fallback', system-ui, sans-serif;
+  --font-sans: var(--body-font);
+  --font-display: var(--display-font);
   --font-mono: 'Geist Mono', 'Geist Mono Fallback', monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -150,6 +170,34 @@
   }
   html {
     scroll-behavior: smooth;
+  }
+
+  /*
+   * Títulos em Saira. Bojos em superelipse (quadrados de canto macio) e
+   * terminais retos dão a leitura high-tech que conversa com o "ʌʌ" angular
+   * do logotipo — sem os chanfros das fontes tecno de jogo, que não cabem
+   * numa marca de saúde. Texto e interface seguem em Inter.
+   *
+   * Utilitários do Tailwind vivem em @layer utilities e vencem esta camada,
+   * então um `tracking-tight` pontual num título continua mandando.
+   */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--display-font);
+    letter-spacing: -0.01em;
+  }
+
+  /*
+   * h1 e h2 levemente condensados: palavras longas do português
+   * ("organizações", "benefícios") cabem sem quebra forçada e a silhueta
+   * fica mais engenheirada. O h3 fica na largura normal — em tamanho
+   * pequeno, condensar cobra legibilidade.
+   */
+  h1,
+  h2 {
+    font-stretch: 96%;
+    text-wrap: balance;
   }
 }
 

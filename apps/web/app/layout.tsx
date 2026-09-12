@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Saira } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Providers } from '@/components/providers'
 import './globals.css'
@@ -8,6 +8,18 @@ const inter = Inter({
   subsets: ["latin"],
   variable: '--font-inter',
   display: 'swap',
+})
+
+/**
+ * Fonte dos títulos. Variável em peso E em largura (eixo `wdth`), então um
+ * único arquivo cobre de 100 a 900 e de condensada a expandida — a Barlow,
+ * alternativa considerada, só existe em versões estáticas (9 arquivos).
+ */
+const saira = Saira({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-saira',
+  display: 'swap',
+  axes: ['wdth'],
 })
 
 export const metadata: Metadata = {
@@ -29,7 +41,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="pt-BR" className={`${inter.variable} bg-background`} suppressHydrationWarning>
+    <html lang="pt-BR" className={`${inter.variable} ${saira.variable} bg-background`} suppressHydrationWarning>
       <body className="font-sans antialiased">
         <Providers>
           {children}

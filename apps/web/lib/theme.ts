@@ -95,5 +95,11 @@ export function buildTenantThemeVars(branding: BrandColors): Record<string, stri
 
     '--brand-primary-soft': withAlpha(primary, 0.1),
     '--brand-secondary-soft': withAlpha(secondary, 0.1),
+
+    // Títulos do inquilino voltam para a fonte de texto. A Saira é a voz
+    // da Annetec: num portal white-label ela anunciaria a marca errada.
+    // Aplicado ao :root como o resto, então alcança também os títulos que
+    // o Radix renderiza em portal (DialogTitle, por exemplo).
+    '--display-font': 'var(--body-font)',
   }
 }

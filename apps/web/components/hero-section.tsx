@@ -3,17 +3,25 @@
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { ArrowRight, CheckCircle2, Heart, Stethoscope, Pill, SmilePlus } from "lucide-react"
+import { ArrowRight, CheckCircle2, Heart, Stethoscope, Pill, SmilePlus, Video, CreditCard, Users } from "lucide-react"
 
-const floatingCards = [
-  { icon: Stethoscope, label: "Consultas", value: "a partir de R$ 40", delay: 0 },
-  { icon: SmilePlus, label: "Odontologia", value: "R$ 19,90/mês", delay: 0.15 },
-  { icon: Pill, label: "Farmácia", value: "até 60% OFF", delay: 0.3 },
+const youCardItems = [
+  { icon: Stethoscope, label: "Planos de saúde" },
+  { icon: SmilePlus, label: "Odontologia" },
+  { icon: Video, label: "Telemedicina 24h" },
+  { icon: Pill, label: "Farmácia e descontos" },
+]
+
+const createCardItems = [
+  "Estratégia e validação",
+  "Produtos e parceiros",
+  "Tecnologia e plataforma",
+  "Operação e suporte",
 ]
 
 export function HeroSection() {
   return (
-    <section className="relative isolate min-h-screen min-h-[100dvh] flex items-center overflow-hidden pt-20 md:pt-20">
+    <section className="relative isolate min-h-screen min-h-[100dvh] flex items-center overflow-hidden pt-20 md:pt-20 pb-[calc(100vw/24)]">
       {/* ───── Rich Background ───── */}
       <div className="absolute inset-0 -z-10 overflow-hidden">
         {/* Gradient fill — mesma linguagem visual da página de login, agora em toda a largura da Hero */}
@@ -33,7 +41,17 @@ export function HeroSection() {
       </div>
 
       <div className="w-full max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-12 relative z-10">
-        <div className="grid lg:grid-cols-2 gap-10 lg:gap-6 items-center min-h-[calc(100vh-5rem)]">
+        {/*
+          A onda branca do rodapé (SVG 1440×60, largura total, logo abaixo)
+          fica em posição absoluta e cobre o fundo da seção. A altura dela é
+          sempre 100vw ÷ 24 — 60px em 1440, 80px em 1920 — e o pico da curva
+          cai bem embaixo da coluna de texto. Centralizar o conteúdo na altura
+          inteira deixava os selos de confiança colados na curva. Por isso a
+          seção reserva exatamente essa altura no `pb` e esta grade desconta
+          o mesmo valor: o conteúdo centraliza na área visível acima da onda,
+          em qualquer largura de tela.
+        */}
+        <div className="grid lg:grid-cols-2 gap-10 lg:gap-6 items-center min-h-[calc(100vh-5rem-100vw/24)]">
 
           {/* ───── Left: Copy & CTAs ───── */}
           <motion.div
@@ -53,8 +71,22 @@ export function HeroSection() {
               Plano de Assistência Familiar
             </motion.div>
 
-            {/* Main Headline */}
-            <h1 className="text-[2.5rem] sm:text-[3.25rem] lg:text-[3.5rem] xl:text-[4rem] font-extrabold text-white leading-[1.08] tracking-tight">
+            {/*
+              Título principal — o único em corpo de display (72px no xl).
+              Peso 600, não 800: na Saira condensada o extrabold fechava o miolo
+              do "a", "e" e "o" e o título virava bloco. O destaque vem do corpo,
+              não da espessura — por isso o tamanho subiu ~12% em todos os
+              breakpoints ao mesmo tempo que o peso desceu.
+              Largura 93% (os demais títulos usam 96%): em 72px a condensação
+              ganha presença sem custar leitura. Tracking -0,02em: com o traço
+              mais fino sobra ar entre as letras, e dá para apertar sem encostar
+              os acentos de "ã" e "ç".
+              Entrelinha 1,02 (era 1,08): em 72px sobrava ar entre as linhas.
+              O ponto crítico é a 1ª para a 2ª linha, onde a perna do "p" de
+              "proteção" cai sobre o acento do "í" de "benefícios" — medido
+              no print em escala real, estavam a ~20px; em 1,02 sobram ~15px.
+            */}
+            <h1 className="text-[2.75rem] sm:text-[3.5rem] lg:text-[3.875rem] xl:text-[4.5rem] font-semibold text-white leading-[1.02] tracking-[-0.02em] [font-stretch:93%]">
               Saúde, proteção e benefícios para pessoas e organizações.
             </h1>
 
@@ -123,11 +155,11 @@ export function HeroSection() {
             </div>
 
             {/* Main Image Container */}
-            <div className="relative w-full max-w-[520px] xl:max-w-[560px]">
+            <div className="relative w-full max-w-[640px] xl:max-w-[720px] -mt-10 lg:-mt-16 xl:-mt-20">
               {/* Halo behind image — pop sobre o painel em degradê */}
-              <div className="absolute -inset-4 bg-gradient-to-br from-white/30 via-white/10 to-white/5 rounded-[2rem] blur-2xl -z-10" />
-              
-              <div className="relative rounded-[1.75rem] overflow-hidden shadow-2xl shadow-[#26365f]/15 border-4 border-white/60">
+              <div className="absolute -inset-4 bg-gradient-to-br from-white/30 via-white/10 to-white/5 rounded-t-[2rem] rounded-b-[9999px] blur-2xl -z-10" />
+
+              <div className="relative rounded-t-[1.75rem] rounded-b-[9999px] overflow-hidden shadow-2xl shadow-[#26365f]/15">
                 <img
                   src="/images/mulher-hero.png"
                   alt="Associada ANNETEC"
@@ -137,56 +169,95 @@ export function HeroSection() {
                 <div className="absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-[#26365f]/10 to-transparent" />
               </div>
 
-              {/* ── Floating Benefit Cards ── */}
-              {floatingCards.map((card, index) => {
-                const positions = [
-                  "absolute -left-8 xl:-left-14 top-[15%]",         // top-left
-                  "absolute -right-6 xl:-right-12 top-[45%]",       // mid-right
-                  "absolute -left-4 xl:-left-10 bottom-[12%]",      // bottom-left
-                ]
-                return (
-                  <motion.div
-                    key={card.label}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.6 + card.delay, duration: 0.5 }}
-                    className={`${positions[index]} z-20 hidden md:block`}
-                  >
-                    <motion.div
-                      animate={{ y: [0, index % 2 === 0 ? -8 : 8, 0] }}
-                      transition={{ duration: 3 + index * 0.5, repeat: Infinity, ease: "easeInOut" }}
-                      className="bg-white/95 backdrop-blur-md rounded-xl px-4 py-3 shadow-lg shadow-[#26365f]/10 border border-white/80 flex items-center gap-3"
-                    >
-                      <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: index === 0 ? '#26365f' : index === 1 ? '#e84364' : '#26365f' }}
-                      >
-                        <card.icon size={20} className="text-white" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-[#26365f]/60 font-medium">{card.label}</p>
-                        <p className="text-sm font-bold text-[#26365f]">{card.value}</p>
-                      </div>
-                    </motion.div>
-                  </motion.div>
-                )
-              })}
-
-              {/* Price badge */}
+              {/* ── "Para Você" Featured Card (top-left) ── */}
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 1, duration: 0.5 }}
-                className="absolute -bottom-5 left-1/2 -translate-x-1/2 z-20 hidden sm:block"
+                initial={{ opacity: 0, scale: 0.9, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ delay: 0.5, duration: 0.5 }}
+                className="absolute -left-5 xl:-left-10 -top-5 sm:-top-8 z-20 hidden md:block w-[230px] xl:w-[250px]"
               >
-                <div className="bg-gradient-to-r from-[#26365f] to-[#3a4e82] rounded-2xl px-8 py-4 shadow-xl shadow-[#26365f]/20 text-center">
-                  <p className="text-white/70 text-xs mb-0.5">A partir de</p>
-                  <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-white text-sm">R$</span>
-                    <span className="text-3xl font-extrabold text-white">14,90</span>
-                    <span className="text-white/60 text-sm">/mês</span>
+                <motion.div
+                  animate={{ y: [0, -8, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                  className="bg-white rounded-2xl p-5 shadow-xl shadow-[#26365f]/15 border border-white/80"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-[#e84364] flex items-center justify-center shrink-0">
+                      <Heart size={22} className="text-white" fill="currentColor" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-bold text-[#e84364] uppercase tracking-wide">Para você</p>
+                      <p className="text-base font-extrabold text-[#26365f] leading-tight">Saúde e<br />benefícios</p>
+                    </div>
                   </div>
-                </div>
+                  <div className="space-y-2">
+                    {youCardItems.map((item) => (
+                      <div
+                        key={item.label}
+                        className="flex items-center gap-2.5 bg-[#faf1ef] rounded-full px-3 py-2"
+                      >
+                        <item.icon size={14} className="text-[#26365f] shrink-0" />
+                        <span className="text-xs font-semibold text-[#26365f]">{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              </motion.div>
+
+              {/* ── "Para Entidades" Featured Card (top-right) ── */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ delay: 0.6, duration: 0.5 }}
+                className="absolute -right-4 xl:-right-8 -top-5 sm:-top-8 z-20 hidden md:block w-[190px] xl:w-[210px]"
+              >
+                <motion.div
+                  animate={{ y: [0, -8, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                  className="bg-white rounded-2xl p-4 shadow-xl shadow-[#26365f]/15 border border-white/80"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-[#e84364] flex items-center justify-center shrink-0">
+                      <Users size={22} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-bold text-[#e84364] uppercase tracking-wide">Para entidades</p>
+                      <p className="text-base font-extrabold text-[#26365f] leading-tight">Mais valor<br />para seus<br />associados</p>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+
+              {/* ── "Crie seu Cartão" Featured Card (bottom-right) ── */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ delay: 0.7, duration: 0.5 }}
+                className="absolute -right-5 xl:-right-10 -bottom-6 sm:-bottom-10 z-20 hidden md:block w-[230px] xl:w-[250px]"
+              >
+                <motion.div
+                  animate={{ y: [0, 8, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                  className="bg-white rounded-2xl p-5 shadow-xl shadow-[#26365f]/15 border border-white/80"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-[#e84364] flex items-center justify-center shrink-0">
+                      <CreditCard size={22} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-bold text-[#e84364] uppercase tracking-wide">Crie seu cartão</p>
+                      <p className="text-base font-extrabold text-[#26365f] leading-tight">Da ideia à<br />operação</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2.5">
+                    {createCardItems.map((label) => (
+                      <div key={label} className="flex items-center gap-2.5">
+                        <CheckCircle2 size={16} className="text-[#26365f]/40 shrink-0" />
+                        <span className="text-xs font-semibold text-[#26365f]">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
               </motion.div>
             </div>
           </motion.div>
