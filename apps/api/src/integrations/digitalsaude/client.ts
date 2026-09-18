@@ -23,8 +23,10 @@ import { logger } from '@/lib/logger'
  *    `one()` normaliza isso para os services;
  *  - o servidor devolve texto em ISO-8859-1 nas respostas de erro, por isso a
  *    decodificação é feita à mão em vez de `res.json()` cego;
- *  - só GET é reexecutado em falha de rede/5xx. POST nunca — o upstream não
- *    tem idempotência e uma adesão duplicada é um problema de negócio real.
+ *  - só GET SEM efeito colateral é reexecutado em falha de rede/5xx. POST e
+ *    os GET marcados com `sideEffect` nunca: o upstream não tem idempotência,
+ *    e tanto uma adesão duplicada quanto um e-mail reenviado ao associado são
+ *    problema de negócio real.
  */
 
 export interface DigitalSaudeCredentials {
@@ -119,7 +121,10 @@ export function createDigitalSaudeClient(credentials: DigitalSaudeCredentials): 
     }
 
     const body = endpoint.body ? parseInput(endpoint.body, raw, name, 'body') : undefined
-    const payload = await request(endpoint.method, url, body, name)
+    // `sideEffect` marca os GET que mandam e-mail ou mudam o contrato. Eles
+    // entram aqui como "não reexecutável", junto com os POST.
+    const reexecutavel = endpoint.method === 'GET' && !('sideEffect' in endpoint && endpoint.sideEffect)
+    const payload = await request(endpoint.method, url, body, name, reexecutavel)
     if (payload === UPSTREAM_EMPTY) {
       // Lista vazia para endpoint de listagem; `null` para busca por chave —
       // que é exatamente o que `one()` já sabe interpretar.
@@ -133,8 +138,9 @@ export function createDigitalSaudeClient(credentials: DigitalSaudeCredentials): 
     url: URL,
     body: unknown,
     name: string,
+    reexecutavel: boolean,
   ): Promise<unknown> {
-    const maxAttempts = method === 'GET' ? MAX_ATTEMPTS : 1
+    const maxAttempts = reexecutavel ? MAX_ATTEMPTS : 1
     let lastError: unknown
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {

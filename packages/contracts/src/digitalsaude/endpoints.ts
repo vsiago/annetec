@@ -24,6 +24,15 @@ import {
  * Os endpoints de envio de e-mail devolvem uma string simples.
  */
 
+/**
+ * Marca as operações que o upstream expõe como GET mas que MUDAM ESTADO:
+ * disparam e-mail ao associado ou alteram o contrato. Elas não podem ser
+ * tratadas como leitura idempotente — reexecutar manda o e-mail de novo.
+ *
+ * O cliente HTTP lê esta marca para nunca reexecutá-las (ver `client.ts`),
+ * e quem for colocar cache na frente do ERP precisa respeitá-la também.
+ */
+
 /** Endpoint "por código" único: o upstream ora devolve o objeto nu, ora um array de um elemento. */
 function oneOrMany<T extends z.ZodTypeAny>(schema: T) {
   return z.union([schema, z.array(schema)])
@@ -112,12 +121,16 @@ export const digitalSaudeEndpoints = {
     response: oneOrMany(dsContrato),
   },
   contratoEnviarCarteira: {
+    /** Dispara e-mail com a carteirinha para o associado. */
+    sideEffect: true,
     method: 'GET',
     path: '/contrato/enviarCarteiraPorContrato',
     query: codigoContratoQuery,
     response: z.string(),
   },
   contratoRetornarParaProduzido: {
+    /** Muda o estado do contrato no ERP. */
+    sideEffect: true,
     method: 'GET',
     path: '/contrato/retornarContratoParaProduzido',
     query: codigoContratoQuery,
@@ -196,6 +209,8 @@ export const digitalSaudeEndpoints = {
 
   // --------------------------------------------------------------- fatura
   faturaEnviarVencidaPorContrato: {
+    /** Dispara e-mail de cobrança das faturas vencidas. */
+    sideEffect: true,
     method: 'GET',
     path: '/fatura/enviarFaturaVencidaPorContrato',
     query: codigoContratoQuery,

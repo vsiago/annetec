@@ -23,6 +23,17 @@ import { organization, user } from './auth'
  * usuário e vendedor da Annetec e (c) manter histórico auditável. `raw` guarda
  * a resposta original para que nenhum campo se perca em mudanças de mapper.
  */
+/**
+ * ESPELHO DA DIGITAL SAÚDE — a fonte da verdade é o ERP, não esta tabela.
+ *
+ * Existe para a listagem, a busca e a carteirinha não dependerem de uma ida ao
+ * upstream a cada request (que ainda por cima tem rate limit por token).
+ *
+ * Só `modules/contracts/repository.ts` grava aqui, sempre a partir de um sync.
+ * Alterar contrato é: escrever na Digital Saúde e sincronizar de volta — uma
+ * escrita direta some no próximo sync e deixa a tela mentindo no meio-tempo.
+ * `pnpm espelhos:check` falha se alguém gravar por fora.
+ */
 export const contracts = pgTable(
   'contracts',
   {

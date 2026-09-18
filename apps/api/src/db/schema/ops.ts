@@ -37,6 +37,13 @@ export const auditLogs = pgTable(
  * bater na Digital Saúde a cada carregamento de tela de catálogo, que muda
  * raramente. A chave inclui o inquilino porque cada um tem seu próprio token.
  */
+/**
+ * ESPELHO DA DIGITAL SAÚDE — cache com TTL das leituras de catálogo.
+ *
+ * Só `modules/catalog/service.ts` grava aqui. Não é lugar de guardar dado que
+ * o inquilino edite: o conteúdo é descartável e reescrito pelo upstream.
+ * `pnpm espelhos:check` falha se alguém gravar por fora.
+ */
 export const upstreamCache = pgTable(
   'upstream_cache',
   {

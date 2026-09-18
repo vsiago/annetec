@@ -19,6 +19,7 @@
     "platform:create-admin": "tsx src/db/create-platform-admin.ts",
     "openapi": "tsx src/openapi/generate.ts",
     "dict:check": "tsx scripts/checar-dicionario.ts",
+    "espelhos:check": "tsx scripts/checar-espelhos.ts",
     "e2e": "tsx scripts/e2e-inquilino.ts",
     "probe:ds": "tsx scripts/probe-digitalsaude.ts"
   },
