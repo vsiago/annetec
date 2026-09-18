@@ -1,39 +1,23 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { useTenantData, getAllClients, getAllSellers } from '@/contexts/tenant-data-context'
-import { useTenant } from '@/contexts/tenant-context'
-import { getInitials } from '@/lib/utils'
-import type { Client } from '@/lib/types'
-import { DigitalCardMockup } from '@/components/digital-card-mockup'
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
-  Search,
-  Plus,
-  MoreHorizontal,
-  Mail,
-  Phone,
+  CircleCheckBig,
+  Clock,
   CreditCard,
-  Users,
-  Calendar,
+  Download,
+  IdCard,
+  ListFilter,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  UserPlus,
+  UsersRound,
 } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -42,200 +26,378 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { EmptyState } from '@/components/dashboard/empty-state'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { DigitalCardMockup } from '@/components/digital-card-mockup'
+import { PageHeader } from '@/components/dashboard/page-header'
+import { StatCard } from '@/components/dashboard/stat-card'
+import {
+  FilterSelect,
+  SearchInput,
+  StatusPill,
+  TableFooter,
+} from '@/components/dashboard/table-controls'
+import { toast } from 'sonner'
+import {
+  ConfirmDialog,
+  FormDialog,
+  FormField,
+  FormRow,
+  FormSelect,
+} from '@/components/dashboard/form-dialog'
+import { useTenant } from '@/contexts/tenant-context'
+import { getAllClients, getAllSellers, useTenantData } from '@/contexts/tenant-data-context'
+import { formatCurrency, monthKeyOf } from '@/lib/analytics'
+import { beneficiarioSchema, formatCpf, formatPhone } from '@/lib/form-schemas'
+import { useZodForm } from '@/lib/use-zod-form'
+import type { Client } from '@/lib/types'
+import { cn, getInitials } from '@/lib/utils'
 
-export default function ClientesPage() {
-  const [search, setSearch] = useState('')
+const statusMeta: Record<Client['planStatus'], { label: string; className: string }> = {
+  active: { label: 'Ativo', className: 'bg-emerald-50 text-emerald-700' },
+  pending: { label: 'Pendente', className: 'bg-amber-50 text-amber-700' },
+  cancelled: { label: 'Cancelado', className: 'bg-red-50 text-red-600' },
+}
+
+const EMPTY_BENEFICIARIO = {
+  name: '',
+  email: '',
+  cpf: '',
+  phone: '',
+  plan: '',
+  sellerId: '',
+  city: '',
+}
+
+const AVATAR_TONES = [
+  'bg-rose-100 text-rose-700',
+  'bg-sky-100 text-sky-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-violet-100 text-violet-700',
+  'bg-amber-100 text-amber-700',
+]
+
+export default function AdminBeneficiariosPage() {
   const { tenant } = useTenant()
-  const { users, clientPlans, createUser } = useTenantData()
+  const { users, clientPlans, createUser, updateUser, deleteUser, isLoading } = useTenantData()
+
+  const [search, setSearch] = useState('')
+  const [plan, setPlan] = useState('all')
+  const [status, setStatus] = useState('all')
+  const [perPage, setPerPage] = useState('10')
+  const [page, setPage] = useState(1)
+
+  const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<Client | null>(null)
+  const [removing, setRemoving] = useState<Client | null>(null)
+  const [viewCardClient, setViewCardClient] = useState<Client | null>(null)
+  const form = useZodForm(beneficiarioSchema, EMPTY_BENEFICIARIO)
+
   const clients = getAllClients(users)
   const sellers = getAllSellers(users)
 
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [viewCardClient, setViewCardClient] = useState<Client | null>(null)
-  const [newName, setNewName] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [newPhone, setNewPhone] = useState('')
-  const [newCPF, setNewCPF] = useState('')
-  const [newPlan, setNewPlan] = useState('')
-  const [newSellerId, setNewSellerId] = useState('')
-  const [error, setError] = useState('')
+  const planPrices = useMemo(
+    () => new Map(clientPlans.map(item => [item.name, item.priceMonthly])),
+    [clientPlans],
+  )
 
-  useEffect(() => {
-    if (!newPlan && clientPlans.length > 0) setNewPlan(clientPlans[0].name)
-  }, [clientPlans, newPlan])
-  useEffect(() => {
-    if (!newSellerId && sellers.length > 0) setNewSellerId(sellers[0].id)
-  }, [sellers, newSellerId])
+  const active = clients.filter(client => client.planStatus === 'active')
+  const pending = clients.filter(client => client.planStatus === 'pending')
+  const currentMonth = monthKeyOf(new Date())
+  const newThisMonth = clients.filter(client => monthKeyOf(client.contractDate) === currentMonth).length
+  const recurring = active.reduce((sum, client) => sum + (planPrices.get(client.plan) ?? 0), 0)
 
-  const handleAddClient = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    if (!tenant || !newName || !newEmail || !newCPF || !newPlan || !newSellerId) {
-      setError('Preencha todos os campos obrigatórios.')
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    return clients
+      .filter(client => {
+        if (plan !== 'all' && client.plan !== plan) return false
+        if (status !== 'all' && client.planStatus !== status) return false
+        if (!term) return true
+        return [client.name, client.email, client.cpf, client.cardNumber, client.city].some(field =>
+          field?.toLowerCase().includes(term),
+        )
+      })
+      .sort((a, b) => new Date(b.contractDate).getTime() - new Date(a.contractDate).getTime())
+  }, [clients, search, plan, status])
+
+  const size = Number(perPage)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / size))
+  const currentPage = Math.min(page, totalPages)
+  const visible = filtered.slice((currentPage - 1) * size, currentPage * size)
+
+  function withPageReset<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setter(value)
+      setPage(1)
+    }
+  }
+
+  function openCreate() {
+    form.reset({
+      ...EMPTY_BENEFICIARIO,
+      plan: clientPlans[0]?.name ?? '',
+      sellerId: sellers[0]?.id ?? '',
+    })
+    setCreating(true)
+  }
+
+  function openEdit(client: Client) {
+    form.reset({
+      name: client.name,
+      email: client.email,
+      cpf: client.cpf,
+      phone: client.phone ?? '',
+      plan: client.plan,
+      sellerId: client.sellerId,
+      city: client.city ?? '',
+    })
+    setEditing(client)
+  }
+
+  async function submitClient(existing: Client | null): Promise<string | void> {
+    const data = form.validate()
+    if (!data) return 'Confira os campos destacados abaixo.'
+    if (!tenant) return 'Inquilino não carregado. Recarregue a página.'
+
+    // CPF é a chave do beneficiário na carteira: dois cadastros com o mesmo
+    // documento quebram carteirinha, cobrança e elegibilidade lá na frente.
+    const cpfTaken = clients.some(
+      client =>
+        client.id !== existing?.id && client.cpf.replace(/\D/g, '') === data.cpf.replace(/\D/g, ''),
+    )
+    if (cpfTaken) return 'Já existe um beneficiário com este CPF nesta carteira.'
+
+    const shared = {
+      name: data.name,
+      email: data.email,
+      phone: formatPhone(data.phone),
+      cpf: formatCpf(data.cpf),
+      plan: data.plan,
+      sellerId: data.sellerId,
+      city: data.city || undefined,
+    }
+
+    if (existing) {
+      const result = await updateUser(existing.id, shared)
+      if (!result.success) return result.error ?? 'Não foi possível salvar as alterações.'
+      toast.success('Cadastro atualizado', { description: data.name })
       return
     }
+
     const result = await createUser({
+      ...shared,
       id: '',
       tenantId: tenant.id,
-      name: newName,
-      email: newEmail,
-      phone: newPhone || '(11) 99999-9999',
       role: 'client',
-      cpf: newCPF,
-      plan: newPlan,
       planStatus: 'pending',
       contractDate: new Date(),
-      cardNumber: `ANN-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
-      sellerId: newSellerId,
+      cardNumber: `MC-${new Date().getFullYear()}-${String(clients.length + 1).padStart(5, '0')}`,
       dependents: [],
       createdAt: new Date(),
       password: 'trocar123',
     })
-    if (!result.success) {
-      setError(result.error || 'Não foi possível cadastrar o cliente')
-      return
-    }
-    setIsAddOpen(false)
-    setNewName('')
-    setNewEmail('')
-    setNewPhone('')
-    setNewCPF('')
-    setNewPlan(clientPlans[0]?.name ?? '')
+
+    if (!result.success) return result.error ?? 'Não foi possível cadastrar o beneficiário.'
+    toast.success('Beneficiário cadastrado', {
+      description: `${data.name} entrou como pendente de ativação.`,
+    })
   }
 
-  const filteredClients = clients.filter(client =>
-    client.name.toLowerCase().includes(search.toLowerCase()) ||
-    client.email.toLowerCase().includes(search.toLowerCase()) ||
-    client.cpf.includes(search) ||
-    client.cardNumber.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const getStatusBadge = (status: Client['planStatus']) => {
-    switch (status) {
-      case 'active':
-        return <Badge className="bg-green-100 text-green-700">Ativo</Badge>
-      case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-700">Pendente</Badge>
-      case 'cancelled':
-        return <Badge className="bg-red-100 text-red-700">Cancelado</Badge>
-    }
+  async function activate(client: Client) {
+    await updateUser(client.id, { planStatus: 'active' })
+    toast.success('Plano ativado', { description: client.name })
   }
+
+  if (isLoading) return null
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
-          <p className="text-muted-foreground">Gerencie os associados de {tenant?.name}</p>
-        </div>
-        <Button className="bg-primary hover:opacity-90 text-white" onClick={() => setIsAddOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Cliente
+    <div className="space-y-5">
+      <PageHeader
+        title="Beneficiários"
+        description="Gerencie a carteira de associados, planos e carteirinhas digitais."
+      >
+        <Button variant="outline" className="h-11 gap-2">
+          <Download className="h-4 w-4" />
+          Exportar
         </Button>
+        <Button className="h-11 gap-2 px-5" onClick={openCreate}>
+          <Plus className="h-4 w-4" />
+          Novo beneficiário
+        </Button>
+      </PageHeader>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          icon={UsersRound}
+          accent="primary"
+          value={active.length.toLocaleString('pt-BR')}
+          label="Beneficiários ativos"
+          delta={{ value: '12%', direction: 'up' }}
+          comparison="vs. mês anterior"
+        />
+        <StatCard
+          icon={UserPlus}
+          accent="success"
+          value={newThisMonth.toLocaleString('pt-BR')}
+          label="Novas adesões no mês"
+          delta={{ value: '18%', direction: 'up' }}
+          comparison="vs. mês anterior"
+        />
+        <StatCard
+          icon={CreditCard}
+          accent="info"
+          value={formatCurrency(Math.round(recurring))}
+          label="Mensalidade recorrente"
+          delta={{ value: '15%', direction: 'up' }}
+          comparison="vs. mês anterior"
+        />
+        <StatCard
+          icon={Clock}
+          accent="warning"
+          value={pending.length.toLocaleString('pt-BR')}
+          label="Cadastros pendentes"
+          hint="aguardando ativação"
+        />
       </div>
 
-      {/* Search */}
-      <Card className="border-0 shadow-sm">
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, email, CPF ou carteirinha..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <Card className="gap-0 py-0 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3 p-4">
+          <SearchInput
+            value={search}
+            onChange={withPageReset(setSearch)}
+            placeholder="Buscar por nome, CPF, e-mail ou nº do beneficiário..."
+          />
+          <FilterSelect
+            label="Plano"
+            value={plan}
+            onChange={withPageReset(setPlan)}
+            allLabel="Todos"
+            options={clientPlans.map(item => ({ value: item.name, label: item.name }))}
+          />
+          <FilterSelect
+            label="Status"
+            value={status}
+            onChange={withPageReset(setStatus)}
+            allLabel="Todos"
+            options={Object.entries(statusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
+          />
+          <Button variant="outline" className="h-14 gap-2 rounded-xl">
+            <ListFilter className="h-4 w-4 text-muted-foreground" />
+            Mais filtros
+          </Button>
+        </div>
 
-      {/* Clients Table */}
-      <Card className="border-0 shadow-sm">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Cliente</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Contato</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Plano</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Carteirinha</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Dependentes</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Status</th>
-                  <th className="text-right py-4 px-6 text-sm font-medium text-muted-foreground">Ações</th>
+                <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+                  <th className="px-4 py-3 font-medium">Beneficiário</th>
+                  <th className="px-4 py-3 font-medium">Contato</th>
+                  <th className="px-4 py-3 font-medium">Plano</th>
+                  <th className="px-4 py-3 font-medium">Nº do beneficiário</th>
+                  <th className="px-4 py-3 font-medium">Cidade</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Desde</th>
+                  <th className="px-4 py-3 text-right font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredClients.map(client => (
-                  <tr key={client.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 px-6">
+                {visible.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                      Nenhum beneficiário encontrado com os filtros atuais.
+                    </td>
+                  </tr>
+                )}
+                {visible.map((client, index) => (
+                  <tr key={client.id} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10 bg-secondary">
-                          <AvatarFallback className="bg-secondary text-white text-sm">
+                        <Avatar className="h-9 w-9">
+                          <AvatarFallback
+                            className={cn('text-xs font-semibold', AVATAR_TONES[index % AVATAR_TONES.length])}
+                          >
                             {getInitials(client.name)}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <p className="font-medium">{client.name}</p>
-                          <p className="text-sm text-muted-foreground">{client.cpf}</p>
-                        </div>
+                        <span className="min-w-0">
+                          <Link
+                            href={`/${tenant?.slug}/admin/clientes/${client.id}`}
+                            className="block truncate font-medium text-foreground hover:text-primary hover:underline"
+                          >
+                            {client.name}
+                          </Link>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {client.cpf}
+                          </span>
+                        </span>
                       </div>
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="space-y-1 text-sm">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Mail className="h-3.5 w-3.5" />
-                          {client.email}
-                        </div>
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Phone className="h-3.5 w-3.5" />
-                          {client.phone}
-                        </div>
-                      </div>
+                    <td className="px-4 py-3">
+                      <span className="block truncate text-foreground">{client.phone}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{client.email}</span>
                     </td>
-                    <td className="py-4 px-6">
-                      <div>
-                        <p className="font-medium text-sm">{client.plan}</p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          Desde {new Date(client.contractDate).toLocaleDateString('pt-BR')}
-                        </p>
-                      </div>
+                    <td className="px-4 py-3 text-muted-foreground">{client.plan}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{client.cardNumber}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{client.city ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <StatusPill {...statusMeta[client.planStatus]} />
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-2 text-sm">
-                        <CreditCard className="h-4 w-4 text-secondary" />
-                        <span className="font-mono">{client.cardNumber}</span>
-                      </div>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {new Date(client.contractDate).toLocaleDateString('pt-BR')}
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        {client.dependents.length}
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      {getStatusBadge(client.planStatus)}
-                    </td>
-                    <td className="py-4 px-6 text-right">
+                    <td className="px-4 py-3 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8">
                             <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Ações do beneficiário</span>
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setViewCardClient(client)}>
-                            <CreditCard className="h-4 w-4 mr-2 text-primary" />
-                            Ver Carteirinha
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/${tenant?.slug}/admin/clientes/${client.id}`}>
+                              <IdCard className="mr-2 h-4 w-4" />
+                              Ver ficha completa
+                            </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setViewCardClient(client)}>Ver Detalhes</DropdownMenuItem>
-                          <DropdownMenuItem>Editar</DropdownMenuItem>
-                          <DropdownMenuItem>Ver Dependentes</DropdownMenuItem>
-                          <DropdownMenuItem>Histórico</DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">Cancelar Plano</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setViewCardClient(client)}>
+                            <CreditCard className="mr-2 h-4 w-4" />
+                            Ver carteirinha
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEdit(client)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Editar cadastro
+                          </DropdownMenuItem>
+                          {client.planStatus === 'pending' && (
+                            <DropdownMenuItem onClick={() => activate(client)}>
+                              <CircleCheckBig className="mr-2 h-4 w-4" />
+                              Ativar plano
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => setRemoving(client)}
+                          >
+                            Excluir cadastro
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>
@@ -245,133 +407,152 @@ export default function ClientesPage() {
             </table>
           </div>
         </CardContent>
+
+        <TableFooter
+          page={currentPage}
+          perPage={perPage}
+          total={filtered.length}
+          noun="beneficiários"
+          onPageChange={setPage}
+          onPerPageChange={withPageReset(setPerPage)}
+        />
       </Card>
 
-      {filteredClients.length === 0 && (
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-0">
-            <EmptyState
-              icon={Users}
-              title={clients.length === 0 ? 'Nenhum cliente cadastrado ainda' : 'Nenhum cliente encontrado'}
-              description={
-                clients.length === 0
-                  ? 'Cadastre o primeiro associado do clube ou aguarde as vendas da equipe comercial.'
-                  : 'Ajuste a busca para encontrar o associado.'
-              }
+      <FormDialog
+        open={creating || editing !== null}
+        onOpenChange={open => {
+          if (open) return
+          setCreating(false)
+          setEditing(null)
+        }}
+        title={editing ? 'Editar beneficiário' : 'Novo beneficiário'}
+        description={
+          editing
+            ? 'Atualize os dados cadastrais do associado.'
+            : 'O cadastro entra como pendente até a ativação do plano.'
+        }
+        submitLabel={editing ? 'Salvar alterações' : 'Cadastrar'}
+        size="lg"
+        onSubmit={() => submitClient(editing)}
+      >
+        <FormField label="Nome completo" htmlFor="ben-name" error={form.errors.name} required>
+          <Input
+            id="ben-name"
+            value={form.values.name}
+            onChange={event => form.setField('name', event.target.value)}
+            aria-invalid={!!form.errors.name}
+          />
+        </FormField>
+
+        <FormRow>
+          <FormField label="CPF" htmlFor="ben-cpf" error={form.errors.cpf} required>
+            <Input
+              id="ben-cpf"
+              inputMode="numeric"
+              placeholder="000.000.000-00"
+              value={form.values.cpf}
+              onChange={event => form.setField('cpf', event.target.value)}
+              aria-invalid={!!form.errors.cpf}
             />
-          </CardContent>
-        </Card>
-      )}
+          </FormField>
+          <FormField label="Telefone" htmlFor="ben-phone" error={form.errors.phone} required hint="Com DDD">
+            <Input
+              id="ben-phone"
+              value={form.values.phone}
+              onChange={event => form.setField('phone', event.target.value)}
+              aria-invalid={!!form.errors.phone}
+            />
+          </FormField>
+        </FormRow>
 
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <form onSubmit={handleAddClient}>
-            <DialogHeader>
-              <DialogTitle>Cadastrar Novo Cliente</DialogTitle>
-              <DialogDescription>Adicione um associado diretamente pela administração</DialogDescription>
-            </DialogHeader>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Nome Completo *</label>
-                <Input required value={newName} onChange={e => setNewName(e.target.value)} />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">E-mail *</label>
-                <Input required type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Telefone</label>
-                <Input value={newPhone} onChange={e => setNewPhone(e.target.value)} />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">CPF *</label>
-                <Input required value={newCPF} onChange={e => setNewCPF(e.target.value)} />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Plano *</label>
-                {clientPlans.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Nenhum plano cadastrado. Crie um em Planos antes de cadastrar clientes.
-                  </p>
-                ) : (
-                  <Select value={newPlan} onValueChange={setNewPlan}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o plano" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clientPlans.map(plan => (
-                        <SelectItem key={plan.id} value={plan.name}>
-                          {plan.name} — R$ {plan.priceMonthly.toLocaleString('pt-BR')}/mês
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Vendedor responsável *</label>
-                {sellers.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Nenhum vendedor cadastrado. Crie um em Vendedores antes de cadastrar clientes.
-                  </p>
-                ) : (
-                  <Select value={newSellerId} onValueChange={setNewSellerId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o vendedor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sellers.map(seller => (
-                        <SelectItem key={seller.id} value={seller.id}>
-                          {seller.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                className="bg-primary hover:opacity-90 text-white"
-                disabled={clientPlans.length === 0 || sellers.length === 0}
-              >
-                Cadastrar Cliente
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+        <FormField label="E-mail" htmlFor="ben-email" error={form.errors.email} required>
+          <Input
+            id="ben-email"
+            type="email"
+            value={form.values.email}
+            onChange={event => form.setField('email', event.target.value)}
+            aria-invalid={!!form.errors.email}
+          />
+        </FormField>
 
-      {/* Modal Visualizar Carteirinha */}
+        <FormRow>
+          <FormField label="Plano" error={form.errors.plan} required>
+            <FormSelect
+              value={form.values.plan}
+              onChange={value => form.setField('plan', value)}
+              placeholder="Selecione o plano"
+              options={clientPlans.map(item => ({
+                value: item.name,
+                label: `${item.name} — ${formatCurrency(item.priceMonthly)}`,
+              }))}
+              invalid={!!form.errors.plan}
+            />
+          </FormField>
+          <FormField label="Vendedor responsável" error={form.errors.sellerId} required>
+            <FormSelect
+              value={form.values.sellerId}
+              onChange={value => form.setField('sellerId', value)}
+              placeholder="Selecione o vendedor"
+              options={sellers.map(seller => ({ value: seller.id, label: seller.name }))}
+              invalid={!!form.errors.sellerId}
+            />
+          </FormField>
+        </FormRow>
+
+        <FormField label="Cidade" htmlFor="ben-city" error={form.errors.city}>
+          <Input
+            id="ben-city"
+            placeholder="Cabo Frio - RJ"
+            value={form.values.city}
+            onChange={event => form.setField('city', event.target.value)}
+          />
+        </FormField>
+      </FormDialog>
+
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={open => !open && setRemoving(null)}
+        title="Excluir beneficiário"
+        description={
+          removing
+            ? `O cadastro de "${removing.name}" e o acesso dele ao portal serão removidos. Para encerrar o contrato mantendo o histórico, cancele o plano em vez de excluir.`
+            : ''
+        }
+        onConfirm={async () => {
+          if (!removing) return
+          const result = await deleteUser(removing.id)
+          if (!result.success) {
+            toast.error(result.error ?? 'Não foi possível excluir o cadastro')
+            return
+          }
+          toast.success('Beneficiário excluído', { description: removing.name })
+        }}
+      />
+
       <Dialog open={!!viewCardClient} onOpenChange={open => !open && setViewCardClient(null)}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-125">
           <DialogHeader>
-            <DialogTitle>Carteirinha Digital do Associado</DialogTitle>
-            <DialogDescription>Visualização em tempo real da carteirinha de {viewCardClient?.name}</DialogDescription>
+            <DialogTitle>Carteirinha digital</DialogTitle>
+            <DialogDescription>{viewCardClient?.name}</DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            {viewCardClient && (
-              <DigitalCardMockup
-                tenant={tenant}
-                clientName={viewCardClient.name}
-                cardNumber={viewCardClient.cardNumber}
-                planName={viewCardClient.plan}
-                cpf={viewCardClient.cpf}
-                contractDate={viewCardClient.contractDate}
-                dependentsCount={viewCardClient.dependents?.length || 0}
-                size="md"
-                interactive={true}
-                showFlip={true}
-              />
-            )}
-          </div>
+          {viewCardClient && (
+            <DigitalCardMockup
+              tenant={tenant}
+              clientName={viewCardClient.name}
+              cardNumber={viewCardClient.cardNumber}
+              planName={viewCardClient.plan}
+              cpf={viewCardClient.cpf}
+              contractDate={viewCardClient.contractDate}
+              dependentsCount={viewCardClient.dependents.length}
+            />
+          )}
         </DialogContent>
       </Dialog>
+
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <CircleCheckBig className="h-3.5 w-3.5 text-emerald-500" />
+        Carteira de {clients.length.toLocaleString('pt-BR')} beneficiários em {tenant?.name}.
+      </div>
     </div>
   )
 }

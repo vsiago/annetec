@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
+import { AdminTopbar } from '@/components/admin/admin-topbar'
 import { cn } from '@/lib/utils'
 
 type SidebarContextType = {
@@ -52,14 +53,15 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     <AdminSidebarContext.Provider value={{ isCollapsed, toggleSidebar, setIsCollapsed }}>
       <div className="min-h-screen bg-background">
         <AdminSidebar />
-        <main
+        <div
           className={cn(
-            'transition-[padding] duration-300 ease-in-out min-h-screen pt-16 lg:pt-0 pb-24 lg:pb-0',
+            'flex min-h-screen flex-col pt-14 transition-[padding] duration-300 ease-in-out lg:pt-0',
             isCollapsed ? 'lg:pl-20' : 'lg:pl-64'
           )}
         >
-          <div className="p-4 lg:p-6">{children}</div>
-        </main>
+          <AdminTopbar />
+          <main className="flex-1 p-4 pb-24 lg:p-6 lg:pb-6">{children}</main>
+        </div>
       </div>
     </AdminSidebarContext.Provider>
   )

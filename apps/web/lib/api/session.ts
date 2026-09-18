@@ -17,6 +17,8 @@ import type { SessionUser } from '@annetec/contracts'
  */
 const TOKEN_COOKIE = 'annetec.token'
 const USER_COOKIE = 'annetec.user'
+/** Token de superadmin guardado enquanto uma impersonação está ativa — ver `beginImpersonation`. */
+const IMPERSONATOR_COOKIE = 'annetec.impersonator'
 
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30 // 30 dias — mesmo teto de apps/api/src/lib/auth.ts
 const secure = process.env.NODE_ENV === 'production'
@@ -61,4 +63,54 @@ export async function clearSession(): Promise<void> {
   const store = await cookies()
   store.delete(TOKEN_COOKIE)
   store.delete(USER_COOKIE)
+}
+
+/**
+ * Guarda o token de superadmin ATUAL (antes de ser sobrescrito) e o caminho
+ * pra onde voltar, depois troca a sessão ativa pela sessão impersonada.
+ *
+ * Existe porque só há um cookie de sessão global (`TOKEN_COOKIE`) — entrar
+ * como outra pessoa sobrescreveria a sessão de superadmin sem deixar como
+ * voltar. `stopImpersonation`/`endImpersonation` desfaz isto. Não usa o
+ * `stopImpersonating` do próprio Better Auth: ele depende de um cookie
+ * assinado que só existe do lado do Better Auth, que este app nunca repassa
+ * (ver o comentário em `tenantsService.impersonateMember`, na API).
+ */
+export async function beginImpersonation(
+  newToken: string,
+  newUser: SessionUser,
+  returnTo: string,
+): Promise<void> {
+  const store = await cookies()
+  const currentToken = store.get(TOKEN_COOKIE)?.value
+
+  if (currentToken) {
+    store.set(IMPERSONATOR_COOKIE, JSON.stringify({ token: currentToken, returnTo }), {
+      httpOnly: true,
+      secure,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: SESSION_MAX_AGE,
+    })
+  }
+
+  await saveSession(newToken, newUser)
+}
+
+/** Lê o token de superadmin guardado por `beginImpersonation`, se houver uma simulação ativa. */
+export async function getImpersonatorSession(): Promise<{ token: string; returnTo: string } | null> {
+  const store = await cookies()
+  const raw = store.get(IMPERSONATOR_COOKIE)?.value
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as { token: string; returnTo: string }
+  } catch {
+    return null
+  }
+}
+
+/** Encerra a simulação — chamado depois que a sessão de superadmin já foi restaurada. */
+export async function endImpersonation(): Promise<void> {
+  const store = await cookies()
+  store.delete(IMPERSONATOR_COOKIE)
 }

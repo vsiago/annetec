@@ -29,7 +29,11 @@ const tenantRoles = {
  * uma referência circular, e o Better Auth não tem como saber os campos que
  * OUTRO plugin (`admin`) adiciona à sessão a partir de dentro de `organization`.
  */
-type SessionWithMembership = Session & { activeOrganizationId?: string | null }
+type SessionWithMembership = Session & {
+  activeOrganizationId?: string | null
+  /** Adicionado pelo plugin `admin`: preenchido durante impersonação. */
+  impersonatedBy?: string | null
+}
 
 /**
  * Instância única do Better Auth — é a fonte da verdade de identidade,
@@ -122,11 +126,12 @@ export const auth = betterAuth({
     // Digital Saúde — ver src/lib/auth-plugins/client-portal.ts.
     clientPortal(),
     customSession(async ({ user, session }) => {
-      // Cast justificado: `admin` (role/banned) e `organization`
-      // (activeOrganizationId) são plugins IRMÃOS deste, no mesmo array —
-      // o TypeScript não propaga o que um adiciona ao tipo que o outro
-      // enxerga. Os dois campos existem de verdade em runtime (conferido
-      // contra o schema de cada plugin); ver `SessionWithMembership` acima.
+      // Cast justificado: `admin` (role/banned no user, impersonatedBy na
+      // session) e `organization` (activeOrganizationId) são plugins IRMÃOS
+      // deste, no mesmo array — o TypeScript não propaga o que um adiciona ao
+      // tipo que o outro enxerga. Os campos existem de verdade em runtime
+      // (conferidos contra o schema de cada plugin); ver `SessionWithMembership`
+      // acima.
       const richUser = user as UserWithRole
       const richSession = session as SessionWithMembership
       return {

@@ -97,6 +97,25 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
     refresh()
   }, [refresh])
 
+  /**
+   * Toda mutação aplica o resultado direto no estado da coleção que mudou,
+   * em vez de rebuscar as oito listas.
+   *
+   * O `refresh()` liga `isLoading`, e cada página do painel devolve `null`
+   * enquanto carrega — então recarregar tudo a cada gravação desmontava a
+   * tela inteira: a lista piscava, a paginação voltava para a página 1, o
+   * filtro aberto fechava e a linha selecionada no painel lateral se perdia.
+   * Trocando pelo patch local, só a lista afetada re-renderiza e o resto da
+   * tela não sente a gravação. `refresh()` fica para a carga inicial.
+   */
+  function upsert<T extends { id: string }>(list: T[], item: T): T[] {
+    const index = list.findIndex(current => current.id === item.id)
+    if (index === -1) return [...list, item]
+    const next = [...list]
+    next[index] = item
+    return next
+  }
+
   const value: TenantDataContextType = {
     isLoading,
     users,
@@ -111,92 +130,95 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
 
     createUser: async input => {
       const result = await createTenantUser(input)
-      await refresh()
-      return result.success ? { success: true } : { success: false, error: result.error }
+      if (!result.success) return { success: false, error: result.error }
+      setUsers(prev => upsert(prev, result.data))
+      return { success: true }
     },
     updateUser: async (id, patch) => {
       const result = await updateUserAction(id, patch)
-      await refresh()
-      return result.success ? { success: true } : { success: false, error: result.error }
+      if (!result.success) return { success: false, error: result.error }
+      setUsers(prev => upsert(prev, result.data))
+      return { success: true }
     },
     deleteUser: async id => {
       const result = await deleteUserAction(id)
-      await refresh()
-      return result.success ? { success: true } : { success: false, error: result.error }
+      if (!result.success) return { success: false, error: result.error }
+      setUsers(prev => prev.filter(item => item.id !== id))
+      return { success: true }
     },
 
     createBenefit: async input => {
-      await createBenefitAction({ ...input, tenantId })
-      await refresh()
+      const result = await createBenefitAction({ ...input, tenantId })
+      if (result.success) setBenefits(prev => upsert(prev, result.data))
     },
     updateBenefit: async (id, patch) => {
-      await updateBenefitAction(id, patch)
-      await refresh()
+      const result = await updateBenefitAction(id, patch)
+      if (result.success) setBenefits(prev => upsert(prev, result.data))
     },
     deleteBenefit: async id => {
-      await deleteBenefitAction(id)
-      await refresh()
+      const result = await deleteBenefitAction(id)
+      if (result.success) setBenefits(prev => prev.filter(item => item.id !== id))
     },
 
     createPartner: async input => {
-      await createPartnerAction({ ...input, tenantId })
-      await refresh()
+      const result = await createPartnerAction({ ...input, tenantId })
+      if (result.success) setPartners(prev => upsert(prev, result.data))
     },
     updatePartner: async (id, patch) => {
-      await updatePartnerAction(id, patch)
-      await refresh()
+      const result = await updatePartnerAction(id, patch)
+      if (result.success) setPartners(prev => upsert(prev, result.data))
     },
     deletePartner: async id => {
-      await deletePartnerAction(id)
-      await refresh()
+      const result = await deletePartnerAction(id)
+      if (result.success) setPartners(prev => prev.filter(item => item.id !== id))
     },
 
     createLead: async input => {
-      await createLeadAction({ ...input, tenantId })
-      await refresh()
+      const result = await createLeadAction({ ...input, tenantId })
+      if (result.success) setLeads(prev => upsert(prev, result.data))
     },
     updateLead: async (id, patch) => {
-      await updateLeadAction(id, patch)
-      await refresh()
+      const result = await updateLeadAction(id, patch)
+      if (result.success) setLeads(prev => upsert(prev, result.data))
     },
     addLeadInteraction: async (id, interaction) => {
-      await addLeadInteractionAction(id, interaction)
-      await refresh()
+      const result = await addLeadInteractionAction(id, interaction)
+      if (result.success) setLeads(prev => upsert(prev, result.data))
     },
     deleteLead: async id => {
-      await deleteLeadAction(id)
-      await refresh()
+      const result = await deleteLeadAction(id)
+      if (result.success) setLeads(prev => prev.filter(item => item.id !== id))
     },
 
     createSale: async input => {
-      await createSaleAction({ ...input, tenantId })
-      await refresh()
+      const result = await createSaleAction({ ...input, tenantId })
+      if (result.success) setSales(prev => upsert(prev, result.data))
     },
     updateSale: async (id, patch) => {
-      await updateSaleAction(id, patch)
-      await refresh()
+      const result = await updateSaleAction(id, patch)
+      if (result.success) setSales(prev => upsert(prev, result.data))
     },
 
     createAppointment: async input => {
-      await createAppointmentAction({ ...input, tenantId })
-      await refresh()
+      const result = await createAppointmentAction({ ...input, tenantId })
+      if (result.success) setAppointments(prev => upsert(prev, result.data))
     },
     updateAppointment: async (id, patch) => {
-      await updateAppointmentAction(id, patch)
-      await refresh()
+      const result = await updateAppointmentAction(id, patch)
+      if (result.success) setAppointments(prev => upsert(prev, result.data))
     },
 
     createClientPlan: async input => {
-      await createClientPlanAction({ ...input, tenantId })
-      await refresh()
+      const result = await createClientPlanAction({ ...input, tenantId })
+      if (result.success) setClientPlans(prev => upsert(prev, result.data))
     },
     updateClientPlan: async (id, patch) => {
-      await updateClientPlanAction(id, patch)
-      await refresh()
+      const result = await updateClientPlanAction(id, patch)
+      if (result.success) setClientPlans(prev => upsert(prev, result.data))
     },
     deleteClientPlan: async id => {
-      await deleteClientPlanAction(id)
-      await refresh()
+      const result = await deleteClientPlanAction(id)
+      if (result.success) setClientPlans(prev => prev.filter(item => item.id !== id))
     },
   }
 

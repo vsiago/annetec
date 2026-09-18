@@ -69,6 +69,8 @@ export const sessionUser = z.object({
   tenantId: z.string().nullable(),
   tenantSlug: z.string().nullable(),
   tenantRole: tenantRole.nullable(),
+  /** Id do superadmin dono da sessão real, quando esta é uma sessão de impersonação. */
+  impersonatedBy: z.string().nullable(),
 })
 export type SessionUser = z.infer<typeof sessionUser>
 

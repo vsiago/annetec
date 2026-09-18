@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { BarChart3 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from './empty-state'
+import { cn } from '@/lib/utils'
 
 // Chart shell with a built-in empty state. `hasData` is required so no chart
 // can be added that silently renders an empty axis grid for a new tenant.
@@ -11,6 +12,8 @@ export function ChartCard({
   hasData,
   emptyMessage = 'Os gráficos aparecem assim que houver movimentação registrada.',
   height = 300,
+  action,
+  className,
   children,
 }: {
   title: string
@@ -18,13 +21,19 @@ export function ChartCard({
   hasData: boolean
   emptyMessage?: string
   height?: number
+  /** Controle à direita do título — seletor de período, "ver todos", selo. */
+  action?: ReactNode
+  className?: string
   children: ReactNode
 }) {
   return (
-    <Card className="border-0 shadow-sm">
+    <Card className={cn('shadow-sm', className)}>
       <CardHeader>
         <CardTitle className="text-lg">{title}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
+        {action && (
+          <CardAction className="flex items-center gap-2 self-center">{action}</CardAction>
+        )}
       </CardHeader>
       <CardContent>
         <div style={{ height }}>

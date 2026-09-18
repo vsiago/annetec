@@ -12,12 +12,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTenants } from '@/contexts/tenants-context'
+import { useAdminScope } from '@/contexts/admin-scope-context'
 import { IntegrationPanel } from '@/components/admin-platform/integration-panel'
 import { TenantAccessPanel } from '@/components/admin-platform/tenant-access-panel'
 import { TenantShortcuts } from '@/components/admin-platform/tenant-shortcuts'
 import type { Tenant, TenantStatus } from '@/lib/types'
 import type { UF } from '@annetec/contracts'
-import { AlertCircle, ArrowLeft, ExternalLink, Save } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowLeft,
+  Building2,
+  ExternalLink,
+  Eye,
+  KeyRound,
+  LayoutGrid,
+  Palette,
+  Plug,
+  Save,
+} from 'lucide-react'
 
 /**
  * Gestão de um inquilino.
@@ -49,6 +61,7 @@ export default function InquilinoDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const { tenants, plans, updateTenant, isLoading } = useTenants()
+  const { select } = useAdminScope()
   const [tenant, setTenant] = useState<Tenant | undefined>()
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
@@ -78,6 +91,12 @@ export default function InquilinoDetailPage() {
 
   const plano = plans.find(p => p.id === tenant.planId)
 
+  /** Atalho de cabeçalho: o destino mais usado ao entrar num inquilino. */
+  const abrirComoSuperadmin = () => {
+    select(tenant.slug)
+    router.push('/admin/clientes')
+  }
+
   const handleSave = async () => {
     setError('')
     setSalvo(false)
@@ -104,30 +123,59 @@ export default function InquilinoDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link
-            href="/admin/inquilinos"
-            className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar para inquilinos
-          </Link>
-          <h1 className="text-2xl font-bold text-foreground">{tenant.name}</h1>
-          <div className="flex flex-wrap items-center gap-3">
-            <a
-              href={`/${tenant.slug}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-secondary hover:underline"
+      <Link
+        href="/admin/inquilinos"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar para inquilinos
+      </Link>
+
+      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs">
+        <div className="h-1.5 w-full" style={{ backgroundColor: tenant.branding.primaryColor }} />
+        <div className="flex flex-wrap items-center justify-between gap-4 p-5">
+          <div className="flex min-w-0 items-center gap-4">
+            <div
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-lg font-bold text-white"
+              style={{ backgroundColor: tenant.branding.primaryColor }}
+              aria-hidden="true"
             >
-              /{tenant.slug}
-              <ExternalLink className="h-3 w-3" />
-            </a>
-            {plano && <span className="text-sm text-muted-foreground">Plano {plano.name}</span>}
+              {tenant.name.slice(0, 2).toUpperCase()}
+            </div>
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-xl font-bold text-foreground">{tenant.name}</h1>
+                <Badge variant={statusVariante[tenant.status]}>{statusLabel[tenant.status]}</Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                <a
+                  href={`/${tenant.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-secondary hover:underline"
+                >
+                  /{tenant.slug}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                {plano && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>Plano {plano.name}</span>
+                  </>
+                )}
+                <span aria-hidden="true">·</span>
+                <span>
+                  Desde{' '}
+                  {new Date(tenant.createdAt).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+            </div>
           </div>
+          <Button className="bg-primary text-white hover:opacity-90" onClick={abrirComoSuperadmin}>
+            <Eye className="mr-2 h-4 w-4" />
+            Operar como superadmin
+          </Button>
         </div>
-        <Badge variant={statusVariante[tenant.status]}>{statusLabel[tenant.status]}</Badge>
       </div>
 
       {error && (
@@ -139,16 +187,31 @@ export default function InquilinoDetailPage() {
 
       <Tabs value={aba} onValueChange={setAba} className="space-y-6">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="visao-geral">Visão geral</TabsTrigger>
-          <TabsTrigger value="cadastro">Cadastro</TabsTrigger>
-          <TabsTrigger value="marca">Marca</TabsTrigger>
-          <TabsTrigger value="acessos">Acessos</TabsTrigger>
-          <TabsTrigger value="integracao">Integração</TabsTrigger>
+          <TabsTrigger value="visao-geral">
+            <LayoutGrid className="h-4 w-4" />
+            Visão geral
+          </TabsTrigger>
+          <TabsTrigger value="cadastro">
+            <Building2 className="h-4 w-4" />
+            Cadastro
+          </TabsTrigger>
+          <TabsTrigger value="marca">
+            <Palette className="h-4 w-4" />
+            Marca
+          </TabsTrigger>
+          <TabsTrigger value="acessos">
+            <KeyRound className="h-4 w-4" />
+            Acessos
+          </TabsTrigger>
+          <TabsTrigger value="integracao">
+            <Plug className="h-4 w-4" />
+            Integração
+          </TabsTrigger>
         </TabsList>
 
         {/* ------------------------------------------------ visão geral */}
         <TabsContent value="visao-geral" className="space-y-4">
-          <TenantShortcuts slug={tenant.slug} />
+          <TenantShortcuts slug={tenant.slug} tenantId={tenant.id} />
         </TabsContent>
 
         {/* ---------------------------------------------------- cadastro */}
@@ -345,7 +408,7 @@ export default function InquilinoDetailPage() {
 
         {/* ------------------------------------------------------ acessos */}
         <TabsContent value="acessos">
-          <TenantAccessPanel tenantId={tenant.id} />
+          <TenantAccessPanel tenantId={tenant.id} tenantSlug={tenant.slug} />
         </TabsContent>
 
         {/* --------------------------------------------------- integração */}

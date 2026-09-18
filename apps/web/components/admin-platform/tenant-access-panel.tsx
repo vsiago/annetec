@@ -22,7 +22,8 @@ import {
   resetTenantMemberPasswordAction,
   type TenantMember,
 } from '@/lib/actions/tenants-api'
-import { AlertCircle, Check, Copy, KeyRound, Loader2, ShieldCheck, Users } from 'lucide-react'
+import { impersonateTenantMemberAction } from '@/lib/actions/auth-api'
+import { AlertCircle, Check, Copy, KeyRound, Loader2, LogIn, ShieldCheck, Users } from 'lucide-react'
 
 /**
  * Acesso administrativo ao inquilino.
@@ -32,6 +33,11 @@ import { AlertCircle, Check, Copy, KeyRound, Loader2, ShieldCheck, Users } from 
  * próprio dono) e por isso a API exige superadmin, confere o vínculo com o
  * inquilino antes e registra na trilha de auditoria. A senha aparece uma única
  * vez; nem a API nem esta tela conseguem lê-la de volta depois.
+ *
+ * "Entrar como" é a alternativa sem trocar a senha de ninguém: abre uma
+ * sessão real daquela conta (até 1h), também restrita a superadmin e também
+ * auditada — só que em vez de devolver uma credencial pra copiar, já navega
+ * pro portal daquela pessoa. Ver `impersonateTenantMemberAction`.
  */
 const PAPEL: Record<TenantMember['role'], { label: string; classe: string }> = {
   admin: { label: 'Admin', classe: 'bg-red-100 text-red-700' },
@@ -39,7 +45,13 @@ const PAPEL: Record<TenantMember['role'], { label: string; classe: string }> = {
   client: { label: 'Beneficiário', classe: 'bg-slate-100 text-slate-700' },
 }
 
-export function TenantAccessPanel({ tenantId }: { tenantId: string }) {
+const PORTAL_PATH: Record<TenantMember['role'], string> = {
+  admin: 'admin',
+  seller: 'vendedor',
+  client: 'cliente',
+}
+
+export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; tenantSlug: string }) {
   const [membros, setMembros] = useState<TenantMember[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
@@ -50,6 +62,10 @@ export function TenantAccessPanel({ tenantId }: { tenantId: string }) {
   const [erroDialogo, setErroDialogo] = useState('')
   const [gerada, setGerada] = useState<{ email: string; password: string } | null>(null)
   const [copiado, setCopiado] = useState(false)
+
+  const [alvoEntrar, setAlvoEntrar] = useState<TenantMember | null>(null)
+  const [entrando, setEntrando] = useState(false)
+  const [erroEntrar, setErroEntrar] = useState('')
 
   useEffect(() => {
     listTenantMembersAction(tenantId).then(resultado => {
@@ -92,6 +108,25 @@ export function TenantAccessPanel({ tenantId }: { tenantId: string }) {
       return
     }
     setGerada(resultado.data)
+  }
+
+  async function entrarComo() {
+    if (!alvoEntrar) return
+    setErroEntrar('')
+    setEntrando(true)
+    const resultado = await impersonateTenantMemberAction(
+      tenantId,
+      alvoEntrar.id,
+      `/admin/inquilinos/${tenantId}`,
+    )
+    if (!resultado.success) {
+      setEntrando(false)
+      setErroEntrar(resultado.error)
+      return
+    }
+    // Navegação dura: a identidade da sessão inteira muda, então não dá pra
+    // reaproveitar a árvore de contexto já montada com a sessão antiga.
+    window.location.href = `/${tenantSlug}/${PORTAL_PATH[alvoEntrar.role]}`
   }
 
   async function copiar() {
@@ -168,6 +203,17 @@ export function TenantAccessPanel({ tenantId }: { tenantId: string }) {
                       {PAPEL[membro.role].label}
                     </Badge>
                     {!membro.active && <Badge variant="outline">Inativo</Badge>}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setAlvoEntrar(membro)
+                        setErroEntrar('')
+                      }}
+                    >
+                      <LogIn className="mr-2 h-3.5 w-3.5" />
+                      Entrar como
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => abrir(membro)}>
                       <KeyRound className="mr-2 h-3.5 w-3.5" />
                       Redefinir senha
@@ -246,6 +292,35 @@ export function TenantAccessPanel({ tenantId }: { tenantId: string }) {
                 </Button>
               </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={alvoEntrar !== null} onOpenChange={aberto => !aberto && !entrando && setAlvoEntrar(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Entrar como — {alvoEntrar?.name}</DialogTitle>
+            <DialogDescription>
+              Abre uma sessão real dessa conta, por até 1 hora. Fica registrado na trilha de
+              auditoria quem entrou, quando e em qual conta.
+            </DialogDescription>
+          </DialogHeader>
+
+          {erroEntrar && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{erroEntrar}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAlvoEntrar(null)} disabled={entrando}>
+              Cancelar
+            </Button>
+            <Button onClick={entrarComo} disabled={entrando}>
+              {entrando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Entrar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

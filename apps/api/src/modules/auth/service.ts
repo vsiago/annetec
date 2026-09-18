@@ -178,11 +178,13 @@ async function resolveOrganizationBySlug(tenantSlug: string): Promise<string | n
   return tenant?.id ?? null
 }
 
-async function setActiveOrganization(token: string, organizationId: string) {
+/** Exportada: `tenantsService.impersonateMember` reaproveita para a sessão de impersonação. */
+export async function setActiveOrganization(token: string, organizationId: string) {
   await auth.api.setActiveOrganization({ headers: bearerHeaders(token), body: { organizationId } })
 }
 
-async function getSessionByToken(token: string) {
+/** Exportada pelo mesmo motivo que `setActiveOrganization` acima. */
+export async function getSessionByToken(token: string) {
   const session = await auth.api.getSession({ headers: bearerHeaders(token) })
   if (!session) throw AppError.unauthenticated()
   return session

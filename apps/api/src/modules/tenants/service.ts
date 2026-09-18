@@ -1,5 +1,6 @@
 import {
   ERROR_CODES,
+  type AuthSession,
   type CreateTenantInput,
   type IntegrationDiscovery,
   type Tenant,
@@ -16,6 +17,8 @@ import { createDigitalSaudeClient } from '@/integrations/digitalsaude/client'
 import { invalidateDigitalSaudeClient } from '@/integrations/digitalsaude/provider'
 import { encryptSecret } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
+import { getSessionByToken, setActiveOrganization } from '@/modules/auth/service'
+import { toSessionUser } from '@/modules/auth/presenter'
 
 /**
  * Ciclo de vida do inquilino — o fluxo que o superadmin percorre em
@@ -350,6 +353,71 @@ export const tenantsService = {
   },
 
   /**
+   * Abre uma sessão real como um usuário do inquilino — é assim que o
+   * superadmin entra em `/{slug}/admin`, `/vendedor` ou `/cliente` sem senha:
+   * esses portais são protegidos por sessão DAQUELE inquilino especificamente
+   * (`ProtectedRoute` no frontend), e uma sessão de plataforma não tem
+   * `tenantRole` pra passar por ali. `auth.api.impersonateUser` (plugin
+   * `admin`, já concede a permissão `impersonate` a superadmin) cria essa
+   * sessão; falta só ativar a organization nela — ao contrário do login
+   * normal, uma sessão de impersonação nasce sem `activeOrganizationId`.
+   *
+   * Os cookies que o Better Auth tenta setar aqui dentro (a "admin_session"
+   * de retorno) não chegam a lugar nenhum — esta chamada é server-to-server,
+   * igual a `authService.login`. É por isso que a saída (`stopImpersonating`
+   * do próprio Better Auth) não é usada em lugar nenhum deste app: ela
+   * depende exatamente desse cookie, que nunca existiu do nosso lado. Quem
+   * chama isto guarda o token de superadmin antes de trocar de sessão e
+   * restaura na mão — ver `beginImpersonation`/`endImpersonation` em
+   * `apps/web/lib/api/session.ts`.
+   *
+   * Mesma conferência de vínculo de `resetUserPassword`: sem ela, um `userId`
+   * chutado na URL entraria como QUALQUER conta do sistema, não só deste
+   * inquilino.
+   */
+  async impersonateMember(
+    tenantId: string,
+    userId: string,
+    headers: Headers,
+  ): Promise<SessaoImpersonada> {
+    return impersonar(tenantId, userId, headers)
+  },
+
+  /**
+   * Mesma coisa que `impersonateMember`, mas escolhendo a conta sozinho a
+   * partir do PAPEL — é o que os atalhos "Portal do admin / vendedor /
+   * beneficiário" usam para entrar em um clique, sem obrigar a passar pela
+   * lista de contas antes.
+   *
+   * Critério: a conta ativa mais antiga daquele papel. Estável (não muda a
+   * cada novo cadastro) e, na prática, é a conta "principal" — o admin nasce
+   * junto com o inquilino no wizard de criação. Quem precisa de uma conta
+   * específica continua tendo o "Entrar como" por linha na aba Acessos.
+   */
+  async impersonateRole(
+    tenantId: string,
+    role: 'admin' | 'seller' | 'client',
+    headers: Headers,
+  ): Promise<SessaoImpersonada> {
+    const [alvo] = await db
+      .select({ userId: member.userId })
+      .from(member)
+      .where(
+        and(
+          eq(member.organizationId, tenantId),
+          eq(member.role, role),
+          eq(member.active, true),
+        ),
+      )
+      .orderBy(member.createdAt)
+      .limit(1)
+
+    if (!alvo) throw AppError.businessRule(SEM_CONTA[role])
+
+    return impersonar(tenantId, alvo.userId, headers)
+  },
+
+  /**
    * Lê no ERP tudo que antes era copiado do portal na mão.
    *
    * A Digital Saúde não tem `GET /grupo/`, `GET /filial/` nem
@@ -532,6 +600,45 @@ function generateProvisionalPassword(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
   return Array.from(bytes, byte => alphabet[byte % alphabet.length]).join('')
+}
+
+type SessaoImpersonada = AuthSession & { role: 'admin' | 'seller' | 'client'; email: string }
+
+const SEM_CONTA: Record<'admin' | 'seller' | 'client', string> = {
+  admin: 'Este inquilino não tem nenhuma conta de admin ativa para entrar.',
+  seller: 'Este inquilino não tem nenhuma conta de vendedor ativa para entrar.',
+  client: 'Este inquilino não tem nenhuma conta de beneficiário ativa para entrar.',
+}
+
+/**
+ * O miolo da impersonação, compartilhado por `impersonateMember` (conta
+ * escolhida a dedo, na aba Acessos) e `impersonateRole` (atalho de um clique
+ * por papel).
+ *
+ * A conferência de vínculo é o que impede um `userId` chutado na URL de virar
+ * acesso a QUALQUER conta do sistema — mesma proteção de `resetUserPassword`.
+ */
+async function impersonar(tenantId: string, userId: string, headers: Headers): Promise<SessaoImpersonada> {
+  const [vinculo] = await db
+    .select({ email: user.email, role: member.role })
+    .from(member)
+    .innerJoin(user, eq(user.id, member.userId))
+    .where(and(eq(member.organizationId, tenantId), eq(member.userId, userId)))
+    .limit(1)
+
+  if (!vinculo) throw AppError.notFound('Usuário deste inquilino')
+
+  const { session } = await auth.api.impersonateUser({ body: { userId }, headers })
+  await setActiveOrganization(session.token, tenantId)
+  const resolved = await getSessionByToken(session.token)
+
+  logger.info({ tenantId, userId }, 'Impersonação iniciada pela equipe Annetec')
+  return {
+    token: session.token,
+    user: toSessionUser(resolved),
+    role: vinculo.role as 'admin' | 'seller' | 'client',
+    email: vinculo.email,
+  }
 }
 
 type OrgRow = typeof organization.$inferSelect

@@ -14,6 +14,8 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => void
   isAuthenticated: boolean
+  /** Esta sessão foi aberta por um superadmin via "Entrar como" (aba Acessos), não por login normal. */
+  isImpersonating: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -35,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { tenant } = useTenant()
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isImpersonating, setIsImpersonating] = useState(false)
   const router = useRouter()
 
   const loadSession = useCallback(async () => {
@@ -43,8 +46,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await meAction()
     if (result.success && result.data.scope === 'tenant' && result.data.tenantSlug === tenant.slug) {
       setUser(toLegacyUser(result.data))
+      setIsImpersonating(result.data.impersonatedBy !== null)
     } else {
       setUser(null)
+      setIsImpersonating(false)
     }
     setIsLoading(false)
   }, [tenant])
@@ -79,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null)
+    setIsImpersonating(false)
     void logoutAction()
     if (tenant) router.push(`/${tenant.slug}/login`)
   }
@@ -91,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         isAuthenticated: !!user,
+        isImpersonating,
       }}
     >
       {children}

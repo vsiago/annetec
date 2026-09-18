@@ -9,7 +9,14 @@ import type {
 } from '@annetec/contracts'
 import { revalidatePath } from 'next/cache'
 import { ApiError, api } from '@/lib/api/client'
-import { clearSession, getToken, saveSession } from '@/lib/api/session'
+import {
+  beginImpersonation,
+  clearSession,
+  endImpersonation,
+  getImpersonatorSession,
+  getToken,
+  saveSession,
+} from '@/lib/api/session'
 
 /**
  * Server Actions de autenticação — a ponte entre os formulários do app e a
@@ -75,6 +82,70 @@ export async function logoutAction(): Promise<ActionResult<null>> {
 
 export async function meAction(): Promise<ActionResult<SessionUser>> {
   return run(() => api<SessionUser>('/api/v1/auth/me'))
+}
+
+/**
+ * Superadmin entrando como uma conta real do inquilino (aba Acessos) — é
+ * assim que `/{slug}/admin`, `/vendedor` e `/cliente` deixam de exigir a
+ * senha daquela pessoa: viram uma sessão de inquilino de verdade, só que
+ * aberta pela plataforma. `returnTo` é pra onde `stopImpersonatingAction`
+ * volta depois.
+ */
+export async function impersonateTenantMemberAction(
+  tenantId: string,
+  userId: string,
+  returnTo: string,
+): Promise<ActionResult<SessionUser>> {
+  return run(async () => {
+    const { token, user } = await api<AuthSession>(
+      `/api/v1/platform/tenants/${tenantId}/usuarios/${userId}/entrar-como`,
+      { method: 'POST' },
+    )
+    await beginImpersonation(token, user, returnTo)
+    revalidatePath('/', 'layout')
+    return user
+  })
+}
+
+/**
+ * Igual à de cima, mas deixando a API escolher a conta pelo papel — é o que
+ * os atalhos "Portal do admin / vendedor / beneficiário" usam para entrar em
+ * um clique, sem passar pela lista de contas.
+ */
+export async function impersonateTenantRoleAction(
+  tenantId: string,
+  papel: 'admin' | 'seller' | 'client',
+  returnTo: string,
+): Promise<ActionResult<SessionUser>> {
+  return run(async () => {
+    const { token, user } = await api<AuthSession>(
+      `/api/v1/platform/tenants/${tenantId}/entrar-como/${papel}`,
+      { method: 'POST' },
+    )
+    await beginImpersonation(token, user, returnTo)
+    revalidatePath('/', 'layout')
+    return user
+  })
+}
+
+/** Sai da simulação e devolve a sessão de superadmin guardada por `impersonateTenantMemberAction`. */
+export async function stopImpersonatingAction(): Promise<ActionResult<{ returnTo: string }>> {
+  const impersonador = await getImpersonatorSession()
+  if (!impersonador) {
+    return { success: false, error: 'Nenhuma simulação ativa.' }
+  }
+
+  // Revoga a sessão simulada no servidor. Falha aqui não pode travar a volta
+  // pro superadmin — na pior hipótese a sessão expira sozinha em 1h.
+  await api('/api/v1/auth/logout', { method: 'POST' }).catch(() => null)
+
+  return run(async () => {
+    const user = await api<SessionUser>('/api/v1/auth/me', { token: impersonador.token })
+    await saveSession(impersonador.token, user)
+    await endImpersonation()
+    revalidatePath('/', 'layout')
+    return { returnTo: impersonador.returnTo }
+  })
 }
 
 /** Usado pelo middleware/layout para checar sessão sem redisparar erro para a tela. */

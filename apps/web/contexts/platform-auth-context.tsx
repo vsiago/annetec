@@ -11,6 +11,14 @@ interface PlatformAuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => void
   isAuthenticated: boolean
+  /**
+   * Há uma simulação de inquilino ocupando o cookie de sessão deste
+   * navegador. Não é o mesmo que "deslogado": a sessão de superadmin está
+   * guardada e volta ao sair da simulação.
+   */
+  isImpersonating: boolean
+  /** Nome de quem está sendo simulado, para a faixa de aviso. */
+  impersonatedName: string | null
 }
 
 const PlatformAuthContext = createContext<PlatformAuthContextType | undefined>(undefined)
@@ -25,6 +33,7 @@ const PlatformAuthContext = createContext<PlatformAuthContextType | undefined>(u
 export function PlatformAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [impersonated, setImpersonated] = useState<SessionUser | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -36,6 +45,11 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
       // aqui.
       if (result.success && result.data.scope === 'platform') {
         setUser(result.data)
+      } else if (result.success && result.data.impersonatedBy) {
+        // Sessão de inquilino aberta por "Entrar como": o superadmin não está
+        // deslogado, está simulando. Sem este ramo o guard mandava para
+        // /login sem explicar nada.
+        setImpersonated(result.data)
       }
       setIsLoading(false)
     })
@@ -63,7 +77,17 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <PlatformAuthContext.Provider value={{ user, isLoading, login, logout, isAuthenticated: !!user }}>
+    <PlatformAuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        login,
+        logout,
+        isAuthenticated: !!user,
+        isImpersonating: impersonated !== null,
+        impersonatedName: impersonated?.name ?? null,
+      }}
+    >
       {children}
     </PlatformAuthContext.Provider>
   )

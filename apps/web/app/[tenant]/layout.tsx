@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { TenantProvider, useTenant } from '@/contexts/tenant-context'
 import { TenantDataProvider } from '@/contexts/tenant-data-context'
 import { AuthProvider } from '@/contexts/auth-context'
+import { ImpersonationBanner } from '@/components/impersonation-banner'
 import { buildTenantThemeVars } from '@/lib/theme'
 import { Loader2 } from 'lucide-react'
 
@@ -48,7 +49,10 @@ function TenantGate({ children }: { children: React.ReactNode }) {
 
   return (
     <TenantDataProvider>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        <ImpersonationBanner />
+        {children}
+      </AuthProvider>
     </TenantDataProvider>
   )
 }

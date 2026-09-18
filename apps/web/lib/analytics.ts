@@ -29,6 +29,42 @@ function monthKey(date: Date): string {
   return `${date.getFullYear()}-${date.getMonth()}`
 }
 
+/** `YYYY-M` bucket key of a date — the same key `lastMonths` returns. */
+export function monthKeyOf(value: Date | string): string {
+  return monthKey(toDate(value))
+}
+
+/** "Outubro/2024" — rótulo do mês de referência no topo do painel. */
+export function formatMonthLabel(date: Date): string {
+  const month = date.toLocaleDateString('pt-BR', { month: 'long' })
+  return `${month.charAt(0).toUpperCase()}${month.slice(1)}/${date.getFullYear()}`
+}
+
+/** "01/10/2024 - 31/10/2024" — o mês de referência como intervalo de datas. */
+export function formatMonthRange(date: Date): string {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1)
+  const last = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+  const format = (value: Date) => value.toLocaleDateString('pt-BR')
+  return `${format(first)} - ${format(last)}`
+}
+
+/**
+ * Beneficiários ativos ao fim de cada um dos últimos N meses — a curva de
+ * crescimento da carteira. Conta contrato por contrato em vez de somar as
+ * adesões do mês, então cancelamento não infla a série.
+ */
+export function beneficiariesEvolution(clients: Client[], months: number) {
+  return lastMonths(months).map(bucket => {
+    const monthEnd = new Date(bucket.date.getFullYear(), bucket.date.getMonth() + 1, 0, 23, 59, 59)
+    return {
+      month: bucket.label,
+      beneficiarios: clients.filter(
+        c => toDate(c.contractDate) <= monthEnd && c.planStatus !== 'cancelled'
+      ).length,
+    }
+  })
+}
+
 /** Ordered list of the last N months, oldest first. */
 export function lastMonths(count: number): { key: string; label: string; date: Date }[] {
   const now = new Date()
@@ -235,6 +271,22 @@ export function currentMonthTotal(sales: Sale[]): number {
 
 export function formatCurrency(value: number): string {
   return `R$ ${value.toLocaleString('pt-BR')}`
+}
+
+/** Variação percentual no formato do StatCard ("12%" + direção da seta). */
+export function formatDelta(change: number | null): {
+  value: string
+  direction: 'up' | 'down' | 'neutral'
+} {
+  if (change === null) return { value: 'sem histórico', direction: 'neutral' }
+  if (change === 0) return { value: '0%', direction: 'neutral' }
+  return { value: `${Math.abs(change)}%`, direction: change > 0 ? 'up' : 'down' }
+}
+
+/** Variação entre dois totais, em pontos percentuais inteiros. */
+export function percentChange(current: number, previous: number): number | null {
+  if (previous === 0) return null
+  return Math.round(((current - previous) / previous) * 100)
 }
 
 /** "+18% vs. período anterior", or a neutral message when there's no baseline. */

@@ -17,12 +17,16 @@ export interface ResolvedMembership {
   tenantId: string | null
   tenantSlug: string | null
   tenantRole: 'admin' | 'seller' | 'client' | null
+  /** Id do superadmin dono da sessão real, quando esta é uma sessão de impersonação. */
+  impersonatedBy: string | null
 }
 
 export async function resolveActiveMembership(
   authUser: { id: string; role?: string | null },
-  authSession: { activeOrganizationId?: string | null },
+  authSession: { activeOrganizationId?: string | null; impersonatedBy?: string | null },
 ): Promise<ResolvedMembership> {
+  const impersonatedBy = authSession.impersonatedBy ?? null
+
   if (authUser.role && PLATFORM_ROLES.has(authUser.role)) {
     return {
       scope: 'platform',
@@ -30,6 +34,7 @@ export async function resolveActiveMembership(
       tenantId: null,
       tenantSlug: null,
       tenantRole: null,
+      impersonatedBy,
     }
   }
 
@@ -39,6 +44,7 @@ export async function resolveActiveMembership(
     tenantId: null,
     tenantSlug: null,
     tenantRole: null,
+    impersonatedBy,
   }
 
   if (!authSession.activeOrganizationId) return empty
@@ -63,5 +69,6 @@ export async function resolveActiveMembership(
     tenantId: row.organizationId,
     tenantSlug: row.slug,
     tenantRole: row.role as 'admin' | 'seller' | 'client',
+    impersonatedBy,
   }
 }

@@ -3,6 +3,7 @@ import {
   paginationQuery,
   resetTenantUserPasswordInput,
   tenantIntegration,
+  tenantRole,
   tenantStatus,
   updateTenantInput,
 } from '@annetec/contracts'
@@ -17,6 +18,7 @@ import { tenantsService } from './service'
 
 const idParam = z.object({ id: z.string().uuid() })
 const userParam = z.object({ id: z.string().uuid(), userId: z.string() })
+const papelParam = z.object({ id: z.string().uuid(), papel: tenantRole })
 const listQuery = paginationQuery.extend({ status: tenantStatus.optional() })
 
 /**
@@ -162,6 +164,48 @@ export const tenantsController = new Hono<AppEnv>()
         metadata: { email: resultado.email, gerada: !password },
       })
       return ok(c, resultado)
+    },
+  )
+
+  /**
+   * Entrar como o inquilino escolhendo a conta pelo PAPEL — o que os atalhos
+   * "Portal do admin / vendedor / beneficiário" usam para abrir em um clique.
+   * Mesma sessão, mesmo corte de papel e mesma trilha da rota por usuário
+   * abaixo; só a escolha de QUEM é automática.
+   */
+  .post('/:id/entrar-como/:papel', requirePlatformRole('superadmin'), param(papelParam), async c => {
+    const { id, papel } = c.req.valid('param')
+    const { role, email, ...sessao } = await tenantsService.impersonateRole(id, papel, c.req.raw.headers)
+    await recordAudit(c, {
+      action: 'tenant_user.impersonate_start',
+      resource: 'tenant_user',
+      resourceId: sessao.user.id,
+      organizationId: id,
+      metadata: { email, role, via: 'atalho' },
+    })
+    return ok(c, sessao)
+  })
+
+  /**
+   * Entrar como um usuário do inquilino — sessão real, por até 1h (default
+   * do plugin `admin`). Tão sensível quanto reset de senha — acesso silencioso
+   * à conta, não só troca de credencial — então mesmo corte de papel.
+   */
+  .post(
+    '/:id/usuarios/:userId/entrar-como',
+    requirePlatformRole('superadmin'),
+    param(userParam),
+    async c => {
+      const { id, userId } = c.req.valid('param')
+      const { role, email, ...sessao } = await tenantsService.impersonateMember(id, userId, c.req.raw.headers)
+      await recordAudit(c, {
+        action: 'tenant_user.impersonate_start',
+        resource: 'tenant_user',
+        resourceId: userId,
+        organizationId: id,
+        metadata: { email, role },
+      })
+      return ok(c, sessao)
     },
   )
 

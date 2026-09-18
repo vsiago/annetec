@@ -93,6 +93,8 @@ export interface Seller extends User {
 export interface Client extends User {
   role: 'client'
   cpf: string
+  /** "São Pedro da Aldeia - RJ", exibido na ficha do beneficiário. */
+  city?: string
   plan: string
   planStatus: 'active' | 'pending' | 'cancelled'
   contractDate: Date
@@ -120,6 +122,8 @@ export interface Lead {
   phone: string
   source: string
   status: LeadStatus
+  /** Plano que motivou o contato, exibido na coluna "Interesse". */
+  interest?: string
   notes: string
   value: number
   createdAt: Date
@@ -144,6 +148,8 @@ export interface Sale {
   sellerId: string
   sellerName: string
   plan: string
+  /** Canal que originou a venda, exibido no filtro "Origem". */
+  source?: string
   value: number
   commission: number
   date: Date
@@ -181,6 +187,12 @@ export interface ClientPlan {
   name: string
   priceMonthly: number
   description: string
+  /** Coberturas listadas no cartão do plano. */
+  features?: string[]
+  /** Destaca o plano como "Mais escolhido" na vitrine. */
+  highlight?: boolean
+  /** Público a que o plano se destina, usado no filtro da vitrine. */
+  audience?: string
 }
 
 // Accredited partner network (rede de credenciados) — core feature of
@@ -192,10 +204,18 @@ export interface Partner {
   id: string
   tenantId: string
   name: string
+  /** Frase curta do parceiro, exibida abaixo do nome na rede credenciada. */
+  tagline?: string
   category: PartnerCategory
   discountPercent: number
   address: string
+  city?: string
   phone: string
+  email?: string
+  website?: string
+  /** Início do credenciamento. */
+  since?: Date
+  specialties?: string[]
   status: PartnerStatus
 }
 
@@ -208,6 +228,10 @@ export interface Appointment {
   clientId: string
   clientName: string
   description: string
+  /** "Consulta", "Exame", "Telemedicina" — a coluna "Tipo de atendimento". */
+  kind?: string
+  /** Clínica, laboratório ou profissional que atendeu. */
+  provider?: string
   status: AppointmentStatus
   createdAt: Date
 }

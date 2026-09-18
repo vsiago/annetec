@@ -13,6 +13,18 @@ import type {
   Appointment,
   ClientPlan,
 } from './types'
+// Base de demonstração do MapCard2 — volumosa e temporária, por isso mora em
+// arquivo próprio. Entra aqui via spread para as coleções de lib/actions/*
+// enxergarem as linhas como qualquer outra semente.
+import {
+  mapcard2Appointments,
+  mapcard2Benefits,
+  mapcard2ClientPlans,
+  mapcard2Leads,
+  mapcard2Partners,
+  mapcard2Sales,
+  mapcard2Users,
+} from './mock-seed-mapcard2'
 
 // ---------------------------------------------------------------------------
 // Platform-level seed (Annetec staff — operates /admin)
@@ -131,6 +143,7 @@ export const seedPlatformCredentials = [
 // ---------------------------------------------------------------------------
 
 export const seedUsers: (User | Seller | Client)[] = [
+  ...mapcard2Users,
   {
     id: 'admin-1',
     tenantId: ANNETEC_TENANT_ID,
@@ -313,6 +326,7 @@ export const seedTenantCredentials = [
 ]
 
 export const seedLeads: Lead[] = [
+  ...mapcard2Leads,
   {
     id: 'lead-1',
     tenantId: ANNETEC_TENANT_ID,
@@ -542,6 +556,7 @@ export const seedLeads: Lead[] = [
 ]
 
 export const seedSales: Sale[] = [
+  ...mapcard2Sales,
   {
     id: 'sale-1',
     tenantId: ANNETEC_TENANT_ID,
@@ -597,6 +612,7 @@ export const seedSales: Sale[] = [
 ]
 
 export const seedClientPlans: ClientPlan[] = [
+  ...mapcard2ClientPlans,
   {
     id: 'cplan-1',
     tenantId: ANNETEC_TENANT_ID,
@@ -679,6 +695,7 @@ export const seedSalesGoals: SalesGoal[] = [
 ]
 
 export const seedBenefits: Benefit[] = [
+  ...mapcard2Benefits,
   {
     id: 'benefit-1',
     tenantId: ANNETEC_TENANT_ID,
@@ -769,6 +786,7 @@ export const seedBenefits: Benefit[] = [
 ]
 
 export const seedPartners: Partner[] = [
+  ...mapcard2Partners,
   {
     id: 'partner-1',
     tenantId: ANNETEC_TENANT_ID,
@@ -853,6 +871,7 @@ export const seedPartners: Partner[] = [
 ]
 
 export const seedAppointments: Appointment[] = [
+  ...mapcard2Appointments,
   {
     id: 'mep-apt-1',
     tenantId: MEPCARD_TENANT_ID,
