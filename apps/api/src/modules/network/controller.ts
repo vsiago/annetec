@@ -48,7 +48,11 @@ export const networkController = new Hono<AppEnv>()
       if (categoria) filters.push(eq(partners.category, categoria))
       if (q) {
         const term = `%${q}%`
-        const match = or(ilike(partners.name, term), ilike(partners.city, term))
+        const match = or(
+          ilike(partners.name, term),
+          ilike(partners.city, term),
+          ilike(partners.tagline, term),
+        )
         if (match) filters.push(match)
       }
       const where = and(...filters)
@@ -76,12 +80,17 @@ export const networkController = new Hono<AppEnv>()
       .values({
         organizationId: tenantOf(c).id,
         name: input.name,
+        tagline: input.tagline,
         category: input.category,
         discountPercent: String(input.discountPercent),
         address: input.address,
         phone: input.phone,
+        email: input.email,
+        website: input.website,
         city: input.city,
         state: input.state,
+        specialties: input.specialties,
+        since: input.since,
         status: input.status,
       })
       .returning()
@@ -105,14 +114,19 @@ export const networkController = new Hono<AppEnv>()
         .update(partners)
         .set({
           ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.tagline !== undefined ? { tagline: input.tagline } : {}),
           ...(input.category !== undefined ? { category: input.category } : {}),
           ...(input.discountPercent !== undefined
             ? { discountPercent: String(input.discountPercent) }
             : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),
           ...(input.phone !== undefined ? { phone: input.phone } : {}),
+          ...(input.email !== undefined ? { email: input.email } : {}),
+          ...(input.website !== undefined ? { website: input.website } : {}),
           ...(input.city !== undefined ? { city: input.city } : {}),
           ...(input.state !== undefined ? { state: input.state } : {}),
+          ...(input.specialties !== undefined ? { specialties: input.specialties } : {}),
+          ...(input.since !== undefined ? { since: input.since } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
         })
         .where(and(eq(partners.organizationId, tenantOf(c).id), eq(partners.id, c.req.valid('param').id)))
@@ -308,12 +322,17 @@ export function toPartner(row: typeof partners.$inferSelect): Partner {
     id: row.id,
     tenantId: row.organizationId,
     name: row.name,
+    tagline: row.tagline,
     category: row.category,
     discountPercent: Number(row.discountPercent),
     address: row.address,
     phone: row.phone,
+    email: row.email,
+    website: row.website,
     city: row.city,
     state: row.state as Partner['state'],
+    specialties: row.specialties,
+    since: row.since,
     status: row.status,
   }
 }

@@ -97,12 +97,20 @@ export const partner = z.object({
   id: uuid,
   tenantId: uuid,
   name: z.string().min(1),
+  /** Frase curta do parceiro, exibida abaixo do nome na rede credenciada. */
+  tagline: z.string().nullable(),
   category: partnerCategory,
   discountPercent: z.number().min(0).max(100),
   address: z.string().nullable(),
   phone: z.string().nullable(),
+  email: z.string().nullable(),
+  website: z.string().nullable(),
   city: z.string().nullable(),
   state: uf.nullable(),
+  /** Especialidades atendidas; é por elas que o associado busca a rede. */
+  specialties: z.array(z.string()),
+  /** Início do credenciamento, `yyyy-MM-dd`. */
+  since: z.string().nullable(),
   status: activeStatus,
 })
 export type Partner = z.infer<typeof partner>

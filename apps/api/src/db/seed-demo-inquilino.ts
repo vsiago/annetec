@@ -161,18 +161,30 @@ const MIX_ETAPAS = [
 ] as ('new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'closed' | 'lost')[]
 
 const PARCEIROS = [
-  { nome: 'Clínica Vida Mais', categoria: 'health', desconto: 30 },
-  { nome: 'LabExames', categoria: 'health', desconto: 35 },
-  { nome: 'OdontoTop', categoria: 'dental', desconto: 25 },
-  { nome: 'Clínica Bem Estar', categoria: 'health', desconto: 22 },
-  { nome: 'Visão Total', categoria: 'other', desconto: 18 },
-  { nome: 'FisioVida', categoria: 'wellness', desconto: 20 },
-  { nome: 'CardioMais', categoria: 'health', desconto: 26 },
-  { nome: 'Clínica da Mulher', categoria: 'health', desconto: 24 },
-  { nome: 'Drogaria Central', categoria: 'pharmacy', desconto: 15 },
-  { nome: 'Sabor & Saúde', categoria: 'food', desconto: 12 },
-  { nome: 'Academia Corpo Ativo', categoria: 'wellness', desconto: 20 },
-  { nome: 'Curso Avance', categoria: 'education', desconto: 40 },
+  { nome: 'Clínica Vida Mais', categoria: 'health', desconto: 30,
+    frase: 'Consultas em até 48h', especialidades: ['Clínica Geral', 'Pediatria', 'Ortopedia'] },
+  { nome: 'LabExames', categoria: 'health', desconto: 35,
+    frase: 'Resultado em 24h pelo aplicativo', especialidades: ['Análises Clínicas', 'Imagem'] },
+  { nome: 'OdontoTop', categoria: 'dental', desconto: 25,
+    frase: 'Avaliação sem custo', especialidades: ['Odontologia Geral', 'Ortodontia'] },
+  { nome: 'Clínica Bem Estar', categoria: 'health', desconto: 22,
+    frase: 'Atendimento humanizado', especialidades: ['Psicologia', 'Nutrição'] },
+  { nome: 'Visão Total', categoria: 'other', desconto: 18,
+    frase: 'Exame de vista gratuito', especialidades: ['Oftalmologia', 'Óptica'] },
+  { nome: 'FisioVida', categoria: 'wellness', desconto: 20,
+    frase: 'Reabilitação com acompanhamento', especialidades: ['Fisioterapia', 'RPG'] },
+  { nome: 'CardioMais', categoria: 'health', desconto: 26,
+    frase: 'Check-up cardiológico completo', especialidades: ['Cardiologia'] },
+  { nome: 'Clínica da Mulher', categoria: 'health', desconto: 24,
+    frase: 'Saúde da mulher em um só lugar', especialidades: ['Ginecologia', 'Mastologia'] },
+  { nome: 'Drogaria Central', categoria: 'pharmacy', desconto: 15,
+    frase: 'Desconto em medicamentos de uso contínuo', especialidades: ['Medicamentos', 'Perfumaria'] },
+  { nome: 'Sabor & Saúde', categoria: 'food', desconto: 12,
+    frase: 'Refeições balanceadas', especialidades: ['Alimentação Saudável'] },
+  { nome: 'Academia Corpo Ativo', categoria: 'wellness', desconto: 20,
+    frase: 'Sem taxa de matrícula', especialidades: ['Musculação', 'Funcional', 'Pilates'] },
+  { nome: 'Curso Avance', categoria: 'education', desconto: 40,
+    frase: 'Cursos livres e profissionalizantes', especialidades: ['Idiomas', 'Informática'] },
 ] as const
 
 const BENEFICIOS = [
@@ -192,6 +204,11 @@ function nomePessoa(i: number): string {
 function cpfDemo(i: number): string {
   const d = String(10000000000 + i * 7919).slice(0, 11)
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
+}
+
+/** `yyyy-MM-dd` de N dias atrás — formato que a coluna `date` aceita. */
+function umaDataDe(diasAtras: number): string {
+  return new Date(Date.now() - diasAtras * 86_400_000).toISOString().slice(0, 10)
 }
 
 function telefoneDemo(i: number): string {
@@ -440,12 +457,19 @@ async function main() {
         .values({
           organizationId: org.id,
           name: p.nome,
+          tagline: p.frase,
           category: p.categoria,
           discountPercent: String(p.desconto),
           address: `${['Rua das Flores', 'Av. Brasil', 'Rua do Sol'][i % 3]}, ${100 + i * 7}`,
           city: cidade.split(' - ')[0]!,
           state: 'RJ',
           phone: telefoneDemo(i),
+          email: `contato@${semAcento(p.nome).replace(/[^a-z]/g, '')}.test`,
+          website: `https://${semAcento(p.nome).replace(/[^a-z]/g, '')}.test`,
+          specialties: [...p.especialidades],
+          // Credenciamentos escalonados: a coluna "desde" só diz algo se as
+          // datas forem diferentes entre si.
+          since: umaDataDe(180 + i * 45),
           status: 'active',
         })
         .onConflictDoNothing()

@@ -1,6 +1,7 @@
 import { relations } from 'drizzle-orm'
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -123,12 +124,20 @@ export const partners = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
+    /** Frase curta do parceiro, exibida abaixo do nome na rede credenciada. */
+    tagline: text('tagline'),
     category: partnerCategoryEnum('category').notNull(),
     discountPercent: numeric('discount_percent', { precision: 5, scale: 2 }).notNull().default('0'),
     address: text('address'),
     phone: text('phone'),
+    email: text('email'),
+    website: text('website'),
     city: text('city'),
     state: text('state'),
+    /** Especialidades atendidas; é por elas que o associado busca a rede. */
+    specialties: jsonb('specialties').$type<string[]>().notNull().default([]),
+    /** Início do credenciamento. */
+    since: date('since'),
     status: activeStatusEnum('status').notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

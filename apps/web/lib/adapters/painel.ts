@@ -154,13 +154,27 @@ export function parceiroDaApi(dto: ApiPartner): Partner {
     id: dto.id,
     tenantId: dto.tenantId,
     name: dto.name,
+    tagline: dto.tagline ?? undefined,
     category: dto.category,
     discountPercent: dto.discountPercent,
     address: dto.address ?? '',
-    city: dto.city ?? undefined,
+    // A tela guarda cidade e UF num campo so ("Cabo Frio - RJ"), entao os dois
+    // sao recompostos aqui — e `cidadeSemUf`/`ufDaCidade` os separam na volta.
+    city: dto.city ? (dto.state ? `${dto.city} - ${dto.state}` : dto.city) : undefined,
     phone: dto.phone ?? '',
+    email: dto.email ?? undefined,
+    website: dto.website ?? undefined,
+    specialties: dto.specialties.length > 0 ? dto.specialties : undefined,
+    since: dto.since ? new Date(dto.since) : undefined,
     status: dto.status,
   }
+}
+
+/** `Date` -> `yyyy-MM-dd`, que e o formato que o contrato aceita em `since`. */
+function dataSimples(valor?: Date): string | null {
+  if (!valor) return null
+  const d = new Date(valor)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
 }
 
 /**
@@ -174,12 +188,17 @@ export function parceiroDaApi(dto: ApiPartner): Partner {
 export function parceiroParaApiCriacao(parceiro: Partial<Partner>) {
   return {
     name: parceiro.name ?? '',
+    tagline: parceiro.tagline || null,
     category: parceiro.category ?? 'other',
     discountPercent: parceiro.discountPercent ?? 0,
     address: parceiro.address || null,
     phone: parceiro.phone || null,
+    email: parceiro.email || null,
+    website: parceiro.website || null,
     city: cidadeSemUf(parceiro.city),
     state: ufDaCidade(parceiro.city),
+    specialties: parceiro.specialties ?? [],
+    since: dataSimples(parceiro.since),
     status: parceiro.status ?? 'active',
   }
 }
@@ -188,6 +207,7 @@ export function parceiroParaApiCriacao(parceiro: Partial<Partner>) {
 export function parceiroParaApi(parceiro: Partial<Partner>) {
   return {
     ...(parceiro.name !== undefined ? { name: parceiro.name } : {}),
+    ...(parceiro.tagline !== undefined ? { tagline: parceiro.tagline || null } : {}),
     ...(parceiro.category !== undefined ? { category: parceiro.category } : {}),
     ...(parceiro.discountPercent !== undefined
       ? { discountPercent: parceiro.discountPercent }
@@ -197,6 +217,10 @@ export function parceiroParaApi(parceiro: Partial<Partner>) {
       ? { city: cidadeSemUf(parceiro.city), state: ufDaCidade(parceiro.city) }
       : {}),
     ...(parceiro.phone !== undefined ? { phone: parceiro.phone || null } : {}),
+    ...(parceiro.email !== undefined ? { email: parceiro.email || null } : {}),
+    ...(parceiro.website !== undefined ? { website: parceiro.website || null } : {}),
+    ...(parceiro.specialties !== undefined ? { specialties: parceiro.specialties ?? [] } : {}),
+    ...(parceiro.since !== undefined ? { since: dataSimples(parceiro.since) } : {}),
     ...(parceiro.status !== undefined ? { status: parceiro.status } : {}),
   }
 }

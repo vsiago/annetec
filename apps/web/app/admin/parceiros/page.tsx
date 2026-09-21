@@ -237,14 +237,23 @@ function AddPartnerDialog({
       setError('Preencha nome e desconto')
       return
     }
+    // Esta é a visão da equipe Annetec, que cadastra o essencial do parceiro.
+    // Vitrine (frase, site, especialidades, início do credenciamento) é do
+    // painel do inquilino — aqui os campos são preservados na edição em vez de
+    // zerados, senão salvar daqui apagaria o que o inquilino escreveu.
     const payload = {
       name,
+      tagline: editing?.tagline ?? null,
       category,
       discountPercent: Number(discountPercent),
       address: address || null,
       phone: phone || null,
+      email: editing?.email ?? null,
+      website: editing?.website ?? null,
       city: city || null,
       state: state || null,
+      specialties: editing?.specialties ?? [],
+      since: editing?.since ?? null,
       status: editing?.status ?? ('active' as const),
     }
 
