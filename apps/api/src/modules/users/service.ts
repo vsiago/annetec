@@ -4,9 +4,9 @@ import {
   type TenantUser,
   type UpdateTenantUserInput,
 } from '@annetec/contracts'
-import { and, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { member, sellerProfiles, user } from '@/db/schema'
+import { clientProfiles, contracts, member, sales, sellerProfiles, user } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { auth } from '@/lib/auth'
 import { decryptSecret, encryptSecret } from '@/lib/crypto'
@@ -40,14 +40,24 @@ export const usersService = {
     }
     const where = and(...filters)
 
+    const vendido = totalVendidoPorVendedor(params.tenantId)
+    const ultima = ultimaVendaPorCliente(params.tenantId)
+
     const [rows, [totals]] = await Promise.all([
       db
         .select({
           member,
           user,
-          upstreamProdutorCodigo: sellerProfiles.upstreamProdutorCodigo,
-          // A senha cifrada nunca sai daqui — só se ela existe.
-          produtorPassword: sellerProfiles.upstreamProdutorPasswordEncrypted,
+          seller: sellerProfiles,
+          clientCpf: clientProfiles.cpf,
+          clientContractCodigo: clientProfiles.primaryContractCodigo,
+          contrato: contracts,
+          totalVendido: vendido.total,
+          ultimaVendaPlano: ultima.planName,
+          ultimaVendaStatus: ultima.status,
+          ultimaVendaValor: ultima.value,
+          ultimaVendaEm: ultima.soldAt,
+          ultimaVendaVendedor: ultima.sellerId,
         })
         .from(member)
         .innerJoin(user, eq(user.id, member.userId))
@@ -55,6 +65,19 @@ export const usersService = {
           sellerProfiles,
           and(eq(sellerProfiles.userId, member.userId), eq(sellerProfiles.organizationId, member.organizationId)),
         )
+        .leftJoin(vendido, eq(vendido.sellerId, member.userId))
+        .leftJoin(
+          clientProfiles,
+          and(eq(clientProfiles.userId, member.userId), eq(clientProfiles.organizationId, member.organizationId)),
+        )
+        .leftJoin(
+          contracts,
+          and(
+            eq(contracts.organizationId, member.organizationId),
+            eq(contracts.upstreamCodigo, clientProfiles.primaryContractCodigo),
+          ),
+        )
+        .leftJoin(ultima, eq(ultima.clientUserId, member.userId))
         .where(where)
         .orderBy(desc(member.createdAt))
         .limit(params.perPage)
@@ -64,7 +87,22 @@ export const usersService = {
 
     return {
       items: rows.map(row =>
-        toDomain(row.member, row.user, row.upstreamProdutorCodigo, Boolean(row.produtorPassword)),
+        toDomain(row.member, row.user, {
+          seller: row.seller,
+          totalVendido: row.totalVendido,
+          clientCpf: row.clientCpf,
+          clientContractCodigo: row.clientContractCodigo,
+          contrato: row.contrato,
+          ultimaVenda: row.ultimaVendaEm
+            ? {
+                planName: row.ultimaVendaPlano,
+                status: row.ultimaVendaStatus,
+                value: row.ultimaVendaValor,
+                soldAt: row.ultimaVendaEm,
+                sellerId: row.ultimaVendaVendedor,
+              }
+            : null,
+        }),
       ),
       total: totals?.value ?? 0,
     }
@@ -73,15 +111,60 @@ export const usersService = {
   async getById(tenantId: string, id: string): Promise<TenantUser> {
     const row = await findMembership(tenantId, id)
     if (!row) throw AppError.notFound('Usuário')
-    const [seller] = await db
+
+    const vendido = totalVendidoPorVendedor(tenantId)
+    const ultima = ultimaVendaPorCliente(tenantId)
+
+    const [extras] = await db
       .select({
-        codigo: sellerProfiles.upstreamProdutorCodigo,
-        senha: sellerProfiles.upstreamProdutorPasswordEncrypted,
+        seller: sellerProfiles,
+        clientCpf: clientProfiles.cpf,
+        clientContractCodigo: clientProfiles.primaryContractCodigo,
+        contrato: contracts,
+        totalVendido: vendido.total,
+        ultimaVendaPlano: ultima.planName,
+        ultimaVendaStatus: ultima.status,
+        ultimaVendaValor: ultima.value,
+        ultimaVendaEm: ultima.soldAt,
+        ultimaVendaVendedor: ultima.sellerId,
       })
-      .from(sellerProfiles)
-      .where(and(eq(sellerProfiles.userId, id), eq(sellerProfiles.organizationId, tenantId)))
+      .from(member)
+      .leftJoin(
+        sellerProfiles,
+        and(eq(sellerProfiles.userId, member.userId), eq(sellerProfiles.organizationId, member.organizationId)),
+      )
+      .leftJoin(vendido, eq(vendido.sellerId, member.userId))
+      .leftJoin(
+        clientProfiles,
+        and(eq(clientProfiles.userId, member.userId), eq(clientProfiles.organizationId, member.organizationId)),
+      )
+      .leftJoin(
+        contracts,
+        and(
+          eq(contracts.organizationId, member.organizationId),
+          eq(contracts.upstreamCodigo, clientProfiles.primaryContractCodigo),
+        ),
+      )
+      .leftJoin(ultima, eq(ultima.clientUserId, member.userId))
+      .where(and(eq(member.organizationId, tenantId), eq(member.userId, id)))
       .limit(1)
-    return toDomain(row.member, row.user, seller?.codigo ?? null, Boolean(seller?.senha))
+
+    return toDomain(row.member, row.user, {
+      seller: extras?.seller ?? null,
+      totalVendido: extras?.totalVendido ?? null,
+      clientCpf: extras?.clientCpf ?? null,
+      clientContractCodigo: extras?.clientContractCodigo ?? null,
+      contrato: extras?.contrato ?? null,
+      ultimaVenda: extras?.ultimaVendaEm
+        ? {
+            planName: extras.ultimaVendaPlano,
+            status: extras.ultimaVendaStatus,
+            value: extras.ultimaVendaValor,
+            soldAt: extras.ultimaVendaEm,
+            sellerId: extras.ultimaVendaVendedor,
+          }
+        : null,
+    })
   },
 
   async create(tenantId: string, input: CreateTenantUserInput): Promise<TenantUser> {
@@ -107,6 +190,16 @@ export const usersService = {
       await db
         .insert(sellerProfiles)
         .values({ userId: authUser.id, organizationId: tenantId })
+        .onConflictDoNothing()
+    }
+
+    // O perfil do associado só nasce com CPF porque a coluna é obrigatória —
+    // é por ele que o contrato da Digital Saúde é reconciliado depois. Sem
+    // CPF o cadastro existe como conta e ganha o perfil na primeira edição.
+    if (input.role === 'client' && input.cpf) {
+      await db
+        .insert(clientProfiles)
+        .values({ userId: authUser.id, organizationId: tenantId, cpf: input.cpf })
         .onConflictDoNothing()
     }
 
@@ -153,6 +246,16 @@ export const usersService = {
       if (input.role === 'seller') {
         await db.insert(sellerProfiles).values({ userId: id, organizationId: tenantId }).onConflictDoNothing()
       }
+    }
+
+    if (input.cpf !== undefined && input.cpf !== null) {
+      await db
+        .insert(clientProfiles)
+        .values({ userId: id, organizationId: tenantId, cpf: input.cpf })
+        .onConflictDoUpdate({
+          target: [clientProfiles.userId, clientProfiles.organizationId],
+          set: { cpf: input.cpf },
+        })
     }
 
     if (input.active !== undefined) {
@@ -296,24 +399,165 @@ function generateProvisionalPassword(): string {
 
 type MemberRow = typeof member.$inferSelect
 type UserRow = typeof user.$inferSelect
+type SellerRow = typeof sellerProfiles.$inferSelect
+type ContractRow = typeof contracts.$inferSelect
 
-function toDomain(
-  memberRow: MemberRow,
-  userRow: UserRow,
-  upstreamProdutorCodigo?: string | null,
-  hasProdutorCredentials = false,
-): TenantUser {
+/**
+ * Total vendido por vendedor no inquilino, como subconsulta agrupada para
+ * juntar na listagem.
+ *
+ * Só conta venda CONFIRMADA: pendente ainda pode não fechar e cancelada não
+ * fechou — somá-las inflaria o desempenho do vendedor e, pior, a comissão
+ * exibida ao lado. E é calculado a cada leitura em vez de guardado numa
+ * coluna justamente porque uma venda pode ser cancelada ou corrigida depois;
+ * um acumulado gravado envelheceria em silêncio.
+ */
+function totalVendidoPorVendedor(tenantId: string) {
+  return db
+    .select({
+      sellerId: sales.sellerId,
+      total: sql<string>`sum(${sales.value})`.as('total_vendido'),
+    })
+    .from(sales)
+    .where(and(eq(sales.organizationId, tenantId), eq(sales.status, 'confirmed')))
+    .groupBy(sales.sellerId)
+    .as('total_vendido_por_vendedor')
+}
+
+/**
+ * Venda mais recente de cada associado. `selectDistinctOn` + `order by` traz
+ * exatamente uma linha por cliente, o que importa aqui: um `leftJoin` que
+ * devolvesse duas vendas duplicaria a PESSOA na listagem de usuários.
+ *
+ * Serve de origem alternativa do plano quando não existe contrato espelhado —
+ * ver `source` em `tenantUserClientProfile`.
+ */
+function ultimaVendaPorCliente(tenantId: string) {
+  return db
+    .selectDistinctOn([sales.clientUserId], {
+      clientUserId: sales.clientUserId,
+      planName: sales.planName,
+      status: sales.status,
+      value: sales.value,
+      soldAt: sales.soldAt,
+      sellerId: sales.sellerId,
+    })
+    .from(sales)
+    .where(eq(sales.organizationId, tenantId))
+    .orderBy(sales.clientUserId, desc(sales.soldAt))
+    .as('ultima_venda_por_cliente')
+}
+
+interface Extras {
+  seller: SellerRow | null
+  totalVendido: string | null
+  clientCpf: string | null
+  clientContractCodigo: string | null
+  contrato: ContractRow | null
+  ultimaVenda: {
+    planName: string | null
+    status: 'pending' | 'confirmed' | 'cancelled' | null
+    value: string | null
+    soldAt: Date
+    sellerId: string | null
+  } | null
+}
+
+function toDomain(memberRow: MemberRow, userRow: UserRow, extras: Extras): TenantUser {
+  const role = memberRow.role as TenantUser['role']
   return {
     id: userRow.id,
     tenantId: memberRow.organizationId,
     name: userRow.name,
     email: userRow.email,
-    role: memberRow.role as TenantUser['role'],
+    role,
     phone: userRow.phone ?? null,
     avatarUrl: userRow.image,
     active: memberRow.active,
     createdAt: memberRow.createdAt.toISOString(),
-    upstreamProdutorCodigo: upstreamProdutorCodigo ?? null,
-    hasProdutorCredentials,
+    upstreamProdutorCodigo: extras.seller?.upstreamProdutorCodigo ?? null,
+    // A senha cifrada nunca sai daqui — só se ela existe.
+    hasProdutorCredentials: Boolean(extras.seller?.upstreamProdutorPasswordEncrypted),
+    sellerProfile: role === 'seller' ? perfilVendedor(extras) : null,
+    clientProfile: role === 'client' ? perfilAssociado(extras) : null,
+  }
+}
+
+function perfilVendedor(extras: Extras): TenantUser['sellerProfile'] {
+  return {
+    region: extras.seller?.region ?? null,
+    salesGoal: Number(extras.seller?.salesGoal ?? 0),
+    commissionRate: Number(extras.seller?.commissionRate ?? 0),
+    totalSales: Number(extras.totalVendido ?? 0),
+  }
+}
+
+/**
+ * Contrato ganha do registro de venda quando existe: ele é o espelho da
+ * Digital Saúde, e é lá que o plano do associado de fato vive. A venda entra
+ * como origem secundária para o inquilino que ainda não integrou o ERP — sem
+ * ela, a carteira inteira apareceria sem plano na tela.
+ */
+function perfilAssociado(extras: Extras): TenantUser['clientProfile'] {
+  const base = { cpf: extras.clientCpf ?? null }
+  const contrato = extras.contrato
+
+  if (contrato) {
+    return {
+      ...base,
+      source: 'contrato',
+      primaryContractCodigo: extras.clientContractCodigo ?? contrato.upstreamCodigo,
+      planName: contrato.planName,
+      planStatus: situacaoDoContrato(contrato.status),
+      contractStatus: contrato.status,
+      contractSignedAt: contrato.signedAt,
+      cardNumber: contrato.upstreamCodigo,
+      monthlyValue: contrato.monthlyValue === null ? null : Number(contrato.monthlyValue),
+      sellerUserId: contrato.sellerUserId ?? extras.ultimaVenda?.sellerId ?? null,
+    }
+  }
+
+  const venda = extras.ultimaVenda
+  if (venda) {
+    return {
+      ...base,
+      source: 'venda',
+      primaryContractCodigo: extras.clientContractCodigo ?? null,
+      planName: venda.planName,
+      planStatus: venda.status === 'confirmed' ? 'active' : venda.status,
+      contractStatus: null,
+      contractSignedAt: venda.soldAt.toISOString(),
+      // Sem contrato não há carteirinha: o número é emitido pela Digital
+      // Saúde, e um gerado aqui não seria reconhecido em parceiro nenhum.
+      cardNumber: null,
+      monthlyValue: venda.value === null ? null : Number(venda.value),
+      sellerUserId: venda.sellerId,
+    }
+  }
+
+  return {
+    ...base,
+    source: null,
+    primaryContractCodigo: extras.clientContractCodigo ?? null,
+    planName: null,
+    planStatus: null,
+    contractStatus: null,
+    contractSignedAt: null,
+    cardNumber: null,
+    monthlyValue: null,
+    sellerUserId: null,
+  }
+}
+
+/** Reduz o vocabulário do ERP aos três estados que a tela mostra. */
+function situacaoDoContrato(status: ContractRow['status']): 'active' | 'pending' | 'cancelled' {
+  switch (status) {
+    case 'ativo':
+      return 'active'
+    case 'cancelado':
+    case 'suspenso':
+      return 'cancelled'
+    default:
+      return 'pending'
   }
 }

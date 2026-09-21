@@ -49,7 +49,7 @@ import { getAllSellers, useTenantData } from '@/contexts/tenant-data-context'
 import { formatDelta, monthKeyOf, percentChange } from '@/lib/analytics'
 import { formatPhone, leadSchema } from '@/lib/form-schemas'
 import { FOLLOW_UP_STATUSES, leadStatusMeta } from '@/lib/lead-status'
-import type { Lead, LeadStatus } from '@/lib/types'
+import type { Interaction, Lead, LeadStatus } from '@/lib/types'
 import { useZodForm } from '@/lib/use-zod-form'
 import { cn, getInitials } from '@/lib/utils'
 
@@ -561,7 +561,7 @@ export default function AdminLeadsPage() {
             return 'Descreva o que foi tratado no contato.'
           }
           await addLeadInteraction(contacting.id, {
-            type: interaction.type as 'call' | 'email' | 'meeting' | 'note',
+            type: interaction.type as Interaction['type'],
             description: interaction.description.trim(),
             date: new Date(),
           })
@@ -575,6 +575,7 @@ export default function AdminLeadsPage() {
             placeholder="Selecione o tipo"
             options={[
               { value: 'call', label: 'Ligação' },
+              { value: 'whatsapp', label: 'WhatsApp' },
               { value: 'email', label: 'E-mail' },
               { value: 'meeting', label: 'Reunião' },
               { value: 'note', label: 'Anotação' },

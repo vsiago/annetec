@@ -81,6 +81,17 @@ export const createSaleInput = sale.omit({
 })
 export type CreateSaleInput = z.infer<typeof createSaleInput>
 
+/**
+ * Correção de venda já registrada. `sellerId` fica de fora: trocar o vendedor
+ * muda a quem a comissão pertence — isso é estorno e novo lançamento, não
+ * edição. A comissão também não entra: ela é recalculada pela taxa vigente
+ * do vendedor, nunca digitada.
+ */
+export const updateSaleInput = createSaleInput
+  .omit({ sellerId: true })
+  .partial()
+export type UpdateSaleInput = z.infer<typeof updateSaleInput>
+
 export const salesGoal = z.object({
   id: uuid,
   tenantId: uuid,
@@ -118,3 +129,17 @@ export const createAppointmentInput = appointment.omit({
   status: true,
 })
 export type CreateAppointmentInput = z.infer<typeof createAppointmentInput>
+
+/**
+ * Andamento do atendimento. Só `status` e `description` mudam: `clientName` e
+ * `clientUserId` identificam de quem é o chamado — trocá-los transformaria o
+ * histórico de uma pessoa no de outra. Para isso, abre-se outro chamado.
+ *
+ * `protocol` também fica de fora: quando o inquilino usa o módulo de
+ * atendimento da Digital Saúde, quem o emite é o ERP.
+ */
+export const updateAppointmentInput = z.object({
+  status: appointmentStatus.optional(),
+  description: z.string().min(1).optional(),
+})
+export type UpdateAppointmentInput = z.infer<typeof updateAppointmentInput>

@@ -1,18 +1,21 @@
 import {
   createBenefitInput,
+  createClubPlanInput,
   createPartnerInput,
   paginationQuery,
   partnerCategory,
   updateBenefitInput,
+  updateClubPlanInput,
   updatePartnerInput,
   type Benefit,
+  type ClubPlan,
   type Partner,
 } from '@annetec/contracts'
-import { and, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '@/db/client'
-import { benefits, partners } from '@/db/schema'
+import { benefits, clubPlans, partners } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { requireAuth, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
@@ -219,7 +222,88 @@ export const networkController = new Hono<AppEnv>()
     return noContent(c)
   })
 
-function toPartner(row: typeof partners.$inferSelect): Partner {
+  /**
+   * Planos do clube — a vitrine comercial do INQUILINO, não o catálogo da
+   * Digital Saúde (esse é `/catalogo/planos`, read-only e indexado por
+   * `codigo`). Leitura para qualquer papel, porque o associado vê a vitrine;
+   * escrita só para admin, porque preço é decisão comercial.
+   */
+  .get('/planos', async c => {
+    const rows = await db
+      .select()
+      .from(clubPlans)
+      .where(eq(clubPlans.organizationId, tenantOf(c).id))
+      .orderBy(desc(clubPlans.highlight), asc(clubPlans.priceMonthly))
+    return ok(c, rows.map(toClubPlan))
+  })
+
+  .post('/planos', requireTenantRole('admin'), json(createClubPlanInput), async c => {
+    const input = c.req.valid('json')
+    const [row] = await db
+      .insert(clubPlans)
+      .values({
+        organizationId: tenantOf(c).id,
+        name: input.name,
+        description: input.description,
+        priceMonthly: String(input.priceMonthly),
+        features: input.features,
+        audience: input.audience,
+        highlight: input.highlight,
+        upstreamPlanCodigo: input.upstreamPlanCodigo,
+        status: input.status,
+      })
+      .returning()
+    await recordAudit(c, {
+      action: 'club_plan.created',
+      resource: 'club_plan',
+      resourceId: row!.id,
+      metadata: { name: input.name, priceMonthly: input.priceMonthly },
+    })
+    return created(c, toClubPlan(row!))
+  })
+
+  .patch('/planos/:id', requireTenantRole('admin'), param(idParam), json(updateClubPlanInput), async c => {
+    const input = c.req.valid('json')
+    const [row] = await db
+      .update(clubPlans)
+      .set({
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.priceMonthly !== undefined ? { priceMonthly: String(input.priceMonthly) } : {}),
+        ...(input.features !== undefined ? { features: input.features } : {}),
+        ...(input.audience !== undefined ? { audience: input.audience } : {}),
+        ...(input.highlight !== undefined ? { highlight: input.highlight } : {}),
+        ...(input.upstreamPlanCodigo !== undefined
+          ? { upstreamPlanCodigo: input.upstreamPlanCodigo }
+          : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(clubPlans.organizationId, tenantOf(c).id), eq(clubPlans.id, c.req.valid('param').id)))
+      .returning()
+
+    if (!row) throw AppError.notFound('Plano do clube')
+    await recordAudit(c, {
+      action: 'club_plan.updated',
+      resource: 'club_plan',
+      resourceId: row.id,
+      metadata: { campos: Object.keys(input) },
+    })
+    return ok(c, toClubPlan(row))
+  })
+
+  .delete('/planos/:id', requireTenantRole('admin'), param(idParam), async c => {
+    const { id } = c.req.valid('param')
+    const [row] = await db
+      .delete(clubPlans)
+      .where(and(eq(clubPlans.organizationId, tenantOf(c).id), eq(clubPlans.id, id)))
+      .returning({ id: clubPlans.id })
+    if (!row) throw AppError.notFound('Plano do clube')
+    await recordAudit(c, { action: 'club_plan.deleted', resource: 'club_plan', resourceId: id })
+    return noContent(c)
+  })
+
+export function toPartner(row: typeof partners.$inferSelect): Partner {
   return {
     id: row.id,
     tenantId: row.organizationId,
@@ -234,7 +318,7 @@ function toPartner(row: typeof partners.$inferSelect): Partner {
   }
 }
 
-function toBenefit(row: typeof benefits.$inferSelect): Benefit {
+export function toBenefit(row: typeof benefits.$inferSelect): Benefit {
   return {
     id: row.id,
     tenantId: row.organizationId,
@@ -244,5 +328,20 @@ function toBenefit(row: typeof benefits.$inferSelect): Benefit {
     discountPercent: row.discountPercent === null ? null : Number(row.discountPercent),
     provider: row.provider,
     locations: row.locations,
+  }
+}
+
+function toClubPlan(row: typeof clubPlans.$inferSelect): ClubPlan {
+  return {
+    id: row.id,
+    tenantId: row.organizationId,
+    name: row.name,
+    description: row.description,
+    priceMonthly: Number(row.priceMonthly),
+    features: row.features,
+    audience: row.audience,
+    highlight: row.highlight,
+    upstreamPlanCodigo: row.upstreamPlanCodigo,
+    status: row.status,
   }
 }

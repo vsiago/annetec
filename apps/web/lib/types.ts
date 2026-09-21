@@ -134,7 +134,8 @@ export interface Lead {
 
 export interface Interaction {
   id: string
-  type: 'call' | 'email' | 'meeting' | 'note'
+  /** Mesmos canais que o contrato da API aceita — WhatsApp inclusive. */
+  type: 'call' | 'email' | 'meeting' | 'note' | 'whatsapp'
   description: string
   date: Date
 }

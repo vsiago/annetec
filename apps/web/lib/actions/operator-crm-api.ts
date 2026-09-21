@@ -1,7 +1,17 @@
 'use server'
 
-import type { CreateInteractionInput, CreateLeadInput, CreateSaleInput, Lead, Sale, UpdateLeadInput } from '@annetec/contracts'
-import { ApiError, apiFetch, tenantPath } from '@/lib/api/client'
+import type {
+  CreateInteractionInput,
+  CreateLeadInput,
+  CreateSaleInput,
+  Lead,
+  Sale,
+  SalesGoal,
+  UpdateLeadInput,
+  UpdateSaleInput,
+  UpsertSalesGoalInput,
+} from '@annetec/contracts'
+import { ApiError, apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
 
 /**
  * Funil comercial da Annetec-operadora — `/api/v1/t/:tenantSlug/crm`, mesmo
@@ -18,10 +28,11 @@ export async function listOperatorLeadsAction(
   params?: { status?: string; q?: string },
 ): Promise<ActionResult<Lead[]>> {
   return run(async () => {
-    const { data } = await apiFetch<Lead[]>(tenantPath(tenantSlug, '/crm/leads'), {
-      query: { perPage: 200, status: params?.status, q: params?.q },
+    // Lista completa: os indicadores do funil contam em cima dela, então uma
+    // página truncada viraria número errado na tela.
+    return apiFetchAll<Lead>(tenantPath(tenantSlug, '/crm/leads'), {
+      query: { status: params?.status, q: params?.q },
     })
-    return data
   })
 }
 
@@ -111,4 +122,71 @@ async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
     }
     return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
   }
+}
+
+/**
+ * Vendas do inquilino. Lista completa pelo mesmo motivo dos leads: faturamento
+ * do mês, ranking de vendedor e comissão são somas sobre a coleção inteira —
+ * uma página truncada vira número errado no painel, não lista curta.
+ *
+ * O escopo vem do servidor, não daqui: `GET /crm/vendas` prende vendedor à
+ * própria carteira e libera a do inquilino inteiro para admin.
+ */
+export async function listOperatorSalesAction(
+  tenantSlug: string,
+  params?: { vendedorId?: string; de?: string; ate?: string },
+): Promise<ActionResult<Sale[]>> {
+  return run(async () => {
+    return apiFetchAll<Sale>(tenantPath(tenantSlug, '/crm/vendas'), {
+      query: { vendedorId: params?.vendedorId, de: params?.de, ate: params?.ate },
+    })
+  })
+}
+
+/**
+ * Corrige uma venda já lançada. Não aceita trocar o vendedor nem digitar
+ * comissão — ver `updateSaleInput` em @annetec/contracts.
+ */
+export async function updateOperatorSaleAction(
+  tenantSlug: string,
+  id: string,
+  patch: UpdateSaleInput,
+): Promise<ActionResult<Sale>> {
+  return run(async () => {
+    const { data } = await apiFetch<Sale>(tenantPath(tenantSlug, `/crm/vendas/${id}`), {
+      method: 'PATCH',
+      body: patch,
+    })
+    return data
+  })
+}
+
+/** Metas do ano. `ano` é obrigatório na rota — sem ele não há o que listar. */
+export async function listOperatorSalesGoalsAction(
+  tenantSlug: string,
+  ano: number,
+): Promise<ActionResult<SalesGoal[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<SalesGoal[]>(tenantPath(tenantSlug, '/crm/metas'), {
+      query: { ano },
+    })
+    return data
+  })
+}
+
+/**
+ * Grava a meta do vendedor no mês. É PUT e não POST de propósito: existe uma
+ * meta por (vendedor, mês, ano), então regravar substitui em vez de duplicar.
+ */
+export async function upsertOperatorSalesGoalAction(
+  tenantSlug: string,
+  input: UpsertSalesGoalInput,
+): Promise<ActionResult<SalesGoal>> {
+  return run(async () => {
+    const { data } = await apiFetch<SalesGoal>(tenantPath(tenantSlug, '/crm/metas'), {
+      method: 'PUT',
+      body: input,
+    })
+    return data
+  })
 }

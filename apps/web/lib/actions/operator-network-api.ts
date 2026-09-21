@@ -2,12 +2,15 @@
 
 import type {
   Benefit,
+  ClubPlan,
   CreateBenefitInput,
+  CreateClubPlanInput,
   CreatePartnerInput,
   Partner,
   UpdateBenefitInput,
+  UpdateClubPlanInput,
 } from '@annetec/contracts'
-import { ApiError, apiFetch, tenantPath } from '@/lib/api/client'
+import { ApiError, apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
 
 /**
  * Rede de parceiros e clube de benefícios da Annetec-operadora —
@@ -23,10 +26,9 @@ export async function listOperatorPartnersAction(
   params?: { categoria?: string; q?: string },
 ): Promise<ActionResult<Partner[]>> {
   return run(async () => {
-    const { data } = await apiFetch<Partner[]>(tenantPath(tenantSlug, '/rede/parceiros'), {
-      query: { perPage: 200, categoria: params?.categoria, q: params?.q },
+    return apiFetchAll<Partner>(tenantPath(tenantSlug, '/rede/parceiros'), {
+      query: { categoria: params?.categoria, q: params?.q },
     })
-    return data
   })
 }
 
@@ -118,4 +120,53 @@ async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
     }
     return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
   }
+}
+
+/**
+ * Planos que o inquilino vende ao associado. É a vitrine comercial do clube,
+ * não o catálogo da Digital Saúde — esse fica em `/catalogo/planos`, é
+ * read-only e indexado por `codigo`. Ver `clubPlan` em @annetec/contracts.
+ */
+export async function listOperatorClubPlansAction(tenantSlug: string): Promise<ActionResult<ClubPlan[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<ClubPlan[]>(tenantPath(tenantSlug, '/rede/planos'))
+    return data
+  })
+}
+
+export async function createOperatorClubPlanAction(
+  tenantSlug: string,
+  input: CreateClubPlanInput,
+): Promise<ActionResult<ClubPlan>> {
+  return run(async () => {
+    const { data } = await apiFetch<ClubPlan>(tenantPath(tenantSlug, '/rede/planos'), {
+      method: 'POST',
+      body: input,
+    })
+    return data
+  })
+}
+
+export async function updateOperatorClubPlanAction(
+  tenantSlug: string,
+  id: string,
+  patch: UpdateClubPlanInput,
+): Promise<ActionResult<ClubPlan>> {
+  return run(async () => {
+    const { data } = await apiFetch<ClubPlan>(tenantPath(tenantSlug, `/rede/planos/${id}`), {
+      method: 'PATCH',
+      body: patch,
+    })
+    return data
+  })
+}
+
+export async function deleteOperatorClubPlanAction(
+  tenantSlug: string,
+  id: string,
+): Promise<ActionResult<null>> {
+  return run(async () => {
+    await apiFetch(tenantPath(tenantSlug, `/rede/planos/${id}`), { method: 'DELETE' })
+    return null
+  })
 }

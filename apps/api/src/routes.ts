@@ -8,6 +8,7 @@ import { crmController } from '@/modules/crm/controller'
 import { healthController } from '@/modules/health/controller'
 import { networkController } from '@/modules/network/controller'
 import { platformUsersController } from '@/modules/platform-users/controller'
+import { supportController } from '@/modules/support/controller'
 import { tenantPlansController } from '@/modules/tenant-plans/controller'
 import { tenantsController } from '@/modules/tenants/controller'
 import { tenantPublicController } from '@/modules/tenants/public-controller'
@@ -40,5 +41,6 @@ export const routes = new Hono<AppEnv>()
   .route('/api/v1/t/:tenantSlug/financeiro', billingController)
   .route('/api/v1/t/:tenantSlug/crm', crmController)
   .route('/api/v1/t/:tenantSlug/rede', networkController)
+  .route('/api/v1/t/:tenantSlug/atendimentos', supportController)
 
 export type ApiRoutes = typeof routes

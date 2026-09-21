@@ -130,3 +130,35 @@ export type CreateBenefitInput = z.infer<typeof createBenefitInput>
 
 export const updateBenefitInput = createBenefitInput.partial()
 export type UpdateBenefitInput = z.infer<typeof updateBenefitInput>
+
+/**
+ * Plano que o INQUILINO vende ao associado — a vitrine comercial do clube.
+ *
+ * Existe separado de `healthPlan` porque as duas coisas respondem a donos
+ * diferentes: `healthPlan` é o produto da Digital Saúde (código, carência,
+ * cobertura, regras do ERP) e este é a oferta da Annetec (preço de tabela,
+ * texto de venda, destaque na vitrine). Misturá-los faria o preço do clube
+ * depender de uma sincronização com o ERP que nunca precisou existir.
+ *
+ * `upstreamPlanCodigo` é a ponte opcional entre os dois: preenchido, amarra o
+ * plano vendido ao produto que será contratado lá na hora da adesão.
+ */
+export const clubPlan = z.object({
+  id: uuid,
+  tenantId: uuid,
+  name: z.string().min(1),
+  description: z.string(),
+  priceMonthly: z.number().nonnegative(),
+  features: z.array(z.string()),
+  audience: z.string().nullable(),
+  highlight: z.boolean(),
+  upstreamPlanCodigo: z.string().nullable(),
+  status: activeStatus,
+})
+export type ClubPlan = z.infer<typeof clubPlan>
+
+export const createClubPlanInput = clubPlan.omit({ id: true, tenantId: true })
+export type CreateClubPlanInput = z.infer<typeof createClubPlanInput>
+
+export const updateClubPlanInput = createClubPlanInput.partial()
+export type UpdateClubPlanInput = z.infer<typeof updateClubPlanInput>

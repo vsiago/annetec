@@ -16,6 +16,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
+    "demo:seed": "tsx src/db/seed-demo-inquilino.ts",
     "platform:create-admin": "tsx src/db/create-platform-admin.ts",
     "openapi": "tsx src/openapi/generate.ts",
     "dict:check": "tsx scripts/checar-dicionario.ts",

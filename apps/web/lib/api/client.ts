@@ -112,6 +112,48 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   return data
 }
 
+/** Teto do `perPage` aceito pela API (ver `paginationQuery` em @annetec/contracts). */
+const PER_PAGE_MAX = 200
+
+/**
+ * Limite de segurança: 100 páginas × 200 = 20 mil registros. Passar disso é
+ * sinal de que a tela precisa paginar de verdade, não carregar tudo.
+ */
+const MAX_PAGINAS = 100
+
+/**
+ * Busca uma coleção paginada INTEIRA, seguindo as páginas até o fim.
+ *
+ * Existe porque `perPage` tem teto de 200 na API: pedir 500 é recusado, e
+ * pedir 200 numa carteira de 432 pessoas devolve 200 sem erro nenhum — o
+ * `meta.total` dizia 432 e a tela contava 200. Truncamento silencioso é pior
+ * que falha: o número errado passa por certo.
+ *
+ * Use nas listagens que alimentam indicador ou gráfico, onde o total precisa
+ * fechar. Para tabela com paginação própria, prefira `apiFetch` com a página.
+ */
+export async function apiFetchAll<T>(path: string, options: RequestOptions = {}): Promise<T[]> {
+  const primeira = await apiFetch<T[]>(path, {
+    ...options,
+    query: { ...options.query, page: 1, perPage: PER_PAGE_MAX },
+  })
+
+  const totalPaginas = primeira.meta?.totalPages ?? 1
+  if (totalPaginas <= 1) return primeira.data
+
+  const paginas = Math.min(totalPaginas, MAX_PAGINAS)
+  const restantes = await Promise.all(
+    Array.from({ length: paginas - 1 }, (_, i) =>
+      apiFetch<T[]>(path, {
+        ...options,
+        query: { ...options.query, page: i + 2, perPage: PER_PAGE_MAX },
+      }).then(r => r.data),
+    ),
+  )
+
+  return [primeira.data, ...restantes].flat()
+}
+
 /** Prefixo das rotas com escopo de inquilino. */
 export function tenantPath(tenantSlug: string, path: string): string {
   return `/api/v1/t/${encodeURIComponent(tenantSlug)}${path}`

@@ -47,13 +47,19 @@ function TenantGate({ children }: { children: React.ReactNode }) {
     )
   }
 
+  // AuthProvider PRECISA envolver TenantDataProvider, nunca o contrário.
+  // O contexto de dados decide o que buscar a partir do papel da sessão —
+  // admin lê usuários, vendedor não; visitante sem sessão não lê nada além da
+  // vitrine pública. Com a ordem invertida ele montava antes de existir
+  // sessão e disparava as oito listas de forma anônima na landing e no
+  // /cadastro, o que contra a API real é 401/403 em série.
   return (
-    <TenantDataProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <TenantDataProvider>
         <ImpersonationBanner />
         {children}
-      </AuthProvider>
-    </TenantDataProvider>
+      </TenantDataProvider>
+    </AuthProvider>
   )
 }
 

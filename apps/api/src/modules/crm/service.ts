@@ -5,6 +5,7 @@ import type {
   Lead,
   Sale,
   UpdateLeadInput,
+  UpdateSaleInput,
   UpsertSalesGoalInput,
 } from '@annetec/contracts'
 import { and, count, desc, eq, gte, ilike, lte, or, sum, type SQL } from 'drizzle-orm'
@@ -251,6 +252,58 @@ export const crmService = {
         }
       }),
     )
+  },
+
+  /**
+   * Correção de uma venda já lançada. Recalcula a comissão sempre que o valor
+   * muda: guardar o número digitado deixaria o fechamento do mês divergir da
+   * taxa que o vendedor tem de fato.
+   */
+  async updateSale(tenantId: string, id: string, input: UpdateSaleInput): Promise<Sale> {
+    const [atual] = await db
+      .select({ sellerId: sales.sellerId, sellerName: user.name })
+      .from(sales)
+      .innerJoin(user, eq(user.id, sales.sellerId))
+      .where(and(eq(sales.id, id), eq(sales.organizationId, tenantId)))
+      .limit(1)
+
+    if (!atual) throw AppError.notFound('Venda')
+
+    const patch: Record<string, unknown> = {}
+    if (input.clientName !== undefined) patch.clientName = input.clientName
+    if (input.planCodigo !== undefined) patch.planCodigo = input.planCodigo
+    if (input.planName !== undefined) patch.planName = input.planName
+    if (input.status !== undefined) patch.status = input.status
+    if (input.leadId !== undefined) patch.leadId = input.leadId
+    if (input.clientUserId !== undefined) patch.clientUserId = input.clientUserId
+    if (input.contractUpstreamCodigo !== undefined) {
+      patch.contractUpstreamCodigo = input.contractUpstreamCodigo
+    }
+    if (input.soldAt !== undefined) patch.soldAt = new Date(input.soldAt)
+
+    if (input.value !== undefined) {
+      const [perfil] = await db
+        .select({ rate: sellerProfiles.commissionRate })
+        .from(sellerProfiles)
+        .where(
+          and(
+            eq(sellerProfiles.userId, atual.sellerId),
+            eq(sellerProfiles.organizationId, tenantId),
+          ),
+        )
+        .limit(1)
+
+      patch.value = String(input.value)
+      patch.commission = String(Number((input.value * Number(perfil?.rate ?? 0)).toFixed(2)))
+    }
+
+    const [row] = await db
+      .update(sales)
+      .set(patch)
+      .where(and(eq(sales.id, id), eq(sales.organizationId, tenantId)))
+      .returning()
+
+    return toSale(row!, atual.sellerName)
   },
 
   async upsertGoal(tenantId: string, input: UpsertSalesGoalInput) {

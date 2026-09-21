@@ -2,6 +2,7 @@ import {
   createInteractionInput,
   createLeadInput,
   createSaleInput,
+  updateSaleInput,
   leadStatus,
   paginationQuery,
   updateLeadInput,
@@ -117,6 +118,10 @@ export const crmController = new Hono<AppEnv>()
       }),
     )
   })
+
+  .patch('/vendas/:id', param(idParam), json(updateSaleInput), async c =>
+    ok(c, await crmService.updateSale(tenantOf(c).id, c.req.valid('param').id, c.req.valid('json'))),
+  )
 
   .get(
     '/metas',

@@ -218,8 +218,20 @@ export default function AdminBeneficiariosPage() {
     })
   }
 
+  /**
+   * A situação do plano nasce da ADESÃO, não desta tela: quando o inquilino
+   * opera integrado, quem a define é o contrato na Digital Saúde; quando não,
+   * é a venda no CRM. Não existe rota que grave o campo direto, então aqui se
+   * avisa em vez de exibir "ativado" sobre uma gravação que não aconteceu.
+   */
   async function activate(client: Client) {
-    await updateUser(client.id, { planStatus: 'active' })
+    const result = await updateUser(client.id, { planStatus: 'active' })
+    if (!result.success) {
+      toast.error('Ativação não concluída', {
+        description: result.error ?? 'A situação do plano vem da adesão.',
+      })
+      return
+    }
     toast.success('Plano ativado', { description: client.name })
   }
 

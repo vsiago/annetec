@@ -1,8 +1,9 @@
 'use server'
 
 import type { CreateTenantUserInput, TenantUser, UpdateTenantUserInput } from '@annetec/contracts'
-import { ApiError, apiFetch, tenantPath } from '@/lib/api/client'
-import type { User as LegacyUser } from '@/lib/types'
+import { ApiError, apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
+import { usuarioDaApi } from '@/lib/adapters/painel'
+import type { Client, Seller, User as LegacyUser } from '@/lib/types'
 
 /**
  * Usuários (admin/vendedor/cliente) de UM inquilino — fala direto com
@@ -15,53 +16,42 @@ import type { User as LegacyUser } from '@/lib/types'
  * quebraria as telas onde é o próprio vendedor/cliente editando os dados
  * dele. Só `/admin/usuarios` (tela exclusiva do admin) usa este arquivo.
  *
- * O modelo real ainda não tem os campos comerciais de `Seller`
- * (região/meta/comissão) nem os de `Client` (CPF/plano/carteirinha) — isso
- * vem do CRM e do contrato na Digital Saúde, ainda não migrados. Por isso o
- * mapeamento devolve sempre o formato base `User`: é estruturalmente válido
- * como `Seller`/`Client` (a união `TenantUser` de `lib/types.ts` aceita
- * qualquer um dos três), e as telas já tratam os campos extras como opcionais
- * quando ausentes.
+ * O perfil comercial vem junto desde que `GET /usuarios` passou a devolver
+ * `sellerProfile` (região, meta e comissão, de `seller_profiles`) e
+ * `clientProfile` (CPF, plano, situação e carteirinha). O plano do associado
+ * sai do contrato espelhado da Digital Saúde quando ele existe e do registro
+ * de venda do CRM quando não — `clientProfile.source` diz qual dos dois foi.
  */
+type PainelUser = LegacyUser | Seller | Client
+
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; fieldErrors?: Record<string, string> }
 
-function toLegacyUser(user: TenantUser): LegacyUser {
-  return {
-    id: user.id,
-    tenantId: user.tenantId,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    phone: user.phone ?? undefined,
-    avatar: user.avatarUrl ?? undefined,
-    createdAt: new Date(user.createdAt),
-  }
-}
+
 
 export async function listTenantUsersAction(
   tenantSlug: string,
   params?: { role?: 'admin' | 'seller' | 'client'; q?: string },
-): Promise<ActionResult<LegacyUser[]>> {
+): Promise<ActionResult<PainelUser[]>> {
   return run(async () => {
-    const { data } = await apiFetch<TenantUser[]>(tenantPath(tenantSlug, '/usuarios'), {
-      query: { perPage: 200, role: params?.role, q: params?.q },
+    const data = await apiFetchAll<TenantUser>(tenantPath(tenantSlug, '/usuarios'), {
+      query: { role: params?.role, q: params?.q },
     })
-    return data.map(toLegacyUser)
+    return data.map(usuarioDaApi)
   })
 }
 
 export async function createTenantUserAction(
   tenantSlug: string,
   input: CreateTenantUserInput,
-): Promise<ActionResult<LegacyUser>> {
+): Promise<ActionResult<PainelUser>> {
   return run(async () => {
     const { data } = await apiFetch<TenantUser>(tenantPath(tenantSlug, '/usuarios'), {
       method: 'POST',
       body: input,
     })
-    return toLegacyUser(data)
+    return usuarioDaApi(data)
   })
 }
 
@@ -69,13 +59,13 @@ export async function updateTenantUserAction(
   tenantSlug: string,
   id: string,
   patch: UpdateTenantUserInput,
-): Promise<ActionResult<LegacyUser>> {
+): Promise<ActionResult<PainelUser>> {
   return run(async () => {
     const { data } = await apiFetch<TenantUser>(tenantPath(tenantSlug, `/usuarios/${id}`), {
       method: 'PATCH',
       body: patch,
     })
-    return toLegacyUser(data)
+    return usuarioDaApi(data)
   })
 }
 

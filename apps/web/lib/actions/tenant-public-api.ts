@@ -1,6 +1,6 @@
 'use server'
 
-import type { Tenant } from '@annetec/contracts'
+import type { Benefit, Partner, Tenant } from '@annetec/contracts'
 import { ApiError, apiFetch } from '@/lib/api/client'
 import type { Tenant as LegacyTenant } from '@/lib/types'
 
@@ -46,4 +46,32 @@ async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
     }
     return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
   }
+}
+
+/**
+ * Vitrine da landing: rede credenciada e clube de benefícios sem sessão.
+ *
+ * Passa `token: null` de propósito. Sem isso o cliente anexaria o cookie de
+ * quem por acaso estivesse logado, e a mesma URL pública responderia coisas
+ * diferentes conforme a sessão do visitante — inclusive furando o cache de
+ * borda com resposta personalizada.
+ */
+export async function listPublicPartnersAction(slug: string): Promise<ActionResult<Partner[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<Partner[]>(
+      `/api/v1/t/${encodeURIComponent(slug)}/public/parceiros`,
+      { token: null },
+    )
+    return data
+  })
+}
+
+export async function listPublicBenefitsAction(slug: string): Promise<ActionResult<Benefit[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<Benefit[]>(
+      `/api/v1/t/${encodeURIComponent(slug)}/public/beneficios`,
+      { token: null },
+    )
+    return data
+  })
 }

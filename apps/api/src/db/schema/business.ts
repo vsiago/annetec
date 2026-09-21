@@ -1,5 +1,6 @@
 import { relations } from 'drizzle-orm'
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -166,6 +167,48 @@ export const appointments = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   table => [index('appointments_org_status_idx').on(table.organizationId, table.status)],
+)
+
+/**
+ * Planos que o INQUILINO vende ao associado — a vitrine comercial do clube.
+ *
+ * Não confundir com três coisas parecidas:
+ *  - `tenant_plans`: o que a ANNETEC vende ao inquilino (assinatura do SaaS);
+ *  - `HealthPlan` do catálogo: o produto da DIGITAL SAÚDE, identificado por
+ *    `codigo` e dono das regras de carência e cobertura;
+ *  - `benefits`: as vantagens avulsas do clube, que não têm mensalidade.
+ *
+ * Esta tabela é regra própria da Annetec: preço de tabela, texto de venda e
+ * destaque na vitrine são decisões comerciais do inquilino e não existem do
+ * lado do ERP. `upstreamPlanCodigo` é a ponte opcional — preenchido, amarra o
+ * plano vendido ao produto que será contratado lá na adesão.
+ */
+export const clubPlans = pgTable(
+  'club_plans',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    priceMonthly: numeric('price_monthly', { precision: 12, scale: 2 }).notNull().default('0'),
+    /** Coberturas listadas no cartão do plano. */
+    features: jsonb('features').$type<string[]>().notNull().default([]),
+    /** Público a que o plano se destina ("Famílias", "MEI"), usado no filtro. */
+    audience: text('audience'),
+    /** Destaca como "Mais escolhido" na vitrine. */
+    highlight: boolean('highlight').notNull().default(false),
+    /** `codigo` do plano correspondente na Digital Saúde, quando houver. */
+    upstreamPlanCodigo: text('upstream_plan_codigo'),
+    status: activeStatusEnum('status').notNull().default('active'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [
+    index('club_plans_org_idx').on(table.organizationId, table.status),
+    uniqueIndex('club_plans_org_name_key').on(table.organizationId, table.name),
+  ],
 )
 
 export const leadsRelations = relations(leads, ({ many, one }) => ({

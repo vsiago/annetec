@@ -233,7 +233,7 @@ export async function registerOperatorPendencyAction(
 export async function listOperatorSellersAction(tenantSlug: string): Promise<ActionResult<TenantUser[]>> {
   return run(async () => {
     const { data } = await apiFetch<TenantUser[]>(tenantPath(tenantSlug, '/usuarios'), {
-      query: { perPage: 200, role: 'seller' },
+      query: { perPage: 200, role: 'seller' },  // equipe comercial cabe numa pagina
     })
     return data
   })

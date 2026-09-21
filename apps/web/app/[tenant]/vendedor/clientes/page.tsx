@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,6 +57,22 @@ export default function VendedorClientesPage() {
   const { tenant } = useTenant()
   const seller = user as Seller
   const { users, sales: allSales, clientPlans, createUser, updateUser } = useTenantData()
+
+  /**
+   * A situação do plano vem da adesão (contrato na Digital Saúde ou venda no
+   * CRM) e não tem rota de escrita própria. Antes isto disparava e ignorava o
+   * retorno — o menu parecia ter alternado o status e nada mudava.
+   */
+  async function alternarSituacao(client: Client) {
+    const result = await updateUser(client.id, {
+      planStatus: client.planStatus === 'active' ? 'pending' : 'active',
+    })
+    if (!result.success) {
+      toast.error('Situação não alterada', {
+        description: result.error ?? 'A situação do plano vem da adesão.',
+      })
+    }
+  }
 
   const clients = getClientsBySellerId(users, seller?.id || '')
   const sellerSales = getSalesBySellerId(allSales, seller?.id || '')
@@ -382,11 +399,7 @@ export default function VendedorClientesPage() {
                           }}>
                             Enviar Mensagem
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => {
-                            updateUser(client.id, {
-                              planStatus: client.planStatus === 'active' ? 'pending' : 'active',
-                            })
-                          }}>
+                          <DropdownMenuItem onClick={() => alternarSituacao(client)}>
                             Alternar Status
                           </DropdownMenuItem>
                         </DropdownMenuContent>

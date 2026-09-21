@@ -53,6 +53,7 @@ export default function DependentesPage() {
   const [newCpf, setNewCpf] = useState('')
   const [newBirthDate, setNewBirthDate] = useState('')
   const [newRelationship, setNewRelationship] = useState('Filho(a)')
+  const [erro, setErro] = useState<string | null>(null)
 
   const handleAddDependent = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -64,7 +65,18 @@ export default function DependentesPage() {
       relationship: newRelationship,
       birthDate: newBirthDate ? new Date(newBirthDate) : new Date(),
     }
-    await updateUser(client.id, { dependents: [...(client.dependents || []), dependent] })
+    // Dependente é beneficiário do CONTRATO, não campo da conta: quem o
+    // inclui é a Digital Saúde. Enquanto essa rota não existe, o diálogo
+    // continua aberto com o aviso — fechar aqui daria a entender que o
+    // dependente entrou na apólice.
+    const result = await updateUser(client.id, {
+      dependents: [...(client.dependents || []), dependent],
+    })
+    if (!result.success) {
+      setErro(result.error ?? 'Não foi possível incluir o dependente.')
+      return
+    }
+    setErro(null)
     setIsAddOpen(false)
     setNewName('')
     setNewCpf('')
@@ -137,6 +149,14 @@ export default function DependentesPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {erro && (
+                <p
+                  role="alert"
+                  className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  {erro}
+                </p>
+              )}
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
                   Cancelar

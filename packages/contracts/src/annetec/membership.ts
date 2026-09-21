@@ -2,6 +2,77 @@ import { z } from 'zod'
 import { cpf, dateOnly, email, telefone, uf, uuid } from '../common/primitives'
 import { beneficiaryKind, contractStatus, tenantRole } from './enums'
 
+/**
+ * Bloco comercial do vendedor, anexado ao usuário quando `role: 'seller'`.
+ *
+ * Vem de `seller_profiles`, tabela Annetec — nada aqui é da Digital Saúde.
+ * A única ponte com o ERP é `upstreamProdutorCodigo`, que já vive no próprio
+ * `tenantUser`.
+ */
+export const tenantUserSellerProfile = z.object({
+  region: z.string().nullable(),
+  salesGoal: z.number().nonnegative(),
+  commissionRate: z.number().min(0).max(1),
+  /**
+   * Somatório das vendas CONFIRMADAS do vendedor neste inquilino. É calculado
+   * na consulta, não gravado: guardar o acumulado exigiria mantê-lo em dia a
+   * cada venda cancelada ou corrigida, e ele silenciosamente divergiria.
+   */
+  totalSales: z.number().nonnegative(),
+})
+export type TenantUserSellerProfile = z.infer<typeof tenantUserSellerProfile>
+
+/**
+ * Bloco do associado, anexado quando `role: 'client'`.
+ *
+ * Divide-se em duas origens, e é por isso que quase tudo é anulável:
+ *  - `cpf` é Annetec (`client_profiles`), preenchido no cadastro;
+ *  - plano, situação, data de adesão e carteirinha vêm do CONTRATO, cuja
+ *    fonte de verdade é a Digital Saúde. Associado cadastrado antes da adesão
+ *    existir simplesmente não tem contrato, e todos esses campos vêm nulos.
+ *
+ * `city` fica de fora de propósito: o endereço do beneficiário só existe
+ * dentro de `beneficiaries.raw`, sem coluna própria — expor daqui seria
+ * prometer um campo que não dá para filtrar nem ordenar.
+ */
+export const tenantUserClientProfile = z.object({
+  cpf: z.string().nullable(),
+  /**
+   * De onde vieram plano, situação e adesão abaixo:
+   *  - `contrato`: do contrato espelhado da Digital Saúde, a fonte de verdade
+   *    quando o inquilino opera integrado ao ERP;
+   *  - `venda`: do registro comercial no CRM da Annetec, usado enquanto a
+   *    adesão não virou contrato lá (ou quando o inquilino não usa o ERP);
+   *  - `null`: associado cadastrado e ainda sem nenhuma adesão.
+   *
+   * O campo é explícito para a tela poder dizer o que está mostrando, em vez
+   * de exibir um plano sem o leitor saber se aquilo já existe no ERP.
+   */
+  source: z.enum(['contrato', 'venda']).nullable(),
+  primaryContractCodigo: z.string().nullable(),
+  planName: z.string().nullable(),
+  /**
+   * Situação da adesão, já reduzida ao vocabulário da tela. O estado bruto do
+   * ERP continua em `upstreamStatus` do contrato — nada se perde.
+   */
+  planStatus: z.enum(['active', 'pending', 'cancelled']).nullable(),
+  /** Situação original do contrato no ERP; `null` quando a origem é `venda`. */
+  contractStatus: contractStatus.nullable(),
+  /** Data de adesão, ISO. */
+  contractSignedAt: z.string().nullable(),
+  /**
+   * Número da carteirinha: o `codigo` do contrato na Digital Saúde, que é o
+   * que o associado apresenta no parceiro e o que o ERP reconhece. Sem
+   * contrato não há carteirinha — e inventar um número aqui criaria um
+   * identificador que nenhum outro sistema aceita.
+   */
+  cardNumber: z.string().nullable(),
+  monthlyValue: z.number().nullable(),
+  /** Vendedor responsável pela adesão, quando ela nasceu no CRM. */
+  sellerUserId: uuid.nullable(),
+})
+export type TenantUserClientProfile = z.infer<typeof tenantUserClientProfile>
+
 /** Usuário de um inquilino (admin, vendedor ou cliente). */
 export const tenantUser = z.object({
   id: uuid,
@@ -22,14 +93,40 @@ export const tenantUser = z.object({
    * este booleano existe para a interface avisar antes de alguém clicar.
    */
   hasProdutorCredentials: z.boolean().optional(),
+  /** Presente só para `role: 'seller'`; `null` nos demais papéis. */
+  sellerProfile: tenantUserSellerProfile.nullable().optional(),
+  /** Presente só para `role: 'client'`; `null` nos demais papéis. */
+  clientProfile: tenantUserClientProfile.nullable().optional(),
 })
 export type TenantUser = z.infer<typeof tenantUser>
 
+/**
+ * `sellerProfile`/`clientProfile` ficam de fora: são LEITURA derivada de
+ * outras tabelas (e, no caso do associado, do contrato na Digital Saúde).
+ * Aceitá-los na criação sugeriria que dá para gravar plano e carteirinha por
+ * aqui — dá não, isso nasce da adesão.
+ */
 export const createTenantUserInput = tenantUser
-  .omit({ id: true, tenantId: true, createdAt: true, avatarUrl: true, active: true, upstreamProdutorCodigo: true })
+  .omit({
+    id: true,
+    tenantId: true,
+    createdAt: true,
+    avatarUrl: true,
+    active: true,
+    upstreamProdutorCodigo: true,
+    sellerProfile: true,
+    clientProfile: true,
+  })
   .extend({
     password: z.string().min(8).optional(),
     active: z.boolean().default(true),
+    /**
+     * Só faz sentido com `role: 'client'` — é o CPF do associado, que vai
+     * para `client_profiles`. Opcional porque o cadastro pode nascer antes do
+     * documento (lead que virou associado, importação parcial); sem ele o
+     * perfil do associado simplesmente não é criado ainda.
+     */
+    cpf: cpf.optional(),
   })
 export type CreateTenantUserInput = z.infer<typeof createTenantUserInput>
 

@@ -118,6 +118,17 @@ export const auth = betterAuth({
       // sistema já entende.
       creatorRole: 'admin',
       allowUserToCreateOrganization: false, // só a plataforma cria inquilinos
+      /**
+       * O padrão do plugin é 100 membros por organização, número pensado para
+       * "time que usa um SaaS". Aqui a organização é uma ADMINISTRADORA DE
+       * BENEFÍCIOS e cada associado é um membro — um clube pequeno já passa
+       * de 100 no primeiro mês.
+       *
+       * Com o padrão, `auth.api.addMember` recusava com "Organization
+       * membership limit reached" e o cadastro de beneficiário simplesmente
+       * parava de funcionar depois do centésimo, sem nada na tela explicando.
+       */
+      membershipLimit: 100_000,
     }),
     // Converte `Authorization: Bearer <token>` em sessão. É como o Next.js
     // (origem separada) fala com esta API sem depender de cookie cross-site.
