@@ -112,16 +112,6 @@ const CITIES = [
   'Petrópolis - RJ',
 ]
 
-const APPOINTMENT_KINDS = ['Consulta', 'Exame', 'Telemedicina', 'Odontologia']
-
-const APPOINTMENT_PROVIDERS = [
-  'Clínica Vida Plena',
-  'LabExames',
-  'Clínica MapCard Centro',
-  'Odonto Sorriso',
-  'Ailine Telemedicina',
-]
-
 /** Leads criados por mês nos últimos 3 meses, mais antigo primeiro. */
 const LEADS_PER_MONTH = [45, 55, 80]
 
@@ -278,30 +268,13 @@ function build() {
     }
   })
 
-  // Histórico de atendimentos: alimenta "Últimos Atendimentos" na ficha do
-  // beneficiário. Três por pessoa deixa toda ficha com lista cheia sem
-  // inchar demais o localStorage.
+  /**
+   * (Aposentado) A mesa de atendimento vem de `/atendimentos` desde que o
+   * módulo ganhou rota própria. A lista fica vazia em vez de ser mantida
+   * contra um formato que nada mais consome — o gerador continua devolvendo
+   * a chave para não quebrar quem desestrutura o retorno.
+   */
   const appointments: Appointment[] = []
-
-  clients.forEach((client, i) => {
-    for (let n = 0; n < 3; n++) {
-      const seed = i * 3 + n
-      const kind = APPOINTMENT_KINDS[seed % APPOINTMENT_KINDS.length]
-      const provider = APPOINTMENT_PROVIDERS[seed % APPOINTMENT_PROVIDERS.length]
-
-      appointments.push({
-        id: `mc2-apt-${seed + 1}`,
-        tenantId: MAPCARD2_TENANT_ID,
-        clientId: client.id,
-        clientName: client.name,
-        kind,
-        provider,
-        description: `${kind} em ${provider}`,
-        status: seed % 11 === 0 ? 'aguardando' : 'concluido',
-        createdAt: new Date(Date.now() - (((seed * 17) % 300) + 5) * 86_400_000),
-      })
-    }
-  })
 
   // Leads dos últimos 3 meses — o funil que a tela de Leads consome.
   const leads: Lead[] = []

@@ -13,6 +13,9 @@ import {
 } from 'drizzle-orm/pg-core'
 import {
   activeStatusEnum,
+  appointmentChannelEnum,
+  appointmentMessageKindEnum,
+  appointmentPriorityEnum,
   appointmentStatusEnum,
   benefitCategoryEnum,
   interactionTypeEnum,
@@ -151,6 +154,14 @@ export const benefits = pgTable(
 )
 
 /** Teleorientação / suporte ao associado. */
+/**
+ * Mesa de atendimento do inquilino: um chamado por linha.
+ *
+ * É dado próprio da Annetec. Quando o inquilino tem o módulo de atendimento
+ * da Digital Saúde contratado, o ERP devolve um `protocol` que fica guardado
+ * junto — mas o chamado nasce e vive aqui, porque nem todo inquilino tem esse
+ * módulo e o histórico não pode depender disso.
+ */
 export const appointments = pgTable(
   'appointments',
   {
@@ -160,14 +171,67 @@ export const appointments = pgTable(
       .references(() => organization.id, { onDelete: 'cascade' }),
     clientUserId: text('client_user_id').references(() => user.id, { onDelete: 'set null' }),
     clientName: text('client_name').notNull(),
+    /** Assunto curto, o que aparece na lista. */
+    subject: text('subject').notNull().default(''),
     description: text('description').notNull(),
+    channel: appointmentChannelEnum('channel').notNull().default('app'),
+    priority: appointmentPriorityEnum('priority').notNull().default('normal'),
     status: appointmentStatusEnum('status').notNull().default('aguardando'),
+    /**
+     * Quem da equipe está com o chamado. `set null` e não `cascade`: se a
+     * pessoa sai do inquilino, o chamado volta para a fila em vez de sumir
+     * junto com ela.
+     */
+    assignedUserId: text('assigned_user_id').references(() => user.id, { onDelete: 'set null' }),
     /** Protocolo devolvido por `/atendimento/` quando o inquilino usa o módulo. */
     protocol: text('protocol'),
+    /**
+     * Última movimentação. Guardado em coluna e não calculado da thread
+     * porque é por ele que a mesa ordena e cobra prazo: um `max()` sobre as
+     * mensagens a cada listagem custaria caro e o chamado sem mensagem
+     * nenhuma ficaria sem data.
+     */
+    lastInteractionAt: timestamp('last_interaction_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  table => [index('appointments_org_status_idx').on(table.organizationId, table.status)],
+  table => [
+    index('appointments_org_status_idx').on(table.organizationId, table.status),
+    index('appointments_org_last_idx').on(table.organizationId, table.lastInteractionAt),
+  ],
 )
+
+/** Thread do chamado: o que o associado mandou, o que a equipe respondeu e as notas internas. */
+export const appointmentMessages = pgTable(
+  'appointment_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    appointmentId: uuid('appointment_id')
+      .notNull()
+      .references(() => appointments.id, { onDelete: 'cascade' }),
+    kind: appointmentMessageKindEnum('kind').notNull().default('saida'),
+    title: text('title').notNull().default(''),
+    body: text('body').notNull(),
+    /** Quem escreveu; null quando a mensagem veio do próprio associado. */
+    authorUserId: text('author_user_id').references(() => user.id, { onDelete: 'set null' }),
+    authorName: text('author_name'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [index('appointment_messages_appointment_idx').on(table.appointmentId, table.createdAt)],
+)
+
+export const appointmentsRelations = relations(appointments, ({ many, one }) => ({
+  messages: many(appointmentMessages),
+  client: one(user, { fields: [appointments.clientUserId], references: [user.id] }),
+}))
+
+export const appointmentMessagesRelations = relations(appointmentMessages, ({ one }) => ({
+  appointment: one(appointments, {
+    fields: [appointmentMessages.appointmentId],
+    references: [appointments.id],
+  }),
+}))
 
 /**
  * Planos que o INQUILINO vende ao associado — a vitrine comercial do clube.

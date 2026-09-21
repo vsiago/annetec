@@ -397,16 +397,20 @@ export default function BeneficiarioPage() {
                                   {new Date(item.createdAt).toLocaleDateString('pt-BR')}
                                 </td>
                                 <td className="py-3 pr-4 font-medium text-foreground">
-                                  {item.kind ?? 'Atendimento'}
+                                  {item.subject || 'Atendimento'}
                                 </td>
                                 <td className="py-3 pr-4 text-muted-foreground">
-                                  {item.provider ?? '—'}
+                                  {item.assignedName || 'Na fila'}
                                 </td>
                                 <td className="py-3">
                                   <StatusPill
-                                    label={item.status === 'concluido' ? 'Realizado' : 'Agendado'}
+                                    label={
+                                      item.status === 'resolvido' || item.status === 'encerrado'
+                                        ? 'Resolvido'
+                                        : 'Em aberto'
+                                    }
                                     className={
-                                      item.status === 'concluido'
+                                      item.status === 'resolvido' || item.status === 'encerrado'
                                         ? 'bg-emerald-50 text-emerald-700'
                                         : 'bg-sky-50 text-sky-700'
                                     }

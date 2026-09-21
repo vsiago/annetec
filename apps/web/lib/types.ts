@@ -220,19 +220,45 @@ export interface Partner {
   status: PartnerStatus
 }
 
-// Mocked teleorientação / support appointment
-export type AppointmentStatus = 'aguardando' | 'em_atendimento' | 'concluido'
+// Mesa de atendimento (helpdesk do clube)
+export type AppointmentStatus =
+  | 'aguardando'
+  | 'em_atendimento'
+  | 'aguardando_usuario'
+  | 'aguardando_terceiro'
+  | 'resolvido'
+  | 'encerrado'
+
+export type AppointmentChannel = 'telefone' | 'whatsapp' | 'email' | 'app' | 'presencial'
+export type AppointmentPriority = 'alta' | 'normal' | 'baixa'
+
+export interface AppointmentMessage {
+  id: string
+  /** `entrada` veio do associado, `saida` é resposta da equipe, `nota` é interna. */
+  kind: 'entrada' | 'saida' | 'nota'
+  title: string
+  body: string
+  at: Date
+  author?: string
+}
 
 export interface Appointment {
   id: string
   tenantId: string
   clientId: string
   clientName: string
+  /** Assunto curto, o que aparece na lista. */
+  subject: string
   description: string
-  /** "Consulta", "Exame", "Telemedicina" — a coluna "Tipo de atendimento". */
-  kind?: string
-  /** Clínica, laboratório ou profissional que atendeu. */
-  provider?: string
+  channel: AppointmentChannel
+  priority: AppointmentPriority
   status: AppointmentStatus
+  /** Quem da equipe está com o chamado; vazio quando ainda está na fila. */
+  assignedId: string
+  assignedName: string
+  /** Emitido pela Digital Saúde quando o inquilino usa o módulo de atendimento. */
+  protocol: string
+  lastInteractionAt: Date
   createdAt: Date
+  messages: AppointmentMessage[]
 }

@@ -63,10 +63,46 @@ export const benefitCategoryEnum = pgEnum('benefit_category', [
   'discount',
 ])
 
+/**
+ * Andamento do atendimento. Os seis estados são os da mesa de atendimento que
+ * a tela do inquilino reproduz, não um resumo dela: distinguir "aguardando
+ * usuário" de "aguardando terceiro" é o que permite cobrar o prazo da pessoa
+ * certa, e separar "resolvido" de "encerrado" é o que diferencia um chamado
+ * que teve solução de um que só foi fechado.
+ *
+ * `concluido` é o nome legado de `resolvido`, mantido porque remover valor de
+ * enum no Postgres exige recriar o tipo. Não usar em gravação nova.
+ */
 export const appointmentStatusEnum = pgEnum('appointment_status', [
   'aguardando',
   'em_atendimento',
+  'aguardando_usuario',
+  'aguardando_terceiro',
+  'resolvido',
+  'encerrado',
   'concluido',
+])
+
+/** Por onde o associado procurou o clube. */
+export const appointmentChannelEnum = pgEnum('appointment_channel', [
+  'telefone',
+  'whatsapp',
+  'email',
+  'app',
+  'presencial',
+])
+
+export const appointmentPriorityEnum = pgEnum('appointment_priority', ['alta', 'normal', 'baixa'])
+
+/**
+ * Sentido da mensagem na thread: `entrada` é o que veio do associado,
+ * `saida` o que a equipe respondeu e `nota` o registro interno que o
+ * associado nunca vê.
+ */
+export const appointmentMessageKindEnum = pgEnum('appointment_message_kind', [
+  'entrada',
+  'saida',
+  'nota',
 ])
 
 export const activeStatusEnum = pgEnum('active_status', ['active', 'inactive'])

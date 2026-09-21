@@ -90,10 +90,20 @@ export default function SuportePage() {
   const handleRequestTeleorientation = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!client || !teleDescription) return
+    // Abre pelo app e entra na fila: o associado não escolhe prioridade nem
+    // quem vai atender — a mesa distribui.
     await createAppointment({
       clientId: client.id,
       clientName: client.name,
+      subject: 'Teleorientação',
       description: teleDescription,
+      channel: 'app',
+      priority: 'normal',
+      assignedId: '',
+      assignedName: '',
+      protocol: '',
+      lastInteractionAt: new Date(),
+      messages: [],
     })
     setTeleSubmitted(true)
     setTeleDescription('')

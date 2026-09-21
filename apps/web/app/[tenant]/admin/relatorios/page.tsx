@@ -183,8 +183,14 @@ export default function AdminRelatoriosPage() {
       .sort((a, b) => b.count - a.count)
   }, [partners])
 
+  /**
+   * Chamados de suporte por assunto. Antes era "por prestador", agrupando por
+   * `appointment.provider` — campo que só existia no mock. Atendimento é
+   * chamado do clube, não visita a prestador; o que ele de fato responde é
+   * sobre o que o associado procurou a gente.
+   */
   const appointmentsByProvider = useMemo(
-    () => group(appointments, item => item.provider ?? '', () => 0).slice(0, 12),
+    () => group(appointments, item => item.subject || 'Sem assunto', () => 0).slice(0, 12),
     [appointments],
   )
 

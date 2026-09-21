@@ -103,8 +103,40 @@ export type PartnerCategory = z.infer<typeof partnerCategory>
 export const benefitCategory = z.enum(['health', 'dental', 'pharmacy', 'funeral', 'discount'])
 export type BenefitCategory = z.infer<typeof benefitCategory>
 
-export const appointmentStatus = z.enum(['aguardando', 'em_atendimento', 'concluido'])
+/**
+ * Andamento do chamado na mesa de atendimento.
+ *
+ * Distinguir "aguardando usuário" de "aguardando terceiro" é o que permite
+ * cobrar o prazo da pessoa certa; separar "resolvido" de "encerrado" é o que
+ * diferencia o chamado que teve solução do que só foi fechado.
+ *
+ * `concluido` é o nome legado de `resolvido`, mantido porque remover valor de
+ * enum no Postgres exige recriar o tipo. Não usar em gravação nova.
+ */
+export const appointmentStatus = z.enum([
+  'aguardando',
+  'em_atendimento',
+  'aguardando_usuario',
+  'aguardando_terceiro',
+  'resolvido',
+  'encerrado',
+  'concluido',
+])
 export type AppointmentStatus = z.infer<typeof appointmentStatus>
+
+/** Por onde o associado procurou o clube. */
+export const appointmentChannel = z.enum(['telefone', 'whatsapp', 'email', 'app', 'presencial'])
+export type AppointmentChannel = z.infer<typeof appointmentChannel>
+
+export const appointmentPriority = z.enum(['alta', 'normal', 'baixa'])
+export type AppointmentPriority = z.infer<typeof appointmentPriority>
+
+/**
+ * Sentido da mensagem: `entrada` veio do associado, `saida` é a resposta da
+ * equipe e `nota` é registro interno que o associado nunca vê.
+ */
+export const appointmentMessageKind = z.enum(['entrada', 'saida', 'nota'])
+export type AppointmentMessageKind = z.infer<typeof appointmentMessageKind>
 
 export const activeStatus = z.enum(['active', 'inactive'])
 export type ActiveStatus = z.infer<typeof activeStatus>

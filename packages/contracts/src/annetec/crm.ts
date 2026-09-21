@@ -1,6 +1,13 @@
 import { z } from 'zod'
 import { email, uuid } from '../common/primitives'
-import { appointmentStatus, leadStatus, saleStatus } from './enums'
+import {
+  appointmentChannel,
+  appointmentMessageKind,
+  appointmentPriority,
+  appointmentStatus,
+  leadStatus,
+  saleStatus,
+} from './enums'
 
 /**
  * CRM e metas: dado 100% Annetec, sem contrapartida na Digital Saúde. É aqui
@@ -107,17 +114,48 @@ export type SalesGoal = z.infer<typeof salesGoal>
 export const upsertSalesGoalInput = salesGoal.omit({ id: true, tenantId: true, achieved: true })
 export type UpsertSalesGoalInput = z.infer<typeof upsertSalesGoalInput>
 
-/** Teleorientação / suporte. Espelha `/atendimento/` do upstream quando o
- *  inquilino usa o módulo de atendimento da Digital Saúde. */
+export const appointmentMessage = z.object({
+  id: uuid,
+  appointmentId: uuid,
+  kind: appointmentMessageKind,
+  title: z.string(),
+  body: z.string().min(1),
+  authorUserId: uuid.nullable(),
+  authorName: z.string().nullable(),
+  createdAt: z.string().datetime(),
+})
+export type AppointmentMessage = z.infer<typeof appointmentMessage>
+
+export const createAppointmentMessageInput = appointmentMessage.omit({
+  id: true,
+  appointmentId: true,
+  authorUserId: true,
+  authorName: true,
+  createdAt: true,
+})
+export type CreateAppointmentMessageInput = z.infer<typeof createAppointmentMessageInput>
+
+/**
+ * Chamado da mesa de atendimento. Dado próprio da Annetec: quando o inquilino
+ * tem o módulo de atendimento da Digital Saúde, o ERP devolve `protocol` e ele
+ * fica guardado junto — mas o chamado nasce e vive deste lado.
+ */
 export const appointment = z.object({
   id: uuid,
   tenantId: uuid,
   clientUserId: uuid.nullable(),
   clientName: z.string(),
+  subject: z.string(),
   description: z.string(),
+  channel: appointmentChannel,
+  priority: appointmentPriority,
   status: appointmentStatus,
+  assignedUserId: uuid.nullable(),
+  assignedName: z.string().nullable(),
   protocol: z.string().nullable(),
+  lastInteractionAt: z.string().datetime(),
   createdAt: z.string().datetime(),
+  messages: z.array(appointmentMessage).default([]),
 })
 export type Appointment = z.infer<typeof appointment>
 
@@ -126,7 +164,9 @@ export const createAppointmentInput = appointment.omit({
   tenantId: true,
   createdAt: true,
   protocol: true,
-  status: true,
+  assignedName: true,
+  lastInteractionAt: true,
+  messages: true,
 })
 export type CreateAppointmentInput = z.infer<typeof createAppointmentInput>
 
@@ -140,6 +180,10 @@ export type CreateAppointmentInput = z.infer<typeof createAppointmentInput>
  */
 export const updateAppointmentInput = z.object({
   status: appointmentStatus.optional(),
+  priority: appointmentPriority.optional(),
+  subject: z.string().min(1).optional(),
   description: z.string().min(1).optional(),
+  /** `null` devolve o chamado para a fila. */
+  assignedUserId: uuid.nullable().optional(),
 })
 export type UpdateAppointmentInput = z.infer<typeof updateAppointmentInput>

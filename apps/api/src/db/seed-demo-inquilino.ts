@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { db, sql } from './client'
 import {
   account,
+  appointmentMessages,
   appointments,
   benefits,
   clientProfiles,
@@ -78,7 +79,8 @@ const PLANOS = [
   },
 ]
 
-const ASSUNTOS = [
+/** O que o associado escreveu, e o assunto sob o qual a mesa arquiva. */
+const PEDIDOS = [
   'Não consigo agendar consulta pelo aplicativo.',
   'Quero incluir minha filha como dependente.',
   'A carteirinha digital não está carregando.',
@@ -90,6 +92,32 @@ const ASSUNTOS = [
   'A clínica não encontrou meu cadastro na rede.',
   'Como funciona a carência para odontologia?',
 ]
+
+const ASSUNTOS_CHAMADO = [
+  'Agendamento pelo aplicativo',
+  'Inclusão de dependente',
+  'Carteirinha digital',
+  'Segunda via de boleto',
+  'Cobertura de exame',
+  'Troca de plano',
+  'Atualização cadastral',
+  'Cobrança em duplicidade',
+  'Cadastro na rede',
+  'Carência',
+]
+
+const CANAIS = ['telefone', 'whatsapp', 'email', 'app', 'presencial'] as const
+const PRIORIDADES = ['alta', 'normal', 'baixa'] as const
+
+/** Percorre os seis estados para a mesa abrir com todas as abas populadas. */
+const SITUACOES_CHAMADO = [
+  'aguardando',
+  'em_atendimento',
+  'aguardando_usuario',
+  'aguardando_terceiro',
+  'resolvido',
+  'encerrado',
+] as const
 
 const VENDEDORES = [
   { nome: 'Carlos Mendes', regiao: 'Rio de Janeiro - Capital', meta: 60000 },
@@ -246,6 +274,7 @@ async function limpar(orgId: string, slug: string) {
   )
   await db.delete(sales).where(eq(sales.organizationId, orgId))
   await db.delete(salesGoals).where(eq(salesGoals.organizationId, orgId))
+  // As mensagens caem junto por cascade na FK do chamado.
   await db.delete(appointments).where(eq(appointments.organizationId, orgId))
   await db.delete(clubPlans).where(eq(clubPlans.organizationId, orgId))
   await db.delete(leads).where(eq(leads.organizationId, orgId))
@@ -461,17 +490,63 @@ async function main() {
     .from(member)
     .innerJoin(user, eq(user.id, member.userId))
     .where(and(eq(member.organizationId, org.id), eq(member.role, 'client')))
-    .limit(ASSUNTOS.length)
+    .limit(PEDIDOS.length)
 
   for (const [i, associado] of associados.entries()) {
-    await db.insert(appointments).values({
-      organizationId: org.id,
-      clientUserId: associado.id,
-      clientName: associado.nome,
-      description: ASSUNTOS[i]!,
-      // Fila realista: a maioria aberta, alguns em curso, alguns fechados.
-      status: i % 5 === 0 ? 'concluido' : i % 3 === 0 ? 'em_atendimento' : 'aguardando',
-    })
+    const situacao = SITUACOES_CHAMADO[i % SITUACOES_CHAMADO.length]!
+    // Chamado na fila ainda não tem dono; qualquer outro tem.
+    const dono = situacao === 'aguardando' ? null : vendedores[i % vendedores.length]!
+
+    const [chamado] = await db
+      .insert(appointments)
+      .values({
+        organizationId: org.id,
+        clientUserId: associado.id,
+        clientName: associado.nome,
+        subject: ASSUNTOS_CHAMADO[i % ASSUNTOS_CHAMADO.length]!,
+        description: PEDIDOS[i % PEDIDOS.length]!,
+        channel: CANAIS[i % CANAIS.length]!,
+        priority: PRIORIDADES[i % PRIORIDADES.length]!,
+        status: situacao,
+        assignedUserId: dono?.id ?? null,
+      })
+      .returning()
+
+    // Thread: o que o associado escreveu, o retorno da equipe e, de vez em
+    // quando, a nota interna — que o associado nunca vê.
+    await db.insert(appointmentMessages).values([
+      {
+        appointmentId: chamado!.id,
+        kind: 'entrada' as const,
+        title: 'Mensagem do associado',
+        body: PEDIDOS[i % PEDIDOS.length]!,
+        authorName: associado.nome,
+      },
+      ...(dono
+        ? [
+            {
+              appointmentId: chamado!.id,
+              kind: 'saida' as const,
+              title: 'Primeiro retorno',
+              body: 'Olá! Recebemos seu contato e já estamos verificando. Retornamos em até 24h.',
+              authorUserId: dono.id,
+              authorName: dono.nome,
+            },
+          ]
+        : []),
+      ...(i % 3 === 0 && dono
+        ? [
+            {
+              appointmentId: chamado!.id,
+              kind: 'nota' as const,
+              title: 'Nota interna',
+              body: 'Conferir com a operadora antes de responder em definitivo.',
+              authorUserId: dono.id,
+              authorName: dono.nome,
+            },
+          ]
+        : []),
+    ])
   }
 
   // ---- Metas comerciais --------------------------------------------------

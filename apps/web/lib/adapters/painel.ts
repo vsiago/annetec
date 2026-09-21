@@ -3,6 +3,7 @@ import type {
   Lead as ApiLead,
   Partner as ApiPartner,
   Appointment as ApiAppointment,
+  AppointmentMessage as ApiAppointmentMessage,
   ClubPlan as ApiClubPlan,
   Sale as ApiSale,
   SalesGoal as ApiSalesGoal,
@@ -12,6 +13,7 @@ import type {
 } from '@annetec/contracts'
 import type {
   Appointment,
+  AppointmentMessage,
   Benefit,
   Client,
   ClientPlan,
@@ -449,9 +451,8 @@ export function planoParaApi(plano: Partial<ClientPlan>) {
 }
 
 /**
- * Atendimento. `kind` e `provider` sao so da tela (o filtro "Tipo de
- * atendimento" e a coluna do prestador) e nao existem no contrato — vem
- * indefinidos em vez de inventados.
+ * Chamado da mesa de atendimento. A API ja devolve o vocabulario final; aqui
+ * so se trocam `null` por vazio e ISO por `Date`, como no resto do arquivo.
  */
 export function atendimentoDaApi(dto: ApiAppointment): Appointment {
   return {
@@ -459,28 +460,74 @@ export function atendimentoDaApi(dto: ApiAppointment): Appointment {
     tenantId: dto.tenantId,
     clientId: dto.clientUserId ?? '',
     clientName: dto.clientName,
+    subject: dto.subject,
     description: dto.description,
-    kind: undefined,
-    provider: undefined,
-    status: dto.status,
+    channel: dto.channel,
+    // `concluido` e o nome legado de `resolvido` no enum do banco; a tela
+    // conhece so o novo, entao a traducao acontece aqui e nao em cada pagina.
+    status: dto.status === 'concluido' ? 'resolvido' : dto.status,
+    priority: dto.priority,
+    assignedId: dto.assignedUserId ?? '',
+    assignedName: dto.assignedName ?? '',
+    protocol: dto.protocol ?? '',
+    lastInteractionAt: new Date(dto.lastInteractionAt),
     createdAt: new Date(dto.createdAt),
+    messages: (dto.messages ?? []).map(mensagemDaApi),
   }
 }
 
-/** `createAppointmentInput` exige as tres chaves; `status` e do servidor. */
+export function mensagemDaApi(dto: ApiAppointmentMessage): AppointmentMessage {
+  return {
+    id: dto.id,
+    kind: dto.kind,
+    title: dto.title,
+    body: dto.body,
+    at: new Date(dto.createdAt),
+    author: dto.authorName ?? undefined,
+  }
+}
+
+/**
+ * `createAppointmentInput` exige as sete chaves. `status` entra porque a mesa
+ * pode abrir um chamado ja em atendimento (alguem ligou e foi atendido na
+ * hora) — o padrao continua sendo a fila.
+ */
 export function atendimentoParaApiCriacao(atendimento: Partial<Appointment>) {
   return {
     clientUserId: atendimento.clientId || null,
     clientName: atendimento.clientName ?? '',
+    subject: atendimento.subject ?? '',
     description: atendimento.description ?? '',
+    channel: atendimento.channel ?? 'app',
+    priority: atendimento.priority ?? 'normal',
+    status: atendimento.status ?? 'aguardando',
+    assignedUserId: atendimento.assignedId || null,
   }
 }
 
-/** So andamento muda: de quem e o chamado nao se corrige, abre-se outro. */
+/**
+ * De quem e o chamado nao se corrige — para isso abre-se outro. O que muda e
+ * o andamento: situacao, prioridade, assunto, descricao e responsavel.
+ *
+ * `assignedId` vazio vira `null` de proposito: e assim que o chamado volta
+ * para a fila.
+ */
 export function atendimentoParaApi(patch: Partial<Appointment>) {
   return {
     ...(patch.status !== undefined ? { status: patch.status } : {}),
+    ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
+    ...(patch.subject !== undefined ? { subject: patch.subject } : {}),
     ...(patch.description !== undefined ? { description: patch.description } : {}),
+    ...(patch.assignedId !== undefined ? { assignedUserId: patch.assignedId || null } : {}),
+  }
+}
+
+/** Nova mensagem na thread; `title` e opcional na tela e vazio na API. */
+export function mensagemParaApi(mensagem: Partial<AppointmentMessage>) {
+  return {
+    kind: mensagem.kind ?? 'saida',
+    title: mensagem.title ?? '',
+    body: mensagem.body ?? '',
   }
 }
 

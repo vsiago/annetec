@@ -87,7 +87,7 @@ interface GroupRow {
 }
 
 export default function AdminComissoesPage() {
-  const { users, sales, partners, appointments, isLoading } = useTenantData()
+  const { users, sales, partners, isLoading } = useTenantData()
   const colors = useChartColors()
 
   const months = useMemo(() => [...lastMonths(12)].reverse(), [])
@@ -149,30 +149,32 @@ export default function AdminComissoesPage() {
   const sourceRows = useMemo(() => groupBy(sale => sale.source ?? ''), [groupBy])
 
   /**
-   * Volume de atendimentos por prestador da rede. Comissão de parceiro ainda
-   * não existe como regra, então a aba mostra o que de fato dá para medir:
-   * quem a carteira mais usou no período.
+   * Rede credenciada, com o desconto vigente de cada prestador. Comissão de
+   * parceiro não existe como regra ainda, então a aba mostra o que de fato dá
+   * para medir.
+   *
+   * A coluna de USO ficou vazia de propósito: ela era contada a partir de
+   * `appointment.provider`, campo que só existia no mock. Atendimento é
+   * chamado de suporte do clube, não visita a prestador — quantas vezes o
+   * associado usou a clínica é outro registro, e nenhum sistema daqui o tem
+   * hoje. Preencher com a contagem de chamados diria uma coisa pelo nome de
+   * outra.
    */
-  const partnerRows = useMemo(() => {
-    const usage = new Map<string, number>()
-    appointments.forEach(item => {
-      if (!item.provider) return
-      usage.set(item.provider, (usage.get(item.provider) ?? 0) + 1)
-    })
-    return [...usage.entries()]
-      .map(([provider, count]) => {
-        const partner = partners.find(item => item.name === provider)
-        return {
-          key: provider,
-          provider,
-          city: partner?.city ?? '—',
-          category: partner?.category ?? 'other',
-          discount: partner?.discountPercent ?? 0,
-          appointments: count,
-        }
-      })
-      .sort((a, b) => b.appointments - a.appointments)
-  }, [appointments, partners])
+  const partnerRows = useMemo(
+    () =>
+      partners
+        .filter(item => item.status === 'active')
+        .map(item => ({
+          key: item.id,
+          provider: item.name,
+          city: item.city ?? '—',
+          category: item.category,
+          discount: item.discountPercent,
+          appointments: null as number | null,
+        }))
+        .sort((a, b) => b.discount - a.discount),
+    [partners],
+  )
 
   const historyRows = useMemo(
     () =>
@@ -492,7 +494,11 @@ export default function AdminComissoesPage() {
                         render: row => <span className="font-medium text-foreground">{row.provider}</span>,
                       },
                       { key: 'city', header: 'Cidade', hideOnMobile: true, render: row => <span className="text-muted-foreground">{row.city}</span> },
-                      { key: 'appointments', header: 'Atendimentos', render: row => row.appointments },
+                      {
+                        key: 'appointments',
+                        header: 'Usos no período',
+                        render: row => row.appointments ?? '—',
+                      },
                       {
                         key: 'discount',
                         header: 'Desconto negociado',

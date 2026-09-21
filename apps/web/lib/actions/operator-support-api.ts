@@ -2,7 +2,9 @@
 
 import type {
   Appointment,
+  AppointmentMessage,
   CreateAppointmentInput,
+  CreateAppointmentMessageInput,
   UpdateAppointmentInput,
 } from '@annetec/contracts'
 import { ApiError, apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
@@ -24,13 +26,19 @@ export type ActionResult<T> =
 
 export async function listOperatorAppointmentsAction(
   tenantSlug: string,
-  params?: { status?: 'aguardando' | 'em_atendimento' | 'concluido'; q?: string },
+  params?: { status?: string; canal?: string; responsavelId?: string; q?: string },
 ): Promise<ActionResult<Appointment[]>> {
   return run(async () => {
-    // Lista completa: os indicadores da tela (fila, em atendimento, concluídos
-    // no mês) contam em cima dela.
+    // Lista completa: os indicadores da mesa (fila, em atendimento, resolvidos
+    // no mês) contam em cima dela, então uma página truncada vira número
+    // errado na tela.
     return apiFetchAll<Appointment>(tenantPath(tenantSlug, '/atendimentos'), {
-      query: { status: params?.status, q: params?.q },
+      query: {
+        status: params?.status,
+        canal: params?.canal,
+        responsavelId: params?.responsavelId,
+        q: params?.q,
+      },
     })
   })
 }
@@ -69,6 +77,24 @@ export async function deleteOperatorAppointmentAction(
   return run(async () => {
     await apiFetch(tenantPath(tenantSlug, `/atendimentos/${id}`), { method: 'DELETE' })
     return null
+  })
+}
+
+/**
+ * Nova mensagem na thread. Devolve só a mensagem criada — quem chama encaixa
+ * no chamado que já tem em memória.
+ */
+export async function addOperatorAppointmentMessageAction(
+  tenantSlug: string,
+  id: string,
+  input: CreateAppointmentMessageInput,
+): Promise<ActionResult<AppointmentMessage>> {
+  return run(async () => {
+    const { data } = await apiFetch<AppointmentMessage>(
+      tenantPath(tenantSlug, `/atendimentos/${id}/mensagens`),
+      { method: 'POST', body: input },
+    )
+    return data
   })
 }
 

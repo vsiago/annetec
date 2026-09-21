@@ -39,10 +39,17 @@ import {
   StatusPill,
   TableFooter,
 } from '@/components/dashboard/table-controls'
-import { buildTickets, type MockTicket, type TicketStatus } from '@/lib/mock-operations'
+import { getAllClients, useTenantData } from '@/contexts/tenant-data-context'
+import type {
+  Appointment,
+  AppointmentChannel,
+  AppointmentPriority,
+  AppointmentStatus,
+} from '@/lib/types'
 import { cn, getInitials } from '@/lib/utils'
 
-const statusMeta: Record<TicketStatus, { label: string; className: string }> = {
+const statusMeta: Record<AppointmentStatus, { label: string; className: string }> = {
+  aguardando: { label: 'Na fila', className: 'bg-slate-100 text-slate-600' },
   em_atendimento: { label: 'Em atendimento', className: 'bg-sky-50 text-sky-700' },
   aguardando_usuario: { label: 'Aguardando retorno', className: 'bg-amber-50 text-amber-700' },
   aguardando_terceiro: { label: 'Aguardando terceiro', className: 'bg-violet-50 text-violet-700' },
@@ -50,18 +57,45 @@ const statusMeta: Record<TicketStatus, { label: string; className: string }> = {
   encerrado: { label: 'Encerrado', className: 'bg-slate-100 text-slate-600' },
 }
 
-const priorityMeta: Record<MockTicket['priority'], string> = {
-  Alta: 'bg-rose-50 text-rose-700',
-  Normal: 'bg-slate-100 text-slate-600',
-  Baixa: 'bg-sky-50 text-sky-700',
+const priorityMeta: Record<AppointmentPriority, { label: string; className: string }> = {
+  alta: { label: 'Alta', className: 'bg-rose-50 text-rose-700' },
+  normal: { label: 'Normal', className: 'bg-slate-100 text-slate-600' },
+  baixa: { label: 'Baixa', className: 'bg-sky-50 text-sky-700' },
 }
 
-const channelIcons: Record<MockTicket['channel'], typeof Phone> = {
-  Telefone: Phone,
-  WhatsApp: MessageCircle,
-  'E-mail': Mail,
-  'App/Site': MonitorSmartphone,
-  Presencial: UserRound,
+const channelMeta: Record<AppointmentChannel, { label: string; icon: typeof Phone }> = {
+  telefone: { label: 'Telefone', icon: Phone },
+  whatsapp: { label: 'WhatsApp', icon: MessageCircle },
+  email: { label: 'E-mail', icon: Mail },
+  app: { label: 'App/Site', icon: MonitorSmartphone },
+  presencial: { label: 'Presencial', icon: UserRound },
+}
+
+/**
+ * O chamado como a tela precisa dele: o registro da mesa mais o cadastro do
+ * associado, que vive em `users` e nao no chamado.
+ *
+ * Dependentes e situacao financeira ficam de fora de proposito. Dependentes
+ * sao beneficiarios do contrato na Digital Saude e a situacao financeira vem
+ * do modulo de cobranca do ERP — nenhum dos dois esta disponivel aqui, e
+ * inventar um valor faria a mesa priorizar atendimento por dado falso.
+ */
+interface Chamado {
+  chamado: Appointment
+  protocolo: string
+  cpf: string
+  plano: string
+  telefone: string
+  email: string
+}
+
+/**
+ * Protocolo para leitura humana. Usa o numero da Digital Saude quando o
+ * inquilino tem o modulo; sem ele, deriva do id do chamado — estavel e unico,
+ * ao contrario de um contador que reiniciaria a cada carga da tela.
+ */
+function protocoloDe(chamado: Appointment): string {
+  return chamado.protocol || 'ATD-' + chamado.id.slice(0, 8).toUpperCase()
 }
 
 const AVATAR_TONES = [
@@ -73,7 +107,22 @@ const AVATAR_TONES = [
 ]
 
 export default function AdminAtendimentoPage() {
-  const tickets = useMemo(() => buildTickets(), [])
+  const { appointments, users, isLoading, addAppointmentMessage } = useTenantData()
+
+  const tickets = useMemo<Chamado[]>(() => {
+    const porId = new Map(getAllClients(users).map(client => [client.id, client]))
+    return appointments.map(chamado => {
+      const associado = porId.get(chamado.clientId)
+      return {
+        chamado,
+        protocolo: protocoloDe(chamado),
+        cpf: associado?.cpf || '—',
+        plano: associado?.plan || 'Sem plano',
+        telefone: associado?.phone || '—',
+        email: associado?.email || '—',
+      }
+    })
+  }, [appointments, users])
 
   const [tab, setTab] = useState('todos')
   const [search, setSearch] = useState('')
@@ -85,16 +134,26 @@ export default function AdminAtendimentoPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [reply, setReply] = useState('')
 
-  const subjects = useMemo(() => [...new Set(tickets.map(t => t.subject))].sort(), [tickets])
-  const owners = useMemo(() => [...new Set(tickets.map(t => t.owner))].sort(), [tickets])
+  const subjects = useMemo(
+    () => [...new Set(tickets.map(t => t.chamado.subject).filter(Boolean))].sort(),
+    [tickets],
+  )
+  const owners = useMemo(
+    () => [...new Set(tickets.map(t => t.chamado.assignedName).filter(Boolean))].sort(),
+    [tickets],
+  )
 
-  const countBy = (status: TicketStatus) => tickets.filter(t => t.status === status).length
-  const open = tickets.filter(t => t.status === 'em_atendimento').length
-  const waiting = countBy('aguardando_usuario') + countBy('aguardando_terceiro')
+  const countBy = (status: AppointmentStatus) =>
+    tickets.filter(t => t.chamado.status === status).length
+  const open = countBy('em_atendimento')
+  // A fila conta junto: chamado sem dono tambem esta esperando alguem.
+  const waiting =
+    countBy('aguardando_usuario') + countBy('aguardando_terceiro') + countBy('aguardando')
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
-    return tickets.filter(ticket => {
+    return tickets.filter(item => {
+      const ticket = item.chamado
       // "Em aberto" é tudo que ainda não fechou; "Em atendimento" é só o que
       // está com alguém agora. Sem essa distinção as duas abas listavam igual.
       if (tab === 'aberto' && (ticket.status === 'resolvido' || ticket.status === 'encerrado')) {
@@ -107,9 +166,9 @@ export default function AdminAtendimentoPage() {
       if (tab === 'encerrados' && ticket.status !== 'encerrado') return false
       if (channel !== 'all' && ticket.channel !== channel) return false
       if (subject !== 'all' && ticket.subject !== subject) return false
-      if (owner !== 'all' && ticket.owner !== owner) return false
+      if (owner !== 'all' && ticket.assignedName !== owner) return false
       if (!term) return true
-      return [ticket.protocol, ticket.userName, ticket.cpf, ticket.subject].some(field =>
+      return [item.protocolo, ticket.clientName, item.cpf, ticket.subject].some(field =>
         field.toLowerCase().includes(term),
       )
     })
@@ -119,7 +178,22 @@ export default function AdminAtendimentoPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / size))
   const currentPage = Math.min(page, totalPages)
   const visible = filtered.slice((currentPage - 1) * size, currentPage * size)
-  const selected = tickets.find(t => t.id === selectedId) ?? visible[0] ?? null
+  const selected = tickets.find(t => t.chamado.id === selectedId) ?? visible[0] ?? null
+
+  /**
+   * Responde o chamado. A mensagem entra como `saida` — nota interna tem
+   * caminho próprio, e o servidor recusa `nota` vinda do associado.
+   */
+  async function responder(item: Chamado) {
+    const texto = reply.trim()
+    if (!texto) return
+    setReply('')
+    await addAppointmentMessage(item.chamado.id, {
+      kind: 'saida',
+      title: 'Resposta enviada',
+      body: texto,
+    })
+  }
 
   function withPageReset<T>(setter: (value: T) => void) {
     return (value: T) => {
@@ -128,12 +202,13 @@ export default function AdminAtendimentoPage() {
     }
   }
 
+  if (isLoading) return null
+
   return (
     <div className="space-y-5">
       <PageHeader
         title="Atendimento"
         description="Registre, acompanhe e resolva as demandas dos nossos beneficiários."
-        mock
       >
         <Button className="h-11 gap-2 px-5">
           <Plus className="h-4 w-4" />
@@ -209,7 +284,10 @@ export default function AdminAtendimentoPage() {
                   value={channel}
                   onChange={withPageReset(setChannel)}
                   allLabel="Todos os canais"
-                  options={Object.keys(channelIcons).map(item => ({ value: item, label: item }))}
+                  options={Object.entries(channelMeta).map(([value, meta]) => ({
+                    value,
+                    label: meta.label,
+                  }))}
                 />
                 <FilterSelect
                   label="Assunto"
@@ -257,21 +335,23 @@ export default function AdminAtendimentoPage() {
                           </td>
                         </tr>
                       )}
-                      {visible.map((ticket, index) => {
-                        const ChannelIcon = channelIcons[ticket.channel]
+                      {visible.map((item, index) => {
+                        const ticket = item.chamado
+                        const canal = channelMeta[ticket.channel]
+                        const ChannelIcon = canal.icon
                         return (
                           <tr
                             key={ticket.id}
                             onClick={() => setSelectedId(ticket.id)}
                             className={cn(
                               'cursor-pointer border-b border-border/60 last:border-0 hover:bg-muted/40',
-                              selected?.id === ticket.id && 'bg-primary/5',
+                              selected?.chamado.id === ticket.id && 'bg-primary/5',
                             )}
                           >
                             <td className="py-3 pl-4" onClick={event => event.stopPropagation()}>
-                              <Checkbox aria-label={`Selecionar ${ticket.protocol}`} />
+                              <Checkbox aria-label={`Selecionar ${item.protocolo}`} />
                             </td>
-                            <td className="px-3 py-3 font-medium text-primary">{ticket.protocol}</td>
+                            <td className="px-3 py-3 font-medium text-primary">{item.protocolo}</td>
                             <td className="px-3 py-3">
                               <div className="flex items-center gap-2">
                                 <Avatar className="h-7 w-7">
@@ -281,15 +361,15 @@ export default function AdminAtendimentoPage() {
                                       AVATAR_TONES[index % AVATAR_TONES.length],
                                     )}
                                   >
-                                    {getInitials(ticket.userName)}
+                                    {getInitials(ticket.clientName)}
                                   </AvatarFallback>
                                 </Avatar>
                                 <span className="min-w-0">
                                   <span className="block truncate font-medium text-foreground">
-                                    {ticket.userName}
+                                    {ticket.clientName}
                                   </span>
                                   <span className="block truncate text-[11px] text-muted-foreground">
-                                    {ticket.cpf}
+                                    {item.cpf}
                                   </span>
                                 </span>
                               </div>
@@ -297,20 +377,19 @@ export default function AdminAtendimentoPage() {
                             <td className="px-3 py-3">
                               <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                                 <ChannelIcon className="h-4 w-4 text-primary" />
-                                {ticket.channel}
+                                {canal.label}
                               </span>
                             </td>
                             <td className="px-3 py-3 text-muted-foreground">{ticket.subject}</td>
                             <td className="px-3 py-3">
-                              <StatusPill
-                                label={ticket.priority}
-                                className={priorityMeta[ticket.priority]}
-                              />
+                              <StatusPill {...priorityMeta[ticket.priority]} />
                             </td>
                             <td className="px-3 py-3">
                               <StatusPill {...statusMeta[ticket.status]} />
                             </td>
-                            <td className="px-3 py-3 text-muted-foreground">{ticket.owner}</td>
+                            <td className="px-3 py-3 text-muted-foreground">
+                              {ticket.assignedName || 'Na fila'}
+                            </td>
                             <td className="px-3 py-3 text-right" onClick={event => event.stopPropagation()}>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -347,9 +426,10 @@ export default function AdminAtendimentoPage() {
             <div className="xl:col-span-4">
               {selected && (
                 <TicketPanel
-                  ticket={selected}
+                  item={selected}
                   reply={reply}
                   onReplyChange={setReply}
+                  onSend={() => responder(selected)}
                   onClose={() => setSelectedId(null)}
                 />
               )}
@@ -362,27 +442,30 @@ export default function AdminAtendimentoPage() {
 }
 
 function TicketPanel({
-  ticket,
+  item,
   reply,
   onReplyChange,
+  onSend,
   onClose,
 }: {
-  ticket: MockTicket
+  item: Chamado
   reply: string
   onReplyChange: (value: string) => void
+  onSend: () => void
   onClose: () => void
 }) {
+  const ticket = item.chamado
   return (
     <Card className="gap-0 py-0 shadow-sm">
       <div className="flex items-start justify-between gap-2 p-4 pb-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-bold text-foreground">{ticket.protocol}</h2>
+            <h2 className="text-base font-bold text-foreground">{item.protocolo}</h2>
             <StatusPill {...statusMeta[ticket.status]} />
           </div>
           <p className="text-xs text-muted-foreground">
-            Aberto em {ticket.openedAt.toLocaleDateString('pt-BR')} às{' '}
-            {ticket.openedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            Aberto em {ticket.createdAt.toLocaleDateString('pt-BR')} às{' '}
+            {ticket.createdAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
           </p>
         </div>
         <button
@@ -398,12 +481,12 @@ function TicketPanel({
       <div className="flex items-center gap-3 border-b border-border px-4 pb-4">
         <Avatar className="h-11 w-11">
           <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
-            {getInitials(ticket.userName)}
+            {getInitials(ticket.clientName)}
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-foreground">{ticket.userName}</p>
-          <p className="truncate text-xs text-muted-foreground">CPF {ticket.cpf}</p>
+          <p className="truncate font-semibold text-foreground">{ticket.clientName}</p>
+          <p className="truncate text-xs text-muted-foreground">CPF {item.cpf}</p>
         </div>
         <Button variant="outline" size="sm">
           Ver perfil
@@ -412,20 +495,19 @@ function TicketPanel({
 
       <dl className="space-y-1.5 border-b border-border p-4 text-sm">
         <PanelLine label="Plano">
-          <span className="text-primary">{ticket.plan}</span> (ativo)
+          <span className="text-primary">{item.plano}</span>
         </PanelLine>
-        <PanelLine label="Telefone">{ticket.phone}</PanelLine>
-        <PanelLine label="E-mail">{ticket.email}</PanelLine>
-        <PanelLine label="Dependentes">{ticket.dependents}</PanelLine>
-        <PanelLine label="Situação financeira">
-          <StatusPill
-            label={ticket.financialStatus}
-            className={
-              ticket.financialStatus === 'Em dia'
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-red-50 text-red-600'
-            }
-          />
+        <PanelLine label="Telefone">{item.telefone}</PanelLine>
+        <PanelLine label="E-mail">{item.email}</PanelLine>
+        {/*
+          Dependentes e situação financeira ficariam aqui, mas nenhum dos dois
+          tem origem: dependentes são beneficiários do contrato na Digital
+          Saúde e a situação financeira vem do módulo de cobrança do ERP. A
+          mesa prioriza atendimento por esses dois campos — preenchê-los com
+          palpite seria pior que não mostrá-los.
+        */}
+        <PanelLine label="Prioridade">
+          <StatusPill {...priorityMeta[ticket.priority]} />
         </PanelLine>
       </dl>
 
@@ -474,12 +556,12 @@ function TicketPanel({
         </TabsContent>
 
         <TabsContent value="detalhes" className="m-0 space-y-1.5 p-4 text-sm">
-          <PanelLine label="Canal">{ticket.channel}</PanelLine>
+          <PanelLine label="Canal">{channelMeta[ticket.channel].label}</PanelLine>
           <PanelLine label="Assunto">{ticket.subject}</PanelLine>
           <PanelLine label="Prioridade">
-            <StatusPill label={ticket.priority} className={priorityMeta[ticket.priority]} />
+            <StatusPill {...priorityMeta[ticket.priority]} />
           </PanelLine>
-          <PanelLine label="Responsável">{ticket.owner}</PanelLine>
+          <PanelLine label="Responsável">{ticket.assignedName || 'Na fila'}</PanelLine>
           <PanelLine label="Última interação">
             {ticket.lastInteractionAt.toLocaleDateString('pt-BR')}
           </PanelLine>
@@ -511,7 +593,11 @@ function TicketPanel({
           <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
           <Smile className="h-4 w-4 shrink-0 text-muted-foreground" />
         </div>
-        <Button className="mt-2 w-full gap-2" disabled={reply.trim().length === 0}>
+        <Button
+          className="mt-2 w-full gap-2"
+          disabled={reply.trim().length === 0}
+          onClick={onSend}
+        >
           <Send className="h-4 w-4" />
           Enviar
         </Button>

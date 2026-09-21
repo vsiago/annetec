@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import type {
   Appointment,
+  AppointmentMessage,
   Benefit,
   Client,
   ClientPlan,
@@ -24,6 +25,8 @@ import {
   atendimentoParaApi,
   atendimentoParaApiCriacao,
   camposSemDestino,
+  mensagemDaApi,
+  mensagemParaApi,
   leadDaApi,
   leadParaApi,
   leadParaApiCriacao,
@@ -73,6 +76,7 @@ import {
 } from '@/lib/actions/operator-network-api'
 import { listPublicBenefitsAction, listPublicPartnersAction } from '@/lib/actions/tenant-public-api'
 import {
+  addOperatorAppointmentMessageAction,
   createOperatorAppointmentAction,
   listOperatorAppointmentsAction,
   updateOperatorAppointmentAction,
@@ -141,6 +145,10 @@ interface TenantDataContextType {
     input: Omit<Appointment, 'id' | 'tenantId' | 'createdAt' | 'status'>,
   ) => Promise<void>
   updateAppointment: (id: string, patch: Partial<Appointment>) => Promise<void>
+  addAppointmentMessage: (
+    id: string,
+    message: Omit<AppointmentMessage, 'id' | 'at'>,
+  ) => Promise<void>
 
   createClientPlan: (input: Omit<ClientPlan, 'id' | 'tenantId'>) => Promise<void>
   updateClientPlan: (id: string, patch: Partial<ClientPlan>) => Promise<void>
@@ -387,6 +395,25 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
     updateAppointment: async (id, patch) => {
       const result = await updateOperatorAppointmentAction(slug, id, atendimentoParaApi(patch))
       if (result.success) setAppointments(prev => upsert(prev, atendimentoDaApi(result.data)))
+    },
+
+    /**
+     * A rota devolve só a MENSAGEM criada, não o chamado inteiro. Ela é
+     * encaixada na thread que já está em memória, junto com a data de última
+     * movimentação — é por ela que a mesa ordena, e deixá-la parada mandaria
+     * o chamado recém-respondido para o fim da fila.
+     */
+    addAppointmentMessage: async (id, message) => {
+      const result = await addOperatorAppointmentMessageAction(slug, id, mensagemParaApi(message))
+      if (!result.success) return
+      const criada = mensagemDaApi(result.data)
+      setAppointments(prev =>
+        prev.map(item =>
+          item.id === id
+            ? { ...item, messages: [...item.messages, criada], lastInteractionAt: criada.at }
+            : item,
+        ),
+      )
     },
 
     createClientPlan: async input => {

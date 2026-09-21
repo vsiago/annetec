@@ -870,15 +870,9 @@ export const seedPartners: Partner[] = [
   },
 ]
 
-export const seedAppointments: Appointment[] = [
-  ...mapcard2Appointments,
-  {
-    id: 'mep-apt-1',
-    tenantId: MEPCARD_TENANT_ID,
-    clientId: 'mep-client-1',
-    clientName: 'Mariana Alves Costa',
-    description: 'Clínica Geral / Telemedicina com Dr. Roberto Camargo',
-    status: 'concluido',
-    createdAt: new Date('2024-03-08'),
-  },
-]
+/**
+ * (Aposentado) A mesa de atendimento vem de `/atendimentos`. A constante fica
+ * porque `lib/actions/appointments.ts` ainda a importa para o `purgeTenant*`
+ * do mock de exclusão de inquilino; some junto com ele.
+ */
+export const seedAppointments: Appointment[] = []
