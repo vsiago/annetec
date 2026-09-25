@@ -5,8 +5,9 @@ import type {
   PlatformUser,
   UpdatePlatformUserInput,
 } from '@annetec/contracts'
-import { ApiError, apiFetch } from '@/lib/api/client'
+import { apiFetch } from '@/lib/api/client'
 import type { PlatformUser as LegacyPlatformUser } from '@/lib/types'
+import { run, type ActionResult } from './_api-result'
 
 /**
  * Contas de equipe Annetec — fala direto com `/api/v1/platform/users`
@@ -17,9 +18,7 @@ import type { PlatformUser as LegacyPlatformUser } from '@/lib/types'
  * `createdAt: Date`) só para o resto do app — construído em cima do mock —
  * não precisar mudar nada além de trocar de onde os dados vêm.
  */
-export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string; fieldErrors?: Record<string, string> }
+export type { ActionResult }
 
 function toLegacyShape(user: PlatformUser): LegacyPlatformUser {
   return {
@@ -71,19 +70,4 @@ export async function updatePlatformUserAction(
     })
     return toLegacyShape(data)
   })
-}
-
-async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
-  try {
-    return { success: true, data: await operation() }
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return {
-        success: false,
-        error: error.message,
-        ...(error.issues ? { fieldErrors: error.toFieldErrors() } : {}),
-      }
-    }
-    return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
-  }
 }

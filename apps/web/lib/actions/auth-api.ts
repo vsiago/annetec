@@ -17,6 +17,7 @@ import {
   getToken,
   saveSession,
 } from '@/lib/api/session'
+import { run, type ActionResult } from './_api-result'
 
 /**
  * Server Actions de autenticação — a ponte entre os formulários do app e a
@@ -26,9 +27,7 @@ import {
  * `lib/actions/*.ts` já usam, para que a troca do mock pela API real seja
  * trocar o import, não reescrever a tela.
  */
-export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string; fieldErrors?: Record<string, string> }
+export type { ActionResult }
 
 export async function loginAction(input: LoginInput): Promise<ActionResult<SessionUser>> {
   return run(async () => {
@@ -161,17 +160,3 @@ export async function hasValidSessionAction(): Promise<boolean> {
 }
 
 /** Converte `ApiError` na mensagem que a tela exibe, sem vazar stack. */
-async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
-  try {
-    return { success: true, data: await operation() }
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return {
-        success: false,
-        error: error.message,
-        ...(error.issues ? { fieldErrors: error.toFieldErrors() } : {}),
-      }
-    }
-    return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
-  }
-}

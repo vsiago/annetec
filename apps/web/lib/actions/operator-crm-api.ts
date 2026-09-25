@@ -11,7 +11,8 @@ import type {
   UpdateSaleInput,
   UpsertSalesGoalInput,
 } from '@annetec/contracts'
-import { ApiError, apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
+import { apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
+import { run, type ActionResult } from './_api-result'
 
 /**
  * Funil comercial da Annetec-operadora — `/api/v1/t/:tenantSlug/crm`, mesmo
@@ -19,9 +20,7 @@ import { ApiError, apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
  * inquilino comum com o slug da operadora. Diferente de contratos/financeiro,
  * aqui não há upstream nenhum — é dado 100% Annetec.
  */
-export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string; fieldErrors?: Record<string, string> }
+export type { ActionResult }
 
 export async function listOperatorLeadsAction(
   tenantSlug: string,
@@ -108,22 +107,6 @@ export async function createOperatorSaleAction(
     return data
   })
 }
-
-async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
-  try {
-    return { success: true, data: await operation() }
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return {
-        success: false,
-        error: error.message,
-        ...(error.issues ? { fieldErrors: error.toFieldErrors() } : {}),
-      }
-    }
-    return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
-  }
-}
-
 /**
  * Vendas do inquilino. Lista completa pelo mesmo motivo dos leads: faturamento
  * do mês, ranking de vendedor e comissão são somas sobre a coleção inteira —

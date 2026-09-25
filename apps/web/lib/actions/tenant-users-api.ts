@@ -1,9 +1,10 @@
 'use server'
 
 import type { CreateTenantUserInput, TenantUser, UpdateTenantUserInput } from '@annetec/contracts'
-import { ApiError, apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
+import { apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
 import { usuarioDaApi } from '@/lib/adapters/painel'
 import type { Client, Seller, User as LegacyUser } from '@/lib/types'
+import { run, type ActionResult } from './_api-result'
 
 /**
  * Usuários (admin/vendedor/cliente) de UM inquilino — fala direto com
@@ -24,11 +25,7 @@ import type { Client, Seller, User as LegacyUser } from '@/lib/types'
  */
 type PainelUser = LegacyUser | Seller | Client
 
-export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string; fieldErrors?: Record<string, string> }
-
-
+export type { ActionResult }
 
 export async function listTenantUsersAction(
   tenantSlug: string,
@@ -75,19 +72,4 @@ export async function deactivateTenantUserAction(tenantSlug: string, id: string)
     await apiFetch(tenantPath(tenantSlug, `/usuarios/${id}`), { method: 'DELETE' })
     return null
   })
-}
-
-async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
-  try {
-    return { success: true, data: await operation() }
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return {
-        success: false,
-        error: error.message,
-        ...(error.issues ? { fieldErrors: error.toFieldErrors() } : {}),
-      }
-    }
-    return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
-  }
 }

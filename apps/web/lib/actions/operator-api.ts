@@ -13,7 +13,8 @@ import type {
   TenantUser,
   WaitingPeriod,
 } from '@annetec/contracts'
-import { ApiError, api, apiFetch, tenantPath } from '@/lib/api/client'
+import { api, apiFetch, tenantPath } from '@/lib/api/client'
+import { run, type ActionResult } from './_api-result'
 
 /**
  * A Annetec operando como operadora — clientes diretos na Digital Saúde, fora
@@ -26,9 +27,7 @@ import { ApiError, api, apiFetch, tenantPath } from '@/lib/api/client'
  * inquilino usa, com o `slug` da operadora. Nenhuma lógica de contrato,
  * financeiro ou catálogo é duplicada.
  */
-export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string; fieldErrors?: Record<string, string> }
+export type { ActionResult }
 
 /** Resultado de `/contratos/busca/cpf` — vem direto do ERP, ainda não espelhado. */
 export interface UpstreamContractResult {
@@ -362,19 +361,4 @@ export async function listOperatorCommissionReceiptsAction(
     })
     return data
   })
-}
-
-async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
-  try {
-    return { success: true, data: await operation() }
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return {
-        success: false,
-        error: error.message,
-        ...(error.issues ? { fieldErrors: error.toFieldErrors() } : {}),
-      }
-    }
-    return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
-  }
 }

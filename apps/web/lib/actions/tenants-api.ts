@@ -12,8 +12,9 @@ import type {
   UpdateTenantInput,
   UpdateTenantPlanInput,
 } from '@annetec/contracts'
-import { ApiError, apiFetch } from '@/lib/api/client'
+import { apiFetch } from '@/lib/api/client'
 import type { Tenant as LegacyTenant, TenantPlan as LegacyTenantPlan } from '@/lib/types'
+import { run, type ActionResult } from './_api-result'
 
 /**
  * Inquilinos e planos de assinatura — fala direto com
@@ -23,9 +24,7 @@ import type { Tenant as LegacyTenant, TenantPlan as LegacyTenantPlan } from '@/l
  * `lib/types.ts` (datas como `Date`) pra tela e contexto não mudarem nada
  * além de trocar de onde os dados vêm.
  */
-export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string; fieldErrors?: Record<string, string> }
+export type { ActionResult }
 
 function toLegacyTenant(tenant: Tenant): LegacyTenant {
   return {
@@ -225,19 +224,4 @@ export async function resetTenantMemberPasswordAction(
     )
     return data
   })
-}
-
-async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
-  try {
-    return { success: true, data: await operation() }
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return {
-        success: false,
-        error: error.message,
-        ...(error.issues ? { fieldErrors: error.toFieldErrors() } : {}),
-      }
-    }
-    return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
-  }
 }

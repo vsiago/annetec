@@ -10,16 +10,15 @@ import type {
   UpdateBenefitInput,
   UpdateClubPlanInput,
 } from '@annetec/contracts'
-import { ApiError, apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
+import { apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
+import { run, type ActionResult } from './_api-result'
 
 /**
  * Rede de parceiros e clube de benefícios da Annetec-operadora —
  * `/api/v1/t/:tenantSlug/rede`, mesmo padrão dos outros `operator-*-api.ts`.
  * Conteúdo 100% Annetec, sem contrapartida na Digital Saúde.
  */
-export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string; fieldErrors?: Record<string, string> }
+export type { ActionResult }
 
 export async function listOperatorPartnersAction(
   tenantSlug: string,
@@ -106,22 +105,6 @@ export async function deleteOperatorBenefitAction(tenantSlug: string, id: string
     return null
   })
 }
-
-async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
-  try {
-    return { success: true, data: await operation() }
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return {
-        success: false,
-        error: error.message,
-        ...(error.issues ? { fieldErrors: error.toFieldErrors() } : {}),
-      }
-    }
-    return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
-  }
-}
-
 /**
  * Planos que o inquilino vende ao associado. É a vitrine comercial do clube,
  * não o catálogo da Digital Saúde — esse fica em `/catalogo/planos`, é

@@ -7,7 +7,8 @@ import type {
   CreateAppointmentMessageInput,
   UpdateAppointmentInput,
 } from '@annetec/contracts'
-import { ApiError, apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
+import { apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
+import { run, type ActionResult } from './_api-result'
 
 /**
  * Atendimento / teleorientação — `/api/v1/t/:tenantSlug/atendimentos`.
@@ -20,9 +21,7 @@ import { ApiError, apiFetch, apiFetchAll, tenantPath } from '@/lib/api/client'
  * O recorte de quem vê o quê é do servidor: admin e vendedor recebem a fila
  * do inquilino, o associado só os chamados dele.
  */
-export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string; fieldErrors?: Record<string, string> }
+export type { ActionResult }
 
 export async function listOperatorAppointmentsAction(
   tenantSlug: string,
@@ -96,19 +95,4 @@ export async function addOperatorAppointmentMessageAction(
     )
     return data
   })
-}
-
-async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
-  try {
-    return { success: true, data: await operation() }
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return {
-        success: false,
-        error: error.message,
-        ...(error.issues ? { fieldErrors: error.toFieldErrors() } : {}),
-      }
-    }
-    return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
-  }
 }

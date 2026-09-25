@@ -1,17 +1,16 @@
 'use server'
 
 import type { Benefit, Partner, Tenant } from '@annetec/contracts'
-import { ApiError, apiFetch } from '@/lib/api/client'
+import { apiFetch } from '@/lib/api/client'
 import type { Tenant as LegacyTenant } from '@/lib/types'
+import { run, type ActionResult } from './_api-result'
 
 /**
  * Info pública do inquilino — fala com `/api/v1/t/:tenantSlug/public`, sem
  * sessão. É o que resolve `/[tenant]/...` antes de qualquer login existir
  * (branding, contato). Sem mock.
  */
-export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string; fieldErrors?: Record<string, string> }
+export type { ActionResult }
 
 function toLegacyTenant(tenant: Tenant): LegacyTenant {
   return {
@@ -32,22 +31,6 @@ export async function getTenantPublicAction(slug: string): Promise<ActionResult<
     return toLegacyTenant(data)
   })
 }
-
-async function run<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
-  try {
-    return { success: true, data: await operation() }
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return {
-        success: false,
-        error: error.message,
-        ...(error.issues ? { fieldErrors: error.toFieldErrors() } : {}),
-      }
-    }
-    return { success: false, error: 'Não foi possível concluir a operação. Tente novamente.' }
-  }
-}
-
 /**
  * Vitrine da landing: rede credenciada e clube de benefícios sem sessão.
  *
