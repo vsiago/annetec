@@ -25,6 +25,10 @@ const FULL_PRODUCTION: ProductionConfigInput = {
   S3_SECRET_ACCESS_KEY: 'segredo',
   BILLING_AUTOMATION_ENABLED: true,
   PLATFORM_BILLING_AUTOMATION_ENABLED: true,
+  API_BASE_URL: 'https://api.annetec.com.br',
+  WEB_BASE_URL: 'https://www.annetec.com.br',
+  CORS_ORIGINS: 'https://www.annetec.com.br,https://annetec.com.br',
+  TRUST_PROXY: true,
 }
 
 describe('assertProductionConfig', () => {
@@ -69,6 +73,33 @@ describe('assertProductionConfig', () => {
     expect(joined).toContain('SENDGRID_API_KEY')
     expect(joined).toContain('SUPABASE_URL')
     expect(violations).toHaveLength(5)
+  })
+
+  it('produção: URLs precisam ser https públicas, tokens do webhook ≥ 32 e TRUST_PROXY explícito', () => {
+    const violations = productionConfigViolations({
+      ...FULL_PRODUCTION,
+      API_BASE_URL: 'http://localhost:3333',
+      WEB_BASE_URL: 'http://www.annetec.com.br',
+      CORS_ORIGINS: 'https://www.annetec.com.br, http://localhost:3000',
+      ASAAS_WEBHOOK_TOKEN: 'curto-demais',
+      PLATFORM_ASAAS_WEBHOOK_TOKEN: 'tambem-curto',
+      TRUST_PROXY: undefined,
+    })
+    const joined = violations.join('\n')
+    expect(joined).toContain('API_BASE_URL precisa ser https://')
+    expect(joined).toContain('WEB_BASE_URL precisa ser https://')
+    expect(joined).toContain('CORS_ORIGINS: "http://localhost:3000" precisa ser https://')
+    expect(joined).toContain('ASAAS_WEBHOOK_TOKEN curto demais')
+    expect(joined).toContain('PLATFORM_ASAAS_WEBHOOK_TOKEN curto demais')
+    expect(joined).toContain('TRUST_PROXY')
+    expect(violations).toHaveLength(6)
+
+    expect(productionConfigViolations({ ...FULL_PRODUCTION, API_BASE_URL: 'https://localhost' }).join('\n')).toContain(
+      'API_BASE_URL não pode apontar para localhost',
+    )
+    expect(productionConfigViolations({ ...FULL_PRODUCTION, CORS_ORIGINS: '' }).join('\n')).toContain('CORS_ORIGINS ausente')
+    // TRUST_PROXY=false explícito é uma decisão válida; WEB_BASE_URL ausente cai na 1ª origem do CORS.
+    expect(productionConfigViolations({ ...FULL_PRODUCTION, TRUST_PROXY: false, WEB_BASE_URL: undefined })).toEqual([])
   })
 
   it('produção completa: passa sem avisos', () => {
@@ -119,6 +150,9 @@ describe('assertProductionConfig', () => {
       STORAGE_DRIVER: 'local',
       BILLING_AUTOMATION_ENABLED: true,
       PLATFORM_BILLING_AUTOMATION_ENABLED: true,
+      API_BASE_URL: 'https://api.3-131-89-130.sslip.io',
+      WEB_BASE_URL: 'https://www.3-131-89-130.sslip.io',
+      CORS_ORIGINS: 'https://www.3-131-89-130.sslip.io',
     }
 
     it('aceita Asaas sandbox, outbox e disco local — e avisa alto no boot', () => {
@@ -151,6 +185,17 @@ describe('assertProductionConfig', () => {
         STORAGE_DRIVER: 's3',
       })
       expect(violations).toHaveLength(5)
+    })
+
+    it('também exige URLs públicas em https (a demo roda no sslip.io com HTTPS), mas não TRUST_PROXY nem token longo', () => {
+      expect(productionConfigViolations({ ...PREVIEW, TRUST_PROXY: undefined, ASAAS_WEBHOOK_TOKEN: 'curto' })).toEqual([])
+      const joined = productionConfigViolations({
+        ...PREVIEW,
+        API_BASE_URL: 'http://api.3-131-89-130.sslip.io',
+        CORS_ORIGINS: 'https://www.3-131-89-130.sslip.io,http://localhost:3000',
+      }).join('\n')
+      expect(joined).toContain('API_BASE_URL precisa ser https://')
+      expect(joined).toContain('CORS_ORIGINS: "http://localhost:3000"')
     })
 
     it('sem DEPLOY_STAGE a mesma configuração é recusada (padrão estrito)', () => {

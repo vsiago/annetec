@@ -75,6 +75,9 @@ services:
       target: runtime
     image: annetec-api:latest
     restart: unless-stopped
+    # SIGTERM → a API para os timers da cobrança, espera requisições/rodadas em
+    # curso (até 25 s) e fecha o pool; só depois deste prazo vem o SIGKILL.
+    stop_grace_period: 35s
     env_file:
       - path: deploy/.env.prod
         required: true

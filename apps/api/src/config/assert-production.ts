@@ -29,6 +29,11 @@ export type ProductionConfigInput = Partial<
     | 'PLATFORM_ASAAS_API_KEY'
     | 'ASAAS_ENV'
     | 'ASAAS_WEBHOOK_TOKEN'
+    | 'PLATFORM_ASAAS_WEBHOOK_TOKEN'
+    | 'API_BASE_URL'
+    | 'WEB_BASE_URL'
+    | 'CORS_ORIGINS'
+    | 'TRUST_PROXY'
     | 'EMAIL_PROVIDER'
     | 'RESEND_API_KEY'
     | 'SENDGRID_API_KEY'
@@ -53,6 +58,54 @@ const PROD_KEY_PREFIX = '$aact_prod_'
 
 const SANDBOX_KEY_PREFIX = '$aact_hmlg_'
 
+/** Mínimo do Asaas para o `authToken` do webhook (o painel recusa menos que isso). */
+export const MIN_WEBHOOK_TOKEN_LENGTH = 32
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'])
+
+/** `null` = URL pública em HTTPS; senão o motivo. */
+function publicHttpsIssue(raw: string): string | null {
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    return 'não é uma URL válida'
+  }
+  if (url.protocol !== 'https:') return 'precisa ser https://'
+  if (LOCAL_HOSTS.has(url.hostname) || url.hostname.endsWith('.localhost')) return 'não pode apontar para localhost'
+  return null
+}
+
+/**
+ * URLs públicas (produção E preview — a demo também roda em HTTPS no sslip.io):
+ * `API_BASE_URL`, `WEB_BASE_URL` (quando definida; senão vale a 1ª de
+ * `CORS_ORIGINS`) e cada origem de `CORS_ORIGINS`. Links de e-mail, retorno do
+ * Asaas e cookies `Secure` dependem disso.
+ */
+function publicUrlViolations(e: ProductionConfigInput): string[] {
+  const v: string[] = []
+  const check = (name: string, value: string | undefined) => {
+    if (!value) {
+      v.push(`${name} ausente (precisa ser a URL pública https://)`)
+      return
+    }
+    const issue = publicHttpsIssue(value)
+    if (issue) v.push(`${name} ${issue} (atual: "${value}")`)
+  }
+  check('API_BASE_URL', e.API_BASE_URL)
+  if (e.WEB_BASE_URL) check('WEB_BASE_URL', e.WEB_BASE_URL)
+  const origins = (e.CORS_ORIGINS ?? '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean)
+  if (origins.length === 0) v.push('CORS_ORIGINS ausente (origens https:// da web, separadas por vírgula)')
+  for (const origin of origins) {
+    const issue = publicHttpsIssue(origin)
+    if (issue) v.push(`CORS_ORIGINS: "${origin}" ${issue}`)
+  }
+  return v
+}
+
 /** `NODE_ENV=production` + `DEPLOY_STAGE=preview`: demo pública com integrações de sandbox. */
 export function isPreviewStage(e: ProductionConfigInput): boolean {
   return e.NODE_ENV === 'production' && e.DEPLOY_STAGE === 'preview'
@@ -64,7 +117,7 @@ export function isPreviewStage(e: ProductionConfigInput): boolean {
  * Asaas: um banco de demo nunca cobra dinheiro de verdade.
  */
 function previewConfigViolations(e: ProductionConfigInput): string[] {
-  const v: string[] = []
+  const v: string[] = publicUrlViolations(e)
 
   // Em runtime de produção o gateway simulado lança — a demo usa o Asaas sandbox.
   if (e.PAYMENT_GATEWAY !== 'asaas') {
@@ -115,7 +168,13 @@ function previewConfigViolations(e: ProductionConfigInput): string[] {
 export function productionConfigViolations(e: ProductionConfigInput): string[] {
   if (e.NODE_ENV !== 'production') return []
   if (isPreviewStage(e)) return previewConfigViolations(e)
-  const v: string[] = []
+  const v: string[] = publicUrlViolations(e)
+
+  // Rate limit, auditoria e `remoteIp` do Asaas dependem do IP real: em produção
+  // a decisão de confiar (ou não) no X-Forwarded-For tem que ser explícita.
+  if (e.TRUST_PROXY === undefined) {
+    v.push('TRUST_PROXY precisa ser definido explicitamente (true atrás do Caddy/proxy que sobrescreve X-Forwarded-For)')
+  }
 
   // Cobrança (clube e plataforma) — só Asaas de produção.
   if (e.PAYMENT_GATEWAY !== 'asaas') {
@@ -137,6 +196,11 @@ export function productionConfigViolations(e: ProductionConfigInput): string[] {
   }
   if (!e.ASAAS_WEBHOOK_TOKEN) {
     v.push('ASAAS_WEBHOOK_TOKEN ausente (sem ele os webhooks do Asaas são recusados)')
+  } else if (e.ASAAS_WEBHOOK_TOKEN.length < MIN_WEBHOOK_TOKEN_LENGTH) {
+    v.push(`ASAAS_WEBHOOK_TOKEN curto demais (mínimo ${MIN_WEBHOOK_TOKEN_LENGTH} caracteres; gere com openssl rand -hex 32)`)
+  }
+  if (e.PLATFORM_ASAAS_WEBHOOK_TOKEN && e.PLATFORM_ASAAS_WEBHOOK_TOKEN.length < MIN_WEBHOOK_TOKEN_LENGTH) {
+    v.push(`PLATFORM_ASAAS_WEBHOOK_TOKEN curto demais (mínimo ${MIN_WEBHOOK_TOKEN_LENGTH} caracteres; gere com openssl rand -hex 32)`)
   }
 
   // E-mail transacional.

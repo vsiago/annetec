@@ -725,6 +725,24 @@ async function applyDunningStep(
 // ---------------------------------------------------------------------------
 
 let schedulerStarted = false
+let stopping = false
+let firstTimer: ReturnType<typeof setTimeout> | null = null
+let intervalTimer: ReturnType<typeof setInterval> | null = null
+
+/**
+ * Encerramento (SIGTERM): para os timers e espera a rodada em curso (timer ou
+ * HTTP) terminar, até `maxWaitMs`. `false` = ainda rodava no fim do prazo.
+ */
+export async function stopPlatformBillingAutomation(maxWaitMs = 20_000): Promise<boolean> {
+  stopping = true
+  if (firstTimer) clearTimeout(firstTimer)
+  if (intervalTimer) clearInterval(intervalTimer)
+  firstTimer = null
+  intervalTimer = null
+  const deadline = Date.now() + maxWaitMs
+  while (running && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100))
+  return !running
+}
 let lastErrorText = ''
 let lastErrorAt = 0
 
@@ -740,6 +758,7 @@ export function startPlatformBillingAutomation(): void {
   schedulerStarted = true
 
   const tick = async () => {
+    if (stopping) return
     if (running) {
       logger.debug('Automação da plataforma ainda rodando; pulando esta rodada')
       return
@@ -779,12 +798,14 @@ export function startPlatformBillingAutomation(): void {
     }
   }
 
-  const first = setTimeout(() => {
+  firstTimer = setTimeout(() => {
+    firstTimer = null
+    if (stopping) return
     void tick()
-    const interval = setInterval(() => void tick(), env.PLATFORM_BILLING_AUTOMATION_INTERVAL_SECONDS * 1000)
-    interval.unref()
+    intervalTimer = setInterval(() => void tick(), env.PLATFORM_BILLING_AUTOMATION_INTERVAL_SECONDS * 1000)
+    intervalTimer.unref()
   }, 15_000)
-  first.unref()
+  firstTimer.unref()
   logger.info(
     { intervalSeconds: env.PLATFORM_BILLING_AUTOMATION_INTERVAL_SECONDS },
     'Automação da cobrança da plataforma agendada',

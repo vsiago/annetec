@@ -181,13 +181,20 @@ dc start api web
    - `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` (domínio do remetente verificado no Resend)
    - `STORAGE_DRIVER=s3` + `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
    - Google: adicione `https://www.annetec.com.br` às origens autorizadas do client OAuth
-4. **Subir**: `dc up -d` (o Caddy emite os certificados novos; a API valida a config estrita no boot —
+4. **Banco primeiro, migrações antes da API** (a API nova nunca sobe com o schema velho):
+   ```bash
+   dc up -d postgres
+   dc run --rm -T migrate
+   ```
+5. **Subir**: `dc up -d` (o Caddy emite os certificados novos; a API valida a config estrita no boot —
    se faltar algo, `dc logs api` lista tudo). Mudou `NEXT_PUBLIC_*`? `dc up -d --build web`.
-5. **Banco**: `dc run --rm migrate` e `platform:create-admin` (sem seeds).
+   Depois, o admin: `dc run --rm migrate pnpm platform:create-admin ...` (sem seeds).
 6. **Webhooks do Asaas de produção**:
    ```bash
    dc run --rm migrate pnpm asaas:setup --public-url https://api.annetec.com.br
    ```
    Cadastra `https://api.annetec.com.br/api/v1/webhooks/asaas` e `/api/v1/webhooks/asaas-plataforma`
-   com os tokens do `.env.prod`. Teste com um evento pelo painel do Asaas e acompanhe `dc logs -f api`.
+   com os tokens do `.env.prod` (mínimo 32 caracteres — a API não sobe com menos) e todos os eventos que o
+   código trata (inclui chargeback, estorno parcial e restauração). **Rode de novo sempre que a lista
+   `EVENTS` de `scripts/asaas-setup.ts` mudar.** Teste com um evento pelo painel do Asaas e acompanhe `dc logs -f api`.
 7. Os certificados do sslip.io simplesmente deixam de ser renovados; nada a remover.

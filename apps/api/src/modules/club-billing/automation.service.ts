@@ -735,6 +735,24 @@ export async function runAll(now = new Date()): Promise<BillingAutomationReport[
 
 let schedulerStarted = false
 let running = false
+let stopping = false
+let firstTimer: ReturnType<typeof setTimeout> | null = null
+let intervalTimer: ReturnType<typeof setInterval> | null = null
+
+/**
+ * Encerramento (SIGTERM): para os timers e espera a rodada em curso terminar
+ * (até `maxWaitMs`). `false` = a rodada ainda rodava quando o prazo acabou.
+ */
+export async function stopBillingAutomation(maxWaitMs = 20_000): Promise<boolean> {
+  stopping = true
+  if (firstTimer) clearTimeout(firstTimer)
+  if (intervalTimer) clearInterval(intervalTimer)
+  firstTimer = null
+  intervalTimer = null
+  const deadline = Date.now() + maxWaitMs
+  while (running && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100))
+  return !running
+}
 
 /**
  * Timer do motor (chamado por `src/index.ts`, nunca por `vercel.ts`): 1ª
@@ -747,6 +765,7 @@ export function startBillingAutomation(): void {
   schedulerStarted = true
 
   const tick = async () => {
+    if (stopping) return
     if (running) {
       logger.debug('Automação de cobrança ainda rodando; pulando esta rodada')
       return
@@ -782,11 +801,13 @@ export function startBillingAutomation(): void {
     }
   }
 
-  const first = setTimeout(() => {
+  firstTimer = setTimeout(() => {
+    firstTimer = null
+    if (stopping) return
     void tick()
-    const interval = setInterval(() => void tick(), env.BILLING_AUTOMATION_INTERVAL_SECONDS * 1000)
-    interval.unref()
+    intervalTimer = setInterval(() => void tick(), env.BILLING_AUTOMATION_INTERVAL_SECONDS * 1000)
+    intervalTimer.unref()
   }, 10_000)
-  first.unref()
+  firstTimer.unref()
   logger.info({ intervalSeconds: env.BILLING_AUTOMATION_INTERVAL_SECONDS }, 'Automação de cobrança do clube agendada')
 }
