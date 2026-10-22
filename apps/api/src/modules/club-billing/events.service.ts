@@ -195,6 +195,15 @@ async function applyGatewayEvent(
     }
 
     const changed = await applyEvent(tx, payload, charge, ctx, now, paidNotes)
+    if (!changed && isChargebackEvent(payload.event)) {
+      // Chargeback sem efeito (cobrança já estornada/não paga, disputa depois
+      // do "Reativar"): fica na timeline, mas marcado para o `chargebackHold`
+      // não travar de novo uma assinatura já liberada.
+      await tx
+        .update(paymentEvents)
+        .set({ payload: { ...sanitizePayload(payload), applied: false } })
+        .where(eq(paymentEvents.id, inserted.id))
+    }
     return {
       status: changed ? ('applied' as const) : ('recorded' as const),
       chargeId: charge.id,
@@ -261,6 +270,9 @@ async function recordOrphanEvent(
     return { status: 'ignored', ...base }
   }
   const value = payload.payment.value ?? null
+  // CONFIRMED e RECEIVED do mesmo pagamento órfão chegam como dois eventos:
+  // os dois vão para a timeline, mas o alerta de estorno sai uma vez só.
+  const alreadyAlerted = payload.payment.id ? await orphanAlreadyRecorded(charge.id, payload.payment.id) : false
   const [inserted] = await db
     .insert(paymentEvents)
     .values({
@@ -280,6 +292,13 @@ async function recordOrphanEvent(
     .onConflictDoNothing({ target: [paymentEvents.gatewayProvider, paymentEvents.externalEventId] })
     .returning({ id: paymentEvents.id })
   if (!inserted) return { status: 'duplicate', ...base }
+  if (alreadyAlerted) {
+    logger.warn(
+      { event: payload.event, chargeId: charge.id, gatewayPaymentId: payload.payment.id, provider: ctx.provider },
+      'Pagamento órfão já alertado (outro evento do mesmo pagamento antigo) — só registrado',
+    )
+    return { status: 'recorded', ...base }
+  }
   logger.error(
     {
       alert: 'orphan_payment',
@@ -297,6 +316,22 @@ async function recordOrphanEvent(
     'Pagamento recebido num pagamento antigo/duplicado da cobrança — ESTORNO MANUAL necessário',
   )
   return { status: 'recorded', ...base }
+}
+
+/** Já existe `PAYMENT_ORPHAN_RECEIVED` deste pagamento antigo nesta cobrança (alerta já saiu). */
+async function orphanAlreadyRecorded(chargeId: string, gatewayPaymentId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ orphanEventId: paymentEvents.id })
+    .from(paymentEvents)
+    .where(
+      and(
+        eq(paymentEvents.chargeId, chargeId),
+        eq(paymentEvents.type, 'PAYMENT_ORPHAN_RECEIVED'),
+        sql`${paymentEvents.payload}->'payment'->>'id' = ${gatewayPaymentId}`,
+      ),
+    )
+    .limit(1)
+  return Boolean(row)
 }
 
 async function applyEvent(
@@ -695,19 +730,16 @@ async function applyChargeback(
   now: Date,
 ): Promise<boolean> {
   const value = payload.payment.value ?? Number(charge.paidAmount ?? charge.amount)
-  logger.error(
-    {
-      alert: 'chargeback',
-      event: payload.event,
-      organizationId: charge.organizationId,
-      chargeId: charge.id,
-      kind: charge.kind,
-      subscriptionId: charge.subscriptionId,
-      gatewayPaymentId: payload.payment.id,
-      value,
-    },
-    'Chargeback no pagamento de uma cobrança do clube — revisar (assinatura suspensa até reativação manual)',
-  )
+  const logFields = {
+    alert: 'chargeback',
+    event: payload.event,
+    organizationId: charge.organizationId,
+    chargeId: charge.id,
+    kind: charge.kind,
+    subscriptionId: charge.subscriptionId,
+    gatewayPaymentId: payload.payment.id,
+    value,
+  }
   const [updated] = await tx
     .update(clubCharges)
     .set({
@@ -718,7 +750,13 @@ async function applyChargeback(
     })
     .where(and(eq(clubCharges.id, charge.id), eq(clubCharges.status, 'paid')))
     .returning()
-  if (!updated) return false
+  if (!updated) {
+    // Disputa/reentrega de um chargeback já tratado, ou cobrança que não estava paga:
+    // o alerta (erro) já saiu no primeiro — aqui só registra.
+    logger.warn({ ...logFields, chargeStatus: charge.status }, 'Chargeback sem efeito (cobrança não estava paga) — só registrado')
+    return false
+  }
+  logger.error(logFields, 'Chargeback no pagamento de uma cobrança do clube — revisar (assinatura suspensa até reativação manual)')
   // Avulsa não mexe na assinatura (mesma regra do vencimento).
   if (updated.kind === 'one_off') return true
 
@@ -744,10 +782,17 @@ async function applyChargeback(
 /** Tipos que seguram a assinatura suspensa até uma reativação manual. */
 export const CHARGEBACK_EVENT_TYPES = ['PAYMENT_CHARGEBACK_REQUESTED', 'PAYMENT_CHARGEBACK_DISPUTE'] as const
 
+function isChargebackEvent(type: string): boolean {
+  return (CHARGEBACK_EVENT_TYPES as readonly string[]).includes(type)
+}
+
 /**
- * Chargeback sem reativação MANUAL posterior (`SUBSCRIPTION_REACTIVATED` com
- * `source = 'manual'`, gravado pelo "Reativar" do admin) → a reativação
- * automática não libera a assinatura.
+ * Chargeback que TEVE efeito (estornou uma mensalidade paga) sem reativação
+ * MANUAL posterior (`SUBSCRIPTION_REACTIVATED` com `source = 'manual'`,
+ * gravado pelo "Reativar" do admin) → a reativação automática não libera a
+ * assinatura. Chargeback sem efeito (`payload.applied = false`: disputa que
+ * chega depois do "Reativar", cobrança já estornada) não trava nada; linhas
+ * antigas sem a marca contam como aplicadas.
  */
 async function chargebackHold(tx: Executor, subscriptionId: string): Promise<boolean> {
   const [hold] = await tx
@@ -757,6 +802,7 @@ async function chargebackHold(tx: Executor, subscriptionId: string): Promise<boo
       and(
         eq(paymentEvents.subscriptionId, subscriptionId),
         inArray(paymentEvents.type, [...CHARGEBACK_EVENT_TYPES]),
+        sql`coalesce(${paymentEvents.payload}->>'applied', 'true') <> 'false'`,
         sql`exists (select 1 from club_charges c where c.id = ${paymentEvents.chargeId} and c.kind = 'cycle')`,
         sql`not exists (select 1 from payment_events r where r.subscription_id = ${subscriptionId} and r.type = 'SUBSCRIPTION_REACTIVATED' and r.source = 'manual' and r.created_at > ${paymentEvents.createdAt})`,
       ),

@@ -92,10 +92,27 @@ O serviço `migrate` é a imagem `tools` (código-fonte + tsx), cwd `apps/api`, 
 dc run --rm migrate                                    # aplica src/db/migrations (idempotente)
 ```
 
-Admin da plataforma (sem seed — use senha forte):
+Admin da plataforma (sem seed — senha forte, mínimo 12 caracteres). A senha **não** vai na linha de
+comando (ficaria no histórico do shell e na lista de processos): o script lê `PLATFORM_ADMIN_PASSWORD`,
+o stdin ou pede sem eco.
 
 ```bash
-dc run --rm migrate pnpm platform:create-admin "Nome Sobrenome" voce@annetec.com.br 'SenhaForte!2026'
+# a) variável de ambiente: `read -rs` não ecoa nem grava no histórico; `-e VAR` sem valor repassa a do shell
+read -rs PLATFORM_ADMIN_PASSWORD; export PLATFORM_ADMIN_PASSWORD
+dc run --rm -e PLATFORM_ADMIN_PASSWORD migrate pnpm platform:create-admin "Nome Sobrenome" voce@annetec.com.br
+unset PLATFORM_ADMIN_PASSWORD
+
+# b) digitada quando pedida (sem eco) — precisa do TTY: NÃO use `-T` aqui
+dc run --rm migrate pnpm platform:create-admin "Nome Sobrenome" voce@annetec.com.br
+
+# c) pipe (só a senha, sem outras linhas) — use `-T`: sem TTY o script lê o stdin inteiro
+pass show annetec/admin | head -n1 | dc run --rm -T migrate pnpm platform:create-admin "Nome Sobrenome" voce@annetec.com.br
+```
+
+Papel opcional no fim (`superadmin`, o padrão, ou `platform_admin`). Admin de inquilino (este script ainda
+recebe a senha como argumento):
+
+```bash
 dc run --rm migrate pnpm tenant:create-admin <slug> "Nome" admin@cliente.com.br 'SenhaForte!2026'
 ```
 

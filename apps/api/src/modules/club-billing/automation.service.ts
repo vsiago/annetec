@@ -317,7 +317,12 @@ async function run(orgId: string, now: Date, onboardingDeps: Partial<OnboardingD
   let tenantBrand: Promise<TenantBrand | null> | null = null
   const noticeDeps: Partial<NoticeDeps> = { loadTenant: id => (tenantBrand ??= loadTenantBrand(id)) }
 
+  // Desligando (SIGTERM): não começa passo nem item novo — o que já foi ao
+  // gateway termina e grava; o resto fica para a rodada do próximo processo.
+  // Sem isso a rodada seguiria chamando o gateway até o SIGKILL, que pode cair
+  // entre a resposta do gateway e a gravação do resultado.
   const step = async (name: string, work: () => Promise<void>) => {
+    if (stopping) return
     try {
       await work()
     } catch (error) {
@@ -325,6 +330,7 @@ async function run(orgId: string, now: Date, onboardingDeps: Partial<OnboardingD
     }
   }
   const item = async (name: string, work: () => Promise<void>) => {
+    if (stopping) return
     try {
       await work()
     } catch (error) {

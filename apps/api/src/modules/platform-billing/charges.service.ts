@@ -194,9 +194,22 @@ export async function submitPlatformChargeToGateway(chargeId: string, attempt: P
   // Pix/boleto não aceitam vencimento no passado; a linha guarda a obrigação original.
   const gatewayDue = attempt.gatewayDueDate && attempt.gatewayDueDate >= today ? attempt.gatewayDueDate : charge.dueDate < today ? today : charge.dueDate
 
+  // Cliente no gateway FORA da tentativa contada: falha aqui não cobrou cartão
+  // nenhum, então não gasta `maxCardRetries`.
+  let customerId: string
+  try {
+    customerId = await ensureCustomer(gateway, payer)
+  } catch (error) {
+    return markGatewayFailure(charge, error, false)
+  }
+
+  // Já houve tentativa nesta fatura (inclusive processo derrubado no meio):
+  // confere no gateway antes de cobrar o cartão de novo.
+  const reuseExistingCardPayment = attempt.method === 'credit_card' && (charge.attempts > 0 || charge.lastAttemptAt !== null)
+  if (attempt.method === 'credit_card') await stampCardAttempt(charge.id, now)
+
   let result: GatewayCharge
   try {
-    const customerId = await ensureCustomer(gateway, payer)
     result = await gateway.createCharge({
       customerId,
       method: attempt.method,
@@ -211,8 +224,7 @@ export async function submitPlatformChargeToGateway(chargeId: string, attempt: P
       remoteIp: attempt.remoteIp,
       finePercent: settings.finePercent,
       interestMonthlyPercent: settings.interestMonthlyPercent,
-      // Já houve tentativa nesta fatura: confere no gateway antes de cobrar o cartão de novo.
-      reuseExistingCardPayment: attempt.method === 'credit_card' && (charge.attempts > 0 || charge.lastAttemptAt !== null),
+      reuseExistingCardPayment,
     })
   } catch (error) {
     if (error instanceof CardDeclinedError) return refuse(charge, gateway.provider, attempt, error.message, now)
@@ -279,6 +291,16 @@ export async function submitPlatformChargeToGateway(chargeId: string, attempt: P
     })
   }
   return loadPlatformCharge(charge.id)
+}
+
+/**
+ * Marca `lastAttemptAt` ANTES de mandar o cartão ao gateway: se o processo
+ * morrer entre a resposta e a gravação do resultado, a próxima tentativa passa
+ * pelo `reuseExistingCardPayment` em vez de cobrar de novo. `attempts` não
+ * muda aqui (aprovação, recusa e falha contam como antes).
+ */
+async function stampCardAttempt(chargeId: string, now: Date): Promise<void> {
+  await db.update(platformCharges).set({ lastAttemptAt: now, updatedAt: now }).where(eq(platformCharges.id, chargeId))
 }
 
 async function refuse(

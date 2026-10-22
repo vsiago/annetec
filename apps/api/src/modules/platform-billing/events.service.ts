@@ -10,7 +10,7 @@ import {
   type PlatformBillingEventType,
   type PlatformEventSource,
 } from '@annetec/contracts'
-import { and, eq, inArray, isNull, lt, ne, or } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { platformBillingEvents, platformCharges, platformSubscriptions, tenantProfiles } from '@/db/schema'
 import { invalidatePlatformAccessCache } from '@/http/middleware/platform-access'
@@ -460,6 +460,8 @@ async function recordOrphanEvent(
     return { status: 'ignored', ...base }
   }
   const value = payload.payment.value ?? null
+  // CONFIRMED e RECEIVED do mesmo pagamento órfão: as duas linhas ficam, o alerta sai uma vez.
+  const alreadyAlerted = payload.payment.id ? await orphanAlreadyRecorded(charge.id, payload.payment.id) : false
   const [inserted] = await db
     .insert(platformBillingEvents)
     .values({
@@ -480,6 +482,13 @@ async function recordOrphanEvent(
     .onConflictDoNothing({ target: [platformBillingEvents.gatewayProvider, platformBillingEvents.externalEventId] })
     .returning({ id: platformBillingEvents.id })
   if (!inserted) return { status: 'duplicate', ...base }
+  if (alreadyAlerted) {
+    logger.warn(
+      { scope: 'platform', event: payload.event, chargeId: charge.id, gatewayPaymentId: payload.payment.id, provider: ctx.provider },
+      'Pagamento órfão da plataforma já alertado (outro evento do mesmo pagamento antigo) — só registrado',
+    )
+    return { status: 'recorded', ...base }
+  }
   logger.error(
     {
       alert: 'orphan_payment',
@@ -498,6 +507,22 @@ async function recordOrphanEvent(
     'Pagamento recebido num pagamento antigo/duplicado da fatura da plataforma — ESTORNO MANUAL necessário',
   )
   return { status: 'recorded', ...base }
+}
+
+/** Já existe `PAYMENT_ORPHAN_RECEIVED` deste pagamento antigo nesta fatura (alerta já saiu). */
+async function orphanAlreadyRecorded(chargeId: string, gatewayPaymentId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ orphanEventId: platformBillingEvents.id })
+    .from(platformBillingEvents)
+    .where(
+      and(
+        eq(platformBillingEvents.chargeId, chargeId),
+        eq(platformBillingEvents.type, 'PAYMENT_ORPHAN_RECEIVED'),
+        sql`${platformBillingEvents.payload}->'payment'->>'id' = ${gatewayPaymentId}`,
+      ),
+    )
+    .limit(1)
+  return Boolean(row)
 }
 
 async function applyEvent(
@@ -752,21 +777,18 @@ async function applyChargeback(
   effects: PlatformEffects,
 ): Promise<boolean> {
   const value = payload.payment.value ?? Number(charge.paidAmount ?? charge.amount)
-  logger.error(
-    {
-      alert: 'chargeback',
-      scope: 'platform',
-      event: payload.event,
-      organizationId: charge.organizationId,
-      chargeId: charge.id,
-      kind: charge.kind,
-      subscriptionId: charge.subscriptionId,
-      proposalId: charge.proposalId,
-      gatewayPaymentId: payload.payment.id,
-      value,
-    },
-    'Chargeback numa fatura da plataforma — revisar (painel bloqueado até a holding liberar)',
-  )
+  const logFields = {
+    alert: 'chargeback',
+    scope: 'platform',
+    event: payload.event,
+    organizationId: charge.organizationId,
+    chargeId: charge.id,
+    kind: charge.kind,
+    subscriptionId: charge.subscriptionId,
+    proposalId: charge.proposalId,
+    gatewayPaymentId: payload.payment.id,
+    value,
+  }
   const [updated] = await tx
     .update(platformCharges)
     .set({
@@ -777,7 +799,12 @@ async function applyChargeback(
     })
     .where(and(eq(platformCharges.id, charge.id), eq(platformCharges.status, 'paid')))
     .returning()
-  if (!updated) return false
+  if (!updated) {
+    // Disputa/reentrega de um chargeback já tratado: o alerta (erro) saiu no primeiro.
+    logger.warn({ ...logFields, chargeStatus: charge.status }, 'Chargeback da plataforma sem efeito (fatura não estava paga) — só registrado')
+    return false
+  }
+  logger.error(logFields, 'Chargeback numa fatura da plataforma — revisar (painel bloqueado até a holding liberar)')
   if (!updated.subscriptionId || !updated.organizationId) return true
 
   const reason = `Chargeback do pagamento de ${formatBRL(value)} (${updated.description}) — revisar antes de liberar`

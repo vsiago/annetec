@@ -254,6 +254,32 @@ export interface StreamOptions {
   clock?: () => number
   /** Relógio do banco − relógio local (medido uma vez por conexão): o cursor anda no tempo do banco. */
   dbClockOffsetMs?: number
+  /** Encerra o loop na hora (padrão: o sinal de desligamento do processo, `abortNotificationStreams`). */
+  signal?: AbortSignal
+}
+
+/**
+ * Desligamento do processo: toda conexão SSE aberta (e qualquer uma que
+ * chegue depois) fecha na hora com o evento `cursor` — o navegador reconecta
+ * em outra instância e retoma pelo Last-Event-ID. Sem isso cada stream
+ * seguraria o `server.close()` por até `maxMs` (25 s), estourando o prazo do
+ * encerramento gracioso.
+ */
+const streamsShutdown = new AbortController()
+
+export function abortNotificationStreams(): void {
+  streamsShutdown.abort()
+}
+
+/** `stream.sleep`, mas acorda assim que o sinal dispara. */
+function sleepUnlessAborted(stream: SseWriter, ms: number, signal: AbortSignal): Promise<unknown> {
+  if (signal.aborted) return Promise.resolve()
+  let onAbort: () => void = () => {}
+  const aborted = new Promise<void>(resolve => {
+    onAbort = () => resolve()
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  return Promise.race([stream.sleep(ms), aborted]).finally(() => signal.removeEventListener('abort', onAbort))
 }
 
 /**
@@ -272,6 +298,7 @@ export async function runNotificationStream(
   const store = options.store ?? notificationStoreDb
   const clock = options.clock ?? Date.now
   const offset = options.dbClockOffsetMs ?? 0
+  const signal = options.signal ?? streamsShutdown.signal
 
   const deadline = clock() + timing.maxMs
   const sent = new Set<string>()
@@ -281,7 +308,7 @@ export async function runNotificationStream(
 
   await stream.writeSSE({ event: 'ready', id: cursor.toISOString(), data: '{}', retry: timing.retryMs })
 
-  while (!stream.aborted && !stream.closed && clock() < deadline) {
+  while (!stream.aborted && !stream.closed && !signal.aborted && clock() < deadline) {
     const polledAt = new Date(clock() + offset)
     let rows: NotificationRecord[]
     try {
@@ -311,7 +338,7 @@ export async function runNotificationStream(
 
     const remaining = deadline - clock()
     if (remaining <= 0) break
-    await stream.sleep(Math.min(timing.pollMs, remaining))
+    await sleepUnlessAborted(stream, Math.min(timing.pollMs, remaining), signal)
   }
 
   if (!stream.aborted && !stream.closed) {

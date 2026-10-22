@@ -346,6 +346,33 @@ describe('stream (SSE)', () => {
     expect(service.parseStreamCursor(new Date(T0 - 3 * 86_400_000).toISOString(), now)!.getTime()).toBe(T0 - 86_400_000)
   })
 
+  it('desligamento (sinal abortado): fecha na hora, mesmo no meio da espera entre consultas', async () => {
+    const h = harness([])
+    // `sleep` que nunca acorda sozinho: só o sinal tira o loop daqui.
+    const writer = { ...h.writer, sleep: () => new Promise<void>(() => {}) }
+    const controller = new AbortController()
+    const running = service.runNotificationStream(writer, scope, new Date(T0), {
+      store: h.store,
+      clock: h.clock,
+      signal: controller.signal,
+    })
+    await new Promise(resolve => setTimeout(resolve, 10))
+    controller.abort()
+    await expect(running).resolves.toMatchObject({ delivered: 0 })
+    expect(h.written.map(m => m.event)).toEqual(['ready', 'cursor'])
+
+    // Conexão que chega já durante o desligamento: `ready` e `cursor`, sem consultar o banco.
+    const late = harness([])
+    let queried = false
+    late.store.createdAfter = async () => {
+      queried = true
+      return []
+    }
+    await service.runNotificationStream(late.writer, scope, new Date(T0), { store: late.store, clock: late.clock, signal: controller.signal })
+    expect(queried).toBe(false)
+    expect(late.written.map(m => m.event)).toEqual(['ready', 'cursor'])
+  })
+
   it('falha do banco encerra a resposta (o navegador reconecta) sem lançar', async () => {
     const h = harness([])
     h.store.createdAfter = async () => {

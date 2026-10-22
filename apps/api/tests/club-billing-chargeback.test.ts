@@ -56,11 +56,26 @@ vi.mock('@/db/client', async () => {
   }
   const arg = (ops: Op[], name: string) => ops.find(op => op.name === name)?.args[0] as Record<string, unknown>
 
-  /** Simula o `chargebackHold`: chargeback de mensalidade sem reativação manual depois. */
+  /** Valores (parâmetros) de um `where` do drizzle — para o banco falso filtrar pelo id certo. */
+  function whereValues(node: unknown, out: unknown[] = []): unknown[] {
+    if (typeof node === 'string') out.push(node)
+    else if (node && typeof node === 'object') {
+      if (Array.isArray((node as { queryChunks?: unknown[] }).queryChunks)) {
+        for (const chunk of (node as { queryChunks: unknown[] }).queryChunks) whereValues(chunk, out)
+      } else if ((node as object).constructor?.name === 'Param') out.push((node as { value: unknown }).value)
+    }
+    return out
+  }
+
+  /**
+   * Simula o `chargebackHold`: chargeback de mensalidade QUE TEVE EFEITO
+   * (`payload.applied !== false`) sem reativação manual depois.
+   */
   function holdRows() {
     let held = false
     for (const event of state.events) {
-      if (CHARGEBACK.includes(event.type as string) && state.charge.kind === 'cycle') held = true
+      const applied = (event.payload as { applied?: boolean } | null)?.applied !== false
+      if (CHARGEBACK.includes(event.type as string) && applied && state.charge.kind === 'cycle') held = true
       if (event.type === 'SUBSCRIPTION_REACTIVATED' && event.source === 'manual') held = false
     }
     return held ? [{ id: 'hold' }] : []
@@ -72,7 +87,16 @@ vi.mock('@/db/client', async () => {
         const table = arg(ops, 'from') as unknown
         if (table === schema.clubCharges) return fields ? [] : [{ ...state.charge }]
         if (table === schema.clubSubscriptions) return [{ ...state.sub }]
-        if (table === schema.paymentEvents) return holdRows()
+        if (table === schema.paymentEvents) {
+          if (fields && 'orphanEventId' in (fields as object)) {
+            const values = whereValues(arg(ops, 'where'))
+            return state.events
+              .filter(e => e.type === 'PAYMENT_ORPHAN_RECEIVED')
+              .filter(e => values.includes((e.payload as { payment: { id: string } }).payment.id))
+              .map(e => ({ orphanEventId: e.id }))
+          }
+          return holdRows()
+        }
         return []
       }),
     insert: (table: unknown) =>
@@ -82,8 +106,9 @@ vi.mock('@/db/client', async () => {
         const external = values.externalEventId as string | null
         if (external && state.seen.has(`${values.gatewayProvider}:${external}`)) return []
         if (external) state.seen.add(`${values.gatewayProvider}:${external}`)
-        state.events.push(values)
-        return [{ id: `evt-row-${state.events.length}` }]
+        const id = `evt-row-${state.events.length + 1}`
+        state.events.push({ ...values, id })
+        return [{ id }]
       }),
     update: (table: unknown) =>
       chain(ops => {
@@ -115,6 +140,13 @@ vi.mock('@/db/client', async () => {
           if (typeof set.status === 'string' && from[set.status] && !from[set.status]!.includes(current)) return []
           Object.assign(state.sub, set)
           return [{ ...state.sub }]
+        }
+        if (table === schema.paymentEvents) {
+          const values = whereValues(arg(ops, 'where'))
+          const row = state.events.find(e => values.includes(e.id))
+          if (!row) return []
+          Object.assign(row, set)
+          return [{ ...row }]
         }
         return []
       }),
@@ -197,6 +229,41 @@ describe('chargeback', () => {
     expect(state.sub.status).toBe('active')
   })
 
+  it('disputa sem efeito DEPOIS do "Reativar" manual não trava de novo a assinatura', async () => {
+    const ctx = { source: 'automation' as const, provider: 'asaas' as const }
+    const sub = { id: SUB_ID, organizationId: 'org-1' }
+    await handleGatewayEvent(event('evt_cb_1', 'PAYMENT_CHARGEBACK_REQUESTED'), webhook)
+    expect(state.sub.status).toBe('suspended')
+
+    // "Reativar" do admin (t1).
+    state.events.push({ type: 'SUBSCRIPTION_REACTIVATED', source: 'manual' })
+    state.sub.status = 'active'
+
+    // Disputa do mesmo chargeback (t2 > t1): a cobrança já está estornada → sem efeito.
+    const dispute = await handleGatewayEvent(event('evt_cb_2', 'PAYMENT_CHARGEBACK_DISPUTE'), webhook)
+    expect(dispute.status).toBe('recorded')
+    const disputeRow = state.events.find(e => e.type === 'PAYMENT_CHARGEBACK_DISPUTE')!
+    expect(disputeRow.payload).toMatchObject({ applied: false, event: 'PAYMENT_CHARGEBACK_DISPUTE' })
+    expect(log.warn).toHaveBeenCalledWith(expect.objectContaining({ alert: 'chargeback', event: 'PAYMENT_CHARGEBACK_DISPUTE' }), expect.any(String))
+    expect(log.error).toHaveBeenCalledTimes(1) // só o REQUESTED alertou
+
+    // Mais tarde a assinatura atrasa e o associado paga: a reativação automática libera.
+    state.sub.status = 'past_due'
+    expect(await reactivateIfSettled(db as never, sub, ctx, NOW)).toBe(true)
+    expect(state.sub.status).toBe('active')
+  })
+
+  it('chargeback numa cobrança já estornada: só registra, sem trava nem alerta de erro', async () => {
+    state.charge.status = 'refunded'
+    const outcome = await handleGatewayEvent(event('evt_cb_4', 'PAYMENT_CHARGEBACK_REQUESTED'), webhook)
+    expect(outcome.status).toBe('recorded')
+    expect(state.events[0]!.payload).toMatchObject({ applied: false })
+    expect(log.error).not.toHaveBeenCalled()
+    state.sub.status = 'past_due'
+    const ctx = { source: 'automation' as const, provider: 'asaas' as const }
+    expect(await reactivateIfSettled(db as never, { id: SUB_ID, organizationId: 'org-1' }, ctx, NOW)).toBe(true)
+  })
+
   it('avulsa com chargeback: só a cobrança muda', async () => {
     state.charge.kind = 'one_off'
     const outcome = await handleGatewayEvent(event('evt_cb_3', 'PAYMENT_CHARGEBACK_REQUESTED'), webhook)
@@ -239,6 +306,19 @@ describe('pagamento órfão (id antigo da cobrança)', () => {
     // Reentrega: não duplica a linha nem o alerta.
     expect((await handleGatewayEvent(event('evt_o1', 'PAYMENT_RECEIVED', 'pay_antigo'), webhook)).status).toBe('duplicate')
     expect(log.error).toHaveBeenCalledTimes(1)
+  })
+
+  it('CONFIRMED + RECEIVED do mesmo pagamento órfão: duas linhas, um alerta só', async () => {
+    await handleGatewayEvent(event('evt_o1c', 'PAYMENT_CONFIRMED', 'pay_antigo'), webhook)
+    const second = await handleGatewayEvent(event('evt_o1r', 'PAYMENT_RECEIVED', 'pay_antigo'), webhook)
+    expect(second.status).toBe('recorded')
+    expect(state.events.filter(e => e.type === 'PAYMENT_ORPHAN_RECEIVED')).toHaveLength(2)
+    expect(log.error).toHaveBeenCalledTimes(1)
+    expect(log.warn).toHaveBeenCalledTimes(1)
+
+    // Outro pagamento órfão da mesma cobrança alerta de novo.
+    await handleGatewayEvent(event('evt_o9', 'PAYMENT_RECEIVED', 'pay_outro_antigo'), webhook)
+    expect(log.error).toHaveBeenCalledTimes(2)
   })
 
   it('PAYMENT_DELETED do pagamento antigo (cancelamento que deu certo) segue ignorado', async () => {

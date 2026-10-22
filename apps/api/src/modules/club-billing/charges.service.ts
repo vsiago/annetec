@@ -168,9 +168,22 @@ export async function submitChargeToGateway(chargeId: string, attempt: PaymentAt
     }
   }
 
+  // Cliente no gateway FORA da tentativa contada: falha aqui não cobrou cartão
+  // nenhum, então não gasta `maxCardRetries`.
+  let customerId: string
+  try {
+    customerId = await ensureGatewayCustomer(gateway, sub)
+  } catch (error) {
+    return markGatewayFailure(charge, error, false)
+  }
+
+  // Já houve tentativa nesta cobrança (recusa, falha, resposta inconclusiva ou
+  // processo derrubado no meio): confere no gateway antes de cobrar o cartão de novo.
+  const reuseExistingCardPayment = attempt.method === 'credit_card' && (charge.attempts > 0 || charge.lastAttemptAt !== null)
+  if (attempt.method === 'credit_card') await stampCardAttempt(charge.id, now)
+
   let result: GatewayCharge
   try {
-    const customerId = await ensureGatewayCustomer(gateway, sub)
     result = await gateway.createCharge({
       customerId,
       method: attempt.method,
@@ -185,9 +198,7 @@ export async function submitChargeToGateway(chargeId: string, attempt: PaymentAt
       remoteIp: attempt.remoteIp,
       finePercent: settings.finePercent,
       interestMonthlyPercent: settings.interestMonthlyPercent,
-      // Já houve tentativa nesta cobrança (recusa, falha ou resposta inconclusiva):
-      // confere no gateway antes de cobrar o cartão de novo.
-      reuseExistingCardPayment: attempt.method === 'credit_card' && (charge.attempts > 0 || charge.lastAttemptAt !== null),
+      reuseExistingCardPayment,
     })
   } catch (error) {
     if (error instanceof CardDeclinedError) {
@@ -261,6 +272,18 @@ export async function submitChargeToGateway(chargeId: string, attempt: PaymentAt
   }
 
   return loadCharge(charge.id)
+}
+
+/**
+ * Marca `lastAttemptAt` ANTES de mandar o cartão ao gateway. Se o processo
+ * morrer entre a resposta do gateway e a gravação do resultado (SIGKILL no
+ * deploy), a próxima tentativa já vê a marca e passa pelo
+ * `reuseExistingCardPayment` em vez de cobrar o cartão de novo — e a
+ * automação espera o intervalo de retentativa. `attempts` não muda aqui (a
+ * aprovação, a recusa e a falha contam como sempre contaram).
+ */
+async function stampCardAttempt(chargeId: string, now: Date): Promise<void> {
+  await db.update(clubCharges).set({ lastAttemptAt: now, updatedAt: now }).where(eq(clubCharges.id, chargeId))
 }
 
 /** Recusa de cartão → handler único (`PAYMENT_CREDIT_CARD_CAPTURE_REFUSED`, attempts+1). */

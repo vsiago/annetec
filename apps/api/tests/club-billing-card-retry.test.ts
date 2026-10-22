@@ -14,6 +14,9 @@ const state = vi.hoisted(() => ({
   updates: [] as Record<string, unknown>[],
   createInputs: [] as Record<string, unknown>[],
   createError: null as Error | null,
+  customerError: null as Error | null,
+  /** Linha da cobrança no banco no instante em que o gateway foi chamado. */
+  atGateway: [] as Record<string, unknown>[],
 }))
 
 vi.mock('@/db/client', async () => {
@@ -66,9 +69,13 @@ vi.mock('@/integrations/payments/provider', () => {
     provider: 'asaas',
     sandbox: false,
     canSimulate: false,
-    ensureCustomer: async () => 'cus_1',
+    ensureCustomer: async () => {
+      if (state.customerError) throw state.customerError
+      return 'cus_1'
+    },
     createCharge: async (input: Record<string, unknown>) => {
       state.createInputs.push(input)
+      state.atGateway.push({ ...state.charge })
       if (state.createError) throw state.createError
       return { id: 'pay_ok', status: 'paid', paidAt: new Date(), paidAmount: 79.7, invoiceUrl: null, pix: null, boleto: null, card: null }
     },
@@ -101,6 +108,8 @@ beforeEach(() => {
   state.updates = []
   state.createInputs = []
   state.createError = null
+  state.customerError = null
+  state.atGateway = []
 })
 
 describe('cartão recorrente com resposta inconclusiva', () => {
@@ -129,5 +138,45 @@ describe('cartão recorrente com resposta inconclusiva', () => {
     await submitChargeToGateway(CHARGE_ID, { method: 'pix', source: 'automation' })
     expect(state.createInputs[0]).toMatchObject({ reuseExistingCardPayment: false })
     expect(state.updates.at(-1)).not.toHaveProperty('attempts')
+  })
+})
+
+describe('cartão: processo derrubado no meio da cobrança', () => {
+  it('lastAttemptAt é gravado ANTES de chamar o gateway (attempts não muda ainda)', async () => {
+    await submitChargeToGateway(CHARGE_ID, { method: 'credit_card', useSavedCard: true, source: 'automation' })
+    expect(state.atGateway).toHaveLength(1)
+    expect(state.atGateway[0]!.lastAttemptAt).toBeInstanceOf(Date)
+    expect(state.atGateway[0]!.attempts).toBe(0)
+    expect(state.atGateway[0]!.gatewayChargeId).toBeNull()
+    // A 1ª tentativa de verdade não pede conferência (nada foi cobrado antes).
+    expect(state.createInputs[0]).toMatchObject({ reuseExistingCardPayment: false })
+  })
+
+  it('SIGKILL entre a resposta do gateway e a gravação: a próxima tentativa confere no gateway (não cobra de novo)', async () => {
+    await submitChargeToGateway(CHARGE_ID, { method: 'credit_card', useSavedCard: true, source: 'automation' })
+    // O banco fica como estava quando o gateway respondeu e o processo morreu.
+    state.charge = { ...state.atGateway[0]! }
+    state.createInputs = []
+    await submitChargeToGateway(CHARGE_ID, { method: 'credit_card', useSavedCard: true, source: 'automation' })
+    expect(state.createInputs[0]).toMatchObject({ reuseExistingCardPayment: true })
+  })
+
+  it('Pix/boleto não ganham a marca de tentativa de cartão', async () => {
+    state.charge.method = 'pix'
+    await submitChargeToGateway(CHARGE_ID, { method: 'pix', source: 'automation' })
+    expect(state.atGateway[0]!.lastAttemptAt).toBeNull()
+  })
+})
+
+describe('cartão: falha ao criar o cliente no gateway', () => {
+  it('não conta tentativa de cartão nem chama a cobrança', async () => {
+    state.sub.gatewayCustomerId = null
+    state.customerError = new AsaasApiError(ERROR_CODES.UPSTREAM_TIMEOUT, 'timeout', 0)
+    const row = await submitChargeToGateway(CHARGE_ID, { method: 'credit_card', useSavedCard: true, source: 'automation' })
+    expect(state.createInputs).toHaveLength(0)
+    expect(row.status).toBe('failed')
+    const failure = state.updates.at(-1)!
+    expect(failure.status).toBe('failed')
+    expect(failure).not.toHaveProperty('attempts')
   })
 })

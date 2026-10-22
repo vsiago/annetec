@@ -61,6 +61,17 @@ vi.mock('@/db/client', async () => {
   }
   const arg = (ops: Op[], name: string) => ops.find(op => op.name === name)?.args[0] as Record<string, unknown>
 
+  /** Valores (parâmetros) de um `where` do drizzle. */
+  function whereValues(node: unknown, out: unknown[] = []): unknown[] {
+    if (typeof node === 'string') out.push(node)
+    else if (node && typeof node === 'object') {
+      if (Array.isArray((node as { queryChunks?: unknown[] }).queryChunks)) {
+        for (const chunk of (node as { queryChunks: unknown[] }).queryChunks) whereValues(chunk, out)
+      } else if ((node as object).constructor?.name === 'Param') out.push((node as { value: unknown }).value)
+    }
+    return out
+  }
+
   const db: Record<string, unknown> = {
     select: (fields?: unknown) =>
       chain(ops => {
@@ -71,6 +82,13 @@ vi.mock('@/db/client', async () => {
           return fields
             ? [{ email: state.sub.billingEmail, name: state.sub.billingName, orgId: state.sub.organizationId }]
             : [{ ...state.sub }]
+        }
+        if (table === schema.platformBillingEvents && fields && 'orphanEventId' in (fields as object)) {
+          const values = whereValues(arg(ops, 'where'))
+          return state.events
+            .filter(e => e.type === 'PAYMENT_ORPHAN_RECEIVED')
+            .filter(e => values.includes((e.payload as { payment: { id: string } }).payment.id))
+            .map(() => ({ orphanEventId: 'orfao' }))
         }
         if (table === schema.organization) return [{ name: 'Clube ASSERV', slug: 'asserv' }]
         if (table === schema.platformOnboardingProposals) {
@@ -154,6 +172,7 @@ vi.mock('@/lib/email', () => ({
 }))
 
 const { handlePlatformGatewayEvent, platformSyntheticEventId } = await import('@/modules/platform-billing/events.service')
+const { logger } = await import('@/lib/logger')
 const { platformReference } = await import('@/modules/platform-billing/access-key')
 const { platformWebhookController } = await import('@/modules/platform-billing/webhook-controller')
 const { errorHandler } = await import('@/http/errors')
@@ -385,5 +404,48 @@ describe('chargeback e pagamento órfão (plataforma)', () => {
     expect(state.events).toHaveLength(1)
     expect(state.events[0]).toMatchObject({ type: 'PAYMENT_ORPHAN_RECEIVED', chargeId: CHARGE_ID, externalEventId: 'evt_orfao' })
     expect((await handlePlatformGatewayEvent(orphan, { source: 'webhook', provider: 'asaas' })).status).toBe('duplicate')
+  })
+
+  it('disputa sem efeito loga aviso (o erro saiu só no chargeback que estornou)', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined as never)
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined as never)
+    try {
+      state.charge = { ...monthlyCharge('paid'), gatewayProvider: 'asaas', gatewayChargeId: 'pay_m1' }
+      state.sub = subscription('active')
+      const chargeback = (id: string, event: string) => ({
+        id,
+        event,
+        payment: { id: 'pay_m1', externalReference: platformReference(CHARGE_ID), value: 990, billingType: 'CREDIT_CARD' },
+      })
+      await handlePlatformGatewayEvent(chargeback('evt_cb_a', 'PAYMENT_CHARGEBACK_REQUESTED'), { source: 'webhook', provider: 'asaas' })
+      await handlePlatformGatewayEvent(chargeback('evt_cb_b', 'PAYMENT_CHARGEBACK_DISPUTE'), { source: 'webhook', provider: 'asaas' })
+      const alerts = (spy: typeof error) => spy.mock.calls.filter(call => (call[0] as { alert?: string }).alert === 'chargeback')
+      expect(alerts(error)).toHaveLength(1)
+      expect(alerts(warn)).toHaveLength(1)
+    } finally {
+      error.mockRestore()
+      warn.mockRestore()
+    }
+  })
+
+  it('CONFIRMED + RECEIVED do mesmo pagamento órfão: duas linhas, um alerta só', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined as never)
+    try {
+      state.charge = { ...activationCharge(), gatewayProvider: 'asaas', gatewayChargeId: 'pay_novo' }
+      const orphan = (id: string, event: string, paymentId = 'pay_antigo') => ({
+        id,
+        event,
+        payment: { id: paymentId, externalReference: platformReference(CHARGE_ID), value: 1980, billingType: 'PIX' },
+      })
+      await handlePlatformGatewayEvent(orphan('evt_oc', 'PAYMENT_CONFIRMED'), { source: 'webhook', provider: 'asaas' })
+      await handlePlatformGatewayEvent(orphan('evt_or', 'PAYMENT_RECEIVED'), { source: 'webhook', provider: 'asaas' })
+      expect(state.events.filter(e => e.type === 'PAYMENT_ORPHAN_RECEIVED')).toHaveLength(2)
+      const alerts = () => error.mock.calls.filter(call => (call[0] as { alert?: string }).alert === 'orphan_payment')
+      expect(alerts()).toHaveLength(1)
+      await handlePlatformGatewayEvent(orphan('evt_o2', 'PAYMENT_RECEIVED', 'pay_outro'), { source: 'webhook', provider: 'asaas' })
+      expect(alerts()).toHaveLength(2)
+    } finally {
+      error.mockRestore()
+    }
   })
 })

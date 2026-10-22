@@ -120,7 +120,12 @@ async function run(now: Date): Promise<PlatformBillingAutomationReport> {
   const today = todaySP(now)
   const settings = await loadPlatformSettings()
 
+  // Desligando (SIGTERM): não começa passo nem item novo — o que já foi ao
+  // gateway termina e grava; o resto fica para a rodada do próximo processo.
+  // Sem isso a rodada seguiria chamando o gateway até o SIGKILL, que pode cair
+  // entre a resposta do gateway e a gravação do resultado.
   const step = async (name: string, work: () => Promise<void>) => {
+    if (stopping) return
     try {
       await work()
     } catch (error) {
@@ -128,6 +133,7 @@ async function run(now: Date): Promise<PlatformBillingAutomationReport> {
     }
   }
   const item = async (name: string, work: () => Promise<void>) => {
+    if (stopping) return
     try {
       await work()
     } catch (error) {

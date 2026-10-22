@@ -655,12 +655,24 @@ Não há token de serviço. A API só entende `Authorization: Bearer <token de s
 
 Caminho recomendado hoje:
 
-1. Criar um usuário só para o cron, com papel `platform_admin`:
+1. Criar um usuário só para o cron, com papel `platform_admin`. A senha (mínimo 12 caracteres) não vai na
+   linha de comando — vem de `PLATFORM_ADMIN_PASSWORD`, do stdin ou é digitada sem eco quando pedida:
 
    ```bash
+   read -rs PLATFORM_ADMIN_PASSWORD; export PLATFORM_ADMIN_PASSWORD
+
+   # local
    pnpm --filter @annetec/api exec tsx src/db/create-platform-admin.ts \
-     "Cron Cobrança" cron-cobranca@annetec.com.br 'SENHA-FORTE-AQUI' platform_admin
+     "Cron Cobrança" cron-cobranca@annetec.com.br platform_admin
+
+   # servidor (docker compose, ver deploy/README.md §4): `-e VAR` sem valor repassa a do shell
+   dc run --rm -e PLATFORM_ADMIN_PASSWORD migrate pnpm platform:create-admin \
+     "Cron Cobrança" cron-cobranca@annetec.com.br platform_admin
+
+   unset PLATFORM_ADMIN_PASSWORD
    ```
+
+   Sem a variável, o script pede a senha sem eco (no `dc run`, só com TTY — não passe `-T`).
 
 2. O cron faz login a cada execução (não depende da validade do token), lista os inquilinos e chama as rotas.
 
