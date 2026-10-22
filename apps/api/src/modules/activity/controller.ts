@@ -5,6 +5,7 @@ import { ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, query } from '@/http/validate'
 import { activityService } from './service'
+import { requestIp } from '@/lib/rate-limit'
 
 /**
  * Ingestão de eventos — montada em `/api/v1/activity`, sem exigir sessão
@@ -30,7 +31,7 @@ export const activityIngestController = new Hono<AppEnv>()
         tenantSlug: membership?.tenantSlug ?? null,
       },
       {
-        ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip') ?? null,
+        ip: requestIp(c),
         userAgent: c.req.header('user-agent') ?? null,
       },
     )

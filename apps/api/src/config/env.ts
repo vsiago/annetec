@@ -51,6 +51,24 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),
   GOOGLE_CLIENT_SECRET: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),
 
+  /**
+   * Confiar em `x-forwarded-for`/`x-real-ip` para descobrir o IP do cliente
+   * (rate limit, auditoria, `remoteIp` do Asaas). Só ligue atrás de um proxy
+   * que SOBRESCREVE esses cabeçalhos (Caddy do docker-compose, Vercel) e com a
+   * porta da API fechada para a internet — senão qualquer um forja o IP.
+   * Vazio = ligado na Vercel e fora de produção (comportamento anterior);
+   * desligado em produção num servidor Node comum (usa o IP do socket).
+   */
+  TRUST_PROXY: z.preprocess(parseBooleanish, z.boolean().optional()),
+
+  /**
+   * `preview` = deploy de DEMONSTRAÇÃO com `NODE_ENV=production`: a trava de
+   * boot (`config/assert-production.ts`) aceita Asaas SANDBOX, e-mail na caixa
+   * de saída (`outbox`) e disco local, e PROÍBE chave/ambiente de produção do
+   * Asaas. Loga um aviso grande no boot. Vazio = produção de verdade (estrito).
+   */
+  DEPLOY_STAGE: z.preprocess(emptyAsUndefined, z.enum(['preview']).optional()),
+
   /** Origens autorizadas no CORS, separadas por vírgula. */
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
 
@@ -168,6 +186,16 @@ export const corsOrigins = env.CORS_ORIGINS.split(',')
 
 export const isProduction = env.NODE_ENV === 'production'
 export const isTest = env.NODE_ENV === 'test'
+
+/**
+ * Deploy de demonstração (`DEPLOY_STAGE=preview`) rodando com `NODE_ENV=production`.
+ * Só relaxa o que é "integração de verdade" (Asaas sandbox, e-mail em outbox,
+ * disco local); auth, rate limit, ferramentas de demo etc. seguem de produção.
+ */
+export const isPreviewDeploy = isProduction && env.DEPLOY_STAGE === 'preview'
+
+/** Ver `TRUST_PROXY`: sem env explícita, confia na Vercel e fora de produção. */
+export const trustProxy = env.TRUST_PROXY ?? (Boolean(process.env.VERCEL) || !isProduction)
 
 /** Automação de cobrança do clube: env explícita manda; sem ela, ligada fora de produção. */
 export const billingAutomationEnabled = env.BILLING_AUTOMATION_ENABLED ?? !isProduction

@@ -49,7 +49,8 @@ export default function RootLayout({
           {/* offset: abaixo da topbar dos painéis (h-18), sem cobrir o sino nem o menu do usuário. */}
           <Toaster position="top-right" richColors offset={84} />
         </Providers>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {/* Vercel Analytics só existe na Vercel; fora dela o script `/_vercel/insights` dá 404. */}
+        {process.env.NODE_ENV === 'production' && process.env.VERCEL && <Analytics />}
       </body>
     </html>
   )

@@ -1,6 +1,6 @@
 import type { EmailProvider, EmailStatus, EmailTemplate } from '@annetec/contracts'
 import { eq } from 'drizzle-orm'
-import { env, isProduction } from '@/config/env'
+import { env, isPreviewDeploy, isProduction } from '@/config/env'
 import { db } from '@/db/client'
 import { platformEmailOutbox } from '@/db/schema'
 import { logger } from '@/lib/logger'
@@ -60,13 +60,15 @@ let warnedMissingKey = false
 
 /**
  * Provedor efetivo: `EMAIL_PROVIDER`, ou `outbox` se faltar a chave (só fora
- * de produção — em produção lança em vez de rebaixar).
+ * de produção — em produção lança em vez de rebaixar; `DEPLOY_STAGE=preview`
+ * aceita `outbox` explícito, nunca rebaixa provedor sem chave).
  */
 export function effectiveEmailProvider(): { provider: EmailProvider; apiKey: string | null } {
   const wanted = env.EMAIL_PROVIDER
   if (wanted === 'resend' && env.RESEND_API_KEY) return { provider: 'resend', apiKey: env.RESEND_API_KEY }
   if (wanted === 'sendgrid' && env.SENDGRID_API_KEY) return { provider: 'sendgrid', apiKey: env.SENDGRID_API_KEY }
-  if (isProduction) {
+  // `DEPLOY_STAGE=preview` aceita a caixa de saída (demo); produção de verdade não.
+  if (isProduction && !(isPreviewDeploy && wanted === 'outbox')) {
     throw new Error(
       wanted === 'outbox'
         ? 'EMAIL_PROVIDER=outbox não é permitido em produção'

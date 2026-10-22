@@ -1,4 +1,4 @@
-import { isProduction } from '@/config/env'
+import { isPreviewDeploy, isProduction } from '@/config/env'
 import { decryptSecret, encryptSecret } from '@/lib/crypto'
 
 /**
@@ -13,8 +13,12 @@ import { decryptSecret, encryptSecret } from '@/lib/crypto'
  *    mostram `••••••`.
  */
 
-/** Pode abrir os lacres? Só fora de produção (em produção `reveal` vira `mask`). */
-export const secretRevealAllowed = !isProduction
+/**
+ * Pode abrir os lacres? Só fora de produção (em produção `reveal` vira `mask`)
+ * — e no deploy de demonstração (`DEPLOY_STAGE=preview`), onde a caixa de
+ * saída é o único canal de e-mail. Continua restrito ao superadmin.
+ */
+export const secretRevealAllowed = !isProduction || isPreviewDeploy
 export const SECRET_MASK = '••••••'
 
 const MARKER = /\[\[segredo:(v1\.[A-Za-z0-9+/=]+\.[A-Za-z0-9+/=]+\.[A-Za-z0-9+/=]+)\]\]/g

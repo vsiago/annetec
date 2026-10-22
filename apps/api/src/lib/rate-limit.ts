@@ -1,7 +1,7 @@
 import { ERROR_CODES } from '@annetec/contracts'
 import type { Context } from 'hono'
 import { createMiddleware } from 'hono/factory'
-import { isProduction } from '@/config/env'
+import { isProduction, trustProxy } from '@/config/env'
 import { AppError } from '@/http/errors'
 import type { AppEnv } from '@/http/types'
 
@@ -63,17 +63,28 @@ function sweep(now: number) {
 }
 
 /**
- * IP de quem chamou: 1º salto do `x-forwarded-for` (proxy da Vercel), depois
- * `x-real-ip`, depois o socket do `@hono/node-server`.
+ * IP vindo dos cabeçalhos do proxy — 1º salto do `x-forwarded-for`, depois
+ * `x-real-ip` — SÓ quando `TRUST_PROXY` está ligado (ver `config/env.ts`).
+ *
+ * O 1º salto é o cliente porque o proxy da borda (Caddy do docker-compose,
+ * Vercel) descarta o `x-forwarded-for` que vem da internet e grava o IP real;
+ * o Next repassa esse valor nas chamadas server-side (`lib/api/client-ip.ts`).
+ * Sem proxy confiável o cabeçalho é forjável, então é ignorado.
  */
-export function requestIp(c: Context): string | null {
+export function forwardedIp(c: Context, trusted: boolean = trustProxy): string | null {
+  if (!trusted) return null
   const forwarded = c.req.header('x-forwarded-for')
   if (forwarded) {
     const first = forwarded.split(',')[0]?.trim()
     if (first) return first
   }
-  const real = c.req.header('x-real-ip')?.trim()
-  if (real) return real
+  return c.req.header('x-real-ip')?.trim() || null
+}
+
+/** IP de quem chamou: o do proxy confiável (`forwardedIp`) ou o do socket do `@hono/node-server`. */
+export function requestIp(c: Context, trusted: boolean = trustProxy): string | null {
+  const forwarded = forwardedIp(c, trusted)
+  if (forwarded) return forwarded
   const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming
   return incoming?.socket?.remoteAddress ?? null
 }

@@ -1,0 +1,47 @@
+# Caddy — HTTPS automático (Let's Encrypt, com ZeroSSL de reserva) para a web,
+# a API e o redirecionamento do domínio raiz. Os hostnames vêm do ambiente
+# (deploy/.env.prod → docker-compose.prod.yml), então trocar de sslip.io para
+# o domínio final é só editar o .env.prod e rodar `docker compose up -d`.
+#
+#   interino: WEB_DOMAIN=www.3-131-89-130.sslip.io  API_DOMAIN=api.3-131-89-130.sslip.io  APEX_DOMAIN=3-131-89-130.sslip.io
+#   final:    WEB_DOMAIN=www.annetec.com.br         API_DOMAIN=api.annetec.com.br         APEX_DOMAIN=annetec.com.br
+#
+# X-Forwarded-For: o Caddy DESCARTA o valor que vem da internet (nenhum proxy
+# confiável configurado) e grava o IP real — é nisso que o TRUST_PROXY da API confia.
+
+{
+	email {$ACME_EMAIL}
+}
+
+(common) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	log {
+		output stdout
+		format console
+	}
+}
+
+# Web (Next.js). O Next já comprime as respostas; sem `encode` aqui para não
+# atrapalhar o stream de notificações (SSE).
+{$WEB_DOMAIN} {
+	import common
+	reverse_proxy web:3000
+}
+
+# API pública — necessária para os webhooks do Asaas
+# (POST /api/v1/webhooks/asaas e /api/v1/webhooks/asaas-plataforma).
+{$API_DOMAIN} {
+	import common
+	request_body {
+		max_size 25MB
+	}
+	reverse_proxy api:3333
+}
+
+# Domínio raiz → www (301).
+{$APEX_DOMAIN} {
+	redir https://{$WEB_DOMAIN}{uri} permanent
+}

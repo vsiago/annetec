@@ -1,0 +1,49 @@
+# Contexto de build = raiz do monorepo (ver apps/*/Dockerfile). As imagens
+# instalam dependências e compilam do zero: nada de artefato local entra.
+
+# Dependências e saídas de build
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/.turbo
+**/.vercel
+# Saída da Serverless Function da Vercel (versionada, gerada pelo tsup)
+apps/api/api
+
+# Git, editores, ferramentas locais
+.git
+.gitignore
+.claude
+.vscode
+.idea
+**/.DS_Store
+**/Thumbs.db
+
+# Segredos — NUNCA no contexto (env do servidor vem de deploy/.env.prod via env_file)
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.ppk
+**/*.key
+
+# Dado real de produção das sondas do ERP
+apps/api/probe-digitalsaude.json
+
+# Binários e documentos que não fazem parte do app
+*.pdf
+*.aab
+*.apk
+*.pptx
+*.docx
+*.xlsx
+temp_logo.png
+docs
+
+# Infra de deploy (não entra nas imagens)
+deploy
+docker-compose*.yml
+**/Dockerfile
+.dockerignore

@@ -3,6 +3,7 @@ import { db } from '@/db/client'
 import { auditLogs } from '@/db/schema'
 import type { AppEnv } from '@/http/types'
 import { logger } from './logger'
+import { requestIp } from './rate-limit'
 
 /**
  * Trilha de auditoria — quem fez o quê, em qual inquilino.
@@ -50,7 +51,7 @@ export async function recordAudit(c: Context<AppEnv>, entry: AuditEntry): Promis
       resource: entry.resource,
       resourceId: entry.resourceId ?? null,
       metadata: entry.metadata ?? null,
-      ip: clientIp(c),
+      ip: requestIp(c),
       requestId: c.get('requestId') ?? null,
     })
   } catch (error) {
@@ -80,15 +81,4 @@ export async function recordSystemAudit(
   } catch (error) {
     logger.error({ err: error, action: entry.action, resource: entry.resource }, 'Falha ao gravar auditoria')
   }
-}
-
-/**
- * IP de quem chamou. Atrás do proxy da Vercel o socket é da própria
- * infraestrutura, então o valor real vem do cabeçalho — primeiro salto do
- * `x-forwarded-for`, que é o cliente.
- */
-function clientIp(c: Context<AppEnv>): string | null {
-  const forwarded = c.req.header('x-forwarded-for')
-  if (forwarded) return forwarded.split(',')[0]!.trim()
-  return c.req.header('x-real-ip') ?? null
 }

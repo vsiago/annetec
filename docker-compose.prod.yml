@@ -1,0 +1,168 @@
+# Annetec — produção num único EC2 (t4g.medium: arm64, 4 GB RAM + 2 GB swap).
+# As imagens são construídas NO servidor. Runbook completo: deploy/README.md.
+#
+#   docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
+#   docker compose -f docker-compose.prod.yml --env-file deploy/.env.prod run --rm migrate
+#
+# `--env-file` alimenta a interpolação deste arquivo (${...}: domínios, senha do
+# Postgres, build args); `env_file:` entrega o mesmo arquivo como ambiente da API.
+#
+# Memória (limites): postgres 768M + api 512M + web 768M + caddy 128M ≈ 2,2 GB,
+# sobrando RAM para o SO, o cache de disco do Postgres e os builds.
+
+name: annetec
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      # Hostnames servidos com HTTPS automático (Let's Encrypt/ZeroSSL).
+      WEB_DOMAIN: ${WEB_DOMAIN:?defina WEB_DOMAIN em deploy/.env.prod}
+      API_DOMAIN: ${API_DOMAIN:?defina API_DOMAIN em deploy/.env.prod}
+      APEX_DOMAIN: ${APEX_DOMAIN:?defina APEX_DOMAIN em deploy/.env.prod}
+      ACME_EMAIL: ${ACME_EMAIL:?defina ACME_EMAIL em deploy/.env.prod}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_started
+    mem_limit: 128m
+    logging: *logging
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runtime
+      args:
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+        NEXT_PUBLIC_CONTACT_EMAIL: ${NEXT_PUBLIC_CONTACT_EMAIL:-}
+    image: annetec-web:latest
+    restart: unless-stopped
+    # Sem env_file de propósito: a web não precisa (nem deve ver) segredos da API/banco.
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      # Chamadas server-side vão direto à API pela rede interna, sem passar pela internet.
+      API_BASE_URL: http://api:3333
+      NODE_OPTIONS: --max-old-space-size=512
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 768m
+    logging: *logging
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    image: annetec-api:latest
+    restart: unless-stopped
+    env_file:
+      - path: deploy/.env.prod
+        required: true
+    environment: &api-environment
+      NODE_ENV: production
+      PORT: "3333"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-annetec}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD em deploy/.env.prod}@postgres:5432/${POSTGRES_DB:-annetec}
+      # Só o Caddy chega na API (porta não publicada) e ele sobrescreve o
+      # X-Forwarded-For vindo da internet: o 1º salto é o IP real do cliente.
+      TRUST_PROXY: "true"
+      STORAGE_LOCAL_DIR: /data/storage
+      NODE_OPTIONS: --max-old-space-size=384
+    volumes:
+      - api_storage:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 512m
+    logging: *logging
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    # Sem `ports:` — o banco só é acessível pela rede interna do compose.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-annetec}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD em deploy/.env.prod}
+      POSTGRES_DB: ${POSTGRES_DB:-annetec}
+      TZ: America/Sao_Paulo
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=50
+      - -c
+      - wal_buffers=8MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - log_min_duration_statement=1000
+    shm_size: 256mb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    mem_limit: 768m
+    logging: *logging
+
+  # Ferramentas (migrações, seeds, scripts). Não sobe com `up`:
+  #   docker compose ... run --rm migrate                         → pnpm db:migrate
+  #   docker compose ... run --rm migrate pnpm platform:create-admin "Nome" email 'Senha'
+  migrate:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: tools
+    image: annetec-api-tools:latest
+    restart: "no"
+    env_file:
+      - path: deploy/.env.prod
+        required: true
+    environment:
+      <<: *api-environment
+      NODE_OPTIONS: --max-old-space-size=640
+    volumes:
+      - api_storage:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 768m
+    logging: *logging
+
+volumes:
+  postgres_data:
+  api_storage:
+  caddy_data:
+  caddy_config:

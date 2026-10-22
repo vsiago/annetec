@@ -24,6 +24,9 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.prod.example
+# Ambiente do servidor (docker compose) — só existe no EC2
+deploy/.env.prod
 
 # Test/coverage
 coverage/

@@ -104,4 +104,57 @@ describe('assertProductionConfig', () => {
       expect(log.warn).not.toHaveBeenCalled()
     }
   })
+
+  describe('DEPLOY_STAGE=preview (demo com NODE_ENV=production)', () => {
+    const PREVIEW: ProductionConfigInput = {
+      NODE_ENV: 'production',
+      DEPLOY_STAGE: 'preview',
+      PAYMENT_GATEWAY: 'asaas',
+      PLATFORM_PAYMENT_GATEWAY: 'asaas',
+      ASAAS_API_KEY: '$aact_hmlg_000sandbox',
+      ASAAS_ENV: 'sandbox',
+      ASAAS_WEBHOOK_TOKEN: 'token-do-webhook-com-mais-de-32-caracteres',
+      EMAIL_PROVIDER: 'outbox',
+      CNPJ_LOOKUP_PROVIDER: 'brasilapi',
+      STORAGE_DRIVER: 'local',
+      BILLING_AUTOMATION_ENABLED: true,
+      PLATFORM_BILLING_AUTOMATION_ENABLED: true,
+    }
+
+    it('aceita Asaas sandbox, outbox e disco local — e avisa alto no boot', () => {
+      const log = { warn: vi.fn() }
+      expect(productionConfigViolations(PREVIEW)).toEqual([])
+      expect(() => assertProductionConfig(PREVIEW, log)).not.toThrow()
+      expect(log.warn).toHaveBeenCalledTimes(1)
+      expect(String(log.warn.mock.calls[0]?.[1])).toMatch(/DEPLOY_STAGE=preview/)
+    })
+
+    it('recusa chave/ambiente de produção do Asaas', () => {
+      const joined = productionConfigViolations({
+        ...PREVIEW,
+        ASAAS_API_KEY: '$aact_prod_000chave',
+        PLATFORM_ASAAS_API_KEY: '$aact_prod_000chave',
+        ASAAS_ENV: 'production',
+      }).join('\n')
+      expect(joined).toContain('ASAAS_API_KEY precisa começar com $aact_hmlg_')
+      expect(joined).toContain('PLATFORM_ASAAS_API_KEY precisa começar com $aact_hmlg_')
+      expect(joined).toContain('ASAAS_ENV')
+    })
+
+    it('continua exigindo gateway asaas, webhook token, CNPJ real e credenciais de driver remoto', () => {
+      const violations = productionConfigViolations({
+        ...PREVIEW,
+        PAYMENT_GATEWAY: 'simulated',
+        ASAAS_WEBHOOK_TOKEN: undefined,
+        CNPJ_LOOKUP_PROVIDER: 'simulated',
+        EMAIL_PROVIDER: 'resend',
+        STORAGE_DRIVER: 's3',
+      })
+      expect(violations).toHaveLength(5)
+    })
+
+    it('sem DEPLOY_STAGE a mesma configuração é recusada (padrão estrito)', () => {
+      expect(productionConfigViolations({ ...PREVIEW, DEPLOY_STAGE: undefined }).length).toBeGreaterThan(0)
+    })
+  })
 })

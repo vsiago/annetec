@@ -17,7 +17,7 @@ import { googleLoginEnabled } from '@/config/env'
 import { auth } from '@/lib/auth'
 import { activityService } from '@/modules/activity/service'
 import { runInBackground } from '@/lib/background'
-import { rateLimit } from '@/lib/rate-limit'
+import { rateLimit, requestIp } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { recordAudit } from '@/lib/audit'
 import { notifyClientSignup } from '@/lib/notifications'
@@ -176,7 +176,7 @@ function trackAuthAction(c: Context<AppEnv>, session: AuthContext, action: 'logi
         tenantSlug: membership.tenantSlug,
       },
       {
-        ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip') ?? null,
+        ip: requestIp(c),
         userAgent: c.req.header('user-agent') ?? null,
       },
     ),
