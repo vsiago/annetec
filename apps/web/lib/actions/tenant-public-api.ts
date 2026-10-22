@@ -2,6 +2,7 @@
 
 import type { Benefit, ClubPlan, Partner, Tenant } from '@annetec/contracts'
 import { apiFetch } from '@/lib/api/client'
+import { clientIpHeaders } from '@/lib/api/client-ip'
 import type { Tenant as LegacyTenant } from '@/lib/types'
 import { run, type ActionResult } from './_api-result'
 
@@ -112,7 +113,8 @@ export async function createPublicLeadAction(
   return run(async () => {
     const { data } = await apiFetch<{ received: true }>(
       `/api/v1/t/${encodeURIComponent(slug)}/public/leads`,
-      { method: 'POST', body: input, token: null },
+      // IP do navegador: a API limita envios da vitrine por IP.
+      { method: 'POST', body: input, token: null, headers: await clientIpHeaders() },
     )
     return data
   })

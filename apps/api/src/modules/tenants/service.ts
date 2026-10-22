@@ -10,7 +10,7 @@ import {
 } from '@annetec/contracts'
 import { and, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { member, organization, tenantIntegrations, tenantProfiles, user } from '@/db/schema'
+import { member, organization, session, tenantIntegrations, tenantProfiles, user } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { auth } from '@/lib/auth'
 import { createDigitalSaudeClient } from '@/integrations/digitalsaude/client'
@@ -300,7 +300,8 @@ export const tenantsService = {
     userId: string,
     headers: Headers,
     password?: string,
-  ): Promise<{ password: string; email: string }> {
+    actorUserId?: string | null,
+  ): Promise<{ password: string; email: string; revokedSessions: number }> {
     const [vinculo] = await db
       .select({ email: user.email })
       .from(member)
@@ -313,8 +314,16 @@ export const tenantsService = {
     const novaSenha = password ?? generateProvisionalPassword()
     await auth.api.setUserPassword({ body: { newPassword: novaSenha, userId }, headers })
 
-    logger.info({ tenantId, userId }, 'Senha redefinida pela equipe Annetec')
-    return { password: novaSenha, email: vinculo.email }
+    // A senha antiga pode ter vazado: quem estava logado com ela sai na hora
+    // (em todos os clubes). Não derruba a própria sessão de quem redefiniu.
+    let revokedSessions = 0
+    if (actorUserId !== userId) {
+      const removed = await db.delete(session).where(eq(session.userId, userId)).returning({ id: session.id })
+      revokedSessions = removed.length
+    }
+
+    logger.info({ tenantId, userId, revokedSessions }, 'Senha redefinida pela equipe Annetec')
+    return { password: novaSenha, email: vinculo.email, revokedSessions }
   },
 
   /**

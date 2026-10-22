@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "sales_goals_org_seller_period_key" ON "sales_goals" USING btree ("organization_id","seller_id","year","month");--> statement-breakpoint
+DROP INDEX IF EXISTS "sales_goals_seller_period_key";

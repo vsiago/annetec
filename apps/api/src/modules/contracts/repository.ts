@@ -51,6 +51,17 @@ export const contractsRepository = {
     })
   },
 
+  /** Contrato (do inquilino) ao qual o beneficiário do ERP pertence, pelo espelho local. */
+  async findOwnerOfBeneficiary(tenantId: string, beneficiaryUpstreamCodigo: string) {
+    const [row] = await db
+      .select({ sellerUserId: contracts.sellerUserId, clientUserId: contracts.clientUserId })
+      .from(beneficiaries)
+      .innerJoin(contracts, eq(contracts.id, beneficiaries.contractId))
+      .where(and(eq(contracts.organizationId, tenantId), eq(beneficiaries.upstreamCodigo, beneficiaryUpstreamCodigo)))
+      .limit(1)
+    return row ?? null
+  },
+
   findByClientUser(tenantId: string, clientUserId: string) {
     return db.query.contracts.findMany({
       where: and(eq(contracts.organizationId, tenantId), eq(contracts.clientUserId, clientUserId)),

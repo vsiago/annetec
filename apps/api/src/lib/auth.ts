@@ -85,9 +85,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
-    // Default (true): o cadastro (`/auth/register`, cliente se autocadastrando
-    // no inquilino) já sai logado. Não afeta `auth.api.createUser` — usado
-    // quando a plataforma cria contas para outra pessoa — que nunca cria sessão.
+    // Default (true): `signUpEmail` já sai logado (só o checkout do clube usa
+    // a sessão; não há mais autocadastro público por senha). Não afeta
+    // `auth.api.createUser` — usado quando a plataforma cria contas para outra
+    // pessoa — que nunca cria sessão.
   },
 
   /**

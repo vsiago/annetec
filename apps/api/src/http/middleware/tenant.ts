@@ -21,6 +21,7 @@ export const resolveTenant = createMiddleware<AppEnv>(async (c, next) => {
       slug: organization.slug,
       name: organization.name,
       status: tenantProfiles.status,
+      kind: tenantProfiles.kind,
     })
     .from(organization)
     .innerJoin(tenantProfiles, eq(tenantProfiles.organizationId, organization.id))
@@ -32,7 +33,7 @@ export const resolveTenant = createMiddleware<AppEnv>(async (c, next) => {
     throw AppError.forbidden('Este inquilino está cancelado')
   }
 
-  c.set('tenant', { id: row.id, slug: row.slug, name: row.name })
+  c.set('tenant', { id: row.id, slug: row.slug, name: row.name, kind: row.kind })
   await next()
 })
 

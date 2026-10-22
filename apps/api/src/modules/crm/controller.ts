@@ -59,11 +59,11 @@ export const crmController = new Hono<AppEnv>()
   })
 
   .get('/leads/:id', param(idParam), async c =>
-    ok(c, await crmService.getLead(tenantOf(c).id, c.req.valid('param').id)),
+    ok(c, await crmService.getLead(tenantOf(c).id, c.req.valid('param').id, ownScope(c))),
   )
 
   .patch('/leads/:id', param(idParam), json(updateLeadInput), async c =>
-    ok(c, await crmService.updateLead(tenantOf(c).id, c.req.valid('param').id, c.req.valid('json'))),
+    ok(c, await crmService.updateLead(tenantOf(c).id, c.req.valid('param').id, c.req.valid('json'), ownScope(c))),
   )
 
   .delete('/leads/:id', param(idParam), requireTenantRole('admin'), async c => {
@@ -80,6 +80,7 @@ export const crmController = new Hono<AppEnv>()
         c.req.valid('param').id,
         c.req.valid('json'),
         auth?.user.id ?? null,
+        ownScope(c),
       ),
     )
   })
@@ -120,7 +121,7 @@ export const crmController = new Hono<AppEnv>()
   })
 
   .patch('/vendas/:id', param(idParam), json(updateSaleInput), async c =>
-    ok(c, await crmService.updateSale(tenantOf(c).id, c.req.valid('param').id, c.req.valid('json'))),
+    ok(c, await crmService.updateSale(tenantOf(c).id, c.req.valid('param').id, c.req.valid('json'), ownScope(c))),
   )
 
   .get(

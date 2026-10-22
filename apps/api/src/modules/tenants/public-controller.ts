@@ -10,6 +10,7 @@ import { created, ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, query } from '@/http/validate'
 import { recordAudit } from '@/lib/audit'
+import { rateLimit } from '@/lib/rate-limit'
 import { toBenefit, toPartner } from '@/modules/network/controller'
 import { listPublicClubPlans } from './public-club-plans'
 import { capturePublicLead, PUBLIC_LEAD_BODY_MAX, publicLeadInput } from './public-leads'
@@ -83,6 +84,8 @@ export const tenantPublicController = new Hono<AppEnv>()
    */
   .post(
     '/leads',
+    // Formulário anônimo: sem limite, um robô enche o funil do clube.
+    rateLimit({ key: 'vitrine:leads', limit: 10, windowMs: 60 * 60_000 }),
     bodyLimit({
       maxSize: PUBLIC_LEAD_BODY_MAX,
       onError: () => {

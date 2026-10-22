@@ -1,6 +1,7 @@
 import { ERROR_CODES } from '@annetec/contracts'
 import { createMiddleware } from 'hono/factory'
 import { auth } from '@/lib/auth'
+import { isUserBanned } from '@/modules/auth/membership'
 import { loadClubAccess } from '@/modules/club-billing/access.service'
 import { AppError } from '@/http/errors'
 import type { AppEnv } from '@/http/types'
@@ -12,10 +13,10 @@ import type { AppEnv } from '@/http/types'
  * (ver `modules/auth/membership.ts`).
  */
 
-/** Popula `c.get('auth')` quando houver sessão válida; nunca falha. */
+/** Popula `c.get('auth')` quando houver sessão válida; nunca falha. Conta desativada conta como anônima. */
 export const optionalAuth = createMiddleware<AppEnv>(async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers })
-  if (session) c.set('auth', session)
+  if (session && !isUserBanned(session.user)) c.set('auth', session)
   await next()
 })
 
@@ -23,10 +24,14 @@ export const optionalAuth = createMiddleware<AppEnv>(async (c, next) => {
  * Exige sessão válida. Sessão de inquilino sem vínculo ATIVO (o clube
  * excluiu/bloqueou a pessoa depois que ela entrou — ver
  * `resolveActiveMembership`) não é sessão válida: 401, como sessão expirada.
+ * Conta desativada (`user.banned`) também não, mesmo com sessão aberta antes.
  */
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers })
   if (!session) throw AppError.unauthenticated()
+  if (isUserBanned(session.user)) {
+    throw AppError.unauthenticated('Sua sessão foi encerrada. Entre novamente.')
+  }
   if (session.membership.scope === 'tenant' && !session.membership.tenantId) {
     throw AppError.unauthenticated('Sua sessão foi encerrada. Entre novamente.')
   }
@@ -70,6 +75,22 @@ export function requirePlatformRole(...roles: ('superadmin' | 'platform_admin')[
   })
 }
 
+const READ_ONLY_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/**
+ * Sessão de PLATAFORMA numa rota de inquilino: leitura sempre; escrita só
+ * superadmin, ou no inquilino-operador (`kind: 'platform'`). Puro.
+ */
+export function platformMayAccess(
+  method: string,
+  platformRole: 'superadmin' | 'platform_admin' | null,
+  tenantKind: 'operator' | 'platform' | null,
+): boolean {
+  if (READ_ONLY_METHODS.has(method.toUpperCase())) return true
+  if (platformRole === 'superadmin') return true
+  return tenantKind === 'platform'
+}
+
 /**
  * Exige sessão de inquilino com um dos papéis informados E que o inquilino
  * ativo da sessão seja o mesmo resolvido pela rota. É esta segunda checagem
@@ -81,8 +102,14 @@ export function requireTenantRole(...roles: ('admin' | 'seller' | 'client')[]) {
     const session = c.get('auth')
     if (!session) throw AppError.unauthenticated()
 
-    // Equipe Annetec tem acesso de leitura a qualquer inquilino para suporte.
+    // Equipe Annetec: LEITURA de qualquer inquilino, para suporte. Escrita só
+    // o superadmin — ou qualquer papel da equipe no inquilino-operador (a
+    // própria Annetec operando como operadora, `kind: 'platform'`).
     if (session.membership.scope === 'platform') {
+      const tenant = c.get('tenant')
+      if (!platformMayAccess(c.req.method, session.membership.platformRole, tenant?.kind ?? null)) {
+        throw AppError.forbidden('A equipe Annetec só consulta este inquilino. Alterações exigem superadmin.')
+      }
       await next()
       return
     }

@@ -8,7 +8,7 @@ import type {
   UpdateSaleInput,
   UpsertSalesGoalInput,
 } from '@annetec/contracts'
-import { and, count, desc, eq, gte, ilike, lte, or, sum, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, gte, ilike, inArray, lte, or, sum, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { leadInteractions, leads, member, sales, salesGoals, sellerProfiles, user } from '@/db/schema'
 import { AppError } from '@/http/errors'
@@ -54,9 +54,10 @@ export const crmService = {
     return { items: rows.map(toLead), total: totals?.value ?? 0 }
   },
 
-  async getLead(tenantId: string, id: string): Promise<Lead> {
+  /** `sellerId` (vendedor pedindo): lead de outra carteira é 404, como se não existisse. */
+  async getLead(tenantId: string, id: string, sellerId?: string): Promise<Lead> {
     const row = await db.query.leads.findFirst({
-      where: and(eq(leads.organizationId, tenantId), eq(leads.id, id)),
+      where: and(eq(leads.organizationId, tenantId), eq(leads.id, id), ...(sellerId ? [eq(leads.sellerId, sellerId)] : [])),
       with: { interactions: true },
     })
     if (!row) throw AppError.notFound('Lead')
@@ -64,6 +65,7 @@ export const crmService = {
   },
 
   async createLead(tenantId: string, input: CreateLeadInput): Promise<Lead> {
+    if (input.sellerId) await assertSellerOfTenant(tenantId, input.sellerId)
     const [row] = await db
       .insert(leads)
       .values({
@@ -81,7 +83,17 @@ export const crmService = {
     return toLead({ ...row!, interactions: [] })
   },
 
-  async updateLead(tenantId: string, id: string, input: UpdateLeadInput): Promise<Lead> {
+  /**
+   * `sellerId` (vendedor pedindo): só lead da própria carteira, e a carteira
+   * não muda — `input.sellerId` é ignorado. Admin pode reatribuir, desde que
+   * para alguém deste inquilino.
+   */
+  async updateLead(tenantId: string, id: string, input: UpdateLeadInput, sellerId?: string): Promise<Lead> {
+    if (sellerId) {
+      input = { ...input, sellerId: undefined }
+    } else if (input.sellerId) {
+      await assertSellerOfTenant(tenantId, input.sellerId)
+    }
     const [row] = await db
       .update(leads)
       .set({
@@ -97,7 +109,7 @@ export const crmService = {
           : {}),
         updatedAt: new Date(),
       })
-      .where(and(eq(leads.organizationId, tenantId), eq(leads.id, id)))
+      .where(and(eq(leads.organizationId, tenantId), eq(leads.id, id), ...(sellerId ? [eq(leads.sellerId, sellerId)] : [])))
       .returning()
 
     if (!row) throw AppError.notFound('Lead')
@@ -117,8 +129,9 @@ export const crmService = {
     leadId: string,
     input: CreateInteractionInput,
     authorId: string | null,
+    sellerId?: string,
   ): Promise<Lead> {
-    await this.getLead(tenantId, leadId)
+    await this.getLead(tenantId, leadId, sellerId)
     await db.insert(leadInteractions).values({
       leadId,
       type: input.type,
@@ -259,12 +272,12 @@ export const crmService = {
    * muda: guardar o número digitado deixaria o fechamento do mês divergir da
    * taxa que o vendedor tem de fato.
    */
-  async updateSale(tenantId: string, id: string, input: UpdateSaleInput): Promise<Sale> {
+  async updateSale(tenantId: string, id: string, input: UpdateSaleInput, sellerId?: string): Promise<Sale> {
     const [atual] = await db
       .select({ sellerId: sales.sellerId, sellerName: user.name })
       .from(sales)
       .innerJoin(user, eq(user.id, sales.sellerId))
-      .where(and(eq(sales.id, id), eq(sales.organizationId, tenantId)))
+      .where(and(eq(sales.id, id), eq(sales.organizationId, tenantId), ...(sellerId ? [eq(sales.sellerId, sellerId)] : [])))
       .limit(1)
 
     if (!atual) throw AppError.notFound('Venda')
@@ -306,7 +319,12 @@ export const crmService = {
     return toSale(row!, atual.sellerName)
   },
 
+  /**
+   * A chave da meta é (inquilino, vendedor, ano, mês): a mesma pessoa pode
+   * vender em dois clubes, e a meta de um nunca pode sobrescrever a do outro.
+   */
   async upsertGoal(tenantId: string, input: UpsertSalesGoalInput) {
+    await assertSellerOfTenant(tenantId, input.sellerId)
     await db
       .insert(salesGoals)
       .values({
@@ -318,7 +336,7 @@ export const crmService = {
         commissionRate: String(input.commissionRate),
       })
       .onConflictDoUpdate({
-        target: [salesGoals.sellerId, salesGoals.year, salesGoals.month],
+        target: [salesGoals.organizationId, salesGoals.sellerId, salesGoals.year, salesGoals.month],
         set: { target: String(input.target), commissionRate: String(input.commissionRate) },
       })
 
@@ -329,6 +347,16 @@ export const crmService = {
     })
     return goal!
   },
+}
+
+/** O vendedor informado precisa ser membro DESTE inquilino (qualquer papel de equipe). */
+async function assertSellerOfTenant(tenantId: string, sellerId: string): Promise<void> {
+  const [found] = await db
+    .select({ id: member.id })
+    .from(member)
+    .where(and(eq(member.organizationId, tenantId), eq(member.userId, sellerId), inArray(member.role, ['admin', 'seller'])))
+    .limit(1)
+  if (!found) throw AppError.notFound('Vendedor')
 }
 
 type LeadRow = typeof leads.$inferSelect & { interactions: (typeof leadInteractions.$inferSelect)[] }

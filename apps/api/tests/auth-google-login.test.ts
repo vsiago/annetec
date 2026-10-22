@@ -42,6 +42,7 @@ const state = vi.hoisted(() => ({
   /** `sub` do Google → userId (tabela `account`, providerId 'google'). */
   links: new Map<string, string>(),
   updates: [] as { values: Record<string, unknown>; params: unknown[] }[],
+  deletes: [] as { table: 'account' | 'session'; params: unknown[] }[],
   signOuts: [] as string[],
   activeOrgs: [] as { token: string; organizationId: string }[],
 }))
@@ -136,6 +137,15 @@ vi.mock('@/db/client', async () => {
           state.updates.push({ values, params })
           for (const u of state.users) if (params.includes(u.id)) Object.assign(u, values)
           return []
+        }),
+      // Só a adoção da conta local pelo Google apaga: senha local e sessões.
+      delete: (table: unknown) =>
+        chain(ops => {
+          const params = paramsOf(ops.find(op => op.name === 'where')?.args[0])
+          if (table === schema.account) state.deletes.push({ table: 'account', params })
+          else if (table === schema.session) state.deletes.push({ table: 'session', params })
+          else throw new Error('Delete inesperado no fake de banco')
+          return [{ id: 'removido' }]
         }),
     },
   }
@@ -273,6 +283,7 @@ beforeEach(() => {
   ]
   state.links = new Map()
   state.updates = []
+  state.deletes = []
   state.signOuts = []
   state.activeOrgs = []
   state.audits = []
@@ -302,11 +313,37 @@ describe('login com Google — resolução de conta', () => {
     expect(auth.api.addMember).not.toHaveBeenCalled()
   })
 
+  it('adotar conta local NÃO verificada apaga a senha local e todas as sessões dela antes de vincular', async () => {
+    // Cadastro antecipado: alguém criou a conta com o e-mail de outra pessoa e
+    // conhece a senha. Quando o dono do e-mail entra pelo Google, a senha e as
+    // sessões antigas deixam de valer.
+    const idToken = googleToken({ sub: 'g-vsiago24', email: 'vsiago24@gmail.com', email_verified: true })
+
+    await authService.loginGoogle({ idToken, tenantSlug: 'mapcard2' })
+
+    expect(state.deletes.map(d => d.table)).toEqual(['account', 'session'])
+    const [senha, sessoes] = state.deletes
+    expect(senha!.params).toEqual(expect.arrayContaining(['u-vsiago24', 'credential']))
+    expect(sessoes!.params).toEqual(['u-vsiago24'])
+    // Nada de outra conta foi tocado.
+    for (const d of state.deletes) expect(d.params).not.toContain('u-admin')
+  })
+
+  it('conta local JÁ verificada não é adotada por este atalho: nada é apagado', async () => {
+    const idToken = googleToken({ sub: 'g-admin', email: 'admin@mapcard2.com.br', email_verified: true })
+
+    await authService.loginGoogle({ idToken, tenantSlug: 'mapcard2' })
+
+    expect(state.deletes).toEqual([])
+    expect(state.updates).toEqual([])
+  })
+
   it('não adota conta local quando o login vem sem slug', async () => {
     const idToken = googleToken({ sub: 'g-vsiago24', email: 'vsiago24@gmail.com', email_verified: true })
 
     await expect(authService.loginGoogle({ idToken })).rejects.toMatchObject({ message: NOT_LINKED })
     expect(state.updates).toEqual([])
+    expect(state.deletes).toEqual([])
   })
 
   it('não adota conta local quando o Google não afirma e-mail verificado', async () => {
@@ -493,6 +530,7 @@ describe('login com Google — cadastro de associado na tela do clube', () => {
       message: STAFF,
     })
     expect(state.updates).toEqual([])
+    expect(state.deletes).toEqual([])
     expect(state.links.size).toBe(0)
     expect(auth.api.addMember).not.toHaveBeenCalled()
   })

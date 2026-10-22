@@ -75,7 +75,7 @@ export const onboardingPublicController = new Hono<AppEnv>()
     ok(c, { ...(await lookupCnpj(c.req.param('cnpj'))), demoToolsEnabled: platformDemoToolsEnabled }),
   )
 
-  .get('/slug-disponivel', query(slugQuery), async c => {
+  .get('/slug-disponivel', rateLimit({ key: 'contratacao:slug', limit: 60, windowMs: MINUTE }), query(slugQuery), async c => {
     const { slug, proposta } = c.req.valid('query')
     return ok(c, await checkSlugAvailability(slug, proposta ?? null))
   })

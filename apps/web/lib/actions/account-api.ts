@@ -2,6 +2,7 @@
 
 import type { ChangePasswordInput } from '@annetec/contracts'
 import { ApiError, api } from '@/lib/api/client'
+import { clientIpHeaders } from '@/lib/api/client-ip'
 import { run, type ActionResult } from './_api-result'
 
 /**
@@ -14,7 +15,8 @@ import { run, type ActionResult } from './_api-result'
 export async function changePasswordAction(input: ChangePasswordInput): Promise<ActionResult<null>> {
   return run(async () => {
     try {
-      await api<null>('/api/v1/auth/password', { method: 'POST', body: input })
+      // IP do navegador: a API limita tentativas por IP.
+      await api<null>('/api/v1/auth/password', { method: 'POST', body: input, headers: await clientIpHeaders() })
     } catch (error) {
       // A rota responde 204 sem corpo, que o cliente HTTP lê como "formato
       // inválido". 204 aqui é sucesso.

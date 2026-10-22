@@ -1,16 +1,16 @@
 import {
+  ERROR_CODES,
   changePasswordInput,
   clientPortalLoginInput,
   googleLoginInput,
   loginInput,
   loginMethodInput,
-  registerInput,
 } from '@annetec/contracts'
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
 import { AppError } from '@/http/errors'
 import { optionalAuth, requireAuth } from '@/http/middleware/auth'
-import { created, noContent, ok } from '@/http/respond'
+import { noContent, ok } from '@/http/respond'
 import type { AppEnv, AuthContext } from '@/http/types'
 import { json } from '@/http/validate'
 import { googleLoginEnabled } from '@/config/env'
@@ -40,7 +40,10 @@ export const authController = new Hono<AppEnv>()
   // Baldes separados: cada tentativa na tela do inquilino passa por /login/method
   // e depois por /login ou /login/portal.
   .post('/login', rateLimit({ key: 'auth:login', limit: 10, windowMs: MINUTE }), json(loginInput), async c => {
-    const { token, session } = await authService.login(c.req.valid('json'))
+    const input = c.req.valid('json')
+    const { token, session } = await auditFailedLogin(c, 'password', { email: input.email, tenantSlug: input.tenantSlug }, () =>
+      authService.login(input),
+    )
     trackAuthAction(c, session, 'login')
     return ok(c, { token, user: await presentSessionUser(session) })
   })
@@ -59,7 +62,13 @@ export const authController = new Hono<AppEnv>()
     rateLimit({ key: 'auth:login-portal', limit: 10, windowMs: MINUTE }),
     json(clientPortalLoginInput),
     async c => {
-      const { token, session } = await authService.loginClientPortal(c.req.valid('json'))
+      const input = c.req.valid('json')
+      const { token, session } = await auditFailedLogin(
+        c,
+        'portal',
+        { email: input.email, tenantSlug: input.tenantSlug },
+        () => authService.loginClientPortal(input),
+      )
       trackAuthAction(c, session, 'login')
       return ok(c, { token, user: await presentSessionUser(session) })
     },
@@ -74,7 +83,10 @@ export const authController = new Hono<AppEnv>()
     rateLimit({ key: 'auth:login-google', limit: 10, windowMs: MINUTE }),
     json(googleLoginInput),
     async c => {
-      const { token, session, onboarding } = await authService.loginGoogle(c.req.valid('json'))
+      const input = c.req.valid('json')
+      const { token, session, onboarding } = await auditFailedLogin(c, 'google', { tenantSlug: input.tenantSlug }, () =>
+        authService.loginGoogle(input),
+      )
       trackAuthAction(c, session, 'login')
 
       const joinedOrganizationId = onboarding.joinedOrganizationId
@@ -106,19 +118,9 @@ export const authController = new Hono<AppEnv>()
   // Pública: a tela de login pergunta, ao montar, se mostra o botão do Google.
   .get('/login/google/config', c => ok(c, { googleEnabled: googleLoginEnabled }))
 
-  .post('/register', json(registerInput), async c => {
-    const { token, session } = await authService.register(c.req.valid('json'))
-    trackAuthAction(c, session, 'login')
-    if (session.membership.tenantId) {
-      await notifyClientSignup({
-        organizationId: session.membership.tenantId,
-        userId: session.user.id,
-        via: 'password',
-        personName: session.user.name,
-      })
-    }
-    return created(c, { token, user: await presentSessionUser(session) })
-  })
+  // Sem `/register`: o autocadastro público por e-mail + senha (sem
+  // verificação de e-mail) permitia criar conta com o e-mail de outra pessoa
+  // antes dela. O associado entra pelo checkout do clube ou pelo Google.
 
   // `optionalAuth`: sessão cujo vínculo foi cortado (401 no resto) ainda
   // consegue se encerrar.
@@ -136,7 +138,9 @@ export const authController = new Hono<AppEnv>()
     return ok(c, await presentSessionUser(session))
   })
 
-  .post('/password', requireAuth, json(changePasswordInput), async c => {
+  // Troca da própria senha: confere a senha atual, então é alvo de tentativa
+  // e erro com uma sessão roubada — mesmo limite por IP dos logins.
+  .post('/password', rateLimit({ key: 'auth:password', limit: 10, windowMs: 15 * MINUTE }), requireAuth, json(changePasswordInput), async c => {
     const token = bearerToken(c.req.header('authorization'))
     if (!token) throw AppError.unauthenticated()
     const { currentPassword, newPassword } = c.req.valid('json')
@@ -147,13 +151,48 @@ export const authController = new Hono<AppEnv>()
     return noContent(c)
   })
 
-  .post('/password/forgot', json(z.object({ email: z.string().email() })), async c => {
+  .post('/password/forgot', rateLimit({ key: 'auth:password-forgot', limit: 5, windowMs: 15 * MINUTE }), json(z.object({ email: z.string().email() })), async c => {
     // O Better Auth só dispara o e-mail se `emailAndPassword.sendResetPassword`
     // estiver configurado (fora do escopo deste MVP); a rota já existe para
     // quando o envio de e-mail transacional for plugado.
     await auth.api.requestPasswordReset({ body: { email: c.req.valid('json').email } }).catch(() => null)
     return noContent(c)
   })
+
+/** Erros que são "login recusado" (vale trilha); o resto (ERP fora, bug) segue só para o log. */
+const FAILED_LOGIN_CODES = new Set<string>([ERROR_CODES.INVALID_CREDENTIALS, ERROR_CODES.ACCESS_UNAVAILABLE])
+
+/**
+ * Roda o login e, se ele for RECUSADO, grava `auth.login_failed` na trilha —
+ * com o e-mail tentado, o método e o motivo (código do erro). Nunca a senha,
+ * nem CPF, nem o token do Google. Relança o erro original.
+ */
+async function auditFailedLogin<T>(
+  c: Context<AppEnv>,
+  via: 'password' | 'portal' | 'google',
+  attempt: { email?: string; tenantSlug?: string },
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    if (error instanceof AppError && FAILED_LOGIN_CODES.has(error.code)) {
+      await recordAudit(c, {
+        action: 'auth.login_failed',
+        resource: 'auth',
+        resourceId: null,
+        metadata: {
+          via,
+          email: attempt.email ? attempt.email.trim().toLowerCase() : null,
+          tenantSlug: attempt.tenantSlug ?? null,
+          motivo: error.code,
+          userAgent: c.req.header('user-agent') ?? null,
+        },
+      })
+    }
+    throw error
+  }
+}
 
 function bearerToken(header: string | undefined): string | null {
   if (!header) return null

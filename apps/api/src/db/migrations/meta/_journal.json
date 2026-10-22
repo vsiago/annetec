@@ -99,6 +99,13 @@
       "when": 1791567248207,
       "tag": "0013_club_charges_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792699377274,
+      "tag": "0014_sales_goals_org_key",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,7 @@ import {
   type TenantUser,
   type UpdateTenantUserInput,
 } from '@annetec/contracts'
-import { and, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, isNull, ne, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { activityEvents, clientProfiles, contracts, member, sales, sellerProfiles, session, user } from '@/db/schema'
 import { AppError } from '@/http/errors'
@@ -23,8 +23,12 @@ import {
 } from './member-access'
 import {
   assertKeepsResponsible,
+  assertTenantOwnsIdentity,
+  changedIdentityFields,
   membershipRulesDb,
   revokeClubSessions,
+  SHARED_ACCOUNT_STAFF_MESSAGE,
+  tenantOwnsIdentity,
   type MembershipRulesDeps,
   type MembershipTarget,
 } from './membership-rules'
@@ -226,7 +230,7 @@ export const usersService = {
       throw new AppError(ERROR_CODES.ALREADY_EXISTS, 'Já existe um usuário com este e-mail neste inquilino')
     }
 
-    const { user: authUser, password: provisionalPassword } = await findOrCreateAuthUser(email, input.name)
+    const { user: authUser, password: provisionalPassword } = await findOrCreateAuthUser(email, input.name, input.role)
 
     await auth.api.addMember({
       body: { userId: authUser.id, organizationId: tenantId, role: input.role },
@@ -249,7 +253,9 @@ export const usersService = {
         .onConflictDoNothing()
     }
 
-    if (input.phone) {
+    // Telefone é da CONTA (global): só grava em conta nova — a que já existia
+    // é de alguém que também está em outro lugar, e o clube não a reescreve.
+    if (input.phone && provisionalPassword !== null) {
       await db.update(user).set({ phone: input.phone }).where(eq(user.id, authUser.id))
     }
 
@@ -293,13 +299,41 @@ export const usersService = {
       )
     }
 
-    if (input.name !== undefined || input.email !== undefined || input.phone !== undefined) {
+    // Nome/e-mail/telefone são da conta (global): só mexe quem a conta é SÓ
+    // deste clube. A tela reenvia o formulário inteiro, então só conta o que
+    // muda de fato.
+    const identidade = changedIdentityFields(
+      { name: row.user.name, email: row.user.email, phone: row.user.phone ?? null },
+      input,
+    )
+    const alvo = { userId: id, platformRole: row.user.role ?? 'user' }
+    if (identidade.length > 0) await assertTenantOwnsIdentity(rules, tenantId, alvo)
+
+    // Associado virando equipe: mesma regra do cadastro — papel de equipe só
+    // em conta que é só deste clube.
+    const viraEquipe = input.role !== undefined && input.role !== 'client' && row.member.role === 'client'
+    if (viraEquipe && !(await tenantOwnsIdentity(rules, tenantId, alvo))) {
+      throw AppError.businessRule(SHARED_ACCOUNT_STAFF_MESSAGE)
+    }
+
+    if (identidade.length > 0) {
+      const novoEmail = identidade.includes('email') ? input.email!.trim().toLowerCase() : null
+      if (novoEmail) {
+        const [emUso] = await db
+          .select({ id: user.id })
+          .from(user)
+          .where(and(eq(user.email, novoEmail), ne(user.id, id)))
+          .limit(1)
+        if (emUso) throw new AppError(ERROR_CODES.ALREADY_EXISTS, 'Já existe uma conta com este e-mail')
+      }
       await db
         .update(user)
         .set({
-          ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.email !== undefined ? { email: input.email.toLowerCase() } : {}),
-          ...(input.phone !== undefined ? { phone: input.phone } : {}),
+          ...(identidade.includes('name') ? { name: input.name } : {}),
+          // E-mail novo ainda não foi provado por ninguém: volta a "não
+          // verificado" (é o que o vínculo com o Google confere).
+          ...(novoEmail ? { email: novoEmail, emailVerified: false } : {}),
+          ...(identidade.includes('phone') ? { phone: input.phone } : {}),
           updatedAt: new Date(),
         })
         .where(eq(user.id, id))
@@ -539,12 +573,22 @@ export const sellersService = {
  * que já tem: `password: null`); senão cria uma nova com senha provisória
  * gerada aqui. Conta da equipe da plataforma nunca vira membro de clube por
  * esta rota — misturaria o escopo de plataforma com o do inquilino.
+ *
+ * Conta que já existe e tem vínculo com OUTRO clube só entra aqui como
+ * associado (a mesma pessoa pode ser associada de dois clubes). Papel de
+ * equipe nunca: o admin deste clube ganharia poder sobre uma conta que não é
+ * dele — e ela passaria a abrir no painel deste clube.
  */
-async function findOrCreateAuthUser(email: string, name: string) {
+async function findOrCreateAuthUser(email: string, name: string, role: 'admin' | 'seller' | 'client') {
   const [existing] = await db.select().from(user).where(eq(user.email, email)).limit(1)
   if (existing) {
     if (existing.role !== 'user') {
       throw AppError.forbidden('Este e-mail pertence a uma conta da equipe da plataforma e não pode ser cadastrado no clube')
+    }
+    if (role !== 'client') {
+      // `create` já recusou vínculo com ESTE clube: qualquer um aqui é de outro.
+      const [outro] = await db.select({ id: member.id }).from(member).where(eq(member.userId, existing.id)).limit(1)
+      if (outro) throw AppError.businessRule(SHARED_ACCOUNT_STAFF_MESSAGE)
     }
     return { user: existing, password: null }
   }

@@ -55,6 +55,7 @@ export const contractsController = new Hono<AppEnv>()
   .post('/:codigo/sync', param(codigoParam), requireTenantRole('admin', 'seller'), async c => {
     const tenant = tenantOf(c)
     const { codigo } = c.req.valid('param')
+    assertCanSee(c, await contractsService.getByCodigo(tenant.id, codigo))
     const contract = await contractsService.refreshFromUpstream(tenant.id, codigo)
     await recordAudit(c, {
       action: 'contract.synced',
@@ -68,8 +69,11 @@ export const contractsController = new Hono<AppEnv>()
   .post('/', requireTenantRole('admin', 'seller'), json(createContractInput), async c => {
     const tenant = tenantOf(c)
     const auth = c.get('auth')
-    const contract = await contractsService.create(tenant.id, c.req.valid('json'), {
-      sellerUserId: auth?.membership.tenantRole === 'seller' ? auth.user.id : null,
+    const input = c.req.valid('json')
+    const ownSeller = auth?.membership.scope === 'tenant' && auth.membership.tenantRole === 'seller' ? auth.user.id : null
+    // Vendedor registra adesão sempre em nome próprio (produtor e comissão dele).
+    const contract = await contractsService.create(tenant.id, ownSeller ? { ...input, sellerId: ownSeller } : input, {
+      sellerUserId: ownSeller,
     })
     // Adesão é a escrita mais consequente do sistema: cria contrato e cobrança
     // reais no ERP, e a Digital Saúde não tem desfazer.
@@ -111,12 +115,21 @@ export const contractsController = new Hono<AppEnv>()
 
   .post('/anexos', requireTenantRole('admin', 'seller'), json(attachDocumentInput), async c => {
     const tenant = tenantOf(c)
-    return created(c, await contractsService.attachDocument(tenant.id, c.req.valid('json')))
+    const input = c.req.valid('json')
+    assertCanSee(c, await contractsService.getByCodigo(tenant.id, input.contractUpstreamCodigo))
+    return created(c, await contractsService.attachDocument(tenant.id, input))
   })
 
   .post('/patologias', requireTenantRole('admin', 'seller'), json(declarePathologyInput), async c => {
     const tenant = tenantOf(c)
-    return created(c, await contractsService.declarePathology(tenant.id, c.req.valid('json')))
+    const input = c.req.valid('json')
+    if (isSeller(c)) {
+      // Vendedor só declara para beneficiário de contrato que ele produziu.
+      const owner = await contractsService.findBeneficiaryOwner(tenant.id, input.beneficiaryUpstreamCodigo)
+      if (!owner) throw AppError.notFound('Beneficiário')
+      assertCanSee(c, { ...owner, upstreamCodigo: '' })
+    }
+    return created(c, await contractsService.declarePathology(tenant.id, input))
   })
 
   .post(
@@ -159,14 +172,26 @@ function visibilityFilter(c: { get: (key: 'auth') => AppEnv['Variables']['auth']
   return {}
 }
 
+function isSeller(c: { get: (key: 'auth') => AppEnv['Variables']['auth'] }): boolean {
+  const auth = c.get('auth')
+  return auth?.membership.scope === 'tenant' && auth.membership.tenantRole === 'seller'
+}
+
+/**
+ * A mesma visibilidade da listagem (`visibilityFilter`) aplicada a UM
+ * contrato: associado só o próprio, vendedor só o que produziu, admin todos.
+ */
 function assertCanSee(
   c: { get: (key: 'auth') => AppEnv['Variables']['auth'] },
-  contract: { clientUserId?: string | null; upstreamCodigo: string },
+  contract: { clientUserId?: string | null; sellerUserId?: string | null; upstreamCodigo: string },
 ) {
   const auth = c.get('auth')
-  if (auth?.membership.scope !== 'tenant' || auth.membership.tenantRole !== 'client') return
-  // O espelho local liga contrato ao associado; sem esse vínculo, negamos.
-  if (!contract.clientUserId || contract.clientUserId !== auth.user.id) {
+  if (auth?.membership.scope !== 'tenant') return
+  const role = auth.membership.tenantRole
+  if (role !== 'client' && role !== 'seller') return
+  // O espelho local liga contrato ao associado e ao vendedor; sem vínculo, negamos.
+  const owner = role === 'client' ? contract.clientUserId : contract.sellerUserId
+  if (!owner || owner !== auth.user.id) {
     throw AppError.forbidden('Este contrato não pertence à sua conta')
   }
 }

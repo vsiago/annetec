@@ -21,11 +21,32 @@ export interface ResolvedMembership {
   impersonatedBy: string | null
 }
 
+/**
+ * Conta desativada (`user.banned` do plugin `admin`, usado para desligar a
+ * equipe da plataforma). O Better Auth só confere o banimento ao CRIAR
+ * sessão — sessão aberta antes continuaria valendo até expirar. `banExpires`
+ * no passado = banimento vencido (o próprio plugin desbaneia no próximo login).
+ */
+export function isUserBanned(
+  authUser: { banned?: boolean | null; banExpires?: Date | string | null },
+  now: Date = new Date(),
+): boolean {
+  if (authUser.banned !== true) return false
+  if (!authUser.banExpires) return true
+  return new Date(authUser.banExpires).getTime() > now.getTime()
+}
+
 export async function resolveActiveMembership(
-  authUser: { id: string; role?: string | null },
+  authUser: { id: string; role?: string | null; banned?: boolean | null; banExpires?: Date | string | null },
   authSession: { activeOrganizationId?: string | null; impersonatedBy?: string | null },
 ): Promise<ResolvedMembership> {
   const impersonatedBy = authSession.impersonatedBy ?? null
+
+  // Conta desativada não tem papel nenhum — nem de plataforma, nem de
+  // inquilino. Sem inquilino ativo, `requireAuth` responde 401.
+  if (isUserBanned(authUser)) {
+    return { scope: 'tenant', platformRole: null, tenantId: null, tenantSlug: null, tenantRole: null, impersonatedBy }
+  }
 
   if (authUser.role && PLATFORM_ROLES.has(authUser.role)) {
     return {

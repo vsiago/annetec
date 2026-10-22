@@ -199,6 +199,11 @@ export const contractsService = {
     })
   },
 
+  /** Dono (vendedor/associado) do contrato do beneficiário; `null` se o beneficiário não está no espelho deste inquilino. */
+  findBeneficiaryOwner(tenantId: string, beneficiaryUpstreamCodigo: string) {
+    return contractsRepository.findOwnerOfBeneficiary(tenantId, beneficiaryUpstreamCodigo)
+  },
+
   async declarePathology(tenantId: string, input: DeclarePathologyInput) {
     const client = await getDigitalSaudeClient(tenantId)
     return client.call('patologiaIncluir', {

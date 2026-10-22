@@ -5,7 +5,7 @@ import { ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, query } from '@/http/validate'
 import { activityService } from './service'
-import { requestIp } from '@/lib/rate-limit'
+import { rateLimit, requestIp } from '@/lib/rate-limit'
 
 /**
  * Ingestão de eventos — montada em `/api/v1/activity`, sem exigir sessão
@@ -15,7 +15,9 @@ import { requestIp } from '@/lib/rate-limit'
  */
 export const activityIngestController = new Hono<AppEnv>()
   .use('*', optionalAuth)
-  .post('/events', json(trackEventInput), async c => {
+  // Uma linha por navegação (o proxy do Next repassa o IP do navegador): o
+  // limite só segura robô enchendo a tabela, não quem navega de verdade.
+  .post('/events', rateLimit({ key: 'activity:events', limit: 120, windowMs: 60_000 }), json(trackEventInput), async c => {
     const input = c.req.valid('json')
     const auth = c.get('auth')
     const membership = auth?.membership

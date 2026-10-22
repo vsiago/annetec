@@ -40,6 +40,7 @@ import { getPlatformBillingSummary } from './summary.service'
 /**
  * Console da cobrança ANNETEC → inquilinos — `/api/v1/platform/billing`.
  * Equipe da plataforma (qualquer papel) lê e opera; cancelar assinatura,
+ * dar baixa manual ou cancelar fatura,
  * régua, preços e "avançar dias" são só do superadmin. Toda mudança vai para
  * a auditoria.
  */
@@ -125,7 +126,8 @@ export const platformBillingController = new Hono<AppEnv>()
     return ok(c, await platformChargeDetail(updated))
   })
 
-  .post('/faturas/:id/baixa-manual', param(idParam), async c => {
+  // Baixa manual e cancelamento mexem no dinheiro sem passar pelo gateway: só superadmin.
+  .post('/faturas/:id/baixa-manual', superadmin, param(idParam), async c => {
     const input = await optionalJson(c, platformManualPaymentInput)
     const charge = await loadPlatformCharge(c.req.valid('param').id)
     const updated = await platformChargesService.manualPayment(charge, input, actorOf(c))
@@ -139,7 +141,7 @@ export const platformBillingController = new Hono<AppEnv>()
     return ok(c, await platformChargeDetail(updated))
   })
 
-  .post('/faturas/:id/cancelar', param(idParam), async c => {
+  .post('/faturas/:id/cancelar', superadmin, param(idParam), async c => {
     const input = await optionalJson(c, cancelPlatformChargeInput)
     const charge = await loadPlatformCharge(c.req.valid('param').id)
     const updated = await platformChargesService.cancel(charge, input, { source: 'manual', actorUserId: actorOf(c) })

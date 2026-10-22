@@ -10,6 +10,7 @@ import { sendEmail, type SendEmailInput } from '@/lib/email'
 import { parseAddress } from '@/lib/email/providers'
 import type { ClubEmailTemplate } from '@/lib/email/templates'
 import { logger } from '@/lib/logger'
+import { membershipRulesDb, SHARED_IDENTITY_MESSAGE, tenantOwnsIdentity } from './membership-rules'
 
 /**
  * Acesso de quem o ADMIN DO CLUBE cadastra (admin/vendedor): senha provisória
@@ -153,6 +154,8 @@ export interface ResetTarget {
 export interface PasswordResetDeps {
   /** Vínculo do usuário COM ESTE clube; `null` se ele não é membro daqui. */
   findTarget: (tenantId: string, userId: string) => Promise<ResetTarget | null>
+  /** Vínculos do usuário com OUTROS clubes (conta compartilhada não é do clube). */
+  countOtherMemberships: (tenantId: string, userId: string) => Promise<number>
   setPassword: (userId: string, password: string) => Promise<void>
   revokeSessions: (userId: string) => Promise<void>
   loadClub: (tenantId: string) => Promise<ClubBrand | null>
@@ -179,6 +182,7 @@ const defaultResetDeps: PasswordResetDeps = {
       .limit(1)
     return row ? { ...row, tenantRole: row.tenantRole as ResetTarget['tenantRole'] } : null
   },
+  countOtherMemberships: (tenantId, userId) => membershipRulesDb.countOtherMemberships(tenantId, userId),
   setPassword: async (userId, password) => {
     const hash = await hashPassword(password)
     const updated = await db
@@ -217,6 +221,8 @@ const defaultResetDeps: PasswordResetDeps = {
  *    sem dizer se a conta existe em outro lugar;
  *  - conta da equipe da plataforma (`user.role` ≠ 'user') → 403: o clube não
  *    mexe em credencial de quem administra a plataforma;
+ *  - conta com vínculo em OUTRO clube → 403: a senha é da conta (global), e
+ *    redefini-la seria mexer no acesso da pessoa ao outro clube;
  *  - vínculo desativado neste clube → regra de negócio (reative antes).
  *
  * As sessões abertas do usuário são encerradas (a senha antiga pode ter
@@ -233,6 +239,11 @@ export async function resetTenantUserPassword(
   if (!target) throw AppError.notFound('Usuário deste clube')
   if (target.platformRole !== 'user') {
     throw AppError.forbidden('Conta da equipe da plataforma: a senha não pode ser redefinida pelo clube')
+  }
+  // Conta usada também em outro clube: a senha não é do clube (a própria
+  // pessoa redefinindo a sua passa).
+  if (actorUserId !== target.userId && !(await tenantOwnsIdentity(deps, tenantId, target))) {
+    throw AppError.forbidden(SHARED_IDENTITY_MESSAGE)
   }
   if (!target.active) {
     throw AppError.businessRule('Usuário desativado neste clube. Reative o acesso antes de redefinir a senha.')

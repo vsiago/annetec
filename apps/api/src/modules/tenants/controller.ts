@@ -66,7 +66,8 @@ export const tenantsController = new Hono<AppEnv>()
 
   .get('/:id', param(idParam), async c => ok(c, await tenantsService.getById(c.req.valid('param').id)))
 
-  .patch('/:id', param(idParam), json(updateTenantInput), async c => {
+  // Cadastro, status comercial, cancelamento e credenciais do ERP: só superadmin.
+  .patch('/:id', requirePlatformRole('superadmin'), param(idParam), json(updateTenantInput), async c => {
     const { id } = c.req.valid('param')
     const patch = c.req.valid('json')
     const tenant = await tenantsService.update(id, patch)
@@ -80,7 +81,7 @@ export const tenantsController = new Hono<AppEnv>()
     return ok(c, tenant)
   })
 
-  .delete('/:id', param(idParam), async c => {
+  .delete('/:id', requirePlatformRole('superadmin'), param(idParam), async c => {
     const { id } = c.req.valid('param')
     const tenant = await tenantsService.cancel(id)
     await recordAudit(c, {
@@ -101,7 +102,7 @@ export const tenantsController = new Hono<AppEnv>()
    * Auditado sem o corpo: `appToken` e `apiPassword` passam por aqui e não
    * podem cair na trilha. Só os códigos padrão, que não são segredo.
    */
-  .put('/:id/integration', param(idParam), json(tenantIntegration), async c => {
+  .put('/:id/integration', requirePlatformRole('superadmin'), param(idParam), json(tenantIntegration), async c => {
     const { id } = c.req.valid('param')
     const input = c.req.valid('json')
     const integration = await tenantsService.saveIntegration(id, input)
@@ -259,11 +260,12 @@ export const tenantsController = new Hono<AppEnv>()
     async c => {
       const { id, userId } = c.req.valid('param')
       const { password } = c.req.valid('json')
-      const resultado = await tenantsService.resetUserPassword(
+      const { revokedSessions, ...resultado } = await tenantsService.resetUserPassword(
         id,
         userId,
         c.req.raw.headers,
         password,
+        c.get('auth')?.user.id ?? null,
       )
       // A senha em si nunca entra na trilha — só o fato de ter sido trocada.
       await recordAudit(c, {
@@ -271,7 +273,7 @@ export const tenantsController = new Hono<AppEnv>()
         resource: 'tenant_user',
         resourceId: userId,
         organizationId: id,
-        metadata: { email: resultado.email, gerada: !password },
+        metadata: { email: resultado.email, gerada: !password, sessoesRevogadas: revokedSessions },
       })
       return ok(c, resultado)
     },

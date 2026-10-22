@@ -59,10 +59,16 @@ export async function saveSession(token: string, user: SessionUser): Promise<voi
   })
 }
 
+/**
+ * Apaga a sessão deste navegador — inclusive o token de superadmin guardado
+ * por uma simulação: sair (ou cair por 401) no meio de uma impersonação não
+ * pode deixar a sessão de superadmin esquecida num cookie.
+ */
 export async function clearSession(): Promise<void> {
   const store = await cookies()
   store.delete(TOKEN_COOKIE)
   store.delete(USER_COOKIE)
+  store.delete(IMPERSONATOR_COOKIE)
 }
 
 /**

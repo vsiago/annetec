@@ -8,7 +8,6 @@ import type {
   LoginInput,
   LoginMethodInput,
   LoginMethodOutput,
-  RegisterInput,
   SessionUser,
 } from '@annetec/contracts'
 import { revalidatePath } from 'next/cache'
@@ -113,22 +112,15 @@ export async function googleLoginConfigAction(): Promise<ActionResult<GoogleLogi
   return run(async () => api<GoogleLoginConfig>('/api/v1/auth/login/google/config', { token: null }))
 }
 
-export async function registerAction(input: RegisterInput): Promise<ActionResult<SessionUser>> {
-  return run(async () => {
-    const { token, user } = await api<AuthSession>('/api/v1/auth/register', {
-      method: 'POST',
-      body: input,
-      token: null,
-    })
-    await saveSession(token, user)
-    revalidatePath('/', 'layout')
-    return user
-  })
-}
-
 export async function logoutAction(): Promise<ActionResult<null>> {
   // Falha ao revogar no servidor não pode impedir o logout local.
   await api('/api/v1/auth/logout', { method: 'POST' }).catch(() => null)
+  // Saindo no meio de uma simulação: a sessão de superadmin guardada também
+  // é encerrada no servidor — senão ficaria viva no cookie e no banco.
+  const impersonador = await getImpersonatorSession()
+  if (impersonador) {
+    await api('/api/v1/auth/logout', { method: 'POST', token: impersonador.token }).catch(() => null)
+  }
   await clearSession()
   revalidatePath('/', 'layout')
   return { success: true, data: null }

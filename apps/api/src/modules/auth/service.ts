@@ -5,7 +5,6 @@ import {
   type LoginInput,
   type LoginMethodInput,
   type LoginMethodOutput,
-  type RegisterInput,
 } from '@annetec/contracts'
 import { APIError as BetterAuthError } from 'better-auth/api'
 import { and, desc, eq, inArray } from 'drizzle-orm'
@@ -13,7 +12,7 @@ import { googleLoginEnabled } from '@/config/env'
 import { db } from '@/db/client'
 import { AppError } from '@/http/errors'
 import { auth } from '@/lib/auth'
-import { clientProfiles, member, organization, tenantIntegrations, user } from '@/db/schema'
+import { account, member, organization, session as sessionTable, tenantIntegrations, user } from '@/db/schema'
 import { logger } from '@/lib/logger'
 import {
   accessUnavailable,
@@ -143,31 +142,6 @@ export const authService = {
     return { method: clientMembership ? 'portal' : 'password', googleEnabled: googleLoginEnabled }
   },
 
-  async register(input: RegisterInput) {
-    const organizationId = await resolveOrganizationBySlug(input.tenantSlug)
-    if (!organizationId) throw AppError.notFound('Inquilino')
-
-    const signUp = await auth.api.signUpEmail({
-      body: { name: input.name, email: input.email, password: input.password },
-    })
-    if (!signUp.token) {
-      throw AppError.businessRule('Não foi possível criar a sessão após o cadastro')
-    }
-
-    await auth.api.addMember({
-      body: { userId: signUp.user.id, organizationId, role: 'client' },
-    })
-    await db.insert(clientProfiles).values({
-      userId: signUp.user.id,
-      organizationId,
-      cpf: input.cpf,
-    })
-
-    await setActiveOrganization(signUp.token, organizationId)
-    const session = await getSessionByToken(signUp.token)
-    return { token: signUp.token, session }
-  },
-
   /** Renova a sessão a partir do próprio token — o Better Auth cuida do rolling expiry. */
   async me(token: string) {
     return getSessionByToken(token)
@@ -254,6 +228,8 @@ function resolveLoginOrganization(userId: string, tenantSlug: string | undefined
  *    já for membro do inquilino pedido — ou puder virar associado dele (ver
  *    `canJoinAsClient`) —, marcamos o e-mail local como verificado (o Google
  *    acabou de provar a posse dele) e tentamos de novo, agora vinculando.
+ *    Antes disso a senha local (`account` credential) e as sessões da conta
+ *    são apagadas: quem a criou sem provar o e-mail não continua entrando.
  * 2. "signup disabled" (e-mail sem conta): com e-mail verificado e inquilino
  *    existente, refaz o `signInSocial` com `requestSignUp` — o próprio Better
  *    Auth cria a conta e o vínculo Google. O papel no clube vem depois, em
@@ -397,8 +373,21 @@ async function adoptLocalAccountForGoogle(idToken: string, tenantSlug: string | 
     }
   }
 
+  // A conta local nunca teve o e-mail provado: quem a criou pode não ser o
+  // dono do e-mail (cadastro antecipado com o e-mail de outra pessoa). O
+  // Google acabou de provar quem é o dono — então a senha local e toda sessão
+  // aberta com ela deixam de valer ANTES de a conta virar dele. O acesso
+  // passa a ser pelo Google (ou por uma senha nova redefinida pelo clube).
+  const senhas = await db
+    .delete(account)
+    .where(and(eq(account.userId, local.id), eq(account.providerId, 'credential')))
+    .returning({ id: account.id })
+  const sessoes = await db.delete(sessionTable).where(eq(sessionTable.userId, local.id)).returning({ id: sessionTable.id })
   await db.update(user).set({ emailVerified: true, updatedAt: new Date() }).where(eq(user.id, local.id))
-  logger.info({ userId: local.id }, 'E-mail confirmado pelo Google; conta Google vinculada à conta existente')
+  logger.info(
+    { userId: local.id, senhasRemovidas: senhas.length, sessoesRevogadas: sessoes.length },
+    'E-mail confirmado pelo Google; senha local e sessões antigas descartadas; conta Google vinculada à conta existente',
+  )
   return true
 }
 

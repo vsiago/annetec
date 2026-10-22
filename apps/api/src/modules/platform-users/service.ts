@@ -6,9 +6,10 @@ import {
 } from '@annetec/contracts'
 import { and, count, desc, eq, ilike, inArray, or, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { user } from '@/db/schema'
+import { session, user } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { auth } from '@/lib/auth'
+import { logger } from '@/lib/logger'
 
 /**
  * Contas de equipe Annetec (`user.role` = 'superadmin' | 'platform_admin').
@@ -17,6 +18,21 @@ import { auth } from '@/lib/auth'
  * algum inquilino" (que fica com role 'user', o default).
  */
 const PLATFORM_ROLES = ['superadmin', 'platform_admin'] as const
+
+export interface PlatformUserSessionDeps {
+  /** Apaga todas as sessões da conta (inclusive impersonações abertas por ela). Devolve quantas. */
+  revokeAllSessions: (userId: string) => Promise<number>
+}
+
+export const platformUserSessionsDb: PlatformUserSessionDeps = {
+  revokeAllSessions: async userId => {
+    const removed = await db
+      .delete(session)
+      .where(or(eq(session.userId, userId), eq(session.impersonatedBy, userId)))
+      .returning({ id: session.id })
+    return removed.length
+  },
+}
 
 export const platformUsersService = {
   async list(params: { page: number; perPage: number; role?: 'superadmin' | 'platform_admin'; search?: string }) {
@@ -95,7 +111,12 @@ export const platformUsersService = {
    * `actorId` impede dois pés no próprio pé: ninguém se autodesativa nem se
    * autorrebaixa, o que deixaria a plataforma sem superadmin.
    */
-  async update(id: string, input: UpdatePlatformUserInput, actorId?: string): Promise<PlatformUser> {
+  async update(
+    id: string,
+    input: UpdatePlatformUserInput,
+    actorId?: string,
+    deps: PlatformUserSessionDeps = platformUserSessionsDb,
+  ): Promise<PlatformUser> {
     const alvo = await this.getById(id)
 
     if (actorId === id) {
@@ -138,6 +159,16 @@ export const platformUsersService = {
         updatedAt: new Date(),
       })
       .where(eq(user.id, id))
+
+    // Desativou ou trocou o papel: as sessões abertas caem na hora — senão a
+    // conta desligada (ou o superadmin rebaixado) seguiria com o acesso antigo
+    // até a sessão expirar (30 dias).
+    const desativou = input.active === false && alvo.active
+    const trocouPapel = input.role !== undefined && input.role !== alvo.role
+    if (desativou || trocouPapel) {
+      const revogadas = await deps.revokeAllSessions(id)
+      logger.info({ userId: id, desativou, trocouPapel, sessoesRevogadas: revogadas }, 'Sessões da conta de plataforma revogadas')
+    }
 
     return this.getById(id)
   },

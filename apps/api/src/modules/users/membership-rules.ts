@@ -93,6 +93,56 @@ export async function revokeClubSessions(
   return deps.revokeSessions(target.userId, all ? 'all' : { tenantId })
 }
 
+// ---------------------------------------------------------------------------
+// Identidade da conta: de quem o clube pode mexer
+// ---------------------------------------------------------------------------
+
+/**
+ * Nome, e-mail, telefone e senha são da CONTA (`user`), que é global — a
+ * mesma pessoa pode ser associada de dois clubes. O admin de um clube só
+ * mexe nisso quando a conta é SÓ deste clube; senão, trocar o e-mail (e
+ * depois redefinir a senha) seria tomar a conta que a pessoa usa em outro
+ * clube.
+ */
+export const SHARED_IDENTITY_MESSAGE =
+  'Esta conta também é usada em outro clube ou pela equipe Annetec: nome, e-mail, telefone e senha não podem ser alterados pelo clube. Fale com o suporte Annetec.'
+
+export const SHARED_ACCOUNT_STAFF_MESSAGE =
+  'Este e-mail já tem uma conta usada em outro clube. Ele só pode ser cadastrado aqui como associado; para dar acesso de equipe, use outro e-mail ou fale com o suporte Annetec.'
+
+/** A conta pertence só a este clube: conta comum, sem vínculo (de qualquer situação) com outro clube. */
+export async function tenantOwnsIdentity(
+  deps: Pick<MembershipRulesDeps, 'countOtherMemberships'>,
+  tenantId: string,
+  target: Pick<MembershipTarget, 'userId' | 'platformRole'>,
+): Promise<boolean> {
+  if (target.platformRole !== 'user') return false
+  return (await deps.countOtherMemberships(tenantId, target.userId)) === 0
+}
+
+/** 403 com `SHARED_IDENTITY_MESSAGE` se a conta não for só deste clube. */
+export async function assertTenantOwnsIdentity(
+  deps: Pick<MembershipRulesDeps, 'countOtherMemberships'>,
+  tenantId: string,
+  target: Pick<MembershipTarget, 'userId' | 'platformRole'>,
+): Promise<void> {
+  if (!(await tenantOwnsIdentity(deps, tenantId, target))) throw AppError.forbidden(SHARED_IDENTITY_MESSAGE)
+}
+
+type IdentityField = 'name' | 'email' | 'phone'
+
+/** Quais campos da conta este patch MUDA de fato (reenviar o valor atual não conta). Puro. */
+export function changedIdentityFields(
+  current: { name: string; email: string; phone: string | null },
+  input: { name?: string; email?: string; phone?: string | null },
+): IdentityField[] {
+  const changed: IdentityField[] = []
+  if (input.name !== undefined && input.name !== current.name) changed.push('name')
+  if (input.email !== undefined && input.email.trim().toLowerCase() !== current.email.toLowerCase()) changed.push('email')
+  if (input.phone !== undefined && (input.phone || null) !== (current.phone || null)) changed.push('phone')
+  return changed
+}
+
 export type RemovalDecision =
   | { removal: 'delete_account'; reason: null }
   | { removal: 'remove_membership'; reason: null }

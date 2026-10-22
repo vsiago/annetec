@@ -13,6 +13,8 @@ export interface ResolvedTenant {
   id: string
   slug: string
   name: string
+  /** `platform` = a própria Annetec operando como operadora. Opcional: nem todo caminho resolve. */
+  kind?: 'operator' | 'platform'
 }
 
 /**

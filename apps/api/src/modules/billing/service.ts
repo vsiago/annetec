@@ -167,10 +167,25 @@ export const billingService = {
     return result.map(mapCommissionReceipt)
   },
 
-  async getCommissionReceipt(tenantId: string, codigo: string): Promise<CommissionReceipt> {
+  /**
+   * `owner.produtorCodigo` (vendedor pedindo): o recibo precisa ser desse
+   * produtor no ERP. Recibo de outro — ou sem produtor informado — é 404, sem
+   * dizer que existe.
+   */
+  async getCommissionReceipt(
+    tenantId: string,
+    codigo: string,
+    owner?: { produtorCodigo: string },
+  ): Promise<CommissionReceipt> {
     const client = await getDigitalSaudeClient(tenantId)
     const result = await client.one('reciboPorCodigo', { codigoRecibo: codigo })
     if (!result) throw AppError.notFound('Recibo')
+    if (owner) {
+      const produtor = result.produtor?.codigo
+      if (produtor === null || produtor === undefined || String(produtor) !== owner.produtorCodigo) {
+        throw AppError.notFound('Recibo')
+      }
+    }
     return mapCommissionReceipt(result)
   },
 }

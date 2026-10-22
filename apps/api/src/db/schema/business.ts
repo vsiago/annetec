@@ -112,7 +112,8 @@ export const salesGoals = pgTable(
     commissionRate: numeric('commission_rate', { precision: 5, scale: 4 }).notNull().default('0'),
   },
   table => [
-    uniqueIndex('sales_goals_seller_period_key').on(table.sellerId, table.year, table.month),
+    // Com o inquilino na chave: a mesma pessoa pode ser vendedora em dois clubes.
+    uniqueIndex('sales_goals_org_seller_period_key').on(table.organizationId, table.sellerId, table.year, table.month),
   ],
 )
 

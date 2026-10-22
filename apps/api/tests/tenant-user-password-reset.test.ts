@@ -16,6 +16,8 @@ const SELLER_A = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const SELLER_B = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const STAFF_IN_A = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 const INACTIVE_A = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+/** Conta com vínculo nos DOIS clubes (associada em A, admin em B). */
+const SHARED = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
 
 vi.mock('@/db/client', () => ({ db: {} }))
 vi.mock('@/lib/auth', () => ({ auth: { api: {} } }))
@@ -53,9 +55,11 @@ const MEMBERS: Record<string, Record<string, { email: string; name: string; plat
     [SELLER_A]: { email: 'vendedor@a.com', name: 'Vitor Vendedor', platformRole: 'user', tenantRole: 'seller', active: true },
     [STAFF_IN_A]: { email: 'suporte@annetec.com', name: 'Equipe', platformRole: 'superadmin', tenantRole: 'admin', active: true },
     [INACTIVE_A]: { email: 'saiu@a.com', name: 'Ex Vendedor', platformRole: 'user', tenantRole: 'seller', active: false },
+    [SHARED]: { email: 'vitima@gmail.com', name: 'Vítima', platformRole: 'user', tenantRole: 'client', active: true },
   },
   [CLUB_B.id]: {
     [SELLER_B]: { email: 'vendedor@b.com', name: 'Beto', platformRole: 'user', tenantRole: 'seller', active: true },
+    [SHARED]: { email: 'vitima@gmail.com', name: 'Vítima', platformRole: 'user', tenantRole: 'admin', active: true },
   },
 }
 
@@ -75,6 +79,8 @@ vi.mock('@/modules/users/access.service', async importOriginal => {
           const found = MEMBERS[t]?.[u]
           return found ? { userId: u, ...found } : null
         },
+        countOtherMemberships: async (t, u) =>
+          Object.entries(MEMBERS).filter(([club, members]) => club !== t && members[u]).length,
         setPassword: (...args) => fakes.setPassword(...args),
         revokeSessions: (...args) => fakes.revokeSessions(...args),
         loadClub: async t => {
@@ -161,6 +167,15 @@ describe('POST /t/:slug/usuarios/:id/redefinir-senha', () => {
     const { status } = await reset(CLUB_A.slug, STAFF_IN_A)
     expect(status).toBe(403)
     expect(fakes.setPassword).not.toHaveBeenCalled()
+    expect(fakes.send).not.toHaveBeenCalled()
+  })
+
+  it('conta que também está em OUTRO clube = 403: o admin de A não redefine a senha que a pessoa usa em B', async () => {
+    const { status, body } = await reset(CLUB_A.slug, SHARED)
+    expect(status).toBe(403)
+    expect(body.error.message).toMatch(/outro clube/)
+    expect(fakes.setPassword).not.toHaveBeenCalled()
+    expect(fakes.revokeSessions).not.toHaveBeenCalled()
     expect(fakes.send).not.toHaveBeenCalled()
   })
 
