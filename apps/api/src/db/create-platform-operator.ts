@@ -1,3 +1,4 @@
+import { tenantAddress } from '@annetec/contracts'
 import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
 import { env } from '@/config/env'
@@ -5,6 +6,17 @@ import { encryptSecret } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
 import { db, sql } from './client'
 import { organization, tenantIntegrations, tenantProfiles, user } from './schema'
+
+// Trava de produção: scripts de seed/provisionamento não rodam em produção sem
+// liberação explícita. (Avaliado depois dos imports — `./client` só conecta na
+// primeira query.)
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED_IN_PRODUCTION !== '1') {
+  console.error(
+    `[create-platform-operator] Abortado: NODE_ENV=production. Este script não roda em produção.\n` +
+      'Se for mesmo intencional, rode de novo com ALLOW_SEED_IN_PRODUCTION=1.',
+  )
+  process.exit(1)
+}
 
 /**
  * Cria (ou atualiza) a organização `kind: 'platform'` — a Annetec operando
@@ -16,14 +28,101 @@ import { organization, tenantIntegrations, tenantProfiles, user } from './schema
  * comum e NUNCA deve carregar credenciais reais da Digital Saúde. Esta aqui
  * é a operadora de verdade, no slug `annetec-operadora`.
  *
- * Idempotente: rodar de novo atualiza cadastro/credenciais em vez de
- * duplicar.
+ * Idempotente: rodar de novo atualiza credenciais em vez de duplicar (o
+ * cadastro só é gravado na criação do perfil).
  *
- *   pnpm --filter @annetec/api exec tsx src/db/create-platform-operator.ts
+ * O cadastro da operadora (CNPJ, contato, endereço) NÃO fica no código: vem de
+ * argumentos `--chave=valor` ou, na falta deles, das variáveis OPERATOR_*.
+ * Ver `USAGE` abaixo.
  */
 const SLUG = 'annetec-operadora'
 
+const USAGE = `Uso:
+  pnpm --filter @annetec/api exec tsx src/db/create-platform-operator.ts \\
+    --razao-social="..." --cnpj=00000000000000 --email=contato@exemplo.com.br --telefone=21999999999 \\
+    --cep=00000000 --rua="..." --numero=123 --bairro="..." --cidade="..." --uf=RJ
+
+Cada argumento pode vir, em vez disso, da variável de ambiente correspondente:
+  OPERATOR_LEGAL_NAME, OPERATOR_CNPJ, OPERATOR_EMAIL, OPERATOR_PHONE,
+  OPERATOR_CEP, OPERATOR_STREET, OPERATOR_NUMBER, OPERATOR_NEIGHBORHOOD,
+  OPERATOR_CITY, OPERATOR_STATE
+
+Requer também DIGITALSAUDE_APP_TOKEN e DIGITALSAUDE_API_PASSWORD no .env.`
+
+/** Argumento → variável de ambiente de fallback. */
+const FIELDS = {
+  'razao-social': 'OPERATOR_LEGAL_NAME',
+  cnpj: 'OPERATOR_CNPJ',
+  email: 'OPERATOR_EMAIL',
+  telefone: 'OPERATOR_PHONE',
+  cep: 'OPERATOR_CEP',
+  rua: 'OPERATOR_STREET',
+  numero: 'OPERATOR_NUMBER',
+  bairro: 'OPERATOR_NEIGHBORHOOD',
+  cidade: 'OPERATOR_CITY',
+  uf: 'OPERATOR_STATE',
+} as const
+
+type Field = keyof typeof FIELDS
+
+/** Lê o cadastro da operadora de `--chave=valor` / OPERATOR_*; sem tudo, imprime o uso e sai. */
+function readOperatorProfile() {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log(USAGE)
+    process.exit(0)
+  }
+
+  const args = new Map<string, string>()
+  for (const raw of process.argv.slice(2)) {
+    const match = /^--([a-z-]+)=([\s\S]*)$/.exec(raw)
+    if (match) args.set(match[1]!, match[2]!)
+  }
+
+  const values = {} as Record<Field, string>
+  const missing: string[] = []
+  for (const [field, envName] of Object.entries(FIELDS) as [Field, string][]) {
+    const value = (args.get(field) ?? process.env[envName] ?? '').trim()
+    if (!value) missing.push(`--${field} (ou ${envName})`)
+    values[field] = value
+  }
+
+  if (missing.length > 0) {
+    console.error(`Cadastro da operadora incompleto. Faltando:\n  ${missing.join('\n  ')}\n\n${USAGE}`)
+    process.exit(1)
+  }
+
+  const document = values.cnpj.replace(/\D/g, '')
+  if (document.length !== 14) {
+    console.error(`--cnpj inválido: esperado 14 dígitos, recebido "${values.cnpj}".\n\n${USAGE}`)
+    process.exit(1)
+  }
+
+  const address = tenantAddress.safeParse({
+    cep: values.cep,
+    street: values.rua,
+    number: values.numero,
+    neighborhood: values.bairro,
+    city: values.cidade,
+    state: values.uf.toUpperCase(),
+  })
+  if (!address.success) {
+    const issues = address.error.issues.map(i => `  - ${i.path.join('.')}: ${i.message}`).join('\n')
+    console.error(`Endereço da operadora inválido:\n${issues}\n\n${USAGE}`)
+    process.exit(1)
+  }
+
+  return {
+    legalName: values['razao-social'],
+    document,
+    email: values.email,
+    phone: values.telefone.replace(/\D/g, ''),
+    address: address.data,
+  }
+}
+
 async function main() {
+  const cadastro = readOperatorProfile()
+
   const appToken = env.DIGITALSAUDE_APP_TOKEN
   const apiPassword = env.DIGITALSAUDE_API_PASSWORD
   if (!appToken || !apiPassword) {
@@ -69,18 +168,11 @@ async function main() {
     .insert(tenantProfiles)
     .values({
       organizationId,
-      legalName: 'ASSOCIAÇÃO NACIONAL PARA EDU. PROF. E TEC. DOS SERV. PUBL. MUN. EST. E',
-      document: '38821517000114',
-      email: 'douglas_trindade@yahoo.com.br',
-      phone: '21965751938',
-      address: {
-        cep: '28941140',
-        street: 'RUA EPAMINONDAS PEREIRA NUNES',
-        number: '122',
-        neighborhood: 'CENTRO',
-        city: 'SÃO PEDRO DA ALDEIA',
-        state: 'RJ',
-      },
+      legalName: cadastro.legalName,
+      document: cadastro.document,
+      email: cadastro.email,
+      phone: cadastro.phone,
+      address: cadastro.address,
       branding: { primaryColor: '#DC2626', secondaryColor: '#1F2937' },
       status: 'active',
       kind: 'platform',

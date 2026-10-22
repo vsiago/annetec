@@ -4,6 +4,10 @@ import React, { createContext, useContext, useState, useEffect } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { AdminTopbar } from '@/components/admin/admin-topbar'
+import { PlatformAccessGate } from '@/components/platform-billing/access-gate'
+import { NotificationsProvider } from '@/components/notifications/notifications-provider'
+import { useTenant } from '@/contexts/tenant-context'
+import { useTenantData } from '@/contexts/tenant-data-context'
 import { cn } from '@/lib/utils'
 
 type SidebarContextType = {
@@ -60,10 +64,33 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           )}
         >
           <AdminTopbar />
-          <main className="flex-1 p-4 pb-24 lg:p-6 lg:pb-6">{children}</main>
+          <main className="flex-1 p-4 pb-24 lg:p-6 lg:pb-6">
+            <PlatformAccessGate>{children}</PlatformAccessGate>
+          </main>
         </div>
       </div>
     </AdminSidebarContext.Provider>
+  )
+}
+
+/**
+ * Sino em tempo real do clube (pagamentos e cadastros). Cadastro novo também
+ * rebusca a lista de usuários: o "Ver detalhes" abre `clientes/<id>`, que
+ * procura a pessoa nela.
+ */
+function TenantNotifications({ children }: { children: React.ReactNode }) {
+  const { tenant } = useTenant()
+  const { reloadUsers } = useTenantData()
+  if (!tenant) return <>{children}</>
+  return (
+    <NotificationsProvider
+      scope={{ kind: 'tenant', slug: tenant.slug }}
+      onNotification={notification => {
+        if (notification.kind === 'client_signed_up') void reloadUsers()
+      }}
+    >
+      {children}
+    </NotificationsProvider>
   )
 }
 
@@ -74,7 +101,9 @@ export default function AdminLayout({
 }) {
   return (
     <ProtectedRoute allowedRoles={['admin']}>
-      <AdminLayoutContent>{children}</AdminLayoutContent>
+      <TenantNotifications>
+        <AdminLayoutContent>{children}</AdminLayoutContent>
+      </TenantNotifications>
     </ProtectedRoute>
   )
 }

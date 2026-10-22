@@ -30,8 +30,9 @@ export class AppError extends Error {
     this.cause = options.cause
   }
 
+  /** "Plano não encontrado", "Assinatura não encontrada" — concorda com o gênero do recurso. */
   static notFound(resource: string) {
-    return new AppError(ERROR_CODES.NOT_FOUND, `${resource} não encontrado`)
+    return new AppError(ERROR_CODES.NOT_FOUND, `${resource} não ${isFeminine(resource) ? 'encontrada' : 'encontrado'}`)
   }
 
   static unauthenticated(message = 'Autenticação necessária') {
@@ -53,6 +54,16 @@ export class AppError extends Error {
   static validation(issues: FieldIssue[], message = 'Dados inválidos') {
     return new AppError(ERROR_CODES.VALIDATION_ERROR, message, { issues })
   }
+}
+
+/** Masculinos terminados em "a" que podem virar recurso de erro. */
+const MASCULINE_IN_A = new Set(['sistema', 'problema', 'tema', 'dia', 'mapa', 'programa', 'esquema'])
+
+/** Gênero pela 1ª palavra ("Assinatura", "Cobrança", "Fatura", "Venda" → feminino). */
+function isFeminine(resource: string): boolean {
+  const word = resource.trim().split(/\s+/)[0]?.toLowerCase() ?? ''
+  if (MASCULINE_IN_A.has(word)) return false
+  return /(a|ção|dade|gem)$/.test(word)
 }
 
 export function zodIssues(error: ZodError): FieldIssue[] {

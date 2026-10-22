@@ -5,7 +5,7 @@ import { adminAc as platformAdminAc, userAc as platformUserAc } from 'better-aut
 import { adminAc, defaultAc, ownerAc } from 'better-auth/plugins/organization/access'
 import { db } from '@/db/client'
 import * as schema from '@/db/schema'
-import { env } from '@/config/env'
+import { env, googleLoginEnabled } from '@/config/env'
 import { clientPortal } from '@/lib/auth-plugins/client-portal'
 import { resolveActiveMembership } from '@/modules/auth/membership'
 
@@ -88,6 +88,50 @@ export const auth = betterAuth({
     // Default (true): o cadastro (`/auth/register`, cliente se autocadastrando
     // no inquilino) já sai logado. Não afeta `auth.api.createUser` — usado
     // quando a plataforma cria contas para outra pessoa — que nunca cria sessão.
+  },
+
+  /**
+   * Login com Google pelo fluxo ID token (Google Identity Services no
+   * navegador → `auth.api.signInSocial({ idToken })` em
+   * `authService.loginGoogle`). Sem redirect OAuth: o handler HTTP do Better
+   * Auth nem está montado nesta API. Registrado só com client id E secret —
+   * sem eles o provider não existe e a rota responde "não configurado".
+   *
+   * `disableImplicitSignUp`: Google nunca cria conta POR CONTA PRÓPRIA. O
+   * único cadastro pelo Google é o explícito (`requestSignUp`) de
+   * `authService.loginGoogle`, na tela de um clube que existe e com e-mail
+   * verificado pelo Google — e o papel criado é sempre `client`. Login sem
+   * clube com e-mail desconhecido continua recusado, sem usuário órfão.
+   */
+  socialProviders: googleLoginEnabled
+    ? {
+        google: {
+          clientId: env.GOOGLE_CLIENT_ID!,
+          clientSecret: env.GOOGLE_CLIENT_SECRET!,
+          disableImplicitSignUp: true,
+          // Nunca reescreve nome/e-mail/foto da conta local com o perfil do
+          // Google a cada login (default do Better Auth, fixado aqui).
+          overrideUserInfoOnSignIn: false,
+        },
+      }
+    : {},
+
+  account: {
+    /**
+     * Vincula a conta Google à conta já existente com EXATAMENTE o mesmo
+     * e-mail (o Better Auth procura pelo e-mail do token).
+     *
+     * - Sem `trustedProviders`: no Better Auth, provedor "confiável" vincula
+     *   MESMO com `email_verified: false` no token. Fora da lista, o vínculo
+     *   implícito exige o Google afirmar que o e-mail é verificado.
+     * - `requireLocalEmailVerified` (default true, fixado): a conta LOCAL
+     *   também precisa estar verificada. Contas do checkout nascem sem, e
+     *   `authService.loginGoogle` trata esse caso de forma restrita (mesmo
+     *   e-mail + membro do inquilino pedido); ver lá.
+     * - `updateUserInfoOnLink: false` (default, fixado): vincular nunca
+     *   troca nome/foto da conta local pelos do Google.
+     */
+    accountLinking: { enabled: true, requireLocalEmailVerified: true, updateUserInfoOnLink: false },
   },
 
   user: {

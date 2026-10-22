@@ -1,8 +1,8 @@
 import { ERROR_CODES } from '@annetec/contracts'
 import { eq } from 'drizzle-orm'
-import { env } from '@/config/env'
+import { digitalSaudeGlobalTenants, env, isProduction } from '@/config/env'
 import { db } from '@/db/client'
-import { tenantIntegrations } from '@/db/schema'
+import { organization, tenantIntegrations } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { decryptSecret } from '@/lib/crypto'
 import { createDigitalSaudeClient, type DigitalSaudeClient } from './client'
@@ -12,7 +12,9 @@ import { createDigitalSaudeClient, type DigitalSaudeClient } from './client'
  *
  * Cada administradora tem seu próprio par token/senhaApi, então o cliente é
  * por inquilino — nunca global. As credenciais do `.env` servem só de fallback
- * para ambiente de desenvolvimento e para o inquilino piloto.
+ * para ambiente de desenvolvimento e para o inquilino piloto: em PRODUÇÃO o
+ * fallback global só vale para os slugs de `DIGITALSAUDE_GLOBAL_TENANTS`; os
+ * demais sem `tenant_integrations` recebem `INTEGRATION_NOT_CONFIGURED`.
  *
  * Os clientes ficam em cache de processo: montar um é barato, mas descriptografar
  * a cada request não é, e a configuração muda raramente.
@@ -48,7 +50,25 @@ export async function getDigitalSaudeClient(tenantId: string): Promise<DigitalSa
     )
   }
 
+  if (isProduction && !(await mayUseGlobalCredentials(tenantId))) {
+    throw new AppError(
+      ERROR_CODES.INTEGRATION_NOT_CONFIGURED,
+      'Integração com a Digital Saúde não configurada para este inquilino',
+    )
+  }
+
   return getFallbackClient()
+}
+
+/** Produção: o slug do inquilino está na allowlist `DIGITALSAUDE_GLOBAL_TENANTS`? */
+async function mayUseGlobalCredentials(tenantId: string): Promise<boolean> {
+  if (digitalSaudeGlobalTenants.size === 0) return false
+  const [org] = await db
+    .select({ slug: organization.slug })
+    .from(organization)
+    .where(eq(organization.id, tenantId))
+    .limit(1)
+  return Boolean(org && digitalSaudeGlobalTenants.has(org.slug.toLowerCase()))
 }
 
 /** Códigos fixos exigidos pelo `POST /contrato/` desta administradora. */

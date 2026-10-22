@@ -7,8 +7,6 @@ import {
   ChartPie,
   ChevronRight,
   CircleDollarSign,
-  CircleAlert,
-  CalendarClock,
   FileText,
   Handshake,
   Percent,
@@ -54,35 +52,36 @@ import {
   planDistribution,
 } from '@/lib/analytics'
 import { useChartColors } from '@/lib/use-chart-colors'
+import { useTenant } from '@/contexts/tenant-context'
+import { useActionData } from '@/components/admin/faturamento/use-action-data'
+import { getBillingSummaryAction } from '@/lib/actions/faturamento-api'
 import { cn } from '@/lib/utils'
+import { downloadCsv } from '@/lib/download-csv'
 
+/** Atalhos para os recortes desta página (cada um abre a aba correspondente). */
 const AVAILABLE_REPORTS = [
-  { name: 'Relatório de Vendas', hint: 'Por período, plano e vendedor', icon: BarChart3, tone: 'bg-rose-50 text-rose-500' },
-  { name: 'Relatório de Beneficiários', hint: 'Ativos, novos, cancelados e inadimplentes', icon: UsersRound, tone: 'bg-sky-50 text-sky-500' },
-  { name: 'Relatório Financeiro', hint: 'Receitas, despesas e fluxo de caixa', icon: Wallet, tone: 'bg-emerald-50 text-emerald-500' },
-  { name: 'Relatório de Comissões', hint: 'Por vendedor, período e status', icon: Percent, tone: 'bg-violet-50 text-violet-500' },
-  { name: 'Relatório de Clínicas', hint: 'Atendimentos, especialidades e ocupação', icon: Stethoscope, tone: 'bg-amber-50 text-amber-500' },
-  { name: 'Relatório de Inadimplência', hint: 'Por plano, faixa de atraso e região', icon: CircleAlert, tone: 'bg-red-50 text-red-500' },
-  { name: 'Relatório de Rede de Parceiros', hint: 'Desempenho por parceiro', icon: Handshake, tone: 'bg-indigo-50 text-indigo-500' },
-  { name: 'Relatório Personalizado', hint: 'Monte seu relatório sob medida', icon: FileText, tone: 'bg-slate-100 text-slate-500' },
+  { tab: 'vendas', name: 'Vendas por vendedor', hint: 'Desempenho da equipe no período', icon: BarChart3, tone: 'bg-rose-50 text-rose-500' },
+  { tab: 'beneficiarios', name: 'Beneficiários por cidade', hint: 'Onde a carteira está concentrada', icon: UsersRound, tone: 'bg-sky-50 text-sky-500' },
+  { tab: 'financeiro', name: 'Resumo financeiro', hint: 'Receita recorrente, adesões e comissão', icon: Wallet, tone: 'bg-emerald-50 text-emerald-500' },
+  { tab: 'comissoes', name: 'Comissões mês a mês', hint: 'Fechamento dos últimos meses', icon: Percent, tone: 'bg-violet-50 text-violet-500' },
+  { tab: 'parceiros', name: 'Rede de parceiros', hint: 'Cobertura por categoria', icon: Handshake, tone: 'bg-indigo-50 text-indigo-500' },
+  { tab: 'atendimentos', name: 'Atendimentos por assunto', hint: 'O que os associados procuram', icon: Stethoscope, tone: 'bg-amber-50 text-amber-500' },
 ]
 
-const REVENUE_SPLIT = [
-  { name: 'Planos de Saúde', share: 0.58, color: '#e11d48' },
-  { name: 'Odontológico', share: 0.18, color: '#3b82f6' },
-  { name: 'Assistências', share: 0.14, color: '#22c55e' },
-  { name: 'Outros', share: 0.1, color: '#f59e0b' },
-]
-
-const PAYMENT_STATUS = [
-  { name: 'Pagos', share: 0.785, color: '#22c55e' },
-  { name: 'Em aberto', share: 0.11, color: '#f59e0b' },
-  { name: 'Atrasados', share: 0.105, color: '#e11d48' },
-]
+/** Cores fixas por situação de assinatura — mesma leitura de semáforo do Faturamento. */
+const SUBSCRIPTION_SPLIT = [
+  { key: 'activeSubscriptions', name: 'Em dia', color: '#22c55e' },
+  { key: 'pendingSubscriptions', name: 'Aguardando 1º pagamento', color: '#3b82f6' },
+  { key: 'pastDueSubscriptions', name: 'Em atraso', color: '#f59e0b' },
+  { key: 'suspendedSubscriptions', name: 'Suspensas', color: '#e11d48' },
+] as const
 
 export default function AdminRelatoriosPage() {
+  const { tenant } = useTenant()
   const { users, sales, clientPlans, partners, appointments, isLoading } = useTenantData()
   const colors = useChartColors()
+  const slug = tenant?.slug ?? ''
+  const billing = useActionData(slug ? () => getBillingSummaryAction(slug) : null, [slug])
 
   const months = useMemo(() => [...lastMonths(12)].reverse(), [])
   const [referenceMonth, setReferenceMonth] = useState(() => months[0]?.key ?? '')
@@ -120,12 +119,30 @@ export default function AdminRelatoriosPage() {
   )
 
   const planShare = planDistribution(activeClients, colors.palette)
-  const revenueSplit = REVENUE_SPLIT.map(item => ({ ...item, value: Math.round(revenue * item.share) }))
-  const totalBoletos = activeClients.length
-  const paymentSplit = PAYMENT_STATUS.map(item => ({
-    ...item,
-    value: Math.round(totalBoletos * item.share),
+  /** Mensalidade somada por plano, da carteira ativa. */
+  const revenueByPlan = planShare.map(item => ({
+    name: item.name,
+    color: item.color,
+    value: item.value * (planPrices.get(item.name) ?? 0),
   }))
+  const revenueByPlanTotal = revenueByPlan.reduce((sum, item) => sum + item.value, 0)
+  const revenueSplit = revenueByPlan
+    .filter(item => item.value > 0)
+    .map(item => ({ ...item, share: revenueByPlanTotal === 0 ? 0 : item.value / revenueByPlanTotal }))
+
+  /** Situação das assinaturas do Clube de Benefícios, do resumo de Faturamento. */
+  const summary = billing.data
+  const subscriptionTotal = summary
+    ? SUBSCRIPTION_SPLIT.reduce((sum, item) => sum + summary[item.key], 0)
+    : 0
+  const subscriptionSplit = summary
+    ? SUBSCRIPTION_SPLIT.map(item => ({
+        name: item.name,
+        color: item.color,
+        value: summary[item.key],
+        share: subscriptionTotal === 0 ? 0 : summary[item.key] / subscriptionTotal,
+      })).filter(item => item.value > 0)
+    : []
 
   const sellers = getAllSellers(users)
 
@@ -210,6 +227,50 @@ export default function AdminRelatoriosPage() {
     [sales],
   )
 
+  /** Exporta em CSV os dados da aba aberta, os mesmos que a tela mostra. */
+  const exportTab = () => {
+    const rows: Array<Array<string | number>> = (() => {
+      switch (tab) {
+        case 'vendas':
+          return [['Vendedor', 'Vendas', 'Valor'], ...salesBySeller.map(r => [r.label, r.count, r.value])]
+        case 'beneficiarios':
+          return [['Cidade', 'Beneficiários', 'Mensalidade somada'], ...clientsByCity.map(r => [r.label, r.count, r.value])]
+        case 'financeiro':
+          return [
+            ['Plano', 'Mensalidade somada', 'Participação'],
+            ...revenueSplit.map(r => [r.name, r.value, `${Math.round(r.share * 100)}%`]),
+            [],
+            ['Situação das assinaturas', 'Quantidade'],
+            ...subscriptionSplit.map(r => [r.name, r.value]),
+          ]
+        case 'parceiros':
+          return [
+            ['Categoria', 'Parceiros', 'Cidades', 'Desconto médio (%)'],
+            ...partnersByCategory.map(r => [r.label, r.count, r.cities, r.discount]),
+          ]
+        case 'atendimentos':
+          return [['Assunto', 'Atendimentos'], ...appointmentsByProvider.map(r => [r.label, r.count])]
+        case 'comissoes':
+          return [
+            ['Mês', 'Vendas', 'Valor vendido', 'Comissão'],
+            ...commissionByMonth.map(r => [r.label, r.count, r.value, r.commission]),
+          ]
+        default:
+          return [
+            ['Indicador', 'Valor'],
+            ['Beneficiários ativos', activeClients.length],
+            ['Vendas no período', periodSales.length],
+            ['Receita no período', Math.round(revenue)],
+            ['Taxa de renovação (%)', renewalRate],
+            [],
+            ['Mês', 'Vendas'],
+            ...salesSeries.map(r => [r.month, r.vendas]),
+          ]
+      }
+    })()
+    downloadCsv(`relatorio-${tab}-${referenceMonth}.csv`, rows)
+  }
+
   if (isLoading) return null
 
   return (
@@ -231,9 +292,9 @@ export default function AdminRelatoriosPage() {
             ))}
           </SelectContent>
         </Select>
-        <Button className="h-11 gap-2 px-5">
+        <Button className="h-11 gap-2 px-5" onClick={exportTab}>
           <FileText className="h-4 w-4" />
-          Gerar relatório
+          Exportar CSV
         </Button>
       </PageHeader>
 
@@ -243,32 +304,24 @@ export default function AdminRelatoriosPage() {
           accent="success"
           value={activeClients.length.toLocaleString('pt-BR')}
           label="Beneficiários ativos"
-          delta={{ value: '12%', direction: 'up' }}
-          comparison="vs. período anterior"
         />
         <StatCard
           icon={BarChart3}
           accent="primary"
           value={periodSales.length.toLocaleString('pt-BR')}
           label="Vendas no período"
-          delta={{ value: '18%', direction: 'up' }}
-          comparison="vs. período anterior"
         />
         <StatCard
           icon={CircleDollarSign}
           accent="info"
           value={formatCurrency(Math.round(revenue))}
           label="Receita no período"
-          delta={{ value: '15%', direction: 'up' }}
-          comparison="vs. período anterior"
         />
         <StatCard
           icon={ChartPie}
           accent="warning"
           value={`${renewalRate}%`}
           label="Taxa de renovação"
-          delta={{ value: '4 p.p.', direction: 'up' }}
-          comparison="vs. período anterior"
         />
       </div>
 
@@ -281,7 +334,7 @@ export default function AdminRelatoriosPage() {
               <SectionTab value="beneficiarios">Beneficiários</SectionTab>
               <SectionTab value="financeiro">Financeiro</SectionTab>
               <SectionTab value="parceiros">Rede de Parceiros</SectionTab>
-              <SectionTab value="clinicas">Clínicas</SectionTab>
+              <SectionTab value="atendimentos">Atendimentos</SectionTab>
               <SectionTab value="comissoes">Comissões</SectionTab>
             </SectionTabsList>
 
@@ -290,9 +343,6 @@ export default function AdminRelatoriosPage() {
                 <Card className="shadow-sm">
                   <CardHeader>
                     <CardTitle className="text-base">Evolução de Vendas</CardTitle>
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                      ↑ 18%
-                    </span>
                   </CardHeader>
                   <CardContent>
                     <div className="h-44">
@@ -314,11 +364,12 @@ export default function AdminRelatoriosPage() {
                 </Card>
 
                 <DonutCard
-                  title="Receita por Categoria"
-                  centerValue={formatCurrency(Math.round(revenue))}
+                  title="Receita por Plano"
+                  centerValue={formatCurrency(Math.round(revenueByPlanTotal))}
                   centerLabel="Total"
                   data={revenueSplit}
                   formatItem={item => `${Math.round(item.share * 100)}%`}
+                  empty="A divisão aparece quando houver beneficiários ativos em planos com preço."
                 />
               </div>
 
@@ -357,11 +408,18 @@ export default function AdminRelatoriosPage() {
                 </Card>
 
                 <DonutCard
-                  title="Status de Pagamentos"
-                  centerValue={totalBoletos.toLocaleString('pt-BR')}
-                  centerLabel="boletos"
-                  data={paymentSplit}
+                  title="Situação das Assinaturas"
+                  centerValue={subscriptionTotal.toLocaleString('pt-BR')}
+                  centerLabel="assinaturas"
+                  data={subscriptionSplit}
                   formatItem={item => `${(item.share * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}
+                  empty={
+                    billing.loading
+                      ? 'Carregando…'
+                      : billing.error
+                        ? billing.error
+                        : 'Nenhuma assinatura no Clube de Benefícios ainda.'
+                  }
                 />
               </div>
             </TabsContent>
@@ -511,12 +569,12 @@ export default function AdminRelatoriosPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="clinicas" className="m-0">
+            <TabsContent value="atendimentos" className="m-0">
               <Card className="gap-0 py-0 shadow-sm">
                 <CardHeader className="p-4">
-                  <CardTitle className="text-base">Atendimentos por prestador</CardTitle>
+                  <CardTitle className="text-base">Atendimentos por assunto</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Volume de uso da rede pelos beneficiários.
+                    Chamados abertos na mesa de atendimento, agrupados pelo assunto.
                   </p>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -524,7 +582,7 @@ export default function AdminRelatoriosPage() {
                     columns={[
                       {
                         key: 'label',
-                        header: 'Prestador',
+                        header: 'Assunto',
                         render: row => <span className="font-medium text-foreground">{row.label}</span>,
                       },
                       { key: 'count', header: 'Atendimentos', render: row => row.count },
@@ -586,22 +644,6 @@ export default function AdminRelatoriosPage() {
             </TabsContent>
           </Tabs>
 
-          <Card className="border-sky-100 bg-sky-50/60 shadow-none">
-            <CardContent className="flex flex-wrap items-center gap-4">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-sky-500 shadow-sm">
-                <BarChart3 className="h-5 w-5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-foreground">Precisa de um relatório específico?</p>
-                <p className="text-sm text-muted-foreground">
-                  Fale com nossa equipe e configure relatórios personalizados para a sua operação.
-                </p>
-              </div>
-              <Button variant="outline" className="bg-card">
-                Solicitar relatório personalizado →
-              </Button>
-            </CardContent>
-          </Card>
         </div>
 
         <div className="space-y-5 xl:col-span-4">
@@ -616,6 +658,7 @@ export default function AdminRelatoriosPage() {
                   <button
                     key={report.name}
                     type="button"
+                    onClick={() => setTab(report.tab)}
                     className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-muted"
                   >
                     <span
@@ -639,10 +682,6 @@ export default function AdminRelatoriosPage() {
             </CardContent>
           </Card>
 
-          <Button variant="outline" className="h-12 w-full gap-2 border-primary/30 text-primary">
-            <CalendarClock className="h-4 w-4" />
-            Agendar envio de relatórios
-          </Button>
         </div>
       </div>
     </div>
@@ -667,12 +706,15 @@ function DonutCard({
   centerLabel,
   data,
   formatItem,
+  empty,
 }: {
   title: string
   centerValue: string
   centerLabel: string
   data: { name: string; value: number; color: string; share: number }[]
   formatItem: (item: { share: number }) => string
+  /** Mensagem no lugar do gráfico quando não há fatia nenhuma. */
+  empty: string
 }) {
   return (
     <Card className="shadow-sm">
@@ -680,6 +722,11 @@ function DonutCard({
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent>
+        {data.length === 0 ? (
+          <p className="flex h-40 items-center justify-center px-4 text-center text-sm text-muted-foreground">
+            {empty}
+          </p>
+        ) : (
         <div className="flex items-center gap-3">
           <div className="relative h-40 flex-1">
             <ResponsiveContainer width="100%" height="100%">
@@ -719,6 +766,7 @@ function DonutCard({
             ))}
           </ul>
         </div>
+        )}
       </CardContent>
     </Card>
   )

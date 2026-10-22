@@ -73,6 +73,19 @@ export const tenantUserClientProfile = z.object({
 })
 export type TenantUserClientProfile = z.infer<typeof tenantUserClientProfile>
 
+/**
+ * Situação do vínculo da pessoa com o clube (`member.access_status`):
+ *  - `active`: acesso normal;
+ *  - `removed`: excluído pelo clube (ou desativado). Associado que volta pelo
+ *    site (Google, CPF + e-mail, senha) tem o MESMO cadastro reativado e
+ *    precisa assinar um plano de novo; equipe só volta reativada pelo admin;
+ *  - `blocked`: bloqueado pelo clube — não entra nem se cadastra de novo com
+ *    este e-mail neste clube até ser desbloqueado.
+ * `active` (booleano) é derivado: `accessStatus === 'active'`.
+ */
+export const memberAccessStatus = z.enum(['active', 'removed', 'blocked'])
+export type MemberAccessStatus = z.infer<typeof memberAccessStatus>
+
 /** Usuário de um inquilino (admin, vendedor ou cliente). */
 export const tenantUser = z.object({
   id: uuid,
@@ -83,7 +96,20 @@ export const tenantUser = z.object({
   phone: z.string().nullable(),
   avatarUrl: z.string().url().nullable(),
   active: z.boolean(),
+  /** Situação do vínculo; `active === (accessStatus === 'active')`. */
+  accessStatus: memberAccessStatus.optional(),
   createdAt: z.string().datetime(),
+  /**
+   * Último login conhecido NESTE inquilino (sessão mais recente aberta pela
+   * própria pessoa — impersonação da equipe Annetec não conta). `null` quando
+   * não há sessão registrada: sessões expiradas/encerradas são apagadas pelo
+   * Better Auth, então "nunca entrou" e "entrou há muito tempo" se confundem.
+   */
+  lastLoginAt: z.string().datetime().nullable().optional(),
+  /** `User-Agent` dessa mesma sessão (a tela resume em navegador/app). */
+  lastLoginUserAgent: z.string().nullable().optional(),
+  /** Conta bloqueada pela plataforma (plugin `admin` do Better Auth), em todo inquilino. */
+  banned: z.boolean().optional(),
   /** Só populado para `role: 'seller'` — código do produtor vinculado na Digital Saúde. */
   upstreamProdutorCodigo: z.string().nullable().optional(),
   /**
@@ -113,12 +139,17 @@ export const createTenantUserInput = tenantUser
     createdAt: true,
     avatarUrl: true,
     active: true,
+    accessStatus: true,
     upstreamProdutorCodigo: true,
     sellerProfile: true,
     clientProfile: true,
+    lastLoginAt: true,
+    lastLoginUserAgent: true,
+    banned: true,
   })
   .extend({
-    password: z.string().min(8).optional(),
+    // Sem `password`: a senha provisória é gerada no SERVIDOR e vai só por
+    // e-mail ao próprio usuário — quem cadastra nunca a vê nem a escolhe.
     active: z.boolean().default(true),
     /**
      * Só faz sentido com `role: 'client'` — é o CPF do associado, que vai
@@ -134,6 +165,17 @@ export const updateTenantUserInput = createTenantUserInput.partial()
 export type UpdateTenantUserInput = z.infer<typeof updateTenantUserInput>
 
 /**
+ * Resposta de `POST /t/:slug/usuarios/:id/redefinir-senha`. A senha nova NÃO
+ * vem aqui: ela só existe no e-mail enviado ao próprio usuário.
+ */
+export const tenantUserPasswordResetResult = z.object({
+  email,
+  /** Situação do envio (`simulated` = só na caixa de saída, ambiente sem provedor). */
+  emailStatus: z.enum(['simulated', 'queued', 'sent', 'failed']),
+})
+export type TenantUserPasswordResetResult = z.infer<typeof tenantUserPasswordResetResult>
+
+/**
  * Redefinição de senha de um usuário de inquilino pela equipe Annetec.
  *
  * Sem senha atual de propósito: é um reset administrativo, não uma troca do
@@ -145,6 +187,87 @@ export const resetTenantUserPasswordInput = z.object({
   password: z.string().min(8).optional(),
 })
 export type ResetTenantUserPasswordInput = z.infer<typeof resetTenantUserPasswordInput>
+
+// ---------------------------------------------------------------------------
+// Gestão de acessos do clube pela equipe da plataforma
+// (`/api/v1/platform/tenants/:id/usuarios` e `/responsaveis`)
+// ---------------------------------------------------------------------------
+
+/**
+ * O que acontece se a equipe clicar em "Remover do clube":
+ *  - `delete_account`: era o único vínculo da pessoa → a conta é excluída;
+ *  - `remove_membership`: a pessoa tem outro vínculo (ou é da equipe da
+ *    plataforma) → só o vínculo com ESTE clube sai;
+ *  - `blocked`: há histórico que a exclusão quebraria (vendas como vendedor,
+ *    assinatura do clube) → a remoção só desativa o acesso.
+ */
+export const tenantMemberRemoval = z.enum(['delete_account', 'remove_membership', 'blocked'])
+export type TenantMemberRemoval = z.infer<typeof tenantMemberRemoval>
+
+/** Conta de um clube na visão da plataforma (aba Acessos). */
+export const tenantMemberSummary = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+  phone: z.string().nullable(),
+  role: tenantRole,
+  active: z.boolean(),
+  createdAt: z.string(),
+  /** Login mais recente NESTE clube (trilha de login ou sessão aberta). */
+  lastLoginAt: z.string().nullable(),
+  /** Conta da equipe da plataforma vinculada ao clube (nunca é excluída daqui). */
+  platformStaff: z.boolean(),
+  /** Vínculos com OUTROS clubes. */
+  otherMemberships: z.number().int().nonnegative(),
+  removal: tenantMemberRemoval,
+  /** Motivo quando `removal` é `blocked`. */
+  removalBlockedReason: z.string().nullable(),
+})
+export type TenantMemberSummary = z.infer<typeof tenantMemberSummary>
+
+/** Resposta de `GET /platform/tenants/:id/usuarios`. */
+export const tenantMemberList = z.object({
+  items: z.array(tenantMemberSummary),
+  /** Responsáveis (admin) ativos que não são da equipe da plataforma. */
+  activeAdmins: z.number().int().nonnegative(),
+})
+export type TenantMemberList = z.infer<typeof tenantMemberList>
+
+/** `POST /platform/tenants/:id/responsaveis` — senha gerada no servidor, só por e-mail. */
+export const addTenantResponsibleInput = z.object({
+  name: z.string().trim().min(2, 'Informe o nome'),
+  email,
+})
+export type AddTenantResponsibleInput = z.infer<typeof addTenantResponsibleInput>
+
+export const addTenantResponsibleResult = z.object({
+  member: tenantMemberSummary,
+  /** `true` quando a conta foi criada agora (o convite leva senha provisória). */
+  accountCreated: z.boolean(),
+  emailStatus: z.enum(['simulated', 'queued', 'sent', 'failed']),
+})
+export type AddTenantResponsibleResult = z.infer<typeof addTenantResponsibleResult>
+
+/** `PATCH /platform/tenants/:id/usuarios/:userId/acesso`. */
+export const setTenantMemberAccessInput = z.object({ active: z.boolean() })
+export type SetTenantMemberAccessInput = z.infer<typeof setTenantMemberAccessInput>
+
+export const setTenantMemberAccessResult = z.object({
+  userId: z.string(),
+  active: z.boolean(),
+  revokedSessions: z.number().int().nonnegative(),
+})
+export type SetTenantMemberAccessResult = z.infer<typeof setTenantMemberAccessResult>
+
+/** `DELETE /platform/tenants/:id/usuarios/:userId`. */
+export const removeTenantMemberResult = z.object({
+  userId: z.string(),
+  email: z.string(),
+  /** `true` quando a conta inteira foi excluída (era o último vínculo). */
+  accountDeleted: z.boolean(),
+  revokedSessions: z.number().int().nonnegative(),
+})
+export type RemoveTenantMemberResult = z.infer<typeof removeTenantMemberResult>
 
 /** Perfil comercial de um usuário com papel `seller`. */
 export const sellerProfile = z.object({

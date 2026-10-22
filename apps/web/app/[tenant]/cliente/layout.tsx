@@ -1,5 +1,7 @@
 import { ProtectedRoute } from '@/components/protected-route'
-import { ClientSidebar } from '@/components/client/client-sidebar'
+import { ClubMembershipProvider } from '@/components/client/club-membership-provider'
+import { ClientPortalChrome } from '@/components/client/client-portal-chrome'
+import { ClientSubscriptionGate } from '@/components/client/subscription-access'
 
 export default function ClientLayout({
   children,
@@ -8,14 +10,13 @@ export default function ClientLayout({
 }) {
   return (
     <ProtectedRoute allowedRoles={['client']}>
-      <div className="min-h-screen bg-muted/30">
-        <ClientSidebar />
-        <main className="lg:pl-64 pt-16 lg:pt-0 min-h-screen">
-          <div className="p-4 lg:p-6">
-            {children}
-          </div>
-        </main>
-      </div>
+      {/* Assinatura do Clube lida uma vez para o portal inteiro (menu + telas). */}
+      <ClubMembershipProvider>
+        {/* Sem assinatura: tudo leva ao onboarding `/cliente/assinar` (tela cheia, sem o menu). */}
+        <ClientSubscriptionGate>
+          <ClientPortalChrome>{children}</ClientPortalChrome>
+        </ClientSubscriptionGate>
+      </ClubMembershipProvider>
     </ProtectedRoute>
   )
 }

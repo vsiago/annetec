@@ -45,7 +45,9 @@ import {
 } from '@/lib/adapters/painel'
 import {
   createTenantUserAction,
+  blockTenantUserAction,
   deactivateTenantUserAction,
+  unblockTenantUserAction,
   listTenantUsersAction,
   updateTenantUserAction,
 } from '@/lib/actions/tenant-users-api'
@@ -121,7 +123,16 @@ interface TenantDataContextType {
 
   createUser: (input: CreateTenantUserInput) => Promise<Resultado>
   updateUser: (id: string, patch: Partial<TenantUser>) => Promise<Resultado>
+  /**
+   * "Excluir cadastro": associado tem a assinatura cancelada e o vínculo vira
+   * `removed` (pode voltar pelo site); equipe é desativada. A linha CONTINUA
+   * na lista, com a situação nova — as telas filtram por situação.
+   */
   deleteUser: (id: string) => Promise<Resultado>
+  /** Bloqueia o acesso (não entra nem se cadastra de novo com o e-mail neste clube). */
+  blockUser: (id: string) => Promise<Resultado>
+  /** Desfaz o bloqueio: associado volta para `removed`, equipe para `active`. */
+  unblockUser: (id: string) => Promise<Resultado>
 
   createBenefit: (input: Omit<Benefit, 'id' | 'tenantId'>) => Promise<void>
   updateBenefit: (id: string, patch: Partial<Benefit>) => Promise<void>
@@ -150,25 +161,47 @@ interface TenantDataContextType {
     message: Omit<AppointmentMessage, 'id' | 'at'>,
   ) => Promise<void>
 
+  /**
+   * Planos do clube. As três REJEITAM com `Error(mensagem da API)` quando a
+   * gravação falha — antes a falha era engolida e a tela dizia "salvo" sobre
+   * um plano que não mudou. Quem chama trata com try/catch + toast.
+   */
   createClientPlan: (input: Omit<ClientPlan, 'id' | 'tenantId'>) => Promise<void>
   updateClientPlan: (id: string, patch: Partial<ClientPlan>) => Promise<void>
   deleteClientPlan: (id: string) => Promise<void>
+  /**
+   * Rebusca só a lista de planos (sem o `isLoading` global que desmonta as
+   * telas). Usada por Produtos e Planos depois de gravar pela action própria,
+   * para Cadastros, Faturamento e o portal do vendedor verem o plano novo.
+   * Não rejeita: lista desatualizada não desfaz uma gravação que deu certo.
+   */
+  reloadClientPlans: () => Promise<void>
+  /**
+   * Rebusca só a lista de usuários, sem o `isLoading` global. Usada pelo sino
+   * quando chega um cadastro novo: o "Ver detalhes" abre `clientes/<id>`, que
+   * procura a pessoa nesta lista.
+   */
+  reloadUsers: () => Promise<void>
 }
 
 type Resultado = { success: boolean; error?: string }
 
 /**
- * O que as telas passam para `createUser`. Continua sendo o objeto inteiro do
- * painel mais a senha — `usuarioParaApiCriacao` extrai o que a API grava e
- * descarta `id`/`tenantId`/`createdAt`, que quem gera é o servidor.
+ * O que as telas passam para `createUser`: só o que a API grava. Id, datas,
+ * carteirinha e SENHA nascem no servidor — a senha provisória vai por e-mail
+ * ao próprio usuário (associado não tem senha: entra por CPF/Google).
  */
-export type CreateTenantUserInput = TenantUser & { password: string }
+export type CreateTenantUserInput = Pick<User, 'name' | 'email' | 'role'> & {
+  phone?: string
+  /** Só associado. */
+  cpf?: string
+}
 
 const TenantDataContext = createContext<TenantDataContextType | undefined>(undefined)
 
 export function TenantDataProvider({ children }: { children: ReactNode }) {
   const { tenant } = useTenant()
-  const { user: sessao, isLoading: carregandoSessao } = useAuth()
+  const { user: sessao, isLoading: carregandoSessao, endSession } = useAuth()
 
   const slug = tenant?.slug ?? ''
   const papel = sessao?.role ?? null
@@ -198,6 +231,14 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
       papel ? listOperatorPartnersAction(slug) : listPublicPartnersAction(slug),
       papel ? listOperatorBenefitsAction(slug) : listPublicBenefitsAction(slug),
     ])
+    // 401 = a sessão caiu no servidor (vínculo desativado, sessões
+    // derrubadas). Para aqui: o AuthProvider limpa o cookie e o
+    // ProtectedRoute leva ao login com o aviso — sem tela meio carregada.
+    if (sessaoCaiu(parceiros, beneficios)) {
+      setIsLoading(false)
+      void endSession()
+      return
+    }
     if (parceiros.success) setPartners(parceiros.data.map(parceiroDaApi))
     if (beneficios.success) setBenefits(beneficios.data.map(beneficioDaApi))
 
@@ -207,6 +248,11 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
         listOperatorSalesAction(slug),
         listOperatorSalesGoalsAction(slug, anoCorrente()),
       ])
+      if (sessaoCaiu(listaLeads, listaVendas, listaMetas)) {
+        setIsLoading(false)
+        void endSession()
+        return
+      }
       if (listaLeads.success) setLeads(listaLeads.data.map(leadDaApi))
       if (listaVendas.success) setSales(listaVendas.data.map(vendaDaApi))
       if (listaMetas.success) setSalesGoals(listaMetas.data.map(metaDaApi))
@@ -218,6 +264,11 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
 
     if (leUsuarios) {
       const listaUsuarios = await listTenantUsersAction(slug)
+      if (sessaoCaiu(listaUsuarios)) {
+        setIsLoading(false)
+        void endSession()
+        return
+      }
       if (listaUsuarios.success) setUsers(listaUsuarios.data)
     } else {
       // Vendedor e associado não enxergam a lista de usuários do inquilino —
@@ -240,7 +291,7 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
     }
 
     setIsLoading(false)
-  }, [slug, papel, leCrm, leUsuarios])
+  }, [slug, papel, leCrm, leUsuarios, endSession])
 
   useEffect(() => {
     // Enquanto a sessão não resolveu não dá para saber o que buscar: disparar
@@ -248,6 +299,19 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
     if (carregandoSessao) return
     refresh()
   }, [carregandoSessao, refresh])
+
+  const reloadClientPlans = useCallback(async () => {
+    if (!slug || !papel) return
+    const planos = await listOperatorClubPlansAction(slug)
+    if (planos.success) setClientPlans(planos.data.map(planoDaApi))
+    else console.warn('[planos] não foi possível atualizar a lista de planos:', planos.error)
+  }, [slug, papel])
+
+  const reloadUsers = useCallback(async () => {
+    if (!slug || !leUsuarios) return
+    const lista = await listTenantUsersAction(slug)
+    if (lista.success) setUsers(lista.data)
+  }, [slug, leUsuarios])
 
   /**
    * Toda mutação aplica o resultado direto no estado da coleção que mudou,
@@ -316,11 +380,32 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
       return { success: true }
     },
 
-    /** Desativa o vínculo; a conta continua existindo e assinando o histórico. */
+    /** Exclui o vínculo; a conta continua existindo e assinando o histórico. */
     deleteUser: async id => {
       const result = await deactivateTenantUserAction(slug, id)
       if (!result.success) return { success: false, error: result.error }
-      setUsers(prev => prev.filter(item => item.id !== id))
+      const atualizado = result.data
+      setUsers(prev =>
+        atualizado
+          ? upsert(prev, atualizado)
+          : prev.map(item =>
+              item.id === id ? { ...item, active: false, accessStatus: 'removed' as const } : item,
+            ),
+      )
+      return { success: true }
+    },
+
+    blockUser: async id => {
+      const result = await blockTenantUserAction(slug, id)
+      if (!result.success) return { success: false, error: result.error }
+      setUsers(prev => upsert(prev, result.data))
+      return { success: true }
+    },
+
+    unblockUser: async id => {
+      const result = await unblockTenantUserAction(slug, id)
+      if (!result.success) return { success: false, error: result.error }
+      setUsers(prev => upsert(prev, result.data))
       return { success: true }
     },
 
@@ -418,19 +503,31 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
 
     createClientPlan: async input => {
       const result = await createOperatorClubPlanAction(slug, planoParaApiCriacao(input))
-      if (result.success) setClientPlans(prev => upsert(prev, planoDaApi(result.data)))
+      if (!result.success) throw new Error(result.error)
+      setClientPlans(prev => upsert(prev, planoDaApi(result.data)))
     },
     updateClientPlan: async (id, patch) => {
       const result = await updateOperatorClubPlanAction(slug, id, planoParaApi(patch))
-      if (result.success) setClientPlans(prev => upsert(prev, planoDaApi(result.data)))
+      if (!result.success) throw new Error(result.error)
+      setClientPlans(prev => upsert(prev, planoDaApi(result.data)))
     },
     deleteClientPlan: async id => {
       const result = await deleteOperatorClubPlanAction(slug, id)
-      if (result.success) setClientPlans(prev => prev.filter(item => item.id !== id))
+      if (!result.success) throw new Error(result.error)
+      setClientPlans(prev => prev.filter(item => item.id !== id))
     },
+    reloadClientPlans,
+    reloadUsers,
   }
 
   return <TenantDataContext.Provider value={value}>{children}</TenantDataContext.Provider>
+}
+
+/** Alguma das leituras voltou 401 — a sessão não vale mais no servidor. */
+function sessaoCaiu(...resultados: { success: boolean }[]): boolean {
+  return resultados.some(
+    resultado => !resultado.success && (resultado as { unauthorized?: true }).unauthorized === true,
+  )
 }
 
 /** Metas são listadas por ano; o painel sempre abre no corrente. */

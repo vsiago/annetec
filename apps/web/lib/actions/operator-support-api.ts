@@ -21,7 +21,6 @@ import { run, type ActionResult } from './_api-result'
  * O recorte de quem vê o quê é do servidor: admin e vendedor recebem a fila
  * do inquilino, o associado só os chamados dele.
  */
-export type { ActionResult }
 
 export async function listOperatorAppointmentsAction(
   tenantSlug: string,

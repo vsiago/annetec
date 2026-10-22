@@ -1,220 +1,34 @@
 'use client'
 
-import Link from 'next/link'
-import { motion } from 'framer-motion'
-import { useTenant } from '@/contexts/tenant-context'
-import { useTenantData } from '@/contexts/tenant-data-context'
-import { Button } from '@/components/ui/button'
-import {
-  Stethoscope,
-  Smile,
-  Pill,
-  Shield,
-  Percent,
-  Gift,
-  Phone,
-  ShieldCheck,
-  ArrowRight,
-  CreditCard,
-  CheckCircle2,
-} from 'lucide-react'
-import { DigitalCardMockup } from '@/components/digital-card-mockup'
+import { BenefitsGrid, SavingsSimulator } from '@/components/site/benefits'
+import { Hero } from '@/components/site/hero'
+import { NetworkPreview } from '@/components/site/network'
+import { PlansSection } from '@/components/site/plans'
+import { SiteShell } from '@/components/site/site-shell'
+import { FaqSection, Testimonials } from '@/components/site/trust'
+import { FinalCta, Guarantees, HowItWorks, PainSolution, SocialProofBar } from '@/components/site/value-sections'
 
-const categoryIcons: Record<string, React.ElementType> = {
-  health: Stethoscope,
-  dental: Smile,
-  pharmacy: Pill,
-  funeral: Shield,
-  discount: Percent,
-}
-
+/**
+ * Vitrine do inquilino: a página de venda do clube. A ordem das seções segue
+ * o funil — dor, solução, prova, oferta, garantia e CTA — e todo número
+ * exibido vem dos dados do próprio inquilino. Os fundos alternam branco e
+ * suave para cada seção se destacar da anterior.
+ */
 export default function TenantLandingPage() {
-  const { tenant } = useTenant()
-  const { benefits, partners, isLoading } = useTenantData()
-
-  if (!tenant) return null
-
   return (
-    <main className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="h-20 flex items-center justify-between px-6 lg:px-12 border-b border-border">
-        {tenant.branding.logoUrl ? (
-          <img src={tenant.branding.logoUrl} alt={tenant.name} className="h-11 object-contain" />
-        ) : (
-          <span className="font-bold text-secondary text-xl">{tenant.name}</span>
-        )}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" className="text-secondary" asChild>
-            <Link href={`/${tenant.slug}/login`}>Entrar</Link>
-          </Button>
-          <Button className="bg-primary hover:opacity-90 text-white" asChild>
-            <Link href={`/${tenant.slug}/cadastro`}>Quero me associar</Link>
-          </Button>
-        </div>
-      </header>
-
-      {/* Hero */}
-      <section className="pt-16 pb-20 lg:pt-24 lg:pb-32 bg-gradient-to-b from-white to-[#f0f4f9]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full text-primary text-sm font-medium mb-6">
-              <ShieldCheck size={16} />
-              Clube de Benefícios {tenant.name}
-            </div>
-            <h1 className="text-3xl sm:text-4xl lg:text-6xl font-bold text-secondary mb-6 text-balance">
-              Saúde, bem-estar e descontos <span className="text-primary">em um só lugar</span>
-            </h1>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10">
-              {tenant.name} reúne teleorientação, rede de parceiros credenciados e descontos exclusivos
-              para você e sua família, com uma carteirinha digital sempre à mão.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-4">
-              <Button size="lg" className="bg-primary hover:opacity-90 text-white h-14 px-8" asChild>
-                <Link href={`/${tenant.slug}/cadastro`}>
-                  Quero me associar
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Link>
-              </Button>
-              <Button size="lg" variant="outline" className="h-14 px-8" asChild>
-                <Link href={`/${tenant.slug}/login`}>Já sou associado</Link>
-              </Button>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Carteirinha Digital Showcase */}
-      <section className="py-16 bg-white overflow-hidden border-y border-border/40">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-4">
-                <CreditCard className="w-4 h-4" />
-                <span>Carteirinha Digital Instantânea</span>
-              </div>
-              <h2 className="text-3xl sm:text-4xl font-bold text-secondary mb-4 leading-tight">
-                Sua carteirinha oficial <span className="text-primary">sempre no celular</span>
-              </h2>
-              <p className="text-muted-foreground text-base mb-6 leading-relaxed">
-                Ao se associar ao {tenant.name}, você recebe imediatamente sua carteirinha digital com QR Code e tecnologia para apresentar em toda a rede credenciada.
-              </p>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-3 text-sm text-secondary font-medium">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                  <span>Acesso imediato sem necessidade de esperar cartão físico</span>
-                </li>
-                <li className="flex items-center gap-3 text-sm text-secondary font-medium">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                  <span>QR Code para validação rápida em consultas, exames e farmácias</span>
-                </li>
-                <li className="flex items-center gap-3 text-sm text-secondary font-medium">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                  <span>Inclusão e controle completo de dependentes</span>
-                </li>
-              </ul>
-              <Button size="lg" className="bg-primary hover:opacity-90 text-white" asChild>
-                <Link href={`/${tenant.slug}/cadastro`}>
-                  Garantir Minha Carteirinha
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Link>
-              </Button>
-            </div>
-
-            <div className="flex justify-center">
-              <DigitalCardMockup
-                tenant={tenant}
-                clientName="Mariana Alves Costa"
-                cardNumber={`${tenant.slug.toUpperCase().slice(0, 3)}-2024-88901`}
-                planName={`${tenant.name} Família`}
-                cpf="234.567.890-11"
-                dependentsCount={2}
-                size="md"
-                interactive={true}
-                showFlip={true}
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Benefits */}
-      <section className="py-20 lg:py-28">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl font-bold text-secondary mb-3">Benefícios do plano</h2>
-            <p className="text-muted-foreground">Tudo que você precisa para cuidar de quem ama</p>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {benefits.map(benefit => {
-              const Icon = categoryIcons[benefit.category] || Gift
-              return (
-                <div key={benefit.id} className="p-6 rounded-2xl border border-border hover:border-primary/30 hover:shadow-md transition-all">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                    <Icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="font-semibold text-secondary mb-2">{benefit.name}</h3>
-                  <p className="text-sm text-muted-foreground">{benefit.description}</p>
-                </div>
-              )
-            })}
-            {!isLoading && benefits.length === 0 && (
-              <p className="text-muted-foreground col-span-full text-center">
-                Nenhum benefício cadastrado ainda.
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Partner network */}
-      {partners.length > 0 && (
-        <section className="py-20 lg:py-28 bg-[#f8fafc]">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-              <h2 className="text-2xl sm:text-3xl font-bold text-secondary mb-3">Rede de parceiros credenciados</h2>
-              <p className="text-muted-foreground">Descontos exclusivos para associados {tenant.name}</p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {partners.filter(p => p.status === 'active').map(partner => (
-                <div key={partner.id} className="p-5 rounded-xl bg-white border border-border text-center">
-                  <p className="font-semibold text-secondary">{partner.name}</p>
-                  <p className="text-2xl font-bold text-primary mt-1">{partner.discountPercent}%</p>
-                  <p className="text-xs text-muted-foreground">de desconto</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Support */}
-      <section className="py-16">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="rounded-2xl bg-gradient-to-r from-secondary to-primary p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-full bg-white/10">
-                <Phone className="h-7 w-7" />
-              </div>
-              <div>
-                <p className="font-bold text-lg">Teleorientação 24h</p>
-                <p className="text-white/80 text-sm">Orientação médica gratuita para associados</p>
-              </div>
-            </div>
-            <p className="text-2xl font-bold">{tenant.phone}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-10 border-t border-border">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4" />
-            {tenant.legalName} — {tenant.document}
-          </div>
-          <p>&copy; {new Date().getFullYear()} {tenant.name}. Todos os direitos reservados.</p>
-        </div>
-      </footer>
-    </main>
+    <SiteShell>
+      <Hero />
+      <SocialProofBar />
+      <PainSolution />
+      <HowItWorks tone="soft" />
+      <BenefitsGrid />
+      <SavingsSimulator />
+      <PlansSection tone="white" />
+      <NetworkPreview tone="soft" />
+      <Testimonials tone="white" />
+      <Guarantees tone="soft" />
+      <FaqSection tone="white" />
+      <FinalCta />
+    </SiteShell>
   )
 }

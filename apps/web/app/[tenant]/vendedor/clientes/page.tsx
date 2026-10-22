@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useTenant } from '@/contexts/tenant-context'
 import { useTenantData, getClientsBySellerId, getSalesBySellerId } from '@/contexts/tenant-data-context'
 import { getInitials } from '@/lib/utils'
-import type { Client, Seller, Dependent } from '@/lib/types'
+import type { Client, Seller } from '@/lib/types'
 import { DigitalCardMockup } from '@/components/digital-card-mockup'
 import {
   Search,
@@ -56,7 +56,7 @@ export default function VendedorClientesPage() {
   const { user } = useAuth()
   const { tenant } = useTenant()
   const seller = user as Seller
-  const { users, sales: allSales, clientPlans, createUser, updateUser } = useTenantData()
+  const { users, sales: allSales, createUser, updateUser } = useTenantData()
 
   /**
    * A situação do plano vem da adesão (contrato na Digital Saúde ou venda no
@@ -91,14 +91,6 @@ export default function VendedorClientesPage() {
   const [newEmail, setNewEmail] = useState('')
   const [newPhone, setNewPhone] = useState('')
   const [newCPF, setNewCPF] = useState('')
-  const [newPlan, setNewPlan] = useState('')
-  const [newStatus, setNewStatus] = useState<'active' | 'pending'>('active')
-  const [newDependentsText, setNewDependentsText] = useState('')
-
-  // Default the plan select to the tenant's first catalog entry once plans load.
-  useEffect(() => {
-    if (!newPlan && clientPlans.length > 0) setNewPlan(clientPlans[0].name)
-  }, [clientPlans, newPlan])
 
   const getStatusBadge = (status: Client['planStatus']) => {
     switch (status) {
@@ -129,44 +121,32 @@ export default function VendedorClientesPage() {
   // Handle adding client
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newName || !newEmail || !newCPF || !newPlan || !tenant || !seller) {
-      alert('Por favor, preencha todos os campos obrigatórios.')
+    if (!newName || !newEmail || !newCPF || !tenant || !seller) {
+      toast.error('Preencha nome, e-mail e CPF.')
       return
     }
 
-    const dependentsList: Dependent[] = newDependentsText
-      ? newDependentsText.split(',').map((name, index) => ({
-          id: `dep-new-${Date.now()}-${index}`,
-          name: name.trim(),
-          cpf: '---.---.---- --',
-          relationship: 'Dependente',
-          birthDate: new Date()
-        }))
-      : []
-
+    // Só a conta e o CPF nascem aqui: telefone vazio fica vazio; carteirinha,
+    // situação e dependentes vêm da adesão (a carteirinha é emitida na
+    // confirmação do pagamento) e senha o associado não tem.
     const result = await createUser({
-      id: '',
-      tenantId: tenant.id,
       name: newName,
       email: newEmail,
-      phone: newPhone || '(11) 99999-9999',
+      phone: newPhone.trim() || undefined,
       role: 'client',
       cpf: newCPF,
-      plan: newPlan,
-      planStatus: newStatus,
-      contractDate: new Date(),
-      cardNumber: `ANN-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
-      sellerId: seller.id,
-      dependents: dependentsList,
-      createdAt: new Date(),
-      password: 'trocar123',
     })
 
     if (!result.success) {
-      alert(result.error || 'Não foi possível cadastrar o cliente')
+      toast.error('Cliente não cadastrado', {
+        description: result.error || 'Não foi possível cadastrar o cliente.',
+      })
       return
     }
 
+    toast.success('Cliente cadastrado', {
+      description: `${newName} recebeu as boas-vindas do clube por e-mail. Plano e carteirinha nascem da adesão.`,
+    })
     setIsAddOpen(false)
 
     // Clear inputs
@@ -174,9 +154,6 @@ export default function VendedorClientesPage() {
     setNewEmail('')
     setNewPhone('')
     setNewCPF('')
-    setNewPlan(clientPlans[0]?.name ?? '')
-    setNewStatus('active')
-    setNewDependentsText('')
   }
 
   // Stats calculation
@@ -340,7 +317,7 @@ export default function VendedorClientesPage() {
                         </Avatar>
                         <div>
                           <p className="font-medium">{client.name}</p>
-                          <p className="text-sm text-muted-foreground">{client.cpf}</p>
+                          <p className="text-sm text-muted-foreground">{client.cpf || '—'}</p>
                         </div>
                       </div>
                     </td>
@@ -352,7 +329,7 @@ export default function VendedorClientesPage() {
                         </div>
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Phone className="h-3.5 w-3.5 shrink-0" />
-                          {client.phone}
+                          {client.phone || '—'}
                         </div>
                       </div>
                     </td>
@@ -368,7 +345,7 @@ export default function VendedorClientesPage() {
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 text-sm">
                         <CreditCard className="h-4 w-4 text-secondary shrink-0" />
-                        <span className="font-mono">{client.cardNumber}</span>
+                        <span className="font-mono">{client.cardNumber || '—'}</span>
                       </div>
                     </td>
                     <td className="py-4 px-6">
@@ -394,11 +371,23 @@ export default function VendedorClientesPage() {
                           }}>
                             Ver Detalhes
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => {
-                            alert(`Enviando mensagem para ${client.phone}`)
-                          }}>
-                            Enviar Mensagem
-                          </DropdownMenuItem>
+                          {client.phone ? (
+                            <DropdownMenuItem asChild>
+                              <a
+                                href={`https://wa.me/55${client.phone.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Enviar Mensagem
+                              </a>
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => toast.info('Cliente sem telefone cadastrado')}
+                            >
+                              Enviar Mensagem
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onClick={() => alternarSituacao(client)}>
                             Alternar Status
                           </DropdownMenuItem>
@@ -468,47 +457,10 @@ export default function VendedorClientesPage() {
                   onChange={e => setNewCPF(e.target.value)}
                 />
               </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Plano *</label>
-                {clientPlans.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Nenhum plano cadastrado. Peça ao administrador para criar um em Planos.
-                  </p>
-                ) : (
-                  <Select value={newPlan} onValueChange={setNewPlan}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o plano" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clientPlans.map(plan => (
-                        <SelectItem key={plan.id} value={plan.name}>
-                          {plan.name} — R$ {plan.priceMonthly.toLocaleString('pt-BR')}/mês
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Status Inicial</label>
-                <Select value={newStatus} onValueChange={v => setNewStatus(v as any)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Status inicial" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Ativo (Confirmado)</SelectItem>
-                    <SelectItem value="pending">Pendente (Aguardando liberação)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Dependentes (separados por vírgula)</label>
-                <Input
-                  placeholder="Ex: Pedro Silva, Maria Silva"
-                  value={newDependentsText}
-                  onChange={e => setNewDependentsText(e.target.value)}
-                />
-              </div>
+              <p className="text-xs text-muted-foreground">
+                Plano, situação, carteirinha e dependentes nascem da adesão (venda): a carteirinha é
+                emitida quando o pagamento é confirmado.
+              </p>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
@@ -548,7 +500,7 @@ export default function VendedorClientesPage() {
                 <div className="grid grid-cols-2 gap-4 border-b border-border pb-3">
                   <div>
                     <span className="text-xs text-muted-foreground block">CPF</span>
-                    <span className="font-medium">{selectedClient.cpf}</span>
+                    <span className="font-medium">{selectedClient.cpf || '—'}</span>
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block">Status do Plano</span>
@@ -563,7 +515,7 @@ export default function VendedorClientesPage() {
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block">Telefone</span>
-                    <span className="font-medium">{selectedClient.phone}</span>
+                    <span className="font-medium">{selectedClient.phone || '—'}</span>
                   </div>
                 </div>
 
@@ -573,7 +525,7 @@ export default function VendedorClientesPage() {
                   <DigitalCardMockup
                     tenant={tenant}
                     clientName={selectedClient.name}
-                    cardNumber={selectedClient.cardNumber}
+                    cardNumber={selectedClient.cardNumber || '—'}
                     planName={selectedClient.plan}
                     cpf={selectedClient.cpf}
                     contractDate={selectedClient.contractDate}
@@ -591,7 +543,7 @@ export default function VendedorClientesPage() {
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground block">Número da Carteirinha</span>
-                    <span className="font-mono font-medium">{selectedClient.cardNumber}</span>
+                    <span className="font-mono font-medium">{selectedClient.cardNumber || '—'}</span>
                   </div>
                 </div>
 

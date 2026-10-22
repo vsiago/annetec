@@ -15,6 +15,17 @@ import {
 } from './schema'
 import { logger } from '@/lib/logger'
 
+// Trava de produção: seeds/scripts de demonstração gravam contas com senha
+// trivial e dados fictícios. Em produção só rodam com liberação explícita.
+// (Avaliado depois dos imports — `./client` só conecta na primeira query.)
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED_IN_PRODUCTION !== '1') {
+  console.error(
+    `[seed] Abortado: NODE_ENV=production. Este script não roda em produção.\n` +
+      'Se for mesmo intencional, rode de novo com ALLOW_SEED_IN_PRODUCTION=1.',
+  )
+  process.exit(1)
+}
+
 /**
  * Seed de desenvolvimento — `pnpm db:seed`.
  *

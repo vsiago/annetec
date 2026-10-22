@@ -20,7 +20,6 @@ import { run, type ActionResult } from './_api-result'
  * inquilino comum com o slug da operadora. Diferente de contratos/financeiro,
  * aqui não há upstream nenhum — é dado 100% Annetec.
  */
-export type { ActionResult }
 
 export async function listOperatorLeadsAction(
   tenantSlug: string,

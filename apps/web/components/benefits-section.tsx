@@ -16,7 +16,7 @@ const benefits = [
   {
     icon: Stethoscope,
     title: "Plano Odontológico Completo",
-    description: "Cobertura nacional por apenas R$ 19,90/mês por beneficiário",
+    description: "Cobertura nacional para o seu clube, com valores sob consulta",
     color: "#26365f",
     href: "#odonto",
   },

@@ -43,8 +43,52 @@ import {
 } from '@/components/ui/select'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useTenant } from '@/contexts/tenant-context'
+import { useClubMembership } from '@/components/client/club-membership-provider'
+import { MembershipDependents } from '@/components/client/membership-dependents'
+import { LoadErrorNotice } from '@/components/client/status-ui'
 
 export default function DependentesPage() {
+  const { tenant } = useTenant()
+  const { membership, isLoading, isRefreshing, error, refresh } = useClubMembership()
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6" aria-busy="true" aria-label="Carregando dependentes">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-44" />
+          <Skeleton className="h-4 w-72 max-w-full" />
+        </div>
+        <Skeleton className="h-28 w-full rounded-xl" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Skeleton className="h-44 w-full rounded-xl" />
+          <Skeleton className="h-44 w-full rounded-xl" />
+        </div>
+      </div>
+    )
+  }
+
+  // Assinante do Clube: dependentes da assinatura, cada um com a carteirinha.
+  if (membership) return <MembershipDependents membership={membership} tenant={tenant} />
+
+  // Sem assinatura do Clube: a tela de sempre.
+  return (
+    <div className="space-y-6">
+      {error && (
+        <LoadErrorNotice
+          title="Não conseguimos carregar sua assinatura do clube"
+          message={error}
+          onRetry={() => void refresh()}
+          retrying={isRefreshing}
+        />
+      )}
+      <LegacyDependentes />
+    </div>
+  )
+}
+
+function LegacyDependentes() {
   const { user } = useAuth()
   const client = user as Client
   const { updateUser } = useTenantData()

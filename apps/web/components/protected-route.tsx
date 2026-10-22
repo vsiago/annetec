@@ -2,8 +2,9 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth, getRedirectPath } from '@/contexts/auth-context'
+import { useAuth } from '@/contexts/auth-context'
 import { useTenant } from '@/contexts/tenant-context'
+import { getRoleRedirectPath, tenantLoginPath } from '@/lib/auth/redirect'
 import type { UserRole } from '@/lib/types'
 import { Loader2 } from 'lucide-react'
 
@@ -12,20 +13,28 @@ interface ProtectedRouteProps {
   allowedRoles: UserRole[]
 }
 
+/**
+ * Área logada do inquilino (painel, vendedor, portal do associado).
+ *
+ * Sem sessão, leva ao login. Se a sessão CAIU com a tela aberta (401 em
+ * qualquer leitura — ver `endSession` no AuthProvider), o login recebe
+ * `?motivo=sessao-encerrada` e avisa; e a área some na hora (`null`), sem
+ * deixar dado antigo na tela enquanto a navegação acontece.
+ */
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { tenant } = useTenant()
-  const { user, isLoading, isAuthenticated } = useAuth()
+  const { user, isLoading, isAuthenticated, sessionEnded } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
     if (!isLoading && tenant) {
       if (!isAuthenticated) {
-        router.push(`/${tenant.slug}/login`)
+        router.replace(tenantLoginPath(tenant.slug, { sessionEnded }))
       } else if (user && !allowedRoles.includes(user.role)) {
-        router.push(getRedirectPath(tenant.slug, user.role))
+        router.push(getRoleRedirectPath(tenant.slug, user.role, { needsSubscription: user.needsSubscription }))
       }
     }
-  }, [isLoading, isAuthenticated, user, allowedRoles, router, tenant])
+  }, [isLoading, isAuthenticated, user, allowedRoles, router, tenant, sessionEnded])
 
   if (isLoading || !tenant) {
     return (

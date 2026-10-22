@@ -18,7 +18,7 @@ import { invalidateDigitalSaudeClient } from '@/integrations/digitalsaude/provid
 import { encryptSecret } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
 import { getSessionByToken, setActiveOrganization } from '@/modules/auth/service'
-import { toSessionUser } from '@/modules/auth/presenter'
+import { presentSessionUser } from '@/modules/auth/presenter'
 
 /**
  * Ciclo de vida do inquilino — o fluxo que o superadmin percorre em
@@ -281,41 +281,6 @@ export const tenantsService = {
       .set({ lastCheckedAt: new Date(), lastCheckOk: ok })
       .where(eq(tenantIntegrations.organizationId, tenantId))
     return ok
-  },
-
-  /**
-   * Lista os usuários de um inquilino pela ótica da plataforma.
-   *
-   * As rotas de inquilino (`/t/:slug/usuarios`) já aceitam sessão de
-   * plataforma, mas a tela de gestão do inquilino é indexada por `id`, não
-   * por slug — e pedir o slug só para listar usuário obrigaria a tela a
-   * conhecer duas chaves da mesma coisa.
-   */
-  async listUsers(tenantId: string) {
-    const rows = await db
-      .select({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: member.role,
-        active: member.active,
-        createdAt: member.createdAt,
-      })
-      .from(member)
-      .innerJoin(user, eq(user.id, member.userId))
-      .where(eq(member.organizationId, tenantId))
-      .orderBy(member.createdAt)
-
-    return rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      email: row.email,
-      phone: row.phone ?? null,
-      role: row.role as 'admin' | 'seller' | 'client',
-      active: row.active,
-      createdAt: row.createdAt.toISOString(),
-    }))
   },
 
   /**
@@ -635,7 +600,7 @@ async function impersonar(tenantId: string, userId: string, headers: Headers): P
   logger.info({ tenantId, userId }, 'Impersonação iniciada pela equipe Annetec')
   return {
     token: session.token,
-    user: toSessionUser(resolved),
+    user: await presentSessionUser(resolved),
     role: vinculo.role as 'admin' | 'seller' | 'client',
     email: vinculo.email,
   }

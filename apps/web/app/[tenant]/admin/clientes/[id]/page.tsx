@@ -3,15 +3,11 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import type { ClubSubscription } from '@annetec/contracts'
 import {
   ArrowLeft,
   CalendarDays,
-  CalendarPlus,
-  ChevronDown,
   CircleCheckBig,
-  Download,
-  Eye,
-  FileText,
   Gift,
   Heart,
   HeartHandshake,
@@ -19,36 +15,33 @@ import {
   Mail,
   MapPin,
   MessageCircle,
-  Pencil,
   Phone,
   Pill,
-  RefreshCw,
   ShieldCheck,
   Smile,
   Stethoscope,
   UserPlus,
   Video,
-  XCircle,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { DigitalCardMockup } from '@/components/digital-card-mockup'
 import { EmptyState } from '@/components/dashboard/empty-state'
-import { MockBadge } from '@/components/dashboard/mock-badge'
 import { SectionTab, SectionTabsList } from '@/components/dashboard/section-tabs'
 import { StatusPill } from '@/components/dashboard/table-controls'
 import { useTenant } from '@/contexts/tenant-context'
 import { getAllClients, getAllSellers, useTenantData } from '@/contexts/tenant-data-context'
-import { formatCurrency } from '@/lib/analytics'
+import { useActionData } from '@/components/admin/faturamento/use-action-data'
+import { listClubChargesAction, listClubSubscriptionsAction } from '@/lib/actions/faturamento-api'
+import {
+  chargeStatusMeta,
+  formatBRL,
+  formatDateBR,
+  paymentMethodLabel,
+  subscriptionStatusMeta,
+} from '@/lib/adapters/faturamento'
 import type { Benefit, Client } from '@/lib/types'
 import { cn, getInitials } from '@/lib/utils'
 
@@ -86,27 +79,11 @@ const BENEFIT_TONES = [
   { card: 'border-indigo-100 bg-indigo-50/70', chip: 'bg-white text-indigo-500' },
 ]
 
-const QUICK_ACTIONS = [
-  { label: 'Solicitar autorização', icon: FileText, tone: 'text-sky-500' },
-  { label: 'Agendar consulta', icon: CalendarPlus, tone: 'text-rose-500' },
-  { label: 'Segunda via da carteirinha', icon: Mail, tone: 'text-violet-500' },
-  { label: 'Atualizar dados', icon: Pencil, tone: 'text-emerald-500' },
-  { label: 'Alterar plano', icon: RefreshCw, tone: 'text-amber-500' },
-  { label: 'Cancelar plano', icon: XCircle, tone: 'text-red-500' },
-]
-
-const PENDING_TABS = [
-  { value: 'plano', label: 'Plano e Cobrança', note: 'Faturas, forma de pagamento e histórico de reajuste.' },
-  { value: 'utilizacao', label: 'Utilização', note: 'Consumo de consultas, exames e teto por benefício.' },
-  { value: 'autorizacoes', label: 'Autorizações', note: 'Pedidos de autorização e prazos de resposta.' },
-  { value: 'documentos', label: 'Documentos', note: 'Contrato, aditivos e documentos pessoais.' },
-  { value: 'historico', label: 'Histórico', note: 'Linha do tempo de tudo que aconteceu no cadastro.' },
-]
 
 export default function BeneficiarioPage() {
   const params = useParams<{ tenant: string; id: string }>()
   const { tenant } = useTenant()
-  const { users, benefits, clientPlans, appointments, isLoading } = useTenantData()
+  const { users, benefits, appointments, isLoading } = useTenantData()
   const [tab, setTab] = useState('visao-geral')
 
   const client = getAllClients(users).find(item => item.id === params?.id)
@@ -114,7 +91,29 @@ export default function BeneficiarioPage() {
 
   const base = `/${params?.tenant}/admin`
 
-  const planPrice = clientPlans.find(plan => plan.name === client?.plan)?.priceMonthly ?? 0
+  const slug = tenant?.slug ?? params?.tenant ?? ''
+
+  /**
+   * Assinatura do Clube de Benefícios deste beneficiário. A busca da API (`q`)
+   * casa por e-mail/CPF; o filtro por `holder.userId` garante que é a dele e
+   * não de outra pessoa com e-mail parecido.
+   */
+  const subscriptionLookup = useActionData(
+    slug && client?.email
+      ? () => listClubSubscriptionsAction(slug, { q: client.email, perPage: 20 })
+      : null,
+    [slug, client?.id, client?.email],
+  )
+  const subscription = useMemo(() => {
+    const items = subscriptionLookup.data?.items ?? []
+    const mine = items.filter(
+      item =>
+        item.holder.userId === client?.id ||
+        item.holder.email.toLowerCase() === client?.email.toLowerCase(),
+    )
+    // A vigente primeiro; cancelada só se não houver outra.
+    return mine.find(item => item.status !== 'canceled') ?? mine[0] ?? null
+  }, [subscriptionLookup.data, client?.id, client?.email])
 
   const clientAppointments = useMemo(
     () =>
@@ -147,7 +146,7 @@ export default function BeneficiarioPage() {
 
   const status = planStatusMeta[client.planStatus]
   const situation = situationMeta[client.planStatus]
-  const nextCharge = nextChargeDate(client.contractDate)
+  const subscriptionStatus = subscription ? subscriptionStatusMeta(subscription.status) : null
 
   return (
     <div className="space-y-6">
@@ -160,39 +159,6 @@ export default function BeneficiarioPage() {
           Voltar para a lista
         </Link>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" className="h-11 gap-2">
-            <Pencil className="h-4 w-4" />
-            Editar cadastro
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-11 gap-2">
-                Mais ações
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Alterar plano
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Mail className="mr-2 h-4 w-4" />
-                Reenviar boas-vindas
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive">
-                <XCircle className="mr-2 h-4 w-4" />
-                Cancelar plano
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button className="h-11 gap-2 px-5">
-            <UserPlus className="h-4 w-4" />
-            Incluir dependente
-          </Button>
-        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-12">
@@ -242,9 +208,21 @@ export default function BeneficiarioPage() {
             tone="border-rose-100 bg-rose-50/70"
             chip="bg-white text-rose-500"
             label="Próxima cobrança"
-            value={nextCharge.toLocaleDateString('pt-BR')}
-            hint={formatCurrency(planPrice)}
-            linkLabel="Ver fatura"
+            value={
+              subscription?.nextDueDate
+                ? formatDateBR(subscription.nextDueDate)
+                : subscriptionLookup.loading
+                  ? 'Carregando…'
+                  : '—'
+            }
+            hint={
+              subscription
+                ? formatBRL(subscription.amount)
+                : subscriptionLookup.loading
+                  ? undefined
+                  : 'Sem assinatura no clube'
+            }
+            linkLabel="Ver cobranças"
             onClick={() => setTab('plano')}
           />
           <SummaryCard
@@ -252,10 +230,16 @@ export default function BeneficiarioPage() {
             tone="border-emerald-100 bg-emerald-50/70"
             chip="bg-white text-emerald-500"
             label="Situação"
-            value={situation.label}
-            hint={situation.hint}
-            linkLabel="Ver histórico"
-            onClick={() => setTab('historico')}
+            value={subscriptionStatus?.label ?? situation.label}
+            hint={
+              subscription
+                ? subscription.overdueCount > 0
+                  ? `${subscription.overdueCount} cobrança(s) em atraso`
+                  : paymentMethodLabel(subscription.paymentMethod)
+                : situation.hint
+            }
+            linkLabel="Ver cobranças"
+            onClick={() => setTab('plano')}
           />
         </div>
       </div>
@@ -267,11 +251,7 @@ export default function BeneficiarioPage() {
           <SectionTab value="dependentes" badge={client.dependents.length}>
             Dependentes
           </SectionTab>
-          {PENDING_TABS.map(item => (
-            <SectionTab key={item.value} value={item.value}>
-              {item.label}
-            </SectionTab>
-          ))}
+          <SectionTab value="plano">Plano e Cobrança</SectionTab>
         </SectionTabsList>
 
         <TabsContent value="visao-geral" className="space-y-6">
@@ -342,20 +322,6 @@ export default function BeneficiarioPage() {
                       dependentsCount={client.dependents.length}
                       size="sm"
                     />
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" className="gap-2">
-                        <Eye className="h-4 w-4" />
-                        Visualizar
-                      </Button>
-                      <Button variant="outline" size="sm" className="gap-2">
-                        <Mail className="h-4 w-4" />
-                        Enviar por e-mail
-                      </Button>
-                      <Button variant="outline" size="sm" className="gap-2">
-                        <Download className="h-4 w-4" />
-                        Baixar PDF
-                      </Button>
-                    </div>
                   </CardContent>
                 </Card>
 
@@ -363,13 +329,9 @@ export default function BeneficiarioPage() {
                   <CardHeader>
                     <CardTitle className="text-lg">Últimos Atendimentos</CardTitle>
                     <CardAction className="self-center">
-                      <button
-                        type="button"
-                        onClick={() => setTab('utilizacao')}
-                        className="text-sm font-medium text-primary hover:underline"
-                      >
+                      <Link href={`${base}/atendimento`} className="text-sm font-medium text-primary hover:underline">
                         Ver todos
-                      </button>
+                      </Link>
                     </CardAction>
                   </CardHeader>
                   <CardContent>
@@ -377,7 +339,7 @@ export default function BeneficiarioPage() {
                       <EmptyState
                         icon={Stethoscope}
                         title="Sem atendimentos registrados"
-                        description="Os atendimentos aparecem aqui conforme a rede credenciada os informa."
+                        description="Os chamados abertos por este beneficiário na mesa de atendimento aparecem aqui."
                       />
                     ) : (
                       <div className="overflow-x-auto">
@@ -428,30 +390,6 @@ export default function BeneficiarioPage() {
             </div>
 
             <div className="space-y-6 xl:col-span-3">
-              <Card className="shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-lg">Ações Rápidas</CardTitle>
-                  <CardAction className="self-center">
-                    <MockBadge />
-                  </CardAction>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {QUICK_ACTIONS.map(action => {
-                    const Icon = action.icon
-                    return (
-                      <button
-                        key={action.label}
-                        type="button"
-                        className="flex w-full items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-muted"
-                      >
-                        <Icon className={cn('h-4 w-4 shrink-0', action.tone)} />
-                        <span className="truncate">{action.label}</span>
-                      </button>
-                    )
-                  })}
-                </CardContent>
-              </Card>
-
               <Card className="border-primary/15 bg-primary/5 shadow-sm">
                 <CardContent className="space-y-3">
                   <div className="flex items-start gap-3">
@@ -463,8 +401,8 @@ export default function BeneficiarioPage() {
                       <p className="text-xs text-muted-foreground">Fale com nosso atendimento</p>
                     </div>
                   </div>
-                  <Button variant="outline" className="w-full bg-card">
-                    Abrir chamado
+                  <Button asChild variant="outline" className="w-full bg-card">
+                    <Link href={`${base}/atendimento`}>Abrir chamado</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -498,12 +436,6 @@ export default function BeneficiarioPage() {
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Dependentes</CardTitle>
-              <CardAction className="self-center">
-                <Button size="sm" className="gap-2">
-                  <UserPlus className="h-4 w-4" />
-                  Incluir dependente
-                </Button>
-              </CardAction>
             </CardHeader>
             <CardContent>
               {client.dependents.length === 0 ? (
@@ -542,32 +474,161 @@ export default function BeneficiarioPage() {
           </Card>
         </TabsContent>
 
-        {PENDING_TABS.map(item => (
-          <TabsContent key={item.value} value={item.value}>
-            <Card className="border-dashed bg-card/60 shadow-none">
-              <CardHeader>
-                <CardTitle className="text-lg">{item.label}</CardTitle>
-                <CardAction className="self-center">
-                  <MockBadge />
-                </CardAction>
-              </CardHeader>
-              <CardContent className="p-0">
-                <EmptyState icon={ShieldCheck} title="Em construção" description={item.note} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
+        <TabsContent value="plano">
+          <PlanBillingTab
+            tenantSlug={slug}
+            base={base}
+            subscription={subscription}
+            loading={subscriptionLookup.loading}
+            error={subscriptionLookup.error}
+          />
+        </TabsContent>
       </Tabs>
     </div>
   )
 }
 
-/** Vencimento seguinte mantendo o dia da adesão. */
-function nextChargeDate(contractDate: Date | string): Date {
-  const day = new Date(contractDate).getDate()
-  const today = new Date()
-  const thisMonth = new Date(today.getFullYear(), today.getMonth(), day)
-  return thisMonth >= today ? thisMonth : new Date(today.getFullYear(), today.getMonth() + 1, day)
+/**
+ * Plano e cobrança do beneficiário, direto do Faturamento: assinatura vigente
+ * e as últimas cobranças dela. Ações (segunda via, baixa manual, cancelar)
+ * ficam no Faturamento — o link abre lá já filtrado nesta assinatura.
+ */
+function PlanBillingTab({
+  tenantSlug,
+  base,
+  subscription,
+  loading,
+  error,
+}: {
+  tenantSlug: string
+  base: string
+  subscription: ClubSubscription | null
+  loading: boolean
+  error: string | null
+}) {
+  const charges = useActionData(
+    tenantSlug && subscription
+      ? () => listClubChargesAction(tenantSlug, { subscriptionId: subscription.id, perPage: 12 })
+      : null,
+    [tenantSlug, subscription?.id],
+  )
+
+  if (loading) {
+    return (
+      <Card className="shadow-sm">
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">Carregando cobrança…</CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="shadow-sm">
+        <CardContent className="p-0">
+          <EmptyState icon={ShieldCheck} title="Não foi possível carregar a cobrança" description={error} />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!subscription) {
+    return (
+      <Card className="shadow-sm">
+        <CardContent className="p-0">
+          <EmptyState
+            icon={ShieldCheck}
+            title="Sem assinatura no Clube de Benefícios"
+            description="Este beneficiário não tem assinatura com cobrança pelo clube. Adesões feitas pelo checkout aparecem aqui."
+          />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const meta = subscriptionStatusMeta(subscription.status)
+  const faturamentoHref = `${base}/faturamento?tab=cobrancas&assinatura=${encodeURIComponent(
+    subscription.id,
+  )}&nome=${encodeURIComponent(subscription.holder.name)}`
+  const items = charges.data?.items ?? []
+
+  return (
+    <div className="space-y-6">
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">Assinatura</CardTitle>
+          <CardAction className="self-center">
+            <Link href={faturamentoHref} className="text-sm font-medium text-primary hover:underline">
+              Abrir no Faturamento
+            </Link>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Situação</p>
+            <StatusPill {...meta} />
+          </div>
+          <Field label="Plano" value={subscription.planName} />
+          <Field label="Mensalidade" value={formatBRL(subscription.amount)} />
+          <Field label="Forma de pagamento" value={paymentMethodLabel(subscription.paymentMethod)} />
+          <Field label="Vencimento" value={`Todo dia ${subscription.dueDay}`} />
+          <Field
+            label="Próxima cobrança"
+            value={subscription.nextDueDate ? formatDateBR(subscription.nextDueDate) : '—'}
+          />
+          <Field label="Em aberto" value={formatBRL(subscription.openAmount)} />
+          <Field label="Carteirinha" value={subscription.cardNumber ?? '—'} />
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">Últimas cobranças</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {charges.loading ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">Carregando cobranças…</p>
+          ) : charges.error ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{charges.error}</p>
+          ) : items.length === 0 ? (
+            <EmptyState
+              icon={CalendarDays}
+              title="Nenhuma cobrança gerada"
+              description="As cobranças aparecem aqui conforme a régua do Faturamento as gera."
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+                    <th className="pb-3 pr-4 font-medium">Vencimento</th>
+                    <th className="pb-3 pr-4 font-medium">Valor</th>
+                    <th className="pb-3 pr-4 font-medium">Forma</th>
+                    <th className="pb-3 pr-4 font-medium">Pago em</th>
+                    <th className="pb-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map(charge => (
+                    <tr key={charge.id} className="border-b border-border/60 last:border-0">
+                      <td className="py-3 pr-4 text-foreground">{formatDateBR(charge.dueDate)}</td>
+                      <td className="py-3 pr-4 font-medium text-foreground">{formatBRL(charge.amount)}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{paymentMethodLabel(charge.method)}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">
+                        {charge.paidAt ? formatDateBR(charge.paidAt) : '—'}
+                      </td>
+                      <td className="py-3">
+                        <StatusPill {...chargeStatusMeta(charge.status)} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
 
 function InfoLine({

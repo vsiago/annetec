@@ -25,7 +25,7 @@ const saira = Saira({
 
 export const metadata: Metadata = {
   title: 'Annetec | Plano de Assistência Familiar - Saúde & Bem-Estar',
-  description: 'A Annetec é o primeiro Plano de Assistência com benefícios incríveis para cuidar da Saúde & Bem-Estar de toda a família. Consultas, odontologia, farmácia e muito mais por apenas R$ 14,90/mês.',
+  description: 'A Annetec é o primeiro Plano de Assistência com benefícios incríveis para cuidar da Saúde & Bem-Estar de toda a família. Consultas, odontologia, farmácia e muito mais.',
   keywords: ['plano de assistência', 'saúde', 'bem-estar', 'clube de benefícios', 'odontologia', 'consultas médicas', 'teleorientação'],
   authors: [{ name: 'ANNETEC' }],
   openGraph: {
@@ -46,7 +46,8 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <Providers>
           {children}
-          <Toaster position="top-right" richColors />
+          {/* offset: abaixo da topbar dos painéis (h-18), sem cobrir o sino nem o menu do usuário. */}
+          <Toaster position="top-right" richColors offset={84} />
         </Providers>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

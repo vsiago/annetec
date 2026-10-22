@@ -1,4 +1,5 @@
-import { boolean, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import { boolean, check, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 /**
  * Tabelas do Better Auth (https://better-auth.com), versão 1.7.2.
@@ -98,27 +99,59 @@ export const organization = pgTable('organization', {
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 })
 
+/** Situação do vínculo com o clube — ver `member.accessStatus`. */
+export const MEMBER_ACCESS_STATUSES = ['active', 'removed', 'blocked'] as const
+export type MemberAccessStatusValue = (typeof MEMBER_ACCESS_STATUSES)[number]
+
 /**
  * Vínculo pessoa↔inquilino. `role`: 'admin' | 'seller' | 'client'.
  *
- * `active` é NOSSO, gerido só por leitura/escrita direta em
- * `modules/users/service.ts` — de propósito NÃO declarado ao Better Auth como
- * `additionalFields`. "Inativo" aqui é por INQUILINO; o plugin `admin`
- * (banimento) é por conta inteira, em todo lugar que ela é membro — a coisa
- * errada para "essa pessoa está desativada neste inquilino".
+ * As colunas abaixo de `role` são NOSSAS, geridas só por escrita direta
+ * (`modules/users/member-access.ts`, `users/service.ts`,
+ * `tenants/members.service.ts`) — de propósito NÃO declaradas ao Better Auth
+ * como `additionalFields` (ele nunca as escreve; os defaults cobrem o
+ * `addMember`). "Inativo" aqui é por INQUILINO; o plugin `admin` (banimento)
+ * é por conta inteira, em todo lugar que ela é membro — a coisa errada para
+ * "essa pessoa está desativada neste inquilino".
+ *
+ * `accessStatus` é a fonte da verdade do vínculo:
+ *  - `active`: entra normalmente;
+ *  - `removed`: excluído pelo clube (associado) ou desativado (equipe).
+ *    Associado que volta pelo site (Google, CPF + e-mail, senha, checkout com
+ *    e-mail + CPF) tem ESTE mesmo vínculo reativado, sem assinatura;
+ *  - `blocked`: bloqueado pelo clube — nenhum login nem recadastro.
+ * `active` é coluna GERADA (`access_status = 'active'`): os leitores antigos
+ * (regra do último responsável, listagens) continuam valendo e é impossível
+ * os dois divergirem — o Drizzle nem deixa gravar em `active`.
+ *
+ * `onboardingRound`/`onboardingStartedAt`: rodada atual da régua "assine seu
+ * plano" (`club_onboarding_emails.round`). Cada retorno de associado
+ * removido abre uma rodada nova, contada a partir de `onboardingStartedAt`
+ * (nulo = desde `createdAt`).
  */
-export const member = pgTable('member', {
-  id: text('id').primaryKey(),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organization.id, { onDelete: 'cascade' }),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  role: text('role').notNull().default('client'),
-  active: boolean('active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const member = pgTable(
+  'member',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    role: text('role').notNull().default('client'),
+    accessStatus: text('access_status').$type<MemberAccessStatusValue>().notNull().default('active'),
+    active: boolean('active')
+      .notNull()
+      .generatedAlwaysAs(sql`access_status = 'active'`),
+    /** Última mudança de `accessStatus` (exclusão, bloqueio, retorno). */
+    accessChangedAt: timestamp('access_changed_at', { withTimezone: true }),
+    onboardingRound: integer('onboarding_round').notNull().default(1),
+    onboardingStartedAt: timestamp('onboarding_started_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [check('member_access_status_check', sql`${table.accessStatus} in ('active', 'removed', 'blocked')`)],
+)
 
 export const invitation = pgTable('invitation', {
   id: text('id').primaryKey(),

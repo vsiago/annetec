@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react'
 import {
   Building2,
   CircleCheckBig,
-  Clock,
   Download,
   Eye,
   History,
@@ -16,7 +15,7 @@ import {
   Plus,
   ShieldCheck,
   UserCog,
-  UserPlus,
+  UserX,
   Users,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -51,9 +50,10 @@ import {
 } from '@/components/dashboard/form-dialog'
 import { useTenant } from '@/contexts/tenant-context'
 import { useTenantData } from '@/contexts/tenant-data-context'
+import { resetTenantUserPasswordAction } from '@/lib/actions/tenant-users-api'
 import { formatPhone, tenantUserSchema } from '@/lib/form-schemas'
 import { useZodForm } from '@/lib/use-zod-form'
-import type { User, UserRole } from '@/lib/types'
+import type { MemberAccessStatus, User, UserRole } from '@/lib/types'
 import { cn, getInitials } from '@/lib/utils'
 
 const roleMeta: Record<UserRole, { label: string; className: string }> = {
@@ -126,7 +126,69 @@ const PERMISSION_MATRIX: { area: string; levels: PermissionLevel[] }[] = [
   { area: 'Configurações', levels: ['none', 'none', 'none', 'full'] },
 ]
 
-const ACCESS_ORIGINS = ['Web · Chrome', 'Web · Safari', 'App Android', 'App iOS', 'Web · Edge']
+type UserStatus = 'ativo' | 'removido' | 'bloqueado' | 'suspenso'
+
+const STATUS_META: Record<UserStatus, { label: string; className: string }> = {
+  ativo: { label: 'Ativo', className: 'bg-emerald-50 text-emerald-700' },
+  removido: { label: 'Removido', className: 'bg-slate-100 text-slate-600' },
+  bloqueado: { label: 'Bloqueado', className: 'bg-red-50 text-red-600' },
+  suspenso: { label: 'Suspenso pela plataforma', className: 'bg-red-50 text-red-600' },
+}
+
+/** Situação do vínculo com o clube; API antiga só tinha o booleano `active`. */
+function accessOf(user: User): MemberAccessStatus {
+  return user.accessStatus ?? (user.active === false ? 'removed' : 'active')
+}
+
+/**
+ * Situação exibida: bloqueio pelo clube > vínculo removido > conta suspensa
+ * pela plataforma (`banned`, vale em todo clube) > ativo.
+ */
+function statusOf(user: User): UserStatus {
+  const access = accessOf(user)
+  if (access === 'blocked') return 'bloqueado'
+  if (access === 'removed') return 'removido'
+  if (user.banned) return 'suspenso'
+  return 'ativo'
+}
+
+const EXCLUIR_ASSOCIADO_DESCRICAO =
+  'A assinatura será cancelada e o acesso removido. Se a pessoa voltar pelo site, o cadastro e o histórico são reativados e ela precisará assinar um plano de novo.'
+
+const BLOQUEAR_DESCRICAO =
+  'A pessoa não conseguirá mais entrar nem se cadastrar de novo com este e-mail neste clube.'
+
+/** Resume o `User-Agent` do último acesso em "Web · Chrome", "App Android"...; sem dado, "—". */
+function describeUserAgent(userAgent: string | undefined): string {
+  if (!userAgent) return '—'
+  const ua = userAgent.toLowerCase()
+  const browser = ua.includes('edg/')
+    ? 'Edge'
+    : ua.includes('opr/') || ua.includes('opera')
+      ? 'Opera'
+      : ua.includes('firefox/')
+        ? 'Firefox'
+        : ua.includes('chrome/') || ua.includes('crios/')
+          ? 'Chrome'
+          : ua.includes('safari/')
+            ? 'Safari'
+            : null
+  const platform = ua.includes('android')
+    ? 'Android'
+    : ua.includes('iphone') || ua.includes('ipad')
+      ? 'iOS'
+      : null
+  if (browser) return platform ? `${platform} · ${browser}` : `Web · ${browser}`
+  if (platform) return `App ${platform}`
+  return 'Outro'
+}
+
+function formatDateTime(value: Date): string {
+  return `${value.toLocaleDateString('pt-BR')} ${value.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`
+}
 
 function PermissionMark({ level }: { level: PermissionLevel }) {
   if (level === 'full') {
@@ -148,11 +210,13 @@ const AVATAR_TONES = [
 
 export default function AdminUsuariosPage() {
   const { tenant } = useTenant()
-  const { users, createUser, updateUser, deleteUser, isLoading } = useTenantData()
+  const { users, createUser, updateUser, deleteUser, blockUser, unblockUser, isLoading } = useTenantData()
 
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<User | null>(null)
   const [removing, setRemoving] = useState<User | null>(null)
+  const [blocking, setBlocking] = useState<User | null>(null)
+  const [resetting, setResetting] = useState<User | null>(null)
   const form = useZodForm(tenantUserSchema, EMPTY_USER)
 
   const [tab, setTab] = useState('usuarios')
@@ -163,9 +227,9 @@ export default function AdminUsuariosPage() {
   const [page, setPage] = useState(1)
 
   /**
-   * A conta não tem campo de situação nem de último acesso ainda. Enquanto
-   * não tem, a linha é derivada do índice para a tela exibir os três estados
-   * que o time precisa enxergar.
+   * Situação, último acesso e origem vêm da API: `member.active`,
+   * `user.banned` e o login mais recente neste clube (trilha de atividade ou
+   * sessão). Sem registro de acesso, a tela mostra "—".
    */
   const rows = useMemo(
     () =>
@@ -174,20 +238,19 @@ export default function AdminUsuariosPage() {
         name: user.name,
         email: user.email,
         role: user.role,
-        entity: user.role === 'client' ? '-' : 'Clínica Centro',
-        status: index % 23 === 0 ? 'pendente' : index % 31 === 0 ? 'inativo' : 'ativo',
-        lastAccess: new Date(Date.now() - ((index * 7) % 30) * 86_400_000),
-        accessOrigin: ACCESS_ORIGINS[index % ACCESS_ORIGINS.length],
+        status: statusOf(user),
+        access: accessOf(user),
+        lastAccess: user.lastLoginAt ?? null,
+        accessOrigin: describeUserAgent(user.lastLoginUserAgent),
         tone: AVATAR_TONES[index % AVATAR_TONES.length],
       })),
     [users],
   )
 
-  const pendingRows = useMemo(() => rows.filter(row => row.status === 'pendente'), [rows])
   const accessRows = useMemo(
     () =>
       rows
-        .filter(row => row.status !== 'pendente')
+        .filter((row): row is typeof row & { lastAccess: Date } => row.lastAccess !== null)
         .sort((a, b) => b.lastAccess.getTime() - a.lastAccess.getTime())
         .slice(0, 25),
     [rows],
@@ -211,7 +274,9 @@ export default function AdminUsuariosPage() {
   const visible = filtered.slice((currentPage - 1) * size, currentPage * size)
 
   const active = rows.filter(row => row.status === 'ativo').length
-  const pending = rows.filter(row => row.status === 'pendente').length
+  const inactive = rows.length - active
+  const sellers = rows.filter(row => row.role === 'seller' && row.status === 'ativo').length
+  const admins = rows.filter(row => row.role === 'admin' && row.status === 'ativo').length
 
   function withPageReset<T>(setter: (value: T) => void) {
     return (value: T) => {
@@ -225,11 +290,36 @@ export default function AdminUsuariosPage() {
     setCreating(true)
   }
 
-  async function approve(id: string, name: string) {
-    // Aprovar hoje é só liberar o acesso; quando existir campo de situação na
-    // conta, esta função passa a gravá-lo em vez de apenas avisar.
-    await updateUser(id, {})
-    toast.success('Solicitação aprovada', { description: name })
+  /** A senha provisória é gerada na API e vai só para o e-mail do usuário. */
+  async function resetPassword(user: User) {
+    if (!tenant) return
+    const result = await resetTenantUserPasswordAction(tenant.slug, user.id)
+    if (!result.success) {
+      toast.error('Senha não redefinida', { description: result.error })
+      return
+    }
+    toast.success('Senha redefinida', {
+      description:
+        result.data.emailStatus === 'failed'
+          ? `A senha foi trocada, mas o e-mail para ${result.data.email} falhou. Tente de novo.`
+          : `Uma senha provisória foi enviada para ${result.data.email}.`,
+    })
+  }
+
+  async function unblock(user: User) {
+    const result = await unblockUser(user.id)
+    if (!result.success) {
+      toast.error('Desbloqueio não concluído', {
+        description: result.error ?? 'Não foi possível desbloquear o acesso.',
+      })
+      return
+    }
+    toast.success('Acesso desbloqueado', {
+      description:
+        user.role === 'client'
+          ? `${user.name} pode voltar pelo site e assinar um plano de novo.`
+          : `${user.name} voltou a ter acesso.`,
+    })
   }
 
   function openEdit(id: string) {
@@ -270,16 +360,13 @@ export default function AdminUsuariosPage() {
       return
     }
 
-    const result = await createUser({
-      ...shared,
-      id: '',
-      tenantId: tenant.id,
-      createdAt: new Date(),
-      password: 'trocar123',
-    })
+    const result = await createUser(shared)
     if (!result.success) return result.error ?? 'Não foi possível criar o usuário.'
     toast.success('Usuário criado', {
-      description: 'Senha provisória: trocar123',
+      description:
+        shared.role === 'client'
+          ? `As boas-vindas do clube foram enviadas para ${data.email}.`
+          : `O acesso (com senha provisória) foi enviado por e-mail para ${data.email}.`,
     })
   }
 
@@ -303,29 +390,24 @@ export default function AdminUsuariosPage() {
           accent="info"
           value={active.toLocaleString('pt-BR')}
           label="Usuários ativos"
-          delta={{ value: '20%', direction: 'up' }}
-          comparison="vs. mês anterior"
-        />
-        <StatCard
-          icon={UserPlus}
-          accent="success"
-          value={4}
-          label="Perfis de acesso"
-          hint="PF, Entidade, Vendedor, Administrador"
         />
         <StatCard
           icon={ShieldCheck}
           accent="primary"
-          value={0}
-          label="Tentativas de acesso bloqueadas"
-          hint="últimos 30 dias"
+          value={admins.toLocaleString('pt-BR')}
+          label="Administradores ativos"
         />
         <StatCard
-          icon={Clock}
+          icon={UserCog}
+          accent="success"
+          value={sellers.toLocaleString('pt-BR')}
+          label="Vendedores ativos"
+        />
+        <StatCard
+          icon={UserX}
           accent="warning"
-          value={pending}
-          label="Usuários pendentes"
-          hint="aguardando aprovação"
+          value={inactive.toLocaleString('pt-BR')}
+          label="Removidos ou bloqueados"
         />
       </div>
 
@@ -333,7 +415,6 @@ export default function AdminUsuariosPage() {
         <SectionTabsList>
           <SectionTab value="usuarios">Usuários</SectionTab>
           <SectionTab value="perfis">Perfis e Permissões</SectionTab>
-          <SectionTab value="pendentes">Solicitações Pendentes</SectionTab>
           <SectionTab value="historico">Histórico de Acesso</SectionTab>
         </SectionTabsList>
 
@@ -362,11 +443,10 @@ export default function AdminUsuariosPage() {
                   value={status}
                   onChange={withPageReset(setStatus)}
                   allLabel="Todos os status"
-                  options={[
-                    { value: 'ativo', label: 'Ativo' },
-                    { value: 'pendente', label: 'Pendente' },
-                    { value: 'inativo', label: 'Inativo' },
-                  ]}
+                  options={Object.entries(STATUS_META).map(([value, meta]) => ({
+                    value,
+                    label: meta.label,
+                  }))}
                 />
                 <Button variant="outline" className="h-14 gap-2 rounded-xl">
                   <ListFilter className="h-4 w-4 text-muted-foreground" />
@@ -382,7 +462,6 @@ export default function AdminUsuariosPage() {
                         <th className="px-4 py-3 font-medium">Nome</th>
                         <th className="px-4 py-3 font-medium">E-mail</th>
                         <th className="px-4 py-3 font-medium">Perfil</th>
-                        <th className="px-4 py-3 font-medium">Entidade / Clínica</th>
                         <th className="px-4 py-3 font-medium">Status</th>
                         <th className="px-4 py-3 font-medium">Último acesso</th>
                         <th className="px-4 py-3 text-right font-medium">Ações</th>
@@ -391,7 +470,7 @@ export default function AdminUsuariosPage() {
                     <tbody>
                       {visible.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                          <td colSpan={6} className="py-12 text-center text-muted-foreground">
                             Nenhum usuário encontrado com os filtros atuais.
                           </td>
                         </tr>
@@ -412,29 +491,11 @@ export default function AdminUsuariosPage() {
                           <td className="px-4 py-3">
                             <StatusPill {...roleMeta[row.role]} />
                           </td>
-                          <td className="px-4 py-3 text-muted-foreground">{row.entity}</td>
                           <td className="px-4 py-3">
-                            <StatusPill
-                              label={
-                                row.status === 'ativo'
-                                  ? 'Ativo'
-                                  : row.status === 'pendente'
-                                    ? 'Pendente'
-                                    : 'Inativo'
-                              }
-                              className={
-                                row.status === 'ativo'
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : row.status === 'pendente'
-                                    ? 'bg-amber-50 text-amber-700'
-                                    : 'bg-red-50 text-red-600'
-                              }
-                            />
+                            <StatusPill {...STATUS_META[row.status]} />
                           </td>
                           <td className="px-4 py-3 text-muted-foreground">
-                            {row.status === 'pendente'
-                              ? '-'
-                              : row.lastAccess.toLocaleDateString('pt-BR')}
+                            {row.lastAccess ? row.lastAccess.toLocaleDateString('pt-BR') : '—'}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <DropdownMenu>
@@ -449,24 +510,48 @@ export default function AdminUsuariosPage() {
                                   Editar usuário
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  onClick={() =>
-                                    toast.success('Senha redefinida', {
-                                      description: 'Nova senha provisória: trocar123',
-                                    })
-                                  }
+                                  disabled={row.status !== 'ativo'}
+                                  onClick={() => {
+                                    const user = users.find(item => item.id === row.id)
+                                    if (user) setResetting(user)
+                                  }}
                                 >
                                   Redefinir senha
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => {
-                                    const user = users.find(item => item.id === row.id)
-                                    if (user) setRemoving(user)
-                                  }}
-                                >
-                                  Excluir usuário
-                                </DropdownMenuItem>
+                                {row.access === 'blocked' ? (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      const user = users.find(item => item.id === row.id)
+                                      if (user) void unblock(user)
+                                    }}
+                                  >
+                                    Desbloquear
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <>
+                                    {row.access === 'active' && (
+                                      <DropdownMenuItem
+                                        className="text-destructive"
+                                        onClick={() => {
+                                          const user = users.find(item => item.id === row.id)
+                                          if (user) setRemoving(user)
+                                        }}
+                                      >
+                                        {row.role === 'client' ? 'Excluir cadastro' : 'Excluir usuário'}
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem
+                                      className="text-destructive"
+                                      onClick={() => {
+                                        const user = users.find(item => item.id === row.id)
+                                        if (user) setBlocking(user)
+                                      }}
+                                    >
+                                      Bloquear acesso
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </td>
@@ -538,79 +623,12 @@ export default function AdminUsuariosPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="pendentes" className="m-0">
-              <Card className="gap-0 py-0 shadow-sm">
-                <CardHeader className="p-4">
-                  <CardTitle className="text-base">Solicitações pendentes</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Cadastros aguardando aprovação para acessar a plataforma.
-                  </p>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <DataTable
-                    columns={[
-                      {
-                        key: 'name',
-                        header: 'Nome',
-                        render: row => (
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarFallback className={cn('text-xs font-semibold', row.tone)}>
-                                {getInitials(row.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="truncate font-medium text-foreground">{row.name}</span>
-                          </div>
-                        ),
-                      },
-                      {
-                        key: 'email',
-                        header: 'E-mail',
-                        hideOnMobile: true,
-                        render: row => <span className="text-primary">{row.email}</span>,
-                      },
-                      {
-                        key: 'role',
-                        header: 'Perfil solicitado',
-                        render: row => <StatusPill {...roleMeta[row.role]} />,
-                      },
-                      {
-                        key: 'actions',
-                        header: 'Ações',
-                        align: 'right',
-                        render: row => (
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const user = users.find(item => item.id === row.id)
-                                if (user) setRemoving(user)
-                              }}
-                            >
-                              Recusar
-                            </Button>
-                            <Button size="sm" onClick={() => approve(row.id, row.name)}>
-                              Aprovar
-                            </Button>
-                          </div>
-                        ),
-                      },
-                    ]}
-                    rows={pendingRows}
-                    rowKey={row => row.id}
-                    empty="Nenhuma solicitação aguardando aprovação."
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
             <TabsContent value="historico" className="m-0">
               <Card className="gap-0 py-0 shadow-sm">
                 <CardHeader className="p-4">
                   <CardTitle className="text-base">Histórico de acesso</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Últimos acessos registrados na plataforma.
+                    Último acesso de cada usuário neste clube (sem registro, a pessoa não aparece).
                   </p>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -639,13 +657,7 @@ export default function AdminUsuariosPage() {
                         key: 'when',
                         header: 'Data e hora',
                         render: row => (
-                          <span className="text-muted-foreground">
-                            {row.lastAccess.toLocaleDateString('pt-BR')}{' '}
-                            {row.lastAccess.toLocaleTimeString('pt-BR', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
+                          <span className="text-muted-foreground">{formatDateTime(row.lastAccess)}</span>
                         ),
                       },
                       {
@@ -657,19 +669,10 @@ export default function AdminUsuariosPage() {
                         ),
                       },
                       {
-                        key: 'result',
-                        header: 'Resultado',
+                        key: 'status',
+                        header: 'Situação atual',
                         align: 'right',
-                        render: row => (
-                          <StatusPill
-                            label={row.status === 'inativo' ? 'Bloqueado' : 'Sucesso'}
-                            className={
-                              row.status === 'inativo'
-                                ? 'bg-red-50 text-red-600'
-                                : 'bg-emerald-50 text-emerald-700'
-                            }
-                          />
-                        ),
+                        render: row => <StatusPill {...STATUS_META[row.status]} />,
                       },
                     ]}
                     rows={accessRows}
@@ -767,7 +770,7 @@ export default function AdminUsuariosPage() {
         description={
           editing
             ? 'Atualize os dados e o perfil de acesso desta pessoa.'
-            : 'O usuário recebe a senha provisória "trocar123" no primeiro acesso.'
+            : 'A senha provisória é gerada pelo sistema e enviada por e-mail ao usuário, com a marca do clube. Associados não recebem senha: entram por CPF ou Google.'
         }
         submitLabel={editing ? 'Salvar alterações' : 'Criar usuário'}
         onSubmit={() => submitUser(editing)}
@@ -816,12 +819,30 @@ export default function AdminUsuariosPage() {
       </FormDialog>
 
       <ConfirmDialog
+        open={resetting !== null}
+        onOpenChange={open => !open && setResetting(null)}
+        title="Redefinir senha"
+        confirmLabel="Redefinir e enviar"
+        description={
+          resetting
+            ? `Uma nova senha provisória será gerada e enviada para ${resetting.email}. A senha atual deixa de valer e as sessões abertas de "${resetting.name}" são encerradas.`
+            : ''
+        }
+        onConfirm={async () => {
+          if (resetting) await resetPassword(resetting)
+        }}
+      />
+
+      <ConfirmDialog
         open={removing !== null}
         onOpenChange={open => !open && setRemoving(null)}
-        title="Excluir usuário"
+        title={removing?.role === 'client' ? 'Excluir cadastro' : 'Excluir usuário'}
+        confirmLabel={removing?.role === 'client' ? 'Excluir cadastro' : 'Excluir'}
         description={
           removing
-            ? `"${removing.name}" perde o acesso à plataforma imediatamente. Se a pessoa for um beneficiário, o contrato dela também sai da carteira.`
+            ? removing.role === 'client'
+              ? EXCLUIR_ASSOCIADO_DESCRICAO
+              : `"${removing.name}" perde o acesso ao clube imediatamente e as sessões abertas são encerradas. O histórico continua guardado.`
             : ''
         }
         onConfirm={async () => {
@@ -831,7 +852,28 @@ export default function AdminUsuariosPage() {
             toast.error(result.error ?? 'Não foi possível excluir o usuário')
             return
           }
-          toast.success('Usuário excluído', { description: removing.name })
+          toast.success(removing.role === 'client' ? 'Cadastro excluído' : 'Usuário excluído', {
+            description: removing.name,
+          })
+        }}
+      />
+
+      <ConfirmDialog
+        open={blocking !== null}
+        onOpenChange={open => !open && setBlocking(null)}
+        title={blocking ? `Bloquear o acesso de ${blocking.name}?` : 'Bloquear acesso'}
+        confirmLabel="Bloquear acesso"
+        description={BLOQUEAR_DESCRICAO}
+        onConfirm={async () => {
+          if (!blocking) return
+          const result = await blockUser(blocking.id)
+          if (!result.success) {
+            toast.error('Acesso não bloqueado', {
+              description: result.error ?? 'Não foi possível bloquear o acesso.',
+            })
+            return
+          }
+          toast.success('Acesso bloqueado', { description: blocking.name })
         }}
       />
     </div>

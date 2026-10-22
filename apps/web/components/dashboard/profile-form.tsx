@@ -8,13 +8,13 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useAuth } from '@/contexts/auth-context'
 import { useTenantData } from '@/contexts/tenant-data-context'
-import { setUserPassword } from '@/lib/actions/tenant-users'
+import { changePasswordAction } from '@/lib/actions/account-api'
 import { AlertCircle, CheckCircle2, Lock, Save, User } from 'lucide-react'
 
-// Shared "my account" form for tenant sellers and clients. Both roles edit the
-// same three fields plus password, so one implementation keeps the behaviour
-// (and the persistence — this actually writes, unlike the old mock alert)
-// identical on both pages.
+// Formulário "minha conta" de vendedor e associado. Os dois papéis editam os
+// mesmos três campos e a senha; uma implementação só mantém o comportamento
+// igual nas duas telas. A senha vai para `POST /auth/password` (Better Auth),
+// que exige a senha atual.
 export function ProfileForm({
   title = 'Dados do Perfil',
   description = 'Informações da sua conta',
@@ -30,6 +30,7 @@ export function ProfileForm({
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isSaving, setIsSaving] = useState(false)
@@ -50,19 +51,43 @@ export function ProfileForm({
       setFeedback({ type: 'error', message: 'As senhas não conferem.' })
       return
     }
+    if (password && password.length < 8) {
+      setFeedback({ type: 'error', message: 'A nova senha precisa ter pelo menos 8 caracteres.' })
+      return
+    }
+    if (password && !currentPassword) {
+      setFeedback({ type: 'error', message: 'Informe a senha atual para trocar a senha.' })
+      return
+    }
 
     setIsSaving(true)
     setFeedback(null)
 
-    const result = await updateUser(user.id, { name, email, phone })
-    if (!result.success) {
-      setFeedback({ type: 'error', message: result.error ?? 'Não foi possível salvar.' })
-      setIsSaving(false)
-      return
+    // Só chama a gravação de cadastro quando algo mudou: trocar apenas a senha
+    // não depende da rota de usuários (que é restrita ao admin do clube).
+    const profileChanged = name !== user.name || email !== user.email || phone !== (user.phone ?? '')
+    if (profileChanged) {
+      const result = await updateUser(user.id, { name, email, phone })
+      if (!result.success) {
+        setFeedback({ type: 'error', message: result.error ?? 'Não foi possível salvar.' })
+        setIsSaving(false)
+        return
+      }
     }
 
     if (password) {
-      await setUserPassword(user.id, password)
+      const changed = await changePasswordAction({ currentPassword, newPassword: password })
+      if (!changed.success) {
+        setFeedback({
+          type: 'error',
+          message: profileChanged
+            ? `Dados salvos, mas a senha não foi alterada: ${changed.error}`
+            : `A senha não foi alterada: ${changed.error}`,
+        })
+        setIsSaving(false)
+        return
+      }
+      setCurrentPassword('')
       setPassword('')
       setConfirmPassword('')
     }
@@ -125,6 +150,15 @@ export function ProfileForm({
           <CardDescription>Deixe em branco para manter a senha atual</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Senha atual</Label>
+            <Input
+              type="password"
+              value={currentPassword}
+              onChange={e => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </div>
           <div className="space-y-2">
             <Label>Nova senha</Label>
             <Input

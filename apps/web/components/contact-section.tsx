@@ -6,6 +6,8 @@ import { Send, Mail, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
+const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "contato@annetec.com.br"
+
 export function ContactSection() {
   const [formState, setFormState] = useState({
     name: "",
@@ -17,9 +19,18 @@ export function ContactSection() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Simulate form submission
+    // Não há endpoint de lead da plataforma: abre o e-mail do visitante já preenchido.
+    const corpo = [
+      `Nome: ${formState.name}`,
+      `E-mail: ${formState.email}`,
+      formState.phone ? `Telefone: ${formState.phone}` : "",
+      "",
+      formState.message,
+    ].join("\n")
+    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
+      `Contato pelo site - ${formState.name}`,
+    )}&body=${encodeURIComponent(corpo)}`
     setIsSubmitted(true)
-    setTimeout(() => setIsSubmitted(false), 3000)
   }
 
   return (
@@ -41,11 +52,11 @@ export function ContactSection() {
             </p>
 
             <a 
-              href="mailto:contato@annetec.com.br"
+              href={`mailto:${CONTACT_EMAIL}`}
               className="inline-flex items-center gap-3 p-4 bg-[#26365f] rounded-xl text-white hover:bg-[#152a5c] transition-colors mb-8"
             >
               <Mail size={24} />
-              <span className="font-medium">contato@annetec.com.br</span>
+              <span className="font-medium">{CONTACT_EMAIL}</span>
             </a>
 
             {/* What We Are */}
@@ -72,8 +83,8 @@ export function ContactSection() {
                   <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-4">
                     <CheckCircle size={32} className="text-green-600" />
                   </div>
-                  <h3 className="text-xl font-bold text-[#26365f] mb-2">Mensagem Enviada!</h3>
-                  <p className="text-muted-foreground">Entraremos em contato em breve.</p>
+                  <h3 className="text-xl font-bold text-[#26365f] mb-2">Abrimos seu e-mail</h3>
+                  <p className="text-muted-foreground">Envie a mensagem pelo seu aplicativo de e-mail para falar com a equipe.</p>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
@@ -142,7 +153,7 @@ export function ContactSection() {
                     className="w-full bg-[#e84364] hover:bg-[#d12d4f] text-white h-14"
                   >
                     <Send size={18} className="mr-2" />
-                    Enviar Mensagem
+                    Enviar por e-mail
                   </Button>
                 </form>
               )}

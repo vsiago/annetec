@@ -1,13 +1,19 @@
 'use server'
 
 import type {
+  AddTenantResponsibleInput,
+  AddTenantResponsibleResult,
   CreateTenantInput,
   CreateTenantPlanInput,
   IntegrationDiscovery,
+  RemoveTenantMemberResult,
   ResetTenantUserPasswordInput,
+  SetTenantMemberAccessResult,
   Tenant,
   TenantIntegration,
   TenantIntegrationPublic,
+  TenantMemberList,
+  TenantMemberSummary,
   TenantPlan,
   UpdateTenantInput,
   UpdateTenantPlanInput,
@@ -24,7 +30,6 @@ import { run, type ActionResult } from './_api-result'
  * `lib/types.ts` (datas como `Date`) pra tela e contexto não mudarem nada
  * além de trocar de onde os dados vêm.
  */
-export type { ActionResult }
 
 function toLegacyTenant(tenant: Tenant): LegacyTenant {
   return {
@@ -189,21 +194,63 @@ export async function probeTenantCapabilitiesAction(
 }
 
 /** Usuário de um inquilino, na visão da plataforma. */
-export interface TenantMember {
-  id: string
-  name: string
-  email: string
-  phone: string | null
-  role: 'admin' | 'seller' | 'client'
-  active: boolean
-  createdAt: string
-}
+export type TenantMember = TenantMemberSummary
 
+/** Contas do inquilino + quantos responsáveis (admins) ativos ele tem. */
 export async function listTenantMembersAction(
   tenantId: string,
-): Promise<ActionResult<TenantMember[]>> {
+): Promise<ActionResult<TenantMemberList>> {
   return run(async () => {
-    const { data } = await apiFetch<TenantMember[]>(`/api/v1/platform/tenants/${tenantId}/usuarios`)
+    const { data } = await apiFetch<TenantMemberList>(`/api/v1/platform/tenants/${tenantId}/usuarios`)
+    return data
+  })
+}
+
+/**
+ * Adiciona um responsável (admin). A senha, quando a conta é nova, é gerada
+ * na API e vai só no convite por e-mail — nunca volta para esta tela.
+ */
+export async function addTenantResponsibleAction(
+  tenantId: string,
+  input: AddTenantResponsibleInput,
+): Promise<ActionResult<AddTenantResponsibleResult>> {
+  return run(async () => {
+    const { data } = await apiFetch<AddTenantResponsibleResult>(
+      `/api/v1/platform/tenants/${tenantId}/responsaveis`,
+      { method: 'POST', body: input },
+    )
+    return data
+  })
+}
+
+/** Desativa/reativa o vínculo. Desativar derruba as sessões ligadas ao clube. */
+export async function setTenantMemberAccessAction(
+  tenantId: string,
+  userId: string,
+  active: boolean,
+): Promise<ActionResult<SetTenantMemberAccessResult>> {
+  return run(async () => {
+    const { data } = await apiFetch<SetTenantMemberAccessResult>(
+      `/api/v1/platform/tenants/${tenantId}/usuarios/${userId}/acesso`,
+      { method: 'PATCH', body: { active } },
+    )
+    return data
+  })
+}
+
+/**
+ * Remove a pessoa do clube (e exclui a conta quando era o último vínculo).
+ * Bloqueada por histórico, a API só desativa e devolve o motivo como erro.
+ */
+export async function removeTenantMemberAction(
+  tenantId: string,
+  userId: string,
+): Promise<ActionResult<RemoveTenantMemberResult>> {
+  return run(async () => {
+    const { data } = await apiFetch<RemoveTenantMemberResult>(
+      `/api/v1/platform/tenants/${tenantId}/usuarios/${userId}`,
+      { method: 'DELETE' },
+    )
     return data
   })
 }

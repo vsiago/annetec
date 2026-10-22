@@ -1,5 +1,8 @@
 import { handle } from 'hono/vercel'
 import { createApp } from '@/app'
+import { assertProductionConfig } from '@/config/assert-production'
+import { env } from '@/config/env'
+import { logger } from '@/lib/logger'
 
 /**
  * Ponto de entrada para hospedar esta API como Serverless Function na
@@ -22,6 +25,10 @@ import { createApp } from '@/app'
 export const config = {
   runtime: 'nodejs',
 }
+
+// Produção sem gateway/e-mail/CNPJ/storage reais falha no cold start (antes de
+// atender qualquer requisição) — ver `config/assert-production.ts`.
+assertProductionConfig(env, logger)
 
 // Exportar como `fetch` (não `default`) é o que faz a Vercel reconhecer a
 // assinatura Web-padrão `(req: Request) => Response` sem ambiguidade — com

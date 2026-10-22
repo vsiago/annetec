@@ -1,0 +1,183 @@
+'use client'
+
+import { Link2, Link2Off, TriangleAlert, UserRound } from 'lucide-react'
+import {
+  PEP_RELATIONSHIP_LABELS,
+  PERSON_POSITION_LABELS,
+  formatCpf,
+  formatDateBR,
+  matchPartnerInQsa,
+  type CnpjLookupPartner,
+  type OnboardingPerson,
+  type OnboardingProposalDetail,
+} from '@annetec/contracts'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Pill } from '@/components/admin-platform/billing/console-kit'
+import { qsaMatchMeta } from '@/lib/adapters/platform-console'
+import { cn } from '@/lib/utils'
+
+/**
+ * Representantes e sócios declarados × quadro societário da Receita (QSA).
+ * A correspondência usa a MESMA regra da pré-checagem (`matchPartnerInQsa`:
+ * nome normalizado + dígitos visíveis do CPF mascarado), então o que a tela
+ * liga é exatamente o que a API considerou.
+ */
+
+function positionOf(person: OnboardingPerson): string {
+  if (person.position === 'outro' && person.positionOther) return person.positionOther
+  return PERSON_POSITION_LABELS[person.position] ?? person.position
+}
+
+function roleChips(person: OnboardingPerson): string[] {
+  const chips: string[] = []
+  if (person.isLegalRepresentative) chips.push('Representante legal')
+  if (person.isPartner) {
+    chips.push(person.ownershipPercent !== null ? `Sócio · ${person.ownershipPercent.toLocaleString('pt-BR')}%` : 'Sócio')
+  }
+  if (person.isBeneficialOwner) chips.push('Beneficiário final')
+  if (person.actsByPowerOfAttorney) chips.push('Por procuração')
+  return chips
+}
+
+function partnerMatches(partner: CnpjLookupPartner, people: OnboardingPerson[]): OnboardingPerson | null {
+  return people.find(person => matchPartnerInQsa({ name: person.name, cpf: person.cpf }, [partner])) ?? null
+}
+
+export function PeoplePanel({ proposal }: { proposal: OnboardingProposalDetail }) {
+  const people = proposal.people ?? []
+  const partners = proposal.receita?.partners ?? []
+  const totalOwnership = people.reduce((acc, person) => acc + (person.ownershipPercent ?? 0), 0)
+  const notFound = people.filter(person => person.qsaMatch === 'not_found')
+
+  return (
+    <div className="space-y-4">
+      <Card className="gap-4 shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base">Pessoas declaradas</CardTitle>
+          <CardDescription>
+            {people.length} pessoa(s)
+            {totalOwnership > 0 ? ` · participações somam ${totalOwnership.toLocaleString('pt-BR')}%` : ''}
+            {proposal.hasPep ? ' · há pessoa politicamente exposta' : ''}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {people.length === 0 ? (
+            <p className="px-6 pb-6 text-sm text-muted-foreground">O contratante ainda não informou as pessoas.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-y border-border bg-muted/40 text-left text-xs text-muted-foreground">
+                    <th className="px-6 py-2.5 font-medium">Pessoa</th>
+                    <th className="px-4 py-2.5 font-medium">Cargo e papéis</th>
+                    <th className="hidden px-4 py-2.5 font-medium md:table-cell">Contato</th>
+                    <th className="px-4 py-2.5 font-medium">Quadro societário</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {people.map(person => (
+                    <tr key={person.id} className="border-b border-border/60 align-top last:border-0">
+                      <td className="px-6 py-3">
+                        <div className="flex items-start gap-3">
+                          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                            <UserRound className="h-4 w-4 text-muted-foreground" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-medium text-foreground">{person.name}</p>
+                            <p className="font-mono text-xs text-muted-foreground">{formatCpf(person.cpf)}</p>
+                            {person.birthDate && (
+                              <p className="text-xs text-muted-foreground">Nasc. {formatDateBR(person.birthDate)}</p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-foreground">{positionOf(person)}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {roleChips(person).map(chip => (
+                            <span key={chip} className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                              {chip}
+                            </span>
+                          ))}
+                        </div>
+                        {person.isPep && (
+                          <p className="mt-1.5 inline-flex items-start gap-1 rounded-md bg-amber-50 px-1.5 py-1 text-[11px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                            <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
+                            <span>
+                              PEP{person.pepRole ? ` — ${person.pepRole}` : ''}
+                              {person.pepRelationship ? ` (${PEP_RELATIONSHIP_LABELS[person.pepRelationship]})` : ''}
+                            </span>
+                          </p>
+                        )}
+                      </td>
+                      <td className="hidden px-4 py-3 text-xs text-muted-foreground md:table-cell">
+                        <p>{person.email ?? '—'}</p>
+                        <p>{person.phone ?? ''}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Pill meta={qsaMatchMeta(person.qsaMatch)} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="gap-4 shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base">Quadro societário na Receita (QSA)</CardTitle>
+          <CardDescription>
+            {proposal.receita
+              ? partners.length > 0
+                ? `${partners.length} sócio(s)/administrador(es) registrados · correspondência com as pessoas declaradas`
+                : 'A Receita não lista sócios para este CNPJ (comum em entidades sem capital).'
+              : 'Consulta à Receita indisponível para esta proposta.'}
+          </CardDescription>
+        </CardHeader>
+        {partners.length > 0 && (
+          <CardContent className="p-0">
+            <ul className="divide-y divide-border border-t border-border">
+              {partners.map((partner, index) => {
+                const match = partnerMatches(partner, people)
+                return (
+                  <li key={`${partner.name}-${index}`} className="flex flex-wrap items-center gap-3 px-6 py-3">
+                    <span
+                      className={cn(
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+                        match ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10' : 'bg-muted text-muted-foreground',
+                      )}
+                    >
+                      {match ? <Link2 className="h-4 w-4" /> : <Link2Off className="h-4 w-4" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">{partner.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {[partner.qualification, partner.document, partner.entryDate ? `desde ${formatDateBR(partner.entryDate)}` : null]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                    <p className={cn('text-xs', match ? 'text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground')}>
+                      {match ? `Declarado: ${match.name} (${positionOf(match)})` : 'Não declarado na proposta'}
+                    </p>
+                  </li>
+                )
+              })}
+            </ul>
+          </CardContent>
+        )}
+        {notFound.length > 0 && (
+          <CardContent>
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+              {notFound.map(person => person.name).join(', ')} não {notFound.length === 1 ? 'aparece' : 'aparecem'} no QSA.
+              Confira os poderes de representação no ato constitutivo, na ata de eleição ou na procuração.
+            </p>
+          </CardContent>
+        )}
+      </Card>
+    </div>
+  )
+}

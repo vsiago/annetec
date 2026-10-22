@@ -6,6 +6,7 @@ import { useTenants } from '@/contexts/tenants-context'
 import { Building2, Users, DollarSign, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
+import { PlatformRecurringRevenueCard } from '@/components/holding/platform-revenue-card'
 
 const statusLabel: Record<string, { label: string; color: string }> = {
   trial: { label: 'Trial', color: 'bg-yellow-100 text-yellow-700' },
@@ -30,6 +31,9 @@ export default function PlatformDashboard() {
         <h1 className="text-2xl font-bold text-foreground">Olá, {user?.name?.split(' ')[0]}</h1>
         <p className="text-muted-foreground">Visão geral da plataforma Annetec</p>
       </div>
+
+      {/* Receita recorrente REAL da cobrança automática (holding, §Q5). */}
+      <PlatformRecurringRevenueCard />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-0 shadow-sm">

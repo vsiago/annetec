@@ -4,6 +4,9 @@
 
 export type PlatformRole = 'superadmin' | 'platform_admin'
 
+/** Situação do vínculo com o clube — espelha `MemberAccessStatus` de @annetec/contracts. */
+export type MemberAccessStatus = 'active' | 'removed' | 'blocked'
+
 export interface PlatformUser {
   id: string
   name: string
@@ -76,6 +79,28 @@ export interface User {
   avatar?: string
   phone?: string
   createdAt: Date
+  /** Vínculo ativo neste inquilino (`member.active`); ausente fora da lista de usuários. */
+  active?: boolean
+  /**
+   * Situação do vínculo com o clube (`member.access_status`): `active`,
+   * `removed` (excluído/desativado — associado pode voltar pelo site) ou
+   * `blocked` (não entra nem se cadastra de novo com este e-mail). Ausente
+   * fora da lista de usuários.
+   */
+  accessStatus?: MemberAccessStatus
+  /** Conta bloqueada pela plataforma. */
+  banned?: boolean
+  /** Último acesso conhecido neste inquilino; ausente = sem registro. */
+  lastLoginAt?: Date
+  /** `User-Agent` desse acesso (resumido na tela como navegador/app). */
+  lastLoginUserAgent?: string
+  /**
+   * Só associado (sessão `client`): ainda não liberou os benefícios do clube
+   * (sem assinatura ou pagamento pendente). Ver `SessionUser.needsSubscription`.
+   */
+  needsSubscription?: boolean
+  /** Situação que gerou `needsSubscription` (`pending_payment` = pagamento pendente). */
+  subscriptionStatus?: 'subscribed' | 'contract' | 'pending_payment' | 'none'
 }
 
 export interface Admin extends User {
@@ -194,6 +219,10 @@ export interface ClientPlan {
   highlight?: boolean
   /** Público a que o plano se destina, usado no filtro da vitrine. */
   audience?: string
+  /** Mensalidade por dependente (R$). `null`/0 = dependentes inclusos. */
+  priceDependentMonthly?: number | null
+  /** Teto de dependentes. `null` = sem limite; 0 = plano individual. */
+  maxDependents?: number | null
 }
 
 // Accredited partner network (rede de credenciados) — core feature of

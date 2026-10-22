@@ -16,6 +16,9 @@ import { useAdminScope } from '@/contexts/admin-scope-context'
 import { IntegrationPanel } from '@/components/admin-platform/integration-panel'
 import { TenantAccessPanel } from '@/components/admin-platform/tenant-access-panel'
 import { TenantShortcuts } from '@/components/admin-platform/tenant-shortcuts'
+import { TenantSubscriptionPanel } from '@/components/admin-platform/billing/tenant-subscription-panel'
+import { TenantHealthPanel } from '@/components/admin-platform/billing/tenant-health-panel'
+import { TenantOnboardingPanel } from '@/components/admin-platform/compliance/tenant-onboarding-panel'
 import type { Tenant, TenantStatus } from '@/lib/types'
 import type { UF } from '@annetec/contracts'
 import {
@@ -24,7 +27,10 @@ import {
   Building2,
   ExternalLink,
   Eye,
+  FileCheck2,
+  HeartPulse,
   KeyRound,
+  Receipt,
   LayoutGrid,
   Palette,
   Plug,
@@ -206,6 +212,18 @@ export default function InquilinoDetailPage() {
           <TabsTrigger value="integracao">
             <Plug className="h-4 w-4" />
             Integração
+          </TabsTrigger>
+          <TabsTrigger value="assinatura-annetec">
+            <Receipt className="h-4 w-4" />
+            Assinatura ANNETEC
+          </TabsTrigger>
+          <TabsTrigger value="kyb">
+            <FileCheck2 className="h-4 w-4" />
+            KYB / Documentos
+          </TabsTrigger>
+          <TabsTrigger value="saude">
+            <HeartPulse className="h-4 w-4" />
+            Saúde
           </TabsTrigger>
         </TabsList>
 
@@ -414,6 +432,21 @@ export default function InquilinoDetailPage() {
         {/* --------------------------------------------------- integração */}
         <TabsContent value="integracao">
           <IntegrationPanel tenantId={tenant.id} />
+        </TabsContent>
+
+        {/* ------------------------------------ assinatura ANNETEC (plataforma) */}
+        <TabsContent value="assinatura-annetec">
+          <TenantSubscriptionPanel tenantId={tenant.id} tenantSlug={tenant.slug} />
+        </TabsContent>
+
+        {/* ------------------------------------- contratação: KYB e documentos */}
+        <TabsContent value="kyb">
+          <TenantOnboardingPanel tenantId={tenant.id} tenantSlug={tenant.slug} document={tenant.document} />
+        </TabsContent>
+
+        {/* ---------------------------------------------------- saúde (holding) */}
+        <TabsContent value="saude">
+          <TenantHealthPanel tenantId={tenant.id} />
         </TabsContent>
       </Tabs>
 

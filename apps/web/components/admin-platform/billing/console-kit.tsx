@@ -1,0 +1,330 @@
+'use client'
+
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { CircleAlert, Loader2, RefreshCw, ShieldAlert } from 'lucide-react'
+import { toast } from 'sonner'
+import { usePlatformAuth } from '@/contexts/platform-auth-context'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import type { ConsoleActionResult, StatusMeta } from '@/lib/adapters/platform-console'
+import { cn } from '@/lib/utils'
+
+/**
+ * Kit comum das telas do console da plataforma (compliance, faturamento e
+ * caixa de saída): carregar uma server action, estados de carregamento e
+ * erro, selo de status, confirmação com motivo e o portão de superadmin.
+ * Fica em `billing/` por ser o maior consumidor; compliance e e-mails
+ * importam daqui para as três telas falarem a mesma língua visual.
+ */
+
+const FALHA_INESPERADA = 'Não foi possível carregar os dados. Verifique a conexão e tente novamente.'
+
+/**
+ * Carrega o resultado de uma server action e guarda dado, erro e estado de
+ * carregamento. Resposta atrasada de uma busca antiga (filtro trocado no
+ * meio) é descartada — só a última chamada escreve no estado.
+ * `reload({ silent: true })` atualiza sem voltar ao esqueleto.
+ */
+export function useConsoleData<T>(load: (() => Promise<ConsoleActionResult<T>>) | null, deps: readonly unknown[]) {
+  const [data, setData] = useState<T | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState<boolean>(load !== null)
+  const sequence = useRef(0)
+  const loadRef = useRef(load)
+  loadRef.current = load
+
+  const reload = useCallback(async (options?: { silent?: boolean }) => {
+    const current = loadRef.current
+    const id = ++sequence.current
+    if (!current) {
+      setLoading(false)
+      return
+    }
+    if (!options?.silent) setLoading(true)
+    try {
+      const result = await current()
+      if (id !== sequence.current) return
+      if (result.success) {
+        setData(result.data)
+        setError(null)
+      } else {
+        setError(result.error)
+      }
+    } catch {
+      if (id !== sequence.current) return
+      setError(FALHA_INESPERADA)
+    } finally {
+      if (id === sequence.current) setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void reload()
+    // As dependências são as do chamador (filtros, página, versão).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps)
+
+  return { data, error, loading, reload, setData }
+}
+
+/**
+ * Executa um comando e avisa por toast com a frase da própria API em caso de
+ * erro. Devolve o dado (ou `null` se falhou) para a tela atualizar o estado.
+ */
+export async function runCommand<T>(
+  promise: Promise<ConsoleActionResult<T>>,
+  success?: string | ((data: T) => string),
+): Promise<T | null> {
+  try {
+    const result = await promise
+    if (!result.success) {
+      const campos = result.fieldErrors ? Object.values(result.fieldErrors).filter(Boolean) : []
+      toast.error(result.error, campos.length > 0 ? { description: campos.slice(0, 3).join(' · ') } : undefined)
+      return null
+    }
+    if (success) toast.success(typeof success === 'function' ? success(result.data) : success)
+    return result.data
+  } catch {
+    toast.error('Não foi possível concluir a operação. Verifique a conexão e tente novamente.')
+    return null
+  }
+}
+
+/** Papel da equipe logada. A API é quem autoriza; aqui só se decide o que mostrar. */
+export function usePlatformRole() {
+  const { user } = usePlatformAuth()
+  return { isSuperadmin: user?.platformRole === 'superadmin', user }
+}
+
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Peças visuais
+// ---------------------------------------------------------------------------
+
+export function Pill({ meta, className, title }: { meta: StatusMeta; className?: string; title?: string }) {
+  return (
+    <span
+      title={title}
+      className={cn(
+        'inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium',
+        meta.className,
+        className,
+      )}
+    >
+      {meta.label}
+    </span>
+  )
+}
+
+export function LoadError({ message, onRetry, className }: { message: string; onRetry?: () => void; className?: string }) {
+  return (
+    <div
+      className={cn(
+        'flex flex-col items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:flex-row sm:items-center',
+        className,
+      )}
+      role="alert"
+    >
+      <CircleAlert className="h-5 w-5 shrink-0 text-destructive" />
+      <p className="flex-1 text-destructive">{message}</p>
+      {onRetry && (
+        <Button variant="outline" size="sm" onClick={onRetry} className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Tentar novamente
+        </Button>
+      )}
+    </div>
+  )
+}
+
+export function TableSkeleton({ rows = 6, className }: { rows?: number; className?: string }) {
+  return (
+    <div className={cn('space-y-3 p-4', className)} aria-busy="true" aria-label="Carregando">
+      {Array.from({ length: rows }, (_, index) => (
+        <div key={index} className="flex items-center gap-4">
+          <Skeleton className="h-9 w-9 rounded-full" />
+          <Skeleton className="h-4 flex-1" />
+          <Skeleton className="hidden h-4 w-24 md:block" />
+          <Skeleton className="hidden h-4 w-20 md:block" />
+          <Skeleton className="h-6 w-20 rounded-full" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function KpiSkeleton({ count = 4, className }: { count?: number; className?: string }) {
+  return (
+    <div className={cn('grid gap-4 sm:grid-cols-2 xl:grid-cols-4', className)}>
+      {Array.from({ length: count }, (_, index) => (
+        <Skeleton key={index} className="h-28 rounded-xl" />
+      ))}
+    </div>
+  )
+}
+
+/** Rótulo pequeno + valor, para fichas de detalhe. */
+export function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('min-w-0 space-y-0.5', className)}>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="break-words text-sm text-foreground">{children ?? '—'}</div>
+    </div>
+  )
+}
+
+/**
+ * Botão de ação exclusiva do superadmin. Para `platform_admin` fica visível e
+ * desabilitado, com a explicação no tooltip — esconder confundiria quem
+ * procura a ação que viu na demonstração.
+ */
+export function SuperadminOnly({
+  isSuperadmin,
+  children,
+  reason = 'Somente o superadmin pode fazer isso.',
+}: {
+  isSuperadmin: boolean
+  children: ReactNode
+  reason?: string
+}) {
+  if (isSuperadmin) return <>{children}</>
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-not-allowed">
+            <span className="pointer-events-none inline-flex opacity-50">{children}</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="flex items-center gap-1.5">
+          <ShieldAlert className="h-3.5 w-3.5" />
+          {reason}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+/**
+ * Confirmação de ação (destrutiva ou não) com motivo opcional/obrigatório.
+ * `onConfirm` devolve `true` quando deu certo — o diálogo só fecha nesse caso,
+ * para o texto digitado não se perder num erro da API.
+ */
+export function ConfirmDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  confirmLabel,
+  destructive = false,
+  reason,
+  onConfirm,
+  children,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  description?: ReactNode
+  confirmLabel: string
+  destructive?: boolean
+  /** Campo de motivo: `minLength` > 0 torna obrigatório. */
+  reason?: { label: string; placeholder?: string; minLength?: number; defaultValue?: string }
+  onConfirm: (reason: string) => Promise<boolean>
+  children?: ReactNode
+}) {
+  const [text, setText] = useState(reason?.defaultValue ?? '')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setText(reason?.defaultValue ?? '')
+      setBusy(false)
+    }
+    // Reinicia o texto a cada abertura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const min = reason?.minLength ?? 0
+  const trimmed = text.trim()
+  const invalid = !!reason && min > 0 && trimmed.length < min
+
+  const confirm = async () => {
+    if (invalid || busy) return
+    setBusy(true)
+    const ok = await onConfirm(trimmed)
+    setBusy(false)
+    if (ok) onOpenChange(false)
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={value => !busy && onOpenChange(value)}>
+      <AlertDialogContent className="sm:max-w-lg">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          {description && <AlertDialogDescription asChild><div>{description}</div></AlertDialogDescription>}
+        </AlertDialogHeader>
+        {children}
+        {reason && (
+          <div className="space-y-2">
+            <Label htmlFor="confirm-reason">{reason.label}</Label>
+            <Textarea
+              id="confirm-reason"
+              value={text}
+              onChange={event => setText(event.target.value)}
+              placeholder={reason.placeholder}
+              rows={3}
+              maxLength={2000}
+            />
+            {min > 0 && (
+              <p className={cn('text-xs', invalid && trimmed.length > 0 ? 'text-destructive' : 'text-muted-foreground')}>
+                {invalid ? `Escreva pelo menos ${min} caracteres (${trimmed.length}/${min}).` : 'Fica registrado na trilha.'}
+              </p>
+            )}
+          </div>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>Voltar</AlertDialogCancel>
+          <Button
+            variant={destructive ? 'destructive' : 'default'}
+            onClick={confirm}
+            disabled={invalid || busy}
+            className="gap-2"
+          >
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            {confirmLabel}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+/** Barra de "atualizado há X" + botão de recarregar, no canto das seções. */
+export function RefreshButton({ loading, onClick, label = 'Atualizar' }: { loading: boolean; onClick: () => void; label?: string }) {
+  return (
+    <Button variant="outline" size="sm" onClick={onClick} disabled={loading} className="gap-2">
+      <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+      {label}
+    </Button>
+  )
+}

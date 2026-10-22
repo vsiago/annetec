@@ -31,7 +31,7 @@ export function ImpersonationBanner() {
     <div className="sticky top-0 z-50 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950">
       <span className="inline-flex items-center gap-1.5">
         <UserRoundCog className="h-4 w-4" />
-        Operando como <strong>{user?.name}</strong> — sessão simulada pela equipe Annetec.
+        Operando como <strong>{user?.name}</strong> — sessão simulada pela operadora.
       </span>
       <button
         type="button"

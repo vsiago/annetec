@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { usePlatformAuth } from '@/contexts/platform-auth-context'
 import { usePlatformSidebarContext } from '@/app/admin/layout'
+import { NotificationBell } from '@/components/notifications/notification-bell'
 import { cn, getInitials } from '@/lib/utils'
 import {
   LayoutDashboard,
@@ -23,6 +24,9 @@ import {
   ChevronDown,
   Activity,
   Layers,
+  ShieldCheck,
+  Landmark,
+  Inbox,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -41,7 +45,9 @@ import {
 
 const sidebarLinks = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/holding', label: 'Holding', icon: Landmark },
   { href: '/admin/inquilinos', label: 'Inquilinos', icon: Building2 },
+  { href: '/admin/compliance', label: 'Compliance', icon: ShieldCheck },
   { href: '/admin/clientes', label: 'Clientes', icon: UsersRound },
   { href: '/admin/catalogo', label: 'Catálogo Digital Saúde', icon: Layers },
   { href: '/admin/vendedores', label: 'Vendedores', icon: UserCog },
@@ -49,9 +55,20 @@ const sidebarLinks = [
   { href: '/admin/financeiro', label: 'Financeiro', icon: Receipt },
   { href: '/admin/comissoes', label: 'Comissões', icon: BadgeDollarSign },
   { href: '/admin/parceiros', label: 'Rede de Parceiros', icon: Handshake },
+  { href: '/admin/emails', label: 'Caixa de saída', icon: Inbox },
   { href: '/admin/usuarios', label: 'Usuários da Plataforma', icon: Users },
   { href: '/admin/configuracoes', label: 'Configurações', icon: Settings },
 ]
+
+/**
+ * Item ativo também nas subpáginas (`/admin/compliance/<id>`,
+ * `/admin/financeiro/assinaturas/<id>`) — o Dashboard (`/admin`) só na raiz.
+ */
+function isLinkActive(pathname: string | null, href: string): boolean {
+  if (!pathname) return false
+  if (pathname === href) return true
+  return href !== '/admin' && pathname.startsWith(`${href}/`)
+}
 
 export function PlatformSidebar() {
   const pathname = usePathname()
@@ -66,46 +83,49 @@ export function PlatformSidebar() {
           <img src="/annetec.svg" alt="Annetec" className="h-7" />
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Superadmin</span>
         </Link>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 p-1.5 rounded-full hover:bg-slate-100 transition-colors">
-              <Avatar className="h-8 w-8 bg-primary">
-                <AvatarFallback className="bg-primary text-white text-xs font-medium">
-                  {user?.name ? getInitials(user.name) : 'SA'}
-                </AvatarFallback>
-              </Avatar>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 z-[110]">
-            <div className="px-3 py-2 border-b border-border">
-              <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground">Superadmin</p>
-            </div>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/configuracoes">
-                <Settings className="mr-2 h-4 w-4" />
-                Configurações
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/logs">
-                <Activity className="mr-2 h-4 w-4" />
-                Logs e Rastreabilidade
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/dicionario-ti">
-                <BookOpenText className="mr-2 h-4 w-4" />
-                Dicionário TI
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-red-600">
-              <LogOut className="mr-2 h-4 w-4" />
-              Sair
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-1">
+          <NotificationBell variant="mobile" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-2 p-1.5 rounded-full hover:bg-slate-100 transition-colors">
+                <Avatar className="h-8 w-8 bg-primary">
+                  <AvatarFallback className="bg-primary text-white text-xs font-medium">
+                    {user?.name ? getInitials(user.name) : 'SA'}
+                  </AvatarFallback>
+                </Avatar>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 z-[110]">
+              <div className="px-3 py-2 border-b border-border">
+                <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
+                <p className="text-xs text-muted-foreground">Superadmin</p>
+              </div>
+              <DropdownMenuItem asChild>
+                <Link href="/admin/configuracoes">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Configurações
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/admin/logs">
+                  <Activity className="mr-2 h-4 w-4" />
+                  Logs e Rastreabilidade
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/admin/dicionario-ti">
+                  <BookOpenText className="mr-2 h-4 w-4" />
+                  Dicionário TI
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={logout} className="text-red-600">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sair
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </header>
 
       {/* Desktop Collapsible Sidebar */}
@@ -155,7 +175,7 @@ export function PlatformSidebar() {
           <ul className="space-y-1">
             {sidebarLinks.map(link => {
               const Icon = link.icon
-              const isActive = pathname === link.href
+              const isActive = isLinkActive(pathname, link.href)
 
               const linkElement = (
                 <Link
@@ -251,6 +271,9 @@ export function PlatformSidebar() {
             return dictElement
           })()}
 
+          {/* Notificações em tempo real (todos os clubes) */}
+          <NotificationBell variant={isCollapsed ? 'sidebar-collapsed' : 'sidebar'} />
+
           {/* User Profile */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -302,20 +325,23 @@ export function PlatformSidebar() {
       >
         {[
           { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+          { href: '/admin/holding', label: 'Holding', icon: Landmark },
           { href: '/admin/inquilinos', label: 'Inquilinos', icon: Building2 },
+          { href: '/admin/compliance', label: 'Compliance', icon: ShieldCheck },
           { href: '/admin/clientes', label: 'Clientes', icon: UsersRound },
           { href: '/admin/vendedores', label: 'Vendedores', icon: UserCog },
           { href: '/admin/leads', label: 'Leads', icon: Kanban },
           { href: '/admin/financeiro', label: 'Financeiro', icon: Receipt },
           { href: '/admin/comissoes', label: 'Comissões', icon: BadgeDollarSign },
           { href: '/admin/parceiros', label: 'Parceiros', icon: Handshake },
+          { href: '/admin/emails', label: 'E-mails', icon: Inbox },
           { href: '/admin/usuarios', label: 'Usuários', icon: Users },
           { href: '/admin/configuracoes', label: 'Config', icon: Settings },
           { href: '/admin/logs', label: 'Logs', icon: Activity },
           { href: '/admin/dicionario-ti', label: 'Dicionário', icon: BookOpenText },
         ].map(link => {
           const Icon = link.icon
-          const isActive = pathname === link.href
+          const isActive = isLinkActive(pathname, link.href)
           return (
             <Link
               key={link.href}

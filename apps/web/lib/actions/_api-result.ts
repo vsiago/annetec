@@ -1,4 +1,5 @@
 import 'server-only'
+import type { ErrorCode } from '@annetec/contracts'
 import { ApiError } from '@/lib/api/client'
 
 /**
@@ -9,10 +10,32 @@ import { ApiError } from '@/lib/api/client'
  * deles porque um módulo `'use server'` só aceita exportar função async — todo
  * o resto vira erro de build. Daí este arquivo à parte: `'server-only'` para o
  * `ApiError` e o token nunca chegarem ao bundle do browser.
+ *
+ * Isso vale também para `export type { ActionResult }`: o Next (16.2.6) registra
+ * o nome como server reference, o tipo some na compilação e a rota quebra com
+ * `ActionResult is not defined`, mesmo com o typecheck passando. Quem precisa
+ * do tipo importa daqui, com `import type`.
  */
 export type ActionResult<T> =
   | { success: true; data: T }
-  | { success: false; error: string; fieldErrors?: Record<string, string> }
+  | {
+      success: false
+      error: string
+      fieldErrors?: Record<string, string>
+      /**
+       * A API respondeu 401: a sessão enviada não vale mais (expirou, foi
+       * derrubada, ou o vínculo com o clube deixou de estar ativo — associado
+       * excluído/bloqueado, equipe desativada). Quem lê sessão (AuthProvider,
+       * portal do associado, dados do painel) trata isto em um lugar só:
+       * limpa o cookie e manda para o login com o aviso de sessão encerrada.
+       *
+       * Nas actions de LOGIN um 401 é credencial errada, não sessão caída — o
+       * campo vem do mesmo jeito, mas lá ninguém o lê.
+       */
+      unauthorized?: true
+      /** Código do erro da API (`ERROR_CODES`), quando a falha veio dela. */
+      code?: ErrorCode
+    }
 
 /**
  * Mensagem para quando a API não respondeu — DNS, porta fechada, processo no
@@ -70,7 +93,9 @@ export async function run<T>(operation: () => Promise<T>): Promise<ActionResult<
       return {
         success: false,
         error: error.message,
+        code: error.code,
         ...(error.issues ? { fieldErrors: error.toFieldErrors() } : {}),
+        ...(error.status === 401 ? { unauthorized: true as const } : {}),
       }
     }
 

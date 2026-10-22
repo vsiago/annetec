@@ -1,3 +1,4 @@
+import type { ClubPaymentMethod, ClubPlanCoverage, ClubPlanDependentRule } from '@annetec/contracts'
 import { relations } from 'drizzle-orm'
 import {
   boolean,
@@ -266,6 +267,10 @@ export const clubPlans = pgTable(
     name: text('name').notNull(),
     description: text('description').notNull().default(''),
     priceMonthly: numeric('price_monthly', { precision: 12, scale: 2 }).notNull().default('0'),
+    /** Preço mensal por dependente; `null`/0 = dependentes inclusos (checkout do clube). */
+    priceDependentMonthly: numeric('price_dependent_monthly', { precision: 12, scale: 2 }),
+    /** Teto de dependentes por assinatura; `null` = sem limite, 0 = individual. */
+    maxDependents: integer('max_dependents'),
     /** Coberturas listadas no cartão do plano. */
     features: jsonb('features').$type<string[]>().notNull().default([]),
     /** Público a que o plano se destina ("Famílias", "MEI"), usado no filtro. */
@@ -275,6 +280,34 @@ export const clubPlans = pgTable(
     /** `codigo` do plano correspondente na Digital Saúde, quando houver. */
     upstreamPlanCodigo: text('upstream_plan_codigo'),
     status: activeStatusEnum('status').notNull().default('active'),
+    // --- Modelo completo do plano (0007). Todos opcionais: ausentes = regra de antes.
+    /** Frase curta de venda sob o nome. */
+    tagline: text('tagline'),
+    /** Selo do card ("Mais escolhido"). */
+    badge: text('badge'),
+    /** Ordem de exibição (menor primeiro); `null` = destaque, depois preço. */
+    sortOrder: integer('sort_order'),
+    /** Dependentes cobertos pela mensalidade do titular; os seguintes pagam `priceDependentMonthly`. */
+    includedDependents: integer('included_dependents'),
+    /** Taxa de adesão (R$), só na 1ª cobrança; `null`/0 = sem adesão. */
+    enrollmentFee: numeric('enrollment_fee', { precision: 12, scale: 2 }),
+    enrollmentFeeWaived: boolean('enrollment_fee_waived').notNull().default(false),
+    /** Idade mínima do titular; `null` = 18. */
+    holderMinAge: integer('holder_min_age'),
+    /** Idade máxima do titular (inclusive); `null` = sem limite. */
+    holderMaxAge: integer('holder_max_age'),
+    /** Parentescos aceitos + idade máxima; `null` = qualquer parentesco, sem limite. */
+    dependentRules: jsonb('dependent_rules').$type<ClubPlanDependentRule[]>(),
+    /** Coberturas estruturadas (ordem do array = ordem de exibição). */
+    coverages: jsonb('coverages').$type<ClubPlanCoverage[]>().notNull().default([]),
+    /** Formas aceitas neste plano (∩ as do clube); `null` = todas as do clube. */
+    paymentMethods: jsonb('payment_methods').$type<ClubPaymentMethod[]>(),
+    /** Fidelidade em meses; 0/`null` = sem fidelidade. */
+    loyaltyMonths: integer('loyalty_months'),
+    cancellationPolicy: text('cancellation_policy'),
+    adjustmentPolicy: text('adjustment_policy'),
+    /** Regulamento exibido no checkout. */
+    terms: text('terms'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

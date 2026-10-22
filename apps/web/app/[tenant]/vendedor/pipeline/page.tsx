@@ -10,17 +10,10 @@ import { useTenantData, getLeadsBySellerId } from '@/contexts/tenant-data-contex
 import type { Lead, LeadStatus, Seller } from '@/lib/types'
 import {
   Plus,
-  MoreHorizontal,
   Phone,
   Mail,
   GripVertical,
 } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
@@ -228,19 +221,6 @@ export default function PipelinePage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between">
                               <p className="font-medium text-sm truncate">{lead.name}</p>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-6 w-6 -mr-2">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
-                                  <DropdownMenuItem>Adicionar Interação</DropdownMenuItem>
-                                  <DropdownMenuItem>Editar</DropdownMenuItem>
-                                  <DropdownMenuItem className="text-red-600">Marcar como Perdido</DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
                             </div>
                             <div className="mt-2 space-y-1">
                               <div className="flex items-center gap-1 text-xs text-muted-foreground">

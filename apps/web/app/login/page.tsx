@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   ShieldCheck,
@@ -15,13 +15,14 @@ import {
   Lock,
 } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { cpf as cpfSchema, email as emailSchema, loginInput } from "@annetec/contracts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { loginAction, loginClientPortalAction } from "@/lib/actions/auth-api"
+import { maskCpfInput } from "@/lib/cpf"
 
 type LoginMode = "admin" | "tenant-admin" | "tenant"
 
@@ -39,21 +40,38 @@ const submitLabel: Record<LoginMode, string> = {
 
 const passwordSchema = loginInput.shape.password
 
-function formatCpf(raw: string) {
-  const digits = raw.replace(/\D/g, "").slice(0, 11)
-  const parts = [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 9)]
-  let out = parts.filter(Boolean).join(".")
-  if (digits.length > 9) out += `-${digits.slice(9, 11)}`
-  return out
+/** Só aceita um slug de verdade em `?tenant=` — nada de `//outro-site` virando redirect aberto. */
+const TENANT_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*$/
+
+/** Para onde vai uma sessão de inquilino, pelo papel. */
+function tenantDestination(tenantSlug: string | null, tenantRole: string | null) {
+  const area = tenantRole === "client" ? "cliente" : tenantRole === "seller" ? "vendedor" : "admin"
+  return `/${tenantSlug}/${area}`
 }
 
 function firstIssue(result: ReturnType<typeof emailSchema.safeParse>) {
   return result.success ? null : result.error.issues[0]?.message ?? "Valor inválido"
 }
 
+// `useSearchParams` exige um limite de Suspense na página (Next App Router).
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginContent />
+    </Suspense>
+  )
+}
+
+function LoginContent() {
   const router = useRouter()
-  const [mode, setMode] = useState<LoginMode>("admin")
+  const searchParams = useSearchParams()
+  // `?tenant=<slug>`: quem chega aqui vindo de um site de inquilino vai para o
+  // login com a marca dele. `?perfil=associado` sem inquilino abre na aba Associado.
+  const tenantParam = searchParams.get("tenant")?.toLowerCase() ?? null
+  const redirectSlug = tenantParam && TENANT_SLUG_PATTERN.test(tenantParam) ? tenantParam : null
+  const [mode, setMode] = useState<LoginMode>(() =>
+    searchParams.get("perfil") === "associado" ? "tenant" : "admin",
+  )
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [cpf, setCpf] = useState("")
@@ -61,6 +79,10 @@ export default function LoginPage() {
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (redirectSlug) router.replace(`/${redirectSlug}/login`)
+  }, [redirectSlug, router])
 
   const validation = useMemo(() => {
     const emailResult = emailSchema.safeParse(email)
@@ -107,7 +129,12 @@ export default function LoginPage() {
           setError(result.error)
           return
         }
-        router.push("/admin")
+        // Conta de inquilino digitada na aba errada: leva para a área dela.
+        router.push(
+          result.data.scope === "platform"
+            ? "/admin"
+            : tenantDestination(result.data.tenantSlug, result.data.tenantRole),
+        )
         return
       }
 
@@ -117,8 +144,11 @@ export default function LoginPage() {
           setError(result.error)
           return
         }
-        const destination = result.data.tenantRole === "seller" ? "vendedor" : "admin"
-        router.push(`/${result.data.tenantSlug}/${destination}`)
+        router.push(
+          result.data.scope === "platform"
+            ? "/admin"
+            : tenantDestination(result.data.tenantSlug, result.data.tenantRole),
+        )
         return
       }
 
@@ -132,6 +162,8 @@ export default function LoginPage() {
       setIsSubmitting(false)
     }
   }
+
+  if (redirectSlug) return null
 
   return (
     <div className="min-h-[100dvh] flex bg-white">
@@ -273,7 +305,7 @@ export default function LoginPage() {
                     label="CPF"
                     placeholder="000.000.000-00"
                     value={cpf}
-                    onChange={(v) => setCpf(formatCpf(v))}
+                    onChange={(v) => setCpf(maskCpfInput(v))}
                     onBlur={() => markTouched("cpf")}
                     touched={!!touched.cpf}
                     validation={validation.cpf}
@@ -378,7 +410,7 @@ export default function LoginPage() {
                   <p className="text-sm text-muted-foreground">
                     Ainda não tem cadastro?{" "}
                     <Link
-                      href="/cadastro"
+                      href="/contratar"
                       className="font-semibold text-[#e84364] hover:underline"
                     >
                       Cadastre-se

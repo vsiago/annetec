@@ -341,6 +341,12 @@ export function usuarioDaApi(dto: ApiTenantUser): User | Seller | Client {
     phone: dto.phone ?? undefined,
     avatar: dto.avatarUrl ?? undefined,
     createdAt: new Date(dto.createdAt),
+    active: dto.active,
+    // API anterior ao `accessStatus`: só havia o booleano, e inativo era exclusão.
+    accessStatus: dto.accessStatus ?? (dto.active ? 'active' : 'removed'),
+    banned: dto.banned ?? false,
+    lastLoginAt: dto.lastLoginAt ? new Date(dto.lastLoginAt) : undefined,
+    lastLoginUserAgent: dto.lastLoginUserAgent ?? undefined,
   }
 
   if (dto.role === 'seller') {
@@ -385,7 +391,7 @@ export function usuarioDaApi(dto: ApiTenantUser): User | Seller | Client {
  * contrato na Digital Saude, e mandar aqui seria descartado em silencio.
  */
 export function usuarioParaApiCriacao(
-  usuario: Partial<User> & { cpf?: string; password?: string },
+  usuario: Partial<User> & { cpf?: string },
 ): CreateTenantUserInput {
   return {
     name: usuario.name ?? '',
@@ -393,7 +399,7 @@ export function usuarioParaApiCriacao(
     role: usuario.role ?? 'client',
     phone: usuario.phone || null,
     active: true,
-    ...(usuario.password ? { password: usuario.password } : {}),
+    // Sem senha: a API gera a provisória e a envia por e-mail ao usuário.
     // CPF e o unico campo comercial que a criacao grava: ele vira o perfil do
     // associado e e por ele que o contrato da Digital Saude e reconciliado.
     ...(usuario.role === 'client' && usuario.cpf ? { cpf: usuario.cpf } : {}),
@@ -444,6 +450,9 @@ export function planoDaApi(dto: ApiClubPlan): ClientPlan {
     features: dto.features,
     highlight: dto.highlight,
     audience: dto.audience ?? undefined,
+    // Ausente na resposta (API antiga) = inclusos / sem limite.
+    priceDependentMonthly: dto.priceDependentMonthly ?? null,
+    maxDependents: dto.maxDependents ?? null,
   }
 }
 
@@ -460,6 +469,8 @@ export function planoParaApiCriacao(plano: Partial<ClientPlan>) {
     // aqui: o painel do inquilino nao tem de onde tirar o codigo.
     upstreamPlanCodigo: null,
     status: 'active' as const,
+    priceDependentMonthly: plano.priceDependentMonthly ?? null,
+    maxDependents: plano.maxDependents ?? null,
   }
 }
 
@@ -471,6 +482,11 @@ export function planoParaApi(plano: Partial<ClientPlan>) {
     ...(plano.features !== undefined ? { features: plano.features ?? [] } : {}),
     ...(plano.audience !== undefined ? { audience: plano.audience || null } : {}),
     ...(plano.highlight !== undefined ? { highlight: plano.highlight } : {}),
+    // `null` é valor de verdade aqui (limpa o campo); só `undefined` fica fora.
+    ...(plano.priceDependentMonthly !== undefined
+      ? { priceDependentMonthly: plano.priceDependentMonthly }
+      : {}),
+    ...(plano.maxDependents !== undefined ? { maxDependents: plano.maxDependents } : {}),
   }
 }
 

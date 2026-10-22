@@ -215,32 +215,24 @@ export default function AdminParceirosPage() {
           accent="primary"
           value={countBy(p => p.status === 'active').toLocaleString('pt-BR')}
           label="Parceiros ativos"
-          delta={{ value: '12%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={Stethoscope}
           accent="info"
           value={countBy(p => p.category === 'health').toLocaleString('pt-BR')}
           label="Clínicas e consultórios"
-          delta={{ value: '8%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={FlaskConical}
           accent="success"
           value={countBy(p => p.category === 'pharmacy' || p.category === 'wellness').toLocaleString('pt-BR')}
           label="Laboratórios e exames"
-          delta={{ value: '15%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={Smile}
           accent="warning"
           value={countBy(p => !['health', 'pharmacy', 'wellness'].includes(p.category)).toLocaleString('pt-BR')}
           label="Odontologia e outros"
-          delta={{ value: '11%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
       </div>
 

@@ -3,10 +3,23 @@ import { activityAdminController, activityIngestController } from '@/modules/act
 import { authController } from '@/modules/auth/controller'
 import { billingController } from '@/modules/billing/controller'
 import { catalogController } from '@/modules/catalog/controller'
+import { clubBillingAdminController } from '@/modules/club-billing/admin-controller'
+import { clubPortalController } from '@/modules/club-billing/portal-controller'
+import { clubCheckoutController } from '@/modules/club-billing/public-controller'
+import { webhooksController } from '@/modules/club-billing/webhook-controller'
 import { contractsController, membershipCardsController } from '@/modules/contracts/controller'
 import { crmController } from '@/modules/crm/controller'
 import { healthController } from '@/modules/health/controller'
 import { networkController } from '@/modules/network/controller'
+import { platformNotificationsController, tenantNotificationsController } from '@/modules/notifications/controller'
+import { onboardingPlatformController, platformEmailsController } from '@/modules/platform-onboarding/platform-controller'
+import { onboardingPublicController, publicFilesController } from '@/modules/platform-onboarding/public-controller'
+import { platformBillingController } from '@/modules/platform-billing/admin-controller'
+import { platformPublicInvoiceController } from '@/modules/platform-billing/public-controller'
+import { tenantPlatformSubscriptionController } from '@/modules/platform-billing/tenant-controller'
+import { platformWebhookController } from '@/modules/platform-billing/webhook-controller'
+import { holdingController } from '@/modules/holding/controller'
+import { platformAccessGuard } from '@/http/middleware/platform-access'
 import { platformUsersController } from '@/modules/platform-users/controller'
 import { supportController } from '@/modules/support/controller'
 import { tenantPlansController } from '@/modules/tenant-plans/controller'
@@ -33,6 +46,22 @@ export const routes = new Hono<AppEnv>()
   .route('/api/v1/platform/tenants', tenantsController)
   .route('/api/v1/platform/users', platformUsersController)
   .route('/api/v1/platform/plans', tenantPlansController)
+  .route('/api/v1/webhooks', webhooksController)
+  // Contratação B2B da plataforma (Q1): jornada pública, arquivos, compliance e caixa de saída.
+  .route('/api/v1/public/contratacao', onboardingPublicController)
+  .route('/api/v1/public/arquivos', publicFilesController)
+  .route('/api/v1/platform/onboarding', onboardingPlatformController)
+  .route('/api/v1/platform/emails', platformEmailsController)
+  // Cobrança da plataforma, guard de restrição e holding (Q2). O guard vem ANTES
+  // de toda rota de inquilino; `/public`, `/cliente` e `/assinatura-annetec` passam sempre.
+  .route('/api/v1/webhooks/asaas-plataforma', platformWebhookController)
+  .route('/api/v1/public/faturas-annetec', platformPublicInvoiceController)
+  .route('/api/v1/platform/billing', platformBillingController)
+  .route('/api/v1/platform/holding', holdingController)
+  .route('/api/v1/platform/notificacoes', platformNotificationsController)
+  .use('/api/v1/t/:tenantSlug/*', platformAccessGuard)
+  .route('/api/v1/t/:tenantSlug/assinatura-annetec', tenantPlatformSubscriptionController)
+  .route('/api/v1/t/:tenantSlug/public/checkout', clubCheckoutController)
   .route('/api/v1/t/:tenantSlug/public', tenantPublicController)
   .route('/api/v1/t/:tenantSlug/usuarios', usersController)
   .route('/api/v1/t/:tenantSlug/contratos', contractsController)
@@ -42,5 +71,8 @@ export const routes = new Hono<AppEnv>()
   .route('/api/v1/t/:tenantSlug/crm', crmController)
   .route('/api/v1/t/:tenantSlug/rede', networkController)
   .route('/api/v1/t/:tenantSlug/atendimentos', supportController)
+  .route('/api/v1/t/:tenantSlug/faturamento', clubBillingAdminController)
+  .route('/api/v1/t/:tenantSlug/cliente', clubPortalController)
+  .route('/api/v1/t/:tenantSlug/notificacoes', tenantNotificationsController)
 
 export type ApiRoutes = typeof routes

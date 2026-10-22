@@ -27,7 +27,6 @@ import { run, type ActionResult } from './_api-result'
  * inquilino usa, com o `slug` da operadora. Nenhuma lógica de contrato,
  * financeiro ou catálogo é duplicada.
  */
-export type { ActionResult }
 
 /** Resultado de `/contratos/busca/cpf` — vem direto do ERP, ainda não espelhado. */
 export interface UpstreamContractResult {

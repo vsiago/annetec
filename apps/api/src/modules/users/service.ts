@@ -1,16 +1,33 @@
 import {
   ERROR_CODES,
   type CreateTenantUserInput,
+  type MemberAccessStatus,
   type TenantUser,
   type UpdateTenantUserInput,
 } from '@annetec/contracts'
-import { and, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { clientProfiles, contracts, member, sales, sellerProfiles, user } from '@/db/schema'
+import { activityEvents, clientProfiles, contracts, member, sales, sellerProfiles, session, user } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { auth } from '@/lib/auth'
 import { decryptSecret, encryptSecret } from '@/lib/crypto'
 import { getDigitalSaudeClient } from '@/integrations/digitalsaude/provider'
+import { generateProvisionalPassword } from './access.service'
+import {
+  cutMemberAccess,
+  MEMBER_BLOCKED_REASON,
+  MEMBER_REMOVED_REASON,
+  memberAccessDb,
+  type CutAccessResult,
+  type MemberAccessDeps,
+} from './member-access'
+import {
+  assertKeepsResponsible,
+  membershipRulesDb,
+  revokeClubSessions,
+  type MembershipRulesDeps,
+  type MembershipTarget,
+} from './membership-rules'
 
 /**
  * CRUD de usuários dentro de um inquilino.
@@ -29,10 +46,12 @@ export const usersService = {
     page: number
     perPage: number
     role?: 'admin' | 'seller' | 'client'
+    accessStatus?: MemberAccessStatus
     search?: string
   }) {
     const filters: SQL[] = [eq(member.organizationId, params.tenantId)]
     if (params.role) filters.push(eq(member.role, params.role))
+    if (params.accessStatus) filters.push(eq(member.accessStatus, params.accessStatus))
     if (params.search) {
       const term = `%${params.search}%`
       const match = or(ilike(user.name, term), ilike(user.email, term))
@@ -42,6 +61,8 @@ export const usersService = {
 
     const vendido = totalVendidoPorVendedor(params.tenantId)
     const ultima = ultimaVendaPorCliente(params.tenantId)
+    const login = ultimoLoginPorUsuario(params.tenantId)
+    const sessao = ultimaSessaoPorUsuario(params.tenantId)
 
     const [rows, [totals]] = await Promise.all([
       db
@@ -58,6 +79,10 @@ export const usersService = {
           ultimaVendaValor: ultima.value,
           ultimaVendaEm: ultima.soldAt,
           ultimaVendaVendedor: ultima.sellerId,
+          loginEm: login.at,
+          loginUserAgent: login.userAgent,
+          sessaoEm: sessao.at,
+          sessaoUserAgent: sessao.userAgent,
         })
         .from(member)
         .innerJoin(user, eq(user.id, member.userId))
@@ -78,6 +103,8 @@ export const usersService = {
           ),
         )
         .leftJoin(ultima, eq(ultima.clientUserId, member.userId))
+        .leftJoin(login, eq(login.userId, member.userId))
+        .leftJoin(sessao, eq(sessao.userId, member.userId))
         .where(where)
         .orderBy(desc(member.createdAt))
         .limit(params.perPage)
@@ -93,6 +120,7 @@ export const usersService = {
           clientCpf: row.clientCpf,
           clientContractCodigo: row.clientContractCodigo,
           contrato: row.contrato,
+          ultimoAcesso: ultimoAcesso(row),
           ultimaVenda: row.ultimaVendaEm
             ? {
                 planName: row.ultimaVendaPlano,
@@ -114,6 +142,8 @@ export const usersService = {
 
     const vendido = totalVendidoPorVendedor(tenantId)
     const ultima = ultimaVendaPorCliente(tenantId)
+    const login = ultimoLoginPorUsuario(tenantId)
+    const sessao = ultimaSessaoPorUsuario(tenantId)
 
     const [extras] = await db
       .select({
@@ -127,6 +157,10 @@ export const usersService = {
         ultimaVendaValor: ultima.value,
         ultimaVendaEm: ultima.soldAt,
         ultimaVendaVendedor: ultima.sellerId,
+        loginEm: login.at,
+        loginUserAgent: login.userAgent,
+        sessaoEm: sessao.at,
+        sessaoUserAgent: sessao.userAgent,
       })
       .from(member)
       .leftJoin(
@@ -146,6 +180,8 @@ export const usersService = {
         ),
       )
       .leftJoin(ultima, eq(ultima.clientUserId, member.userId))
+      .leftJoin(login, eq(login.userId, member.userId))
+      .leftJoin(sessao, eq(sessao.userId, member.userId))
       .where(and(eq(member.organizationId, tenantId), eq(member.userId, id)))
       .limit(1)
 
@@ -155,6 +191,7 @@ export const usersService = {
       clientCpf: extras?.clientCpf ?? null,
       clientContractCodigo: extras?.clientContractCodigo ?? null,
       contrato: extras?.contrato ?? null,
+      ultimoAcesso: extras ? ultimoAcesso(extras) : null,
       ultimaVenda: extras?.ultimaVendaEm
         ? {
             planName: extras.ultimaVendaPlano,
@@ -167,7 +204,16 @@ export const usersService = {
     })
   },
 
-  async create(tenantId: string, input: CreateTenantUserInput): Promise<TenantUser> {
+  /**
+   * Cria (ou reaproveita) a conta e o vínculo. A senha NUNCA vem de quem
+   * cadastra: conta nova nasce com senha provisória gerada aqui, devolvida só
+   * para o controller mandar por e-mail ao próprio usuário (convite com a
+   * marca do clube) — `provisionalPassword: null` quando a conta já existia.
+   */
+  async create(
+    tenantId: string,
+    input: CreateTenantUserInput,
+  ): Promise<{ tenantUser: TenantUser; provisionalPassword: string | null }> {
     const email = input.email.toLowerCase()
 
     const [existingMembership] = await db
@@ -180,7 +226,7 @@ export const usersService = {
       throw new AppError(ERROR_CODES.ALREADY_EXISTS, 'Já existe um usuário com este e-mail neste inquilino')
     }
 
-    const authUser = await findOrCreateAuthUser(email, input.name, input.password)
+    const { user: authUser, password: provisionalPassword } = await findOrCreateAuthUser(email, input.name)
 
     await auth.api.addMember({
       body: { userId: authUser.id, organizationId: tenantId, role: input.role },
@@ -210,16 +256,42 @@ export const usersService = {
     if (!input.active) {
       await db
         .update(member)
-        .set({ active: false })
+        .set({ accessStatus: 'removed', accessChangedAt: new Date() })
         .where(and(eq(member.organizationId, tenantId), eq(member.userId, authUser.id)))
     }
 
-    return this.getById(tenantId, authUser.id)
+    return { tenantUser: await this.getById(tenantId, authUser.id), provisionalPassword }
   },
 
-  async update(tenantId: string, id: string, input: UpdateTenantUserInput): Promise<TenantUser> {
+  async update(
+    tenantId: string,
+    id: string,
+    input: UpdateTenantUserInput,
+    actorUserId?: string | null,
+    rules: MembershipRulesDeps = membershipRulesDb,
+  ): Promise<TenantUser> {
     const row = await findMembership(tenantId, id)
     if (!row) throw AppError.notFound('Usuário')
+
+    // Desativar ou rebaixar quem é responsável: o clube não pode ficar sem
+    // nenhum admin ativo — nem quando é o próprio admin saindo.
+    const deixaDeResponder =
+      input.active === false || (input.role !== undefined && input.role !== 'admin')
+    if (deixaDeResponder) {
+      await assertKeepsResponsible(
+        rules,
+        tenantId,
+        {
+          userId: id,
+          email: row.user.email,
+          name: row.user.name,
+          platformRole: row.user.role ?? 'user',
+          tenantRole: row.member.role as MembershipTarget['tenantRole'],
+          active: row.member.active,
+        },
+        actorUserId,
+      )
+    }
 
     if (input.name !== undefined || input.email !== undefined || input.phone !== undefined) {
       await db
@@ -258,31 +330,124 @@ export const usersService = {
         })
     }
 
-    if (input.active !== undefined) {
+    if (input.active === false && row.member.active && row.member.role === 'client') {
+      // Desativar associado é excluí-lo: mesma regra do DELETE (cancela a
+      // assinatura viva, marca `removed`, derruba as sessões).
+      await cutMemberAccess(
+        tenantId,
+        { userId: id, platformRole: row.user.role ?? 'user' },
+        'removed',
+        { actorUserId: actorUserId ?? null, reason: MEMBER_REMOVED_REASON },
+        { ...memberAccessDb, ...pickRules(rules) },
+      )
+    } else if (input.active !== undefined && input.active !== row.member.active) {
       await db
         .update(member)
-        .set({ active: input.active })
+        .set({ accessStatus: input.active ? 'active' : 'removed', accessChangedAt: new Date() })
         .where(and(eq(member.organizationId, tenantId), eq(member.userId, id)))
+      // Desativado agora: o acesso cai na hora, não quando a sessão expirar.
+      if (!input.active) {
+        await revokeClubSessions(rules, tenantId, { userId: id, platformRole: row.user.role ?? 'user' })
+      }
     }
 
-    if (input.password) {
-      // Troca de senha por terceiro dentro do inquilino usa o fluxo de
-      // "esqueci minha senha" (e-mail) — `admin.setUserPassword` é só para a
-      // equipe Annetec (plataforma) resetar senha de qualquer conta.
-      throw AppError.businessRule('Use o fluxo de redefinição de senha para alterar a senha de outro usuário')
-    }
+    // Senha não se altera por aqui (o campo nem existe no contrato): o admin
+    // usa `POST /usuarios/:id/redefinir-senha`, que gera uma provisória e a
+    // envia por e-mail ao próprio usuário.
 
     return this.getById(tenantId, id)
   },
 
   /**
-   * Remove o vínculo com o inquilino. A conta Better Auth em si não é
-   * apagada — pode ter vínculo com outro inquilino, ou o histórico de vendas
-   * e contratos aponta para o `userId` por chave estrangeira.
+   * "Excluir" (`DELETE /usuarios/:id`). Nada é apagado — a conta pode ter
+   * vínculo com outro inquilino, e vendas, contratos e assinaturas apontam
+   * para o `userId` —, o vínculo vira `removed`:
+   *  - associado: cancela a(s) assinatura(s) viva(s) no clube (cobranças
+   *    abertas no gateway e cartão salvo), marca `removed` e derruba as
+   *    sessões. Se ele voltar pelo site, o MESMO cadastro é reativado e ele
+   *    precisa assinar de novo (`member-access.ts`);
+   *  - admin/vendedor: regra de sempre — recusa (422) tirar o último
+   *    responsável ativo, inclusive a si mesmo; marca `removed` e derruba as
+   *    sessões.
+   * Repetir num vínculo já removido é seguro (cancela o que ainda estiver
+   * vivo). Excluir alguém bloqueado mantém o bloqueio.
    */
-  async deactivate(tenantId: string, id: string): Promise<TenantUser> {
-    return this.update(tenantId, id, { active: false })
+  async remove(
+    tenantId: string,
+    id: string,
+    actorUserId?: string | null,
+    deps: MemberAccessDeps & MembershipRulesDeps = { ...membershipRulesDb, ...memberAccessDb },
+  ): Promise<{ tenantUser: TenantUser; result: CutAccessResult }> {
+    const row = await findMembership(tenantId, id)
+    if (!row) throw AppError.notFound('Usuário')
+    await assertKeepsResponsible(deps, tenantId, targetOf(row), actorUserId)
+    const result = await cutMemberAccess(
+      tenantId,
+      { userId: id, platformRole: row.user.role ?? 'user' },
+      row.member.accessStatus === 'blocked' ? 'blocked' : 'removed',
+      { actorUserId: actorUserId ?? null, reason: MEMBER_REMOVED_REASON },
+      deps,
+    )
+    return { tenantUser: await this.getById(tenantId, id), result }
   },
+
+  /**
+   * Bloqueia o acesso: como excluir (assinatura viva cancelada, sessões
+   * derrubadas), mas a pessoa não volta pelo site — nenhum login nem
+   * recadastro com este e-mail neste clube até o desbloqueio.
+   */
+  async block(
+    tenantId: string,
+    id: string,
+    actorUserId?: string | null,
+    deps: MemberAccessDeps & MembershipRulesDeps = { ...membershipRulesDb, ...memberAccessDb },
+  ): Promise<{ tenantUser: TenantUser; result: CutAccessResult }> {
+    const row = await findMembership(tenantId, id)
+    if (!row) throw AppError.notFound('Usuário')
+    if (actorUserId && actorUserId === id) throw AppError.businessRule('Você não pode bloquear o próprio acesso')
+    await assertKeepsResponsible(deps, tenantId, targetOf(row), actorUserId)
+    const result = await cutMemberAccess(
+      tenantId,
+      { userId: id, platformRole: row.user.role ?? 'user' },
+      'blocked',
+      { actorUserId: actorUserId ?? null, reason: MEMBER_BLOCKED_REASON },
+      deps,
+    )
+    return { tenantUser: await this.getById(tenantId, id), result }
+  },
+
+  /**
+   * Desfaz o bloqueio. Associado volta para `removed` (pode voltar pelo
+   * site e assinar de novo — a assinatura foi cancelada no bloqueio);
+   * admin/vendedor volta para `active` (só o admin desbloqueia equipe).
+   */
+  async unblock(
+    tenantId: string,
+    id: string,
+    deps: Pick<MemberAccessDeps, 'setStatus'> = memberAccessDb,
+  ): Promise<{ tenantUser: TenantUser; status: MemberAccessStatus }> {
+    const row = await findMembership(tenantId, id)
+    if (!row) throw AppError.notFound('Usuário')
+    if (row.member.accessStatus !== 'blocked') throw AppError.businessRule('Este acesso não está bloqueado')
+    const status = row.member.role === 'client' ? 'removed' : 'active'
+    await deps.setStatus(tenantId, id, status, new Date())
+    return { tenantUser: await this.getById(tenantId, id), status }
+  },
+}
+
+function targetOf(row: { member: MemberRow; user: UserRow }): MembershipTarget {
+  return {
+    userId: row.user.id,
+    email: row.user.email,
+    name: row.user.name,
+    platformRole: row.user.role ?? 'user',
+    tenantRole: row.member.role as MembershipTarget['tenantRole'],
+    active: row.member.active,
+  }
+}
+
+function pickRules(rules: MembershipRulesDeps): Pick<MemberAccessDeps, 'countOtherMemberships' | 'revokeSessions'> {
+  return { countOtherMemberships: rules.countOtherMemberships, revokeSessions: rules.revokeSessions }
 }
 
 /** Vínculo entre vendedor Annetec e `Produtor` da Digital Saúde. */
@@ -369,15 +534,24 @@ export const sellersService = {
   },
 }
 
-/** Reaproveita a conta se o e-mail já existir; senão cria uma nova. */
-async function findOrCreateAuthUser(email: string, name: string, password?: string) {
+/**
+ * Reaproveita a conta se o e-mail já existir (a pessoa continua com a senha
+ * que já tem: `password: null`); senão cria uma nova com senha provisória
+ * gerada aqui. Conta da equipe da plataforma nunca vira membro de clube por
+ * esta rota — misturaria o escopo de plataforma com o do inquilino.
+ */
+async function findOrCreateAuthUser(email: string, name: string) {
   const [existing] = await db.select().from(user).where(eq(user.email, email)).limit(1)
-  if (existing) return existing
+  if (existing) {
+    if (existing.role !== 'user') {
+      throw AppError.forbidden('Este e-mail pertence a uma conta da equipe da plataforma e não pode ser cadastrado no clube')
+    }
+    return { user: existing, password: null }
+  }
 
-  const signUp = await auth.api.signUpEmail({
-    body: { email, name, password: password ?? generateProvisionalPassword() },
-  })
-  return signUp.user
+  const password = generateProvisionalPassword()
+  const signUp = await auth.api.signUpEmail({ body: { email, name, password } })
+  return { user: signUp.user, password }
 }
 
 function findMembership(tenantId: string, userId: string) {
@@ -390,11 +564,54 @@ function findMembership(tenantId: string, userId: string) {
     .then(rows => rows[0])
 }
 
-function generateProvisionalPassword(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
-  const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes, byte => alphabet[byte % alphabet.length]).join('')
+/**
+ * Login mais recente da pessoa NESTE inquilino, pela trilha de atividade
+ * (`activity_events`, ação `login`) — que, ao contrário de `session`, não é
+ * apagada quando a sessão expira.
+ */
+export function ultimoLoginPorUsuario(tenantId: string) {
+  return db
+    .selectDistinctOn([activityEvents.actorUserId], {
+      userId: activityEvents.actorUserId,
+      at: activityEvents.createdAt,
+      userAgent: activityEvents.userAgent,
+    })
+    .from(activityEvents)
+    .where(and(eq(activityEvents.tenantId, tenantId), eq(activityEvents.action, 'login')))
+    .orderBy(activityEvents.actorUserId, desc(activityEvents.createdAt))
+    .as('ultimo_login_por_usuario')
+}
+
+/**
+ * Sessão mais recente da pessoa neste inquilino — cobre os logins que não
+ * passam pela trilha (portal do associado por CPF, Google). Impersonação da
+ * equipe Annetec não conta como acesso da pessoa.
+ */
+export function ultimaSessaoPorUsuario(tenantId: string) {
+  return db
+    .selectDistinctOn([session.userId], {
+      userId: session.userId,
+      at: session.createdAt,
+      userAgent: session.userAgent,
+    })
+    .from(session)
+    .where(and(eq(session.activeOrganizationId, tenantId), isNull(session.impersonatedBy)))
+    .orderBy(session.userId, desc(session.createdAt))
+    .as('ultima_sessao_por_usuario')
+}
+
+/** O mais recente entre login registrado e sessão aberta; `null` se nenhum. */
+export function ultimoAcesso(row: {
+  loginEm: Date | null
+  loginUserAgent: string | null
+  sessaoEm: Date | null
+  sessaoUserAgent: string | null
+}): { at: Date; userAgent: string | null } | null {
+  const login = row.loginEm ? { at: row.loginEm, userAgent: row.loginUserAgent } : null
+  const sessao = row.sessaoEm ? { at: row.sessaoEm, userAgent: row.sessaoUserAgent } : null
+  if (!login) return sessao
+  if (!sessao) return login
+  return sessao.at > login.at ? sessao : login
 }
 
 type MemberRow = typeof member.$inferSelect
@@ -454,6 +671,7 @@ interface Extras {
   clientCpf: string | null
   clientContractCodigo: string | null
   contrato: ContractRow | null
+  ultimoAcesso: { at: Date; userAgent: string | null } | null
   ultimaVenda: {
     planName: string | null
     status: 'pending' | 'confirmed' | 'cancelled' | null
@@ -474,7 +692,11 @@ function toDomain(memberRow: MemberRow, userRow: UserRow, extras: Extras): Tenan
     phone: userRow.phone ?? null,
     avatarUrl: userRow.image,
     active: memberRow.active,
+    accessStatus: memberRow.accessStatus,
     createdAt: memberRow.createdAt.toISOString(),
+    lastLoginAt: extras.ultimoAcesso?.at.toISOString() ?? null,
+    lastLoginUserAgent: extras.ultimoAcesso?.userAgent ?? null,
+    banned: Boolean(userRow.banned),
     upstreamProdutorCodigo: extras.seller?.upstreamProdutorCodigo ?? null,
     // A senha cifrada nunca sai daqui — só se ela existe.
     hasProdutorCredentials: Boolean(extras.seller?.upstreamProdutorPasswordEncrypted),

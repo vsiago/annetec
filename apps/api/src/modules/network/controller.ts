@@ -1,21 +1,25 @@
 import {
+  checkClubPlanConsistency,
   createBenefitInput,
   createClubPlanInput,
   createPartnerInput,
+  effectivePaymentMethods,
   paginationQuery,
   partnerCategory,
+  sortClubPlansForDisplay,
   updateBenefitInput,
   updateClubPlanInput,
   updatePartnerInput,
   type Benefit,
   type ClubPlan,
   type Partner,
+  type UpdateClubPlanInput,
 } from '@annetec/contracts'
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { db } from '@/db/client'
-import { benefits, clubPlans, partners } from '@/db/schema'
+import { benefits, clubPlans, clubSubscriptions, partners } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { requireAuth, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
@@ -23,6 +27,7 @@ import { created, noContent, ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { recordAudit } from '@/lib/audit'
 import { json, param, query } from '@/http/validate'
+import { loadBillingSettings } from '@/modules/club-billing/settings.service'
 
 const idParam = z.object({ id: z.string().uuid() })
 
@@ -243,30 +248,20 @@ export const networkController = new Hono<AppEnv>()
    * escrita só para admin, porque preço é decisão comercial.
    */
   .get('/planos', async c => {
-    const rows = await db
-      .select()
-      .from(clubPlans)
-      .where(eq(clubPlans.organizationId, tenantOf(c).id))
-      .orderBy(desc(clubPlans.highlight), asc(clubPlans.priceMonthly))
-    return ok(c, rows.map(toClubPlan))
+    const rows = await db.select().from(clubPlans).where(eq(clubPlans.organizationId, tenantOf(c).id))
+    return ok(c, sortClubPlansForDisplay(rows.map(toClubPlan)))
   })
 
   .post('/planos', requireTenantRole('admin'), json(createClubPlanInput), async c => {
     const input = c.req.valid('json')
-    const [row] = await db
-      .insert(clubPlans)
-      .values({
-        organizationId: tenantOf(c).id,
-        name: input.name,
-        description: input.description,
-        priceMonthly: String(input.priceMonthly),
-        features: input.features,
-        audience: input.audience,
-        highlight: input.highlight,
-        upstreamPlanCodigo: input.upstreamPlanCodigo,
-        status: input.status,
-      })
-      .returning()
+    const tenantId = tenantOf(c).id
+    await assertClubPlanValid(tenantId, input)
+    const [row] = await uniquePlanName(() =>
+      db
+        .insert(clubPlans)
+        .values({ organizationId: tenantId, name: input.name, ...clubPlanColumns(input) })
+        .returning(),
+    )
     await recordAudit(c, {
       action: 'club_plan.created',
       resource: 'club_plan',
@@ -278,24 +273,20 @@ export const networkController = new Hono<AppEnv>()
 
   .patch('/planos/:id', requireTenantRole('admin'), param(idParam), json(updateClubPlanInput), async c => {
     const input = c.req.valid('json')
-    const [row] = await db
-      .update(clubPlans)
-      .set({
-        ...(input.name !== undefined ? { name: input.name } : {}),
-        ...(input.description !== undefined ? { description: input.description } : {}),
-        ...(input.priceMonthly !== undefined ? { priceMonthly: String(input.priceMonthly) } : {}),
-        ...(input.features !== undefined ? { features: input.features } : {}),
-        ...(input.audience !== undefined ? { audience: input.audience } : {}),
-        ...(input.highlight !== undefined ? { highlight: input.highlight } : {}),
-        ...(input.upstreamPlanCodigo !== undefined
-          ? { upstreamPlanCodigo: input.upstreamPlanCodigo }
-          : {}),
-        ...(input.status !== undefined ? { status: input.status } : {}),
-        updatedAt: new Date(),
-      })
-      .where(and(eq(clubPlans.organizationId, tenantOf(c).id), eq(clubPlans.id, c.req.valid('param').id)))
-      .returning()
+    const tenantId = tenantOf(c).id
+    const where = and(eq(clubPlans.organizationId, tenantId), eq(clubPlans.id, c.req.valid('param').id))
+    const [current] = await db.select().from(clubPlans).where(where).limit(1)
+    if (!current) throw AppError.notFound('Plano do clube')
+    // Regras entre campos valem sobre o plano JÁ MESCLADO (atual + alterações).
+    await assertClubPlanValid(tenantId, { ...toClubPlan(current), ...input })
 
+    const [row] = await uniquePlanName(() =>
+      db
+        .update(clubPlans)
+        .set({ ...clubPlanColumns(input), updatedAt: new Date() })
+        .where(where)
+        .returning(),
+    )
     if (!row) throw AppError.notFound('Plano do clube')
     await recordAudit(c, {
       action: 'club_plan.updated',
@@ -308,9 +299,19 @@ export const networkController = new Hono<AppEnv>()
 
   .delete('/planos/:id', requireTenantRole('admin'), param(idParam), async c => {
     const { id } = c.req.valid('param')
+    const tenantId = tenantOf(c).id
+    // A FK `club_subscriptions.club_plan_id` é `set null`: excluir apagaria o
+    // vínculo de quem já assinou (estatísticas, filtro por plano, portal).
+    const [subscriptions] = await db
+      .select({ total: count() })
+      .from(clubSubscriptions)
+      .where(and(eq(clubSubscriptions.organizationId, tenantId), eq(clubSubscriptions.clubPlanId, id)))
+    if ((subscriptions?.total ?? 0) > 0) {
+      throw AppError.conflict('Plano com assinaturas: inative em vez de excluir')
+    }
     const [row] = await db
       .delete(clubPlans)
-      .where(and(eq(clubPlans.organizationId, tenantOf(c).id), eq(clubPlans.id, id)))
+      .where(and(eq(clubPlans.organizationId, tenantId), eq(clubPlans.id, id)))
       .returning({ id: clubPlans.id })
     if (!row) throw AppError.notFound('Plano do clube')
     await recordAudit(c, { action: 'club_plan.deleted', resource: 'club_plan', resourceId: id })
@@ -350,7 +351,89 @@ export function toBenefit(row: typeof benefits.$inferSelect): Benefit {
   }
 }
 
-function toClubPlan(row: typeof clubPlans.$inferSelect): ClubPlan {
+/** Número → texto do `numeric`; `null`/ausente viram `null` (dependentes inclusos). */
+function numericOrNull(value: number | null | undefined): string | null {
+  return value === null || value === undefined ? null : String(value)
+}
+
+/** Texto opcional: vazio vira `null` (o formulário manda `''` quando o campo fica em branco). */
+function textOrNull(value: string | null | undefined): string | null {
+  return value === null || value === undefined || value.trim() === '' ? null : value
+}
+
+/** Lista opcional em que vazio = "sem restrição": grava `null`. */
+function listOrNull<T>(value: readonly T[] | null | undefined): T[] | null {
+  return value && value.length > 0 ? [...value] : null
+}
+
+/**
+ * Entrada da API → colunas de `club_plans`, só com as chaves presentes (o
+ * PATCH altera apenas o que veio; o POST recebe o objeto completo).
+ */
+export function clubPlanColumns(input: UpdateClubPlanInput): Partial<typeof clubPlans.$inferInsert> {
+  const columns: Partial<typeof clubPlans.$inferInsert> = {}
+  if (input.name !== undefined) columns.name = input.name
+  if (input.description !== undefined) columns.description = input.description
+  if (input.priceMonthly !== undefined) columns.priceMonthly = String(input.priceMonthly)
+  if (input.features !== undefined) columns.features = input.features
+  if (input.audience !== undefined) columns.audience = input.audience
+  if (input.highlight !== undefined) columns.highlight = input.highlight
+  if (input.upstreamPlanCodigo !== undefined) columns.upstreamPlanCodigo = input.upstreamPlanCodigo
+  if (input.status !== undefined) columns.status = input.status
+  if (input.priceDependentMonthly !== undefined) columns.priceDependentMonthly = numericOrNull(input.priceDependentMonthly)
+  if (input.maxDependents !== undefined) columns.maxDependents = input.maxDependents
+  if (input.tagline !== undefined) columns.tagline = textOrNull(input.tagline)
+  if (input.badge !== undefined) columns.badge = textOrNull(input.badge)
+  if (input.sortOrder !== undefined) columns.sortOrder = input.sortOrder
+  if (input.includedDependents !== undefined) columns.includedDependents = input.includedDependents
+  if (input.enrollmentFee !== undefined) columns.enrollmentFee = numericOrNull(input.enrollmentFee)
+  if (input.enrollmentFeeWaived !== undefined) columns.enrollmentFeeWaived = input.enrollmentFeeWaived
+  if (input.holderMinAge !== undefined) columns.holderMinAge = input.holderMinAge
+  if (input.holderMaxAge !== undefined) columns.holderMaxAge = input.holderMaxAge
+  if (input.dependentRules !== undefined) columns.dependentRules = listOrNull(input.dependentRules)
+  if (input.coverages !== undefined) columns.coverages = input.coverages
+  if (input.paymentMethods !== undefined) columns.paymentMethods = listOrNull(input.paymentMethods)
+  if (input.loyaltyMonths !== undefined) columns.loyaltyMonths = input.loyaltyMonths
+  if (input.cancellationPolicy !== undefined) columns.cancellationPolicy = textOrNull(input.cancellationPolicy)
+  if (input.adjustmentPolicy !== undefined) columns.adjustmentPolicy = textOrNull(input.adjustmentPolicy)
+  if (input.terms !== undefined) columns.terms = textOrNull(input.terms)
+  return columns
+}
+
+/**
+ * Regras entre campos (`checkClubPlanConsistency`) + plano ativo precisa de ao
+ * menos uma forma de pagamento habilitada no clube. No PATCH, recebe o plano
+ * já mesclado. Falha → 400 com `path` por campo.
+ */
+export async function assertClubPlanValid(tenantId: string, plan: Partial<ClubPlan>): Promise<void> {
+  const issues = checkClubPlanConsistency(plan).map(({ path, message }) => ({ path, message }))
+  if ((plan.status ?? 'active') === 'active' && plan.paymentMethods && plan.paymentMethods.length > 0) {
+    const { enabledMethods } = await loadBillingSettings(tenantId)
+    if (effectivePaymentMethods(plan, enabledMethods).length === 0) {
+      issues.push({ path: 'paymentMethods', message: 'Nenhuma forma de pagamento do plano está habilitada no clube' })
+    }
+  }
+  if (issues.length > 0) throw AppError.validation(issues)
+}
+
+/** Violação do índice único `club_plans_org_name_key` (pg 23505, às vezes embrulhada pelo drizzle). */
+function isUniqueViolation(error: unknown): boolean {
+  const code = (value: unknown) =>
+    typeof value === 'object' && value !== null && 'code' in value ? (value as { code: unknown }).code : undefined
+  return code(error) === '23505' || (error instanceof Error && code(error.cause) === '23505')
+}
+
+async function uniquePlanName<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write()
+  } catch (error) {
+    if (isUniqueViolation(error)) throw AppError.conflict('Já existe um plano com este nome')
+    throw error
+  }
+}
+
+/** Exportada: o checkout do clube (club-billing), a vitrine e o portal devolvem os planos no mesmo formato. */
+export function toClubPlan(row: typeof clubPlans.$inferSelect): ClubPlan {
   return {
     id: row.id,
     tenantId: row.organizationId,
@@ -362,5 +445,22 @@ function toClubPlan(row: typeof clubPlans.$inferSelect): ClubPlan {
     highlight: row.highlight,
     upstreamPlanCodigo: row.upstreamPlanCodigo,
     status: row.status,
+    priceDependentMonthly: row.priceDependentMonthly === null ? null : Number(row.priceDependentMonthly),
+    maxDependents: row.maxDependents,
+    tagline: row.tagline,
+    badge: row.badge,
+    sortOrder: row.sortOrder,
+    includedDependents: row.includedDependents,
+    enrollmentFee: row.enrollmentFee === null ? null : Number(row.enrollmentFee),
+    enrollmentFeeWaived: row.enrollmentFeeWaived,
+    holderMinAge: row.holderMinAge,
+    holderMaxAge: row.holderMaxAge,
+    dependentRules: row.dependentRules ?? null,
+    coverages: row.coverages ?? [],
+    paymentMethods: row.paymentMethods ?? null,
+    loyaltyMonths: row.loyaltyMonths,
+    cancellationPolicy: row.cancellationPolicy,
+    adjustmentPolicy: row.adjustmentPolicy,
+    terms: row.terms,
   }
 }

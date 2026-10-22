@@ -9,7 +9,7 @@ import {
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { AppError } from '@/http/errors'
-import { requireAuth, requireTenantRole } from '@/http/middleware/auth'
+import { requireAuth, requireClubSubscription, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
 import { recordAudit } from '@/lib/audit'
 import { created, ok, paginate } from '@/http/respond'
@@ -142,9 +142,9 @@ export const contractsController = new Hono<AppEnv>()
     },
   )
 
-/** Carteirinhas do associado autenticado. */
+/** Carteirinhas do associado autenticado (só com assinatura viva ou contrato). */
 export const membershipCardsController = new Hono<AppEnv>()
-  .use('*', resolveTenant, requireAuth, requireTenantRole('client'))
+  .use('*', resolveTenant, requireAuth, requireTenantRole('client'), requireClubSubscription())
   .get('/', async c => {
     const tenant = tenantOf(c)
     const auth = c.get('auth')

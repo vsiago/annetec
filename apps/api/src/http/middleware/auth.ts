@@ -1,6 +1,7 @@
 import { ERROR_CODES } from '@annetec/contracts'
 import { createMiddleware } from 'hono/factory'
 import { auth } from '@/lib/auth'
+import { loadClubAccess } from '@/modules/club-billing/access.service'
 import { AppError } from '@/http/errors'
 import type { AppEnv } from '@/http/types'
 
@@ -18,13 +19,41 @@ export const optionalAuth = createMiddleware<AppEnv>(async (c, next) => {
   await next()
 })
 
-/** Exige sessão válida. */
+/**
+ * Exige sessão válida. Sessão de inquilino sem vínculo ATIVO (o clube
+ * excluiu/bloqueou a pessoa depois que ela entrou — ver
+ * `resolveActiveMembership`) não é sessão válida: 401, como sessão expirada.
+ */
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers })
   if (!session) throw AppError.unauthenticated()
+  if (session.membership.scope === 'tenant' && !session.membership.tenantId) {
+    throw AppError.unauthenticated('Sua sessão foi encerrada. Entre novamente.')
+  }
   c.set('auth', session)
   await next()
 })
+
+/**
+ * Associado sem assinatura viva não usa o que depende dela (carteirinha,
+ * benefícios, dependentes, faturas): 403 `SUBSCRIPTION_REQUIRED` e o portal
+ * leva para o onboarding. `allowPending`: aguardando o 1º pagamento passa —
+ * é por estas rotas (assinatura/faturas) que ele conclui o pagamento.
+ * Equipe e plataforma passam direto; usar depois de `requireTenantRole`.
+ */
+export function requireClubSubscription(options: { allowPending?: boolean } = {}) {
+  return createMiddleware<AppEnv>(async (c, next) => {
+    const membership = c.get('auth')?.membership
+    if (membership?.scope === 'tenant' && membership.tenantRole === 'client' && membership.tenantId) {
+      const access = await loadClubAccess(membership.tenantId, c.get('auth')!.user.id)
+      const pendingAllowed = options.allowPending && access.status === 'pending_payment'
+      if (access.needsSubscription && !pendingAllowed) {
+        throw new AppError(ERROR_CODES.SUBSCRIPTION_REQUIRED, 'Assine um plano do clube para acessar esta área.')
+      }
+    }
+    await next()
+  })
+}
 
 /** Exige sessão de plataforma (equipe Annetec) com um dos papéis informados. */
 export function requirePlatformRole(...roles: ('superadmin' | 'platform_admin')[]) {

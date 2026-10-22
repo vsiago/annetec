@@ -45,19 +45,16 @@ export function DentalSection() {
 
             <p className="text-lg text-white/80 mb-8 leading-relaxed">
               Só na Annetec você tem acesso ao melhor da Odontologia, por 
-              meio de um plano dental completo, com cobertura nacional, por apenas{" "}
-              <span className="font-bold text-[#e84364]">R$ 19,90 por mês</span>, por beneficiário.
+              meio de um plano dental completo, com cobertura nacional, com{" "}
+              <span className="font-bold text-[#e84364]">valores sob consulta</span>.
             </p>
 
             {/* Price Card */}
             <div className="inline-block p-6 bg-white/10 backdrop-blur-sm rounded-2xl mb-8">
-              <p className="text-sm text-white/70">Por apenas</p>
+              <p className="text-sm text-white/70">Valores</p>
               <div className="flex items-baseline gap-1">
-                <span className="text-sm text-white">R$</span>
-                <span className="text-5xl font-bold text-white">19,90</span>
-                <span className="text-sm text-white/70">/mês</span>
+                <span className="text-4xl font-bold text-white">Consulte</span>
               </div>
-              <p className="text-xs text-white/60 mt-1">por beneficiário</p>
             </div>
 
             {/* CTAs */}

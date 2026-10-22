@@ -7,13 +7,14 @@ import {
   CalendarClock,
   CalendarDays,
   ChevronRight,
-  CircleAlert,
+  CircleCheckBig,
   CreditCard,
+  Headset,
   Download,
   Receipt,
   ShieldCheck,
-  TriangleAlert,
   UserRoundPlus,
+  UserSearch,
   UsersRound,
 } from 'lucide-react'
 import {
@@ -38,7 +39,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ChartCard, chartTooltipStyle } from '@/components/dashboard/chart-card'
-import { MockBadge } from '@/components/dashboard/mock-badge'
 import { StatCard } from '@/components/dashboard/stat-card'
 import { StatusPill } from '@/components/dashboard/table-controls'
 import { saleStatusMeta } from '@/lib/sale-status'
@@ -56,32 +56,38 @@ import {
 } from '@/lib/analytics'
 import { useChartColors } from '@/lib/use-chart-colors'
 import { cn } from '@/lib/utils'
+import { ClubHomeBlock } from '@/components/admin/faturamento/club-home-block'
+import { downloadCsv } from '@/lib/download-csv'
+import { useActionData } from '@/components/admin/faturamento/use-action-data'
+import { getBillingSummaryAction } from '@/lib/actions/faturamento-api'
+import { delinquencyPercent, formatBRL, formatPercent } from '@/lib/adapters/faturamento'
 
-/**
- * Alertas operacionais do painel aprovado. Pendência de cadastro, carência,
- * boleto e autorização vivem no ERP da administradora — nenhum deles tem
- * tabela aqui ainda, então o card inteiro é maquete sinalizada com MockBadge.
- */
-const mockAlerts = [
-  { count: 12, label: 'Pendências em cadastros', icon: CircleAlert, tone: 'bg-red-50 text-red-500' },
-  { count: 8, label: 'Contratos em carência', icon: CalendarClock, tone: 'bg-sky-50 text-sky-500' },
-  { count: 5, label: 'Boletos em atraso', icon: Receipt, tone: 'bg-amber-50 text-amber-500' },
-  {
-    count: 3,
-    label: 'Autorizações negadas (últimos 7 dias)',
-    icon: TriangleAlert,
-    tone: 'bg-red-50 text-red-500',
-  },
-]
+interface OperationAlert {
+  key: string
+  count: number
+  label: string
+  icon: typeof Receipt
+  tone: string
+  href: string
+}
+
+/** Atendimento que ainda espera a primeira resposta do clube. */
+const AWAITING_SUPPORT = new Set(['aguardando'])
 
 export default function AdminDashboard() {
   const { tenant } = useTenant()
-  const { users, sales, leads, clientPlans, isLoading } = useTenantData()
+  const { users, sales, leads, clientPlans, appointments, isLoading } = useTenantData()
   const colors = useChartColors()
   const [evolutionMonths, setEvolutionMonths] = useState('10')
 
   const months = useMemo(() => [...lastMonths(12)].reverse(), [])
   const [referenceMonth, setReferenceMonth] = useState(() => months[0]?.key ?? '')
+
+  // Resumo do Clube de Benefícios (cobrança própria): alimenta o bloco do
+  // clube, a inadimplência e os alertas de cobrança.
+  const slug = tenant?.slug ?? ''
+  const clubSummary = useActionData(slug ? () => getBillingSummaryAction(slug) : null, [slug])
+  const club = clubSummary.data
 
   const clients = getAllClients(users)
   const activeClients = clients.filter(c => c.planStatus === 'active')
@@ -120,6 +126,84 @@ export default function AdminDashboard() {
 
   const base = tenant ? `/${tenant.slug}/admin` : ''
 
+  /**
+   * Só o que tem fonte real e destino para resolver: cobranças e assinaturas
+   * vêm do resumo de Faturamento; leads e atendimentos, do CRM e da mesa de
+   * atendimento. Alerta zerado sai da lista em vez de ocupar espaço.
+   */
+  const newLeads = leads.filter(lead => lead.status === 'new').length
+  const awaitingSupport = appointments.filter(item => AWAITING_SUPPORT.has(item.status)).length
+  const alerts: OperationAlert[] = [
+    ...(club
+      ? [
+          {
+            key: 'overdue-charges',
+            count: club.overdueCharges,
+            label: 'Cobranças em atraso',
+            icon: Receipt,
+            tone: 'bg-red-50 text-red-500',
+            href: `${base}/faturamento?tab=cobrancas&status=overdue`,
+          },
+          {
+            key: 'past-due',
+            count: club.pastDueSubscriptions,
+            label: 'Assinaturas em atraso',
+            icon: CalendarClock,
+            tone: 'bg-amber-50 text-amber-500',
+            href: `${base}/faturamento?tab=assinaturas`,
+          },
+          {
+            key: 'pending-payment',
+            count: club.pendingSubscriptions,
+            label: 'Adesões aguardando 1º pagamento',
+            icon: CreditCard,
+            tone: 'bg-sky-50 text-sky-500',
+            href: `${base}/cadastros`,
+          },
+        ]
+      : []),
+    {
+      key: 'support',
+      count: awaitingSupport,
+      label: 'Atendimentos aguardando resposta',
+      icon: Headset,
+      tone: 'bg-violet-50 text-violet-500',
+      href: `${base}/atendimento`,
+    },
+    {
+      key: 'leads',
+      count: newLeads,
+      label: 'Leads novos sem contato',
+      icon: UserSearch,
+      tone: 'bg-emerald-50 text-emerald-600',
+      href: `${base}/leads`,
+    },
+  ].filter(alert => alert.count > 0)
+
+  const exportReport = () => {
+    const monthLabel = reference ? formatMonthLabel(reference.date) : referenceMonth
+    downloadCsv(`dashboard-${referenceMonth}.csv`, [
+      ['Indicador', 'Valor'],
+      ['Mês de referência', monthLabel],
+      ['Beneficiários ativos', activeClients.length],
+      ['Novas adesões', monthAdmissions],
+      ['Faturamento do mês', formatCurrency(monthRevenue)],
+      ...(club
+        ? [
+            ['Inadimplência', formatPercent(delinquencyPercent(club.delinquencyRate))],
+            ['Valor em atraso', formatBRL(club.overdueAmount)],
+          ]
+        : []),
+      ...alerts.map(alert => [alert.label, alert.count]),
+      [],
+      ['Plano', 'Beneficiários ativos'],
+      ...planShare.map(item => [item.name, item.value]),
+      [],
+      ['Mês', 'Beneficiários'],
+      ...evolution.map(point => [point.month, point.beneficiarios]),
+    ])
+  }
+
   if (isLoading) return null
 
   return (
@@ -143,12 +227,21 @@ export default function AdminDashboard() {
               ))}
             </SelectContent>
           </Select>
-          <Button className="h-11 gap-2 px-5">
+          <Button className="h-11 gap-2 px-5" onClick={exportReport}>
             <Download className="h-4 w-4" />
             Exportar relatório
           </Button>
         </div>
       </div>
+
+      <ClubHomeBlock
+        tenantSlug={slug}
+        base={base}
+        summary={club}
+        summaryLoading={clubSummary.loading}
+        summaryError={clubSummary.error}
+        onRetrySummary={() => void clubSummary.reload()}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -175,15 +268,24 @@ export default function AdminDashboard() {
           delta={formatDelta(revenueChange)}
           comparison="vs. mês anterior"
         />
-        <StatCard
-          icon={ShieldCheck}
-          accent="warning"
-          value="4,8%"
-          label="Inadimplência"
-          delta={{ value: '1,2%', direction: 'down' }}
-          comparison="vs. mês anterior"
-          mock
-        />
+        {club ? (
+          <StatCard
+            icon={ShieldCheck}
+            accent="warning"
+            value={formatPercent(delinquencyPercent(club.delinquencyRate))}
+            label="Inadimplência"
+            hint={`${formatBRL(club.overdueAmount)} em atraso no clube`}
+            tone={club.overdueCharges > 0 ? 'down' : 'neutral'}
+          />
+        ) : (
+          <StatCard
+            icon={ShieldCheck}
+            accent="warning"
+            value="—"
+            label="Inadimplência"
+            hint={clubSummary.loading ? 'Carregando…' : 'Resumo de faturamento indisponível'}
+          />
+        )}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-12">
@@ -285,19 +387,20 @@ export default function AdminDashboard() {
         <Card className="shadow-sm xl:col-span-4">
           <CardHeader>
             <CardTitle className="text-lg">Alertas da operação</CardTitle>
-            <CardAction className="flex items-center gap-2 self-center">
-              <span className="text-sm font-medium text-primary">Ver todos</span>
-              <MockBadge />
-            </CardAction>
           </CardHeader>
           <CardContent className="space-y-2">
-            {mockAlerts.map(alert => {
+            {alerts.length === 0 && (
+              <div className="flex flex-col items-center gap-2 py-8 text-center">
+                <CircleCheckBig className="h-8 w-8 text-emerald-500" />
+                <p className="text-sm text-muted-foreground">
+                  {clubSummary.loading ? 'Carregando alertas…' : 'Nenhuma pendência no momento.'}
+                </p>
+              </div>
+            )}
+            {alerts.map(alert => {
               const Icon = alert.icon
-              return (
-                <div
-                  key={alert.label}
-                  className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5"
-                >
+              const content = (
+                <>
                   <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', alert.tone)}>
                     <Icon className="h-5 w-5" />
                   </span>
@@ -306,7 +409,16 @@ export default function AdminDashboard() {
                     {alert.label}
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </div>
+                </>
+              )
+              return (
+                <Link
+                  key={alert.key}
+                  href={alert.href}
+                  className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5 transition-colors hover:bg-muted/50"
+                >
+                  {content}
+                </Link>
               )
             })}
           </CardContent>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
+  Ban,
   CircleCheckBig,
   Clock,
   CreditCard,
@@ -12,6 +13,8 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Trash2,
+  Unlock,
   UserPlus,
   UsersRound,
 } from 'lucide-react'
@@ -64,7 +67,7 @@ import { getAllClients, getAllSellers, useTenantData } from '@/contexts/tenant-d
 import { formatCurrency, monthKeyOf } from '@/lib/analytics'
 import { beneficiarioSchema, formatCpf, formatPhone } from '@/lib/form-schemas'
 import { useZodForm } from '@/lib/use-zod-form'
-import type { Client } from '@/lib/types'
+import type { Client, MemberAccessStatus } from '@/lib/types'
 import { cn, getInitials } from '@/lib/utils'
 
 const statusMeta: Record<Client['planStatus'], { label: string; className: string }> = {
@@ -72,6 +75,23 @@ const statusMeta: Record<Client['planStatus'], { label: string; className: strin
   pending: { label: 'Pendente', className: 'bg-amber-50 text-amber-700' },
   cancelled: { label: 'Cancelado', className: 'bg-red-50 text-red-600' },
 }
+
+/** Situação do vínculo com o clube (`accessStatus`) — independente da situação do plano. */
+const accessMeta: Record<MemberAccessStatus, { label: string; filterLabel: string; className: string }> = {
+  active: { label: 'Ativo', filterLabel: 'Ativos', className: 'bg-emerald-50 text-emerald-700' },
+  removed: { label: 'Removido', filterLabel: 'Removidos', className: 'bg-slate-100 text-slate-600' },
+  blocked: { label: 'Bloqueado', filterLabel: 'Bloqueados', className: 'bg-red-50 text-red-600' },
+}
+
+function accessOf(client: Client): MemberAccessStatus {
+  return client.accessStatus ?? (client.active === false ? 'removed' : 'active')
+}
+
+const EXCLUIR_DESCRICAO =
+  'A assinatura será cancelada e o acesso removido. Se a pessoa voltar pelo site, o cadastro e o histórico são reativados e ela precisará assinar um plano de novo.'
+
+const BLOQUEAR_DESCRICAO =
+  'A pessoa não conseguirá mais entrar nem se cadastrar de novo com este e-mail neste clube.'
 
 const EMPTY_BENEFICIARIO = {
   name: '',
@@ -93,21 +113,27 @@ const AVATAR_TONES = [
 
 export default function AdminBeneficiariosPage() {
   const { tenant } = useTenant()
-  const { users, clientPlans, createUser, updateUser, deleteUser, isLoading } = useTenantData()
+  const { users, clientPlans, createUser, updateUser, deleteUser, blockUser, unblockUser, isLoading } =
+    useTenantData()
 
   const [search, setSearch] = useState('')
   const [plan, setPlan] = useState('all')
   const [status, setStatus] = useState('all')
+  const [access, setAccess] = useState('all')
   const [perPage, setPerPage] = useState('10')
   const [page, setPage] = useState(1)
 
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Client | null>(null)
   const [removing, setRemoving] = useState<Client | null>(null)
+  const [blocking, setBlocking] = useState<Client | null>(null)
   const [viewCardClient, setViewCardClient] = useState<Client | null>(null)
   const form = useZodForm(beneficiarioSchema, EMPTY_BENEFICIARIO)
 
+  // A lista traz todo vínculo (ativos, removidos e bloqueados); os
+  // indicadores contam só a carteira ativa.
   const clients = getAllClients(users)
+  const activeClients = clients.filter(client => accessOf(client) === 'active')
   const sellers = getAllSellers(users)
 
   const planPrices = useMemo(
@@ -115,10 +141,10 @@ export default function AdminBeneficiariosPage() {
     [clientPlans],
   )
 
-  const active = clients.filter(client => client.planStatus === 'active')
-  const pending = clients.filter(client => client.planStatus === 'pending')
+  const active = activeClients.filter(client => client.planStatus === 'active')
+  const pending = activeClients.filter(client => client.planStatus === 'pending')
   const currentMonth = monthKeyOf(new Date())
-  const newThisMonth = clients.filter(client => monthKeyOf(client.contractDate) === currentMonth).length
+  const newThisMonth = activeClients.filter(client => monthKeyOf(client.contractDate) === currentMonth).length
   const recurring = active.reduce((sum, client) => sum + (planPrices.get(client.plan) ?? 0), 0)
 
   const filtered = useMemo(() => {
@@ -127,13 +153,14 @@ export default function AdminBeneficiariosPage() {
       .filter(client => {
         if (plan !== 'all' && client.plan !== plan) return false
         if (status !== 'all' && client.planStatus !== status) return false
+        if (access !== 'all' && accessOf(client) !== access) return false
         if (!term) return true
         return [client.name, client.email, client.cpf, client.cardNumber, client.city].some(field =>
           field?.toLowerCase().includes(term),
         )
       })
       .sort((a, b) => new Date(b.contractDate).getTime() - new Date(a.contractDate).getTime())
-  }, [clients, search, plan, status])
+  }, [clients, search, plan, status, access])
 
   const size = Number(perPage)
   const totalPages = Math.max(1, Math.ceil(filtered.length / size))
@@ -199,22 +226,20 @@ export default function AdminBeneficiariosPage() {
       return
     }
 
+    // Só a conta e o CPF nascem aqui. Carteirinha, plano e situação vêm da
+    // adesão (a carteirinha é emitida na confirmação do pagamento); senha o
+    // associado não tem — entra pelo portal com CPF e e-mail ou Google.
     const result = await createUser({
-      ...shared,
-      id: '',
-      tenantId: tenant.id,
+      name: shared.name,
+      email: shared.email,
+      phone: shared.phone,
+      cpf: shared.cpf,
       role: 'client',
-      planStatus: 'pending',
-      contractDate: new Date(),
-      cardNumber: `MC-${new Date().getFullYear()}-${String(clients.length + 1).padStart(5, '0')}`,
-      dependents: [],
-      createdAt: new Date(),
-      password: 'trocar123',
     })
 
     if (!result.success) return result.error ?? 'Não foi possível cadastrar o beneficiário.'
     toast.success('Beneficiário cadastrado', {
-      description: `${data.name} entrou como pendente de ativação.`,
+      description: `${data.name} recebeu as boas-vindas do clube por e-mail. Plano e carteirinha nascem da adesão.`,
     })
   }
 
@@ -233,6 +258,19 @@ export default function AdminBeneficiariosPage() {
       return
     }
     toast.success('Plano ativado', { description: client.name })
+  }
+
+  async function unblock(client: Client) {
+    const result = await unblockUser(client.id)
+    if (!result.success) {
+      toast.error('Desbloqueio não concluído', {
+        description: result.error ?? 'Não foi possível desbloquear o acesso.',
+      })
+      return
+    }
+    toast.success('Acesso desbloqueado', {
+      description: `${client.name} pode voltar pelo site e assinar um plano de novo.`,
+    })
   }
 
   if (isLoading) return null
@@ -259,24 +297,18 @@ export default function AdminBeneficiariosPage() {
           accent="primary"
           value={active.length.toLocaleString('pt-BR')}
           label="Beneficiários ativos"
-          delta={{ value: '12%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={UserPlus}
           accent="success"
           value={newThisMonth.toLocaleString('pt-BR')}
           label="Novas adesões no mês"
-          delta={{ value: '18%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={CreditCard}
           accent="info"
           value={formatCurrency(Math.round(recurring))}
           label="Mensalidade recorrente"
-          delta={{ value: '15%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={Clock}
@@ -308,6 +340,13 @@ export default function AdminBeneficiariosPage() {
             allLabel="Todos"
             options={Object.entries(statusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
           />
+          <FilterSelect
+            label="Acesso"
+            value={access}
+            onChange={withPageReset(setAccess)}
+            allLabel="Todos"
+            options={Object.entries(accessMeta).map(([value, meta]) => ({ value, label: meta.filterLabel }))}
+          />
           <Button variant="outline" className="h-14 gap-2 rounded-xl">
             <ListFilter className="h-4 w-4 text-muted-foreground" />
             Mais filtros
@@ -325,6 +364,7 @@ export default function AdminBeneficiariosPage() {
                   <th className="px-4 py-3 font-medium">Nº do beneficiário</th>
                   <th className="px-4 py-3 font-medium">Cidade</th>
                   <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Acesso</th>
                   <th className="px-4 py-3 font-medium">Desde</th>
                   <th className="px-4 py-3 text-right font-medium">Ações</th>
                 </tr>
@@ -332,12 +372,14 @@ export default function AdminBeneficiariosPage() {
               <tbody>
                 {visible.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={9} className="py-12 text-center text-muted-foreground">
                       Nenhum beneficiário encontrado com os filtros atuais.
                     </td>
                   </tr>
                 )}
-                {visible.map((client, index) => (
+                {visible.map((client, index) => {
+                  const clientAccess = accessOf(client)
+                  return (
                   <tr key={client.id} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -362,14 +404,17 @@ export default function AdminBeneficiariosPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="block truncate text-foreground">{client.phone}</span>
+                      <span className="block truncate text-foreground">{client.phone || '—'}</span>
                       <span className="block truncate text-xs text-muted-foreground">{client.email}</span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{client.plan}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{client.cardNumber}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{client.cardNumber || '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{client.city ?? '—'}</td>
                     <td className="px-4 py-3">
                       <StatusPill {...statusMeta[client.planStatus]} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusPill {...accessMeta[clientAccess]} />
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {new Date(client.contractDate).toLocaleDateString('pt-BR')}
@@ -397,24 +442,44 @@ export default function AdminBeneficiariosPage() {
                             <Pencil className="mr-2 h-4 w-4" />
                             Editar cadastro
                           </DropdownMenuItem>
-                          {client.planStatus === 'pending' && (
+                          {clientAccess === 'active' && client.planStatus === 'pending' && (
                             <DropdownMenuItem onClick={() => activate(client)}>
                               <CircleCheckBig className="mr-2 h-4 w-4" />
                               Ativar plano
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => setRemoving(client)}
-                          >
-                            Excluir cadastro
-                          </DropdownMenuItem>
+                          {clientAccess === 'blocked' ? (
+                            <DropdownMenuItem onClick={() => void unblock(client)}>
+                              <Unlock className="mr-2 h-4 w-4" />
+                              Desbloquear
+                            </DropdownMenuItem>
+                          ) : (
+                            <>
+                              {clientAccess === 'active' && (
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => setRemoving(client)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Excluir cadastro
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setBlocking(client)}
+                              >
+                                <Ban className="mr-2 h-4 w-4" />
+                                Bloquear acesso
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -524,20 +589,40 @@ export default function AdminBeneficiariosPage() {
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={open => !open && setRemoving(null)}
-        title="Excluir beneficiário"
-        description={
-          removing
-            ? `O cadastro de "${removing.name}" e o acesso dele ao portal serão removidos. Para encerrar o contrato mantendo o histórico, cancele o plano em vez de excluir.`
-            : ''
-        }
+        title={removing ? `Excluir cadastro de ${removing.name}?` : 'Excluir cadastro'}
+        description={EXCLUIR_DESCRICAO}
+        confirmLabel="Excluir cadastro"
         onConfirm={async () => {
           if (!removing) return
           const result = await deleteUser(removing.id)
           if (!result.success) {
-            toast.error(result.error ?? 'Não foi possível excluir o cadastro')
+            toast.error('Cadastro não excluído', {
+              description: result.error ?? 'Não foi possível excluir o cadastro.',
+            })
             return
           }
-          toast.success('Beneficiário excluído', { description: removing.name })
+          toast.success('Cadastro excluído', {
+            description: `${removing.name}: assinatura cancelada e acesso removido.`,
+          })
+        }}
+      />
+
+      <ConfirmDialog
+        open={blocking !== null}
+        onOpenChange={open => !open && setBlocking(null)}
+        title={blocking ? `Bloquear o acesso de ${blocking.name}?` : 'Bloquear acesso'}
+        description={BLOQUEAR_DESCRICAO}
+        confirmLabel="Bloquear acesso"
+        onConfirm={async () => {
+          if (!blocking) return
+          const result = await blockUser(blocking.id)
+          if (!result.success) {
+            toast.error('Acesso não bloqueado', {
+              description: result.error ?? 'Não foi possível bloquear o acesso.',
+            })
+            return
+          }
+          toast.success('Acesso bloqueado', { description: blocking.name })
         }}
       />
 
@@ -551,7 +636,7 @@ export default function AdminBeneficiariosPage() {
             <DigitalCardMockup
               tenant={tenant}
               clientName={viewCardClient.name}
-              cardNumber={viewCardClient.cardNumber}
+              cardNumber={viewCardClient.cardNumber || '—'}
               planName={viewCardClient.plan}
               cpf={viewCardClient.cpf}
               contractDate={viewCardClient.contractDate}
@@ -563,7 +648,7 @@ export default function AdminBeneficiariosPage() {
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <CircleCheckBig className="h-3.5 w-3.5 text-emerald-500" />
-        Carteira de {clients.length.toLocaleString('pt-BR')} beneficiários em {tenant?.name}.
+        Carteira de {activeClients.length.toLocaleString('pt-BR')} beneficiários ativos em {tenant?.name}.
       </div>
     </div>
   )

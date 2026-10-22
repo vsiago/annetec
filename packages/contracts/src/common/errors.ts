@@ -15,6 +15,16 @@ export const ERROR_CODES = {
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
   FORBIDDEN: 'FORBIDDEN',
   TENANT_MISMATCH: 'TENANT_MISMATCH',
+  /**
+   * Associado sem assinatura viva tentando usar o que depende dela
+   * (carteirinha, benefícios, dependentes). O portal manda para o onboarding.
+   */
+  SUBSCRIPTION_REQUIRED: 'SUBSCRIPTION_REQUIRED',
+  /**
+   * Vínculo com o clube bloqueado (ou de equipe desativado): o login é
+   * recusado com mensagem genérica, sem dizer o motivo.
+   */
+  ACCESS_UNAVAILABLE: 'ACCESS_UNAVAILABLE',
   // 404 / 409
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
@@ -50,6 +60,8 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   TOKEN_EXPIRED: 401,
   FORBIDDEN: 403,
   TENANT_MISMATCH: 403,
+  SUBSCRIPTION_REQUIRED: 403,
+  ACCESS_UNAVAILABLE: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
   ALREADY_EXISTS: 409,

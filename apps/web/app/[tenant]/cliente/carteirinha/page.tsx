@@ -1,13 +1,14 @@
 'use client'
 
+import { Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/contexts/auth-context'
 import { useTenant } from '@/contexts/tenant-context'
 import { getInitials } from '@/lib/utils'
 import type { Client } from '@/lib/types'
 import {
-  Download,
   QrCode,
   User,
   Calendar,
@@ -20,8 +21,64 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 
 import { DigitalCardMockup } from '@/components/digital-card-mockup'
+import { useClubMembership } from '@/components/client/club-membership-provider'
+import { MembershipCards } from '@/components/client/membership-cards'
+import { LoadErrorNotice } from '@/components/client/status-ui'
 
 export default function CarteirinhaPage() {
+  return (
+    <Suspense fallback={<CarteirinhaSkeleton />}>
+      <CarteirinhaContent />
+    </Suspense>
+  )
+}
+
+function CarteirinhaContent() {
+  const { tenant } = useTenant()
+  const { membership, isLoading, isRefreshing, error, refresh } = useClubMembership()
+  const searchParams = useSearchParams()
+
+  if (isLoading) return <CarteirinhaSkeleton />
+
+  // Assinante do Clube: carteirinhas reais (titular + dependentes).
+  if (membership) {
+    return <MembershipCards membership={membership} tenant={tenant} initialKey={searchParams.get('pessoa')} />
+  }
+
+  // Sem assinatura do Clube: a carteirinha de sempre.
+  return (
+    <div className="space-y-6">
+      {error && (
+        <LoadErrorNotice
+          title="Não conseguimos carregar sua assinatura do clube"
+          message={error}
+          onRetry={() => void refresh()}
+          retrying={isRefreshing}
+        />
+      )}
+      <LegacyCarteirinha />
+    </div>
+  )
+}
+
+function CarteirinhaSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="Carregando carteirinha">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-4 w-72 max-w-full" />
+      </div>
+      <Skeleton className="mx-auto h-70 w-full max-w-120 rounded-2xl" />
+      <div className="mx-auto grid max-w-3xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} className="h-18 w-full rounded-xl" />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function LegacyCarteirinha() {
   const { user } = useAuth()
   const { tenant } = useTenant()
   const client = user as Client
@@ -34,22 +91,18 @@ export default function CarteirinhaPage() {
           <h1 className="text-2xl font-bold text-foreground">Carteirinha Digital</h1>
           <p className="text-muted-foreground">Apresente sua carteirinha digital para liberar benefícios e descontos</p>
         </div>
-        <Button variant="outline">
-          <Download className="h-4 w-4 mr-2" />
-          Baixar PDF
-        </Button>
       </div>
 
-      {/* Digital Card Mockup */}
+      {/* Carteirinha */}
       <div className="py-4">
         <DigitalCardMockup
           tenant={tenant}
-          clientName={client?.name || 'Mariana Alves Costa'}
-          cardNumber={client?.cardNumber || 'MEP-2024-88901'}
-          planName={client?.plan || 'MepCard Família'}
-          cpf={client?.cpf || '234.567.890-11'}
+          clientName={client?.name || '—'}
+          cardNumber={client?.cardNumber || '—'}
+          planName={client?.plan || '—'}
+          cpf={client?.cpf || '—'}
           contractDate={client?.contractDate}
-          dependentsCount={client?.dependents?.length || 2}
+          dependentsCount={client?.dependents?.length ?? 0}
           size="lg"
           interactive={true}
           showFlip={true}
@@ -65,7 +118,7 @@ export default function CarteirinhaPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Carteirinha</p>
-              <p className="font-mono font-medium text-sm">{client?.cardNumber}</p>
+              <p className="font-mono font-medium text-sm">{client?.cardNumber || 'Ainda não emitida'}</p>
             </div>
           </CardContent>
         </Card>
@@ -76,8 +129,8 @@ export default function CarteirinhaPage() {
               <Calendar className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Validade</p>
-              <p className="font-medium text-sm">Indeterminada</p>
+              <p className="text-xs text-muted-foreground">Plano</p>
+              <p className="font-medium text-sm">{client?.plan || '—'}</p>
             </div>
           </CardContent>
         </Card>
@@ -88,8 +141,8 @@ export default function CarteirinhaPage() {
               <Phone className="h-5 w-5 text-green-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Teleorientação</p>
-              <p className="font-medium text-sm">{tenant?.phone}</p>
+              <p className="text-xs text-muted-foreground">Central do clube</p>
+              <p className="font-medium text-sm">{tenant?.phone || '—'}</p>
             </div>
           </CardContent>
         </Card>
@@ -108,7 +161,7 @@ export default function CarteirinhaPage() {
             </li>
             <li className="flex items-start gap-3">
               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-secondary text-white text-xs font-bold flex-shrink-0">2</span>
-              Informe o número da carteirinha ao ligar para a Teleorientação 24h
+              Informe o número da carteirinha ao ligar para a central do clube
             </li>
             <li className="flex items-start gap-3">
               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-secondary text-white text-xs font-bold flex-shrink-0">3</span>
@@ -116,7 +169,7 @@ export default function CarteirinhaPage() {
             </li>
             <li className="flex items-start gap-3">
               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-secondary text-white text-xs font-bold flex-shrink-0">4</span>
-              Para consultas e exames, agende pelo app ou telefone com antecedência
+              Para consultas e exames, agende com antecedência direto na rede parceira
             </li>
           </ol>
         </CardContent>

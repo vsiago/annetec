@@ -49,6 +49,9 @@ export async function resolveActiveMembership(
 
   if (!authSession.activeOrganizationId) return empty
 
+  // Só vínculo ATIVO conta: sessão aberta antes de o clube excluir/bloquear
+  // a pessoa (ou desativar alguém da equipe) fica sem inquilino, e
+  // `requireAuth` responde 401 — o web trata como sessão encerrada.
   const [row] = await db
     .select({ role: member.role, slug: organization.slug, organizationId: organization.id })
     .from(member)
@@ -57,6 +60,7 @@ export async function resolveActiveMembership(
       and(
         eq(member.organizationId, authSession.activeOrganizationId),
         eq(member.userId, authUser.id),
+        eq(member.accessStatus, 'active'),
       ),
     )
     .limit(1)

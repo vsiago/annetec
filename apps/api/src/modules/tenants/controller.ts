@@ -1,7 +1,9 @@
 import {
+  addTenantResponsibleInput,
   createTenantInput,
   paginationQuery,
   resetTenantUserPasswordInput,
+  setTenantMemberAccessInput,
   tenantIntegration,
   tenantRole,
   tenantStatus,
@@ -9,11 +11,13 @@ import {
 } from '@annetec/contracts'
 import { Hono } from 'hono'
 import { z } from 'zod'
+import { AppError } from '@/http/errors'
 import { requireAuth, requirePlatformRole } from '@/http/middleware/auth'
 import { recordAudit } from '@/lib/audit'
 import { created, ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, param, query } from '@/http/validate'
+import { tenantMembersService } from './members.service'
 import { tenantsService } from './service'
 
 const idParam = z.object({ id: z.string().uuid() })
@@ -131,10 +135,116 @@ export const tenantsController = new Hono<AppEnv>()
   /**
    * Usuários do inquilino vistos pela plataforma. A rota equivalente do
    * inquilino é por slug; esta é por id, que é a chave da tela de gestão.
+   * Devolve `{ items, activeAdmins }`: cada conta com último acesso e o que
+   * "Remover" faria com ela; `activeAdmins` = responsáveis ativos.
    */
   .get('/:id/usuarios', param(idParam), async c =>
-    ok(c, await tenantsService.listUsers(c.req.valid('param').id)),
+    ok(c, await tenantMembersService.list(c.req.valid('param').id)),
   )
+
+  /**
+   * Adiciona um responsável (admin) ao clube. Conta nova nasce com senha
+   * gerada no servidor, que só sai no convite com a marca do clube; conta já
+   * existente recebe o convite sem senha. Conta da plataforma: 403.
+   */
+  .post(
+    '/:id/responsaveis',
+    requirePlatformRole('superadmin'),
+    param(idParam),
+    json(addTenantResponsibleInput),
+    async c => {
+      const { id } = c.req.valid('param')
+      const resultado = await tenantMembersService.addResponsible(id, c.req.valid('json'))
+      await recordAudit(c, {
+        action: 'tenant_user.responsible_added',
+        resource: 'tenant_user',
+        resourceId: resultado.userId,
+        organizationId: id,
+        metadata: {
+          email: resultado.email,
+          contaNova: resultado.accountCreated,
+          papelAnterior: resultado.previousRole,
+          convite: `club_staff_invite:${resultado.emailStatus}`,
+        },
+      })
+      const member = await tenantMembersService.getSummary(id, resultado.userId)
+      return created(c, { member, accountCreated: resultado.accountCreated, emailStatus: resultado.emailStatus })
+    },
+  )
+
+  /**
+   * Ativa/desativa o vínculo da pessoa com o clube. Desativar derruba na
+   * hora as sessões dela ligadas ao clube (todas, se era o único vínculo) e
+   * é recusado (422) para o último responsável ativo.
+   */
+  .patch(
+    '/:id/usuarios/:userId/acesso',
+    requirePlatformRole('superadmin'),
+    param(userParam),
+    json(setTenantMemberAccessInput),
+    async c => {
+      const { id, userId } = c.req.valid('param')
+      const { active } = c.req.valid('json')
+      const { email, role, ...resultado } = await tenantMembersService.setAccess(
+        id,
+        userId,
+        active,
+        c.get('auth')?.user.id ?? null,
+      )
+      await recordAudit(c, {
+        action: active ? 'tenant_user.reactivated' : 'tenant_user.deactivated',
+        resource: 'tenant_user',
+        resourceId: userId,
+        organizationId: id,
+        metadata: { email, role, sessoesRevogadas: resultado.revokedSessions, via: 'plataforma' },
+      })
+      return ok(c, resultado)
+    },
+  )
+
+  /**
+   * Remove a pessoa do clube. Último vínculo de conta comum → a conta é
+   * excluída. Com histórico que a exclusão quebraria (vendas como vendedor,
+   * assinatura) só desativa o acesso e responde 422 com o motivo.
+   */
+  .delete('/:id/usuarios/:userId', requirePlatformRole('superadmin'), param(userParam), async c => {
+    const { id, userId } = c.req.valid('param')
+    const resultado = await tenantMembersService.remove(id, userId, c.get('auth')?.user.id ?? null)
+
+    if (resultado.outcome === 'blocked') {
+      await recordAudit(c, {
+        action: 'tenant_user.deactivated',
+        resource: 'tenant_user',
+        resourceId: userId,
+        organizationId: id,
+        metadata: {
+          email: resultado.email,
+          motivo: 'remoção bloqueada',
+          bloqueio: resultado.reason,
+          sessoesRevogadas: resultado.revokedSessions,
+          via: 'plataforma',
+        },
+      })
+      throw AppError.businessRule(
+        `Não é possível remover ${resultado.email}: ${resultado.reason}. O acesso foi desativado no lugar.`,
+      )
+    }
+
+    await recordAudit(c, {
+      action: resultado.accountDeleted ? 'platform.user.deleted' : 'tenant_user.removed',
+      resource: resultado.accountDeleted ? 'user' : 'tenant_user',
+      resourceId: userId,
+      organizationId: id,
+      metadata: {
+        email: resultado.email,
+        contaExcluida: resultado.accountDeleted,
+        sessoesRevogadas: resultado.revokedSessions,
+        via: 'plataforma',
+      },
+    })
+    const { outcome: _outcome, ...corpo } = resultado
+    return ok(c, corpo)
+  })
 
   /**
    * Reset administrativo de senha. Omitir `password` gera uma provisória e

@@ -49,7 +49,14 @@ export const annetecModules: ApiModule[] = [
             method: 'POST',
             route: '/login',
             description:
-              'Autentica por e-mail e senha. Sem tenantSlug, autentica a equipe Annetec (scope platform); com tenantSlug, autentica admin ou vendedor daquele inquilino.',
+              'Autentica por e-mail e senha. Sem tenantSlug, resolve sozinho: equipe Annetec (scope platform) ou o vínculo do inquilino (admin > vendedor > associado); com tenantSlug, exige que a conta seja membro daquele inquilino, em qualquer papel.',
+            access: 'público',
+          },
+          {
+            method: 'POST',
+            route: '/login/method',
+            description:
+              'Tela de login do inquilino, etapa 1: recebe { tenantSlug, email } e diz o próximo passo — portal (associado daquele inquilino, entra por CPF) ou password (admin/vendedor). E-mail desconhecido responde password, sem revelar se a conta existe.',
             access: 'público',
           },
           {
@@ -111,6 +118,8 @@ export const annetecModules: ApiModule[] = [
         items: [
           { method: 'GET', route: '/:id/usuarios', description: 'Contas do inquilino pela ótica da plataforma. A rota equivalente do inquilino é por slug; esta é por id, que é a chave da tela de gestão.', access: 'superadmin · platform_admin' },
           { method: 'POST', route: '/:id/usuarios/:userId/senha', description: 'Reset administrativo de senha, sem exigir a senha atual. Confere o vínculo com o inquilino antes (id de fora devolve 404) e registra na auditoria sem gravar a senha. Omitir o corpo gera uma provisória, devolvida uma única vez.', access: 'superadmin' },
+          { method: 'POST', route: '/:id/entrar-como/:papel', description: 'Abre uma sessão real no inquilino com o papel pedido (admin ou vendedor), para operar o painel dele. O token do superadmin fica guardado para voltar.', access: 'superadmin' },
+          { method: 'POST', route: '/:id/usuarios/:userId/entrar-como', description: 'Entra como um usuário específico do inquilino — sessão real, por até 1 h. Tão sensível quanto reset de senha; registrado na auditoria.', access: 'superadmin' },
         ],
       },
     ],
@@ -357,6 +366,7 @@ export const annetecModules: ApiModule[] = [
         items: [
           { method: 'GET', route: '/vendas', description: 'Vendas fechadas, com filtro por vendedor e período.', access: 'admin · vendedor' },
           { method: 'POST', route: '/vendas', description: 'Registra uma venda — a comissão é calculada e congelada pela taxa vigente do vendedor.', access: 'admin · vendedor' },
+          { method: 'PATCH', route: '/vendas/:id', description: 'Atualiza a situação ou os dados de uma venda registrada.', access: 'admin · vendedor' },
           { method: 'GET', route: '/metas?ano=...&mes=...', description: 'Metas por vendedor/mês, com o realizado somado das vendas confirmadas do período.', access: 'admin · vendedor' },
           { method: 'PUT', route: '/metas', description: 'Define a meta e a taxa de comissão de um vendedor no mês.', access: 'admin' },
         ],
@@ -387,6 +397,15 @@ export const annetecModules: ApiModule[] = [
           { method: 'DELETE', route: '/beneficios/:id', description: 'Remove um benefício.', access: 'admin' },
         ],
       },
+      {
+        heading: 'Planos do clube',
+        items: [
+          { method: 'GET', route: '/planos', description: 'Planos que o clube vende aos associados (preço, dependentes, coberturas e regulamento).', access: 'admin · vendedor · cliente' },
+          { method: 'POST', route: '/planos', description: 'Cria um plano do clube.', access: 'admin' },
+          { method: 'PATCH', route: '/planos/:id', description: 'Edita um plano do clube (preço, vitrine, coberturas, regulamento).', access: 'admin' },
+          { method: 'DELETE', route: '/planos/:id', description: 'Remove um plano sem assinaturas.', access: 'admin' },
+        ],
+      },
     ],
   },
   {
@@ -400,6 +419,331 @@ export const annetecModules: ApiModule[] = [
         heading: 'Identidade',
         items: [
           { method: 'GET', route: '/', description: 'Nome, slug, marca e cores do inquilino. Sem sessão.', access: 'público' },
+          { method: 'GET', route: '/parceiros', description: 'Rede credenciada exibida na vitrine do clube.', access: 'público' },
+          { method: 'GET', route: '/beneficios', description: 'Benefícios exibidos na vitrine do clube.', access: 'público' },
+          { method: 'GET', route: '/planos', description: 'Planos ativos do clube para a vitrine (preço e coberturas).', access: 'público' },
+          { method: 'POST', route: '/leads', description: '"Quero ser associado" / "Proposta para empresas" da vitrine: grava o lead no funil do inquilino sem devolvê-lo.', access: 'público' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Clube — Checkout público',
+    prefix: '/api/v1/t/:tenantSlug/public/checkout',
+    controllerRef: 'clubCheckoutController',
+    summary:
+      'Assinatura do Clube de Benefícios sem login: planos com preço por dependente, cobrança no gateway (simulado ou Asaas) e acompanhamento do pagamento. As rotas por assinatura exigem ?chave= (HMAC devolvido no checkout); chave errada responde 404.',
+    sections: [
+      {
+        heading: 'Checkout',
+        items: [
+          { method: 'GET', route: '/contexto', description: 'Planos ativos (com preço por dependente e teto), meios habilitados, gateway e regras da simulação.', access: 'público' },
+          { method: 'POST', route: '/', description: 'Cria conta (se o e-mail for novo), assinatura, dependentes e a 1ª cobrança. Cartão recusado também responde 201 com a cobrança recusada.', access: 'público' },
+          { method: 'GET', route: '/:subscriptionId?chave=', description: 'Situação da assinatura e da cobrança corrente; sincroniza com o gateway (máx. 1×/3 s).', access: 'público (com chave)' },
+          { method: 'POST', route: '/:subscriptionId/pagamento?chave=', description: 'Nova tentativa ou troca de método enquanto aguarda pagamento.', access: 'público (com chave)' },
+          { method: 'POST', route: '/:subscriptionId/simular-pagamento?chave=', description: 'Confirma o pagamento no modo simulado/sandbox (422 fora dele).', access: 'público (com chave)' },
+          { method: 'GET', route: '/:subscriptionId/cobrancas/:chargeId?chave=', description: 'Dados da página imprimível do boleto.', access: 'público (com chave)' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Clube — Faturamento e Cadastros',
+    prefix: '/api/v1/t/:tenantSlug/faturamento',
+    controllerRef: 'clubBillingAdminController',
+    summary:
+      'Motor de cobrança próprio do clube: assinaturas, cobranças, régua e inadimplência vivem no nosso banco; o gateway só processa. Tudo auditado.',
+    sections: [
+      {
+        heading: 'Painel',
+        items: [
+          { method: 'GET', route: '/resumo', description: 'MRR, assinaturas por situação, inadimplência, recebido e os últimos 6 meses.', access: 'admin' },
+          { method: 'GET', route: '/planos/estatisticas', description: 'Assinaturas, vidas e receita por plano do clube.', access: 'admin' },
+          { method: 'GET', route: '/eventos', description: 'Linha do tempo de pagamentos (webhook, automação, checkout, manual, simulação).', access: 'admin' },
+          { method: 'POST', route: '/automacao/executar', description: 'Roda a automação de cobrança agora, só para este inquilino.', access: 'admin' },
+          { method: 'GET', route: '/configuracoes', description: 'Régua de cobrança e gateway efetivo.', access: 'admin' },
+          { method: 'PATCH', route: '/configuracoes', description: 'Altera a régua (meios, prazos, retentativas, multa/juros, gateway).', access: 'admin' },
+        ],
+      },
+      {
+        heading: 'Cobranças',
+        items: [
+          { method: 'GET', route: '/cobrancas', description: 'Cobranças por vencimento, com filtros de situação, método, período e busca.', access: 'admin' },
+          { method: 'GET', route: '/cobrancas/:id', description: 'Cobrança com a assinatura e a linha do tempo.', access: 'admin' },
+          { method: 'POST', route: '/cobrancas/:id/segunda-via', description: 'Novo vencimento (e troca Pix↔boleto) na mesma cobrança.', access: 'admin' },
+          { method: 'POST', route: '/cobrancas/:id/baixa-manual', description: 'Registra pagamento recebido fora do gateway.', access: 'admin' },
+          { method: 'POST', route: '/cobrancas/:id/cancelar', description: 'Cancela cobrança em aberto.', access: 'admin' },
+          { method: 'POST', route: '/cobrancas/:id/simular-pagamento', description: 'Confirma o pagamento no modo simulado/sandbox.', access: 'admin' },
+        ],
+      },
+      {
+        heading: 'Assinaturas (Cadastros)',
+        items: [
+          { method: 'GET', route: '/assinaturas', description: 'Assinaturas com titular e dependentes; busca por nome, e-mail, CPF ou carteirinha.', access: 'admin' },
+          { method: 'GET', route: '/assinaturas/:id', description: 'Assinatura com cobranças e linha do tempo.', access: 'admin' },
+          { method: 'GET', route: '/assinaturas/:id/cobrancas/previa', description: '"Gerar cobrança": próximo período e valor do adiantamento, preferência do associado, métodos do clube e cartão salvo mascarado.', access: 'admin' },
+          { method: 'POST', route: '/assinaturas/:id/cobrancas', description: 'Adianta a próxima mensalidade ou lança cobrança avulsa (Pix/boleto/cartão salvo/link) e avisa o associado; só ativa/em atraso (422).', access: 'admin' },
+          { method: 'POST', route: '/assinaturas/:id/cancelar', description: 'Cancela a assinatura e as cobranças em aberto.', access: 'admin' },
+          { method: 'POST', route: '/assinaturas/:id/reativar', description: 'Reabre assinatura cancelada (nova cobrança) ou reativa em atraso/suspensa.', access: 'admin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Clube — Área do associado',
+    prefix: '/api/v1/t/:tenantSlug/cliente',
+    controllerRef: 'clubPortalController',
+    summary: 'O associado vê a própria assinatura, carteirinhas e cobranças; tudo filtrado pelo usuário da sessão.',
+    sections: [
+      {
+        heading: 'Assinatura',
+        items: [
+          { method: 'GET', route: '/assinatura', description: 'Assinatura, carteirinhas (titular + dependentes) e cobranças em aberto; null sem assinatura.', access: 'cliente' },
+          { method: 'GET', route: '/cobrancas', description: 'Histórico de cobranças do associado.', access: 'cliente' },
+          { method: 'POST', route: '/cobrancas/:id/segunda-via', description: 'Segunda via de Pix/boleto.', access: 'cliente' },
+          { method: 'POST', route: '/cobrancas/:id/pagar', description: 'Paga a cobrança com outro cartão ou método.', access: 'cliente' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Webhooks de pagamento',
+    prefix: '/api/v1/webhooks',
+    controllerRef: 'webhooksController',
+    summary: 'Notificações do Asaas (header asaas-access-token). Token certo → sempre 200; o processamento é o handler único de eventos.',
+    sections: [
+      {
+        heading: 'Asaas',
+        items: [
+          { method: 'POST', route: '/asaas', description: 'Eventos PAYMENT_* do Asaas, com dedupe pelo id do evento.', access: 'Asaas (token)' },
+          { method: 'POST', route: '/asaas-plataforma', description: 'Eventos PAYMENT_* das cobranças da ANNETEC aos inquilinos (externalReference plt_…); o handler do clube ignora essas referências.', access: 'Asaas (token)' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Atendimento',
+    prefix: '/api/v1/t/:tenantSlug/atendimentos',
+    controllerRef: 'supportController',
+    summary:
+      'Mesa de atendimento do clube: o chamado nasce e vive no nosso banco (protocolo da Digital Saúde guardado junto quando existir). Admin e vendedor veem a fila; o associado, só os próprios chamados, sem nota interna.',
+    sections: [
+      {
+        heading: 'Chamados',
+        items: [
+          { method: 'GET', route: '/', description: 'Fila de chamados com a thread de mensagens.', access: 'admin · vendedor · cliente (só os seus)' },
+          { method: 'POST', route: '/', description: 'Abre um chamado.', access: 'admin · vendedor · cliente' },
+          { method: 'GET', route: '/:id', description: 'Chamado com a thread.', access: 'admin · vendedor · cliente (só os seus)' },
+          { method: 'PATCH', route: '/:id', description: 'Atualiza situação, responsável ou prioridade.', access: 'admin · vendedor' },
+          { method: 'POST', route: '/:id/mensagens', description: 'Responde na thread (nota interna só para a equipe).', access: 'admin · vendedor · cliente' },
+          { method: 'DELETE', route: '/:id', description: 'Remove um chamado.', access: 'admin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Contratação da plataforma (público)',
+    prefix: '/api/v1/public/contratacao',
+    controllerRef: 'onboardingPublicController',
+    summary:
+      'Jornada B2B de uma suboperadora no site: plano por vidas, dados cadastrais com a Receita, pessoas, documentos (KYB), marca, contrato e pagamento. O candidato não tem conta: as rotas por proposta exigem ?chave= (HMAC da proposta); chave errada responde 404.',
+    sections: [
+      {
+        heading: 'Início',
+        items: [
+          { method: 'GET', route: '/planos', description: 'Planos ANNETEC visíveis na vitrine, com preço completo (adesão, vida extra, split).', access: 'público' },
+          { method: 'GET', route: '/cnpj/:cnpj', description: 'Consulta a Receita (BrasilAPI ou simulada); indisponível não é erro — o formulário segue manual.', access: 'público (30/min/IP)' },
+          { method: 'GET', route: '/slug-disponivel?slug=', description: 'Endereço do site livre? Com motivo e sugestões.', access: 'público' },
+          { method: 'POST', route: '/propostas', description: 'Cria a proposta e devolve o link de acompanhamento com a chave (409 se o CNPJ já tem proposta aberta ou já é inquilino).', access: 'público (5/h/IP)' },
+          { method: 'POST', route: '/propostas/recuperar-acesso', description: 'Reenvia o link de acompanhamento por e-mail; responde sempre { sent: true }.', access: 'público' },
+        ],
+      },
+      {
+        heading: 'Proposta',
+        items: [
+          { method: 'GET', route: '/propostas/:id?chave=', description: 'Visão do candidato (wizard e acompanhamento); sincroniza a cobrança de ativação.', access: 'público (com chave)' },
+          { method: 'PUT', route: '/propostas/:id/plano?chave=', description: 'Plano e vidas previstas.', access: 'público (com chave)' },
+          { method: 'PUT', route: '/propostas/:id/empresa?chave=', description: 'Dados cadastrais e contatos.', access: 'público (com chave)' },
+          { method: 'PUT', route: '/propostas/:id/pessoas?chave=', description: 'Representantes, sócios e beneficiários finais (substitui a lista).', access: 'público (com chave)' },
+          { method: 'PUT', route: '/propostas/:id/marca?chave=', description: 'Nome do clube, endereço do site, cores, logo e administrador.', access: 'público (com chave)' },
+          { method: 'PUT', route: '/propostas/:id/pagamento?chave=', description: 'Forma de pagamento da ativação e da recorrência.', access: 'público (com chave)' },
+          { method: 'POST', route: '/propostas/:id/documentos?chave=', description: 'Upload multipart de documento KYB (PDF/JPEG/PNG até 4 MB, validado por magic bytes).', access: 'público (com chave)' },
+          { method: 'DELETE', route: '/propostas/:id/documentos/:docId?chave=', description: 'Remove documento enviado ou recusado.', access: 'público (com chave)' },
+          { method: 'GET', route: '/propostas/:id/documentos/:docId/arquivo?chave=', description: 'Arquivo do documento, inline.', access: 'público (com chave)' },
+          { method: 'POST', route: '/propostas/:id/logo?chave=', description: 'Logo PNG/JPEG até 1 MB, servido depois em /public/arquivos.', access: 'público (com chave)' },
+          { method: 'POST', route: '/propostas/:id/aceite?chave=', description: 'Aceite eletrônico dos termos e do DPA (hash, IP e user-agent).', access: 'público (com chave)' },
+          { method: 'POST', route: '/propostas/:id/enviar?chave=', description: 'Envia para análise e roda as pré-checagens (422 com o que falta).', access: 'público (com chave)' },
+          { method: 'POST', route: '/propostas/:id/cancelar?chave=', description: 'Desistência do candidato.', access: 'público (com chave)' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Arquivos públicos',
+    prefix: '/api/v1/public/arquivos',
+    controllerRef: 'publicFilesController',
+    summary: 'Arquivos marcados como públicos (logos das marcas), com cache de 1 dia. Documentos KYB nunca passam por aqui.',
+    sections: [
+      {
+        heading: 'Arquivos',
+        items: [
+          { method: 'GET', route: '/:fileId', description: 'Binário do arquivo público.', access: 'público' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Plataforma — Compliance (contratação)',
+    prefix: '/api/v1/platform/onboarding',
+    controllerRef: 'onboardingPlatformController',
+    summary:
+      'Console de análise cadastral (KYB): fila com SLA de 48 h, pré-checagens automáticas, checklist, revisão de documentos, pendências e decisão. Aprovar emite a cobrança de ativação; o pagamento provisiona o clube sozinho.',
+    sections: [
+      {
+        heading: 'Fila',
+        items: [
+          { method: 'GET', route: '/propostas', description: 'Propostas por grupo, situação, pré-checagem, responsável e tipo; busca por nome, CNPJ ou protocolo.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/propostas/resumo', description: 'Contagens da fila: por situação, sem responsável, SLA estourado, aguardando pagamento, ativadas no mês.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/propostas/:id', description: 'Detalhe completo: pré-checagens, checklist, documentos, eventos internos e e-mails.', access: 'superadmin · platform_admin' },
+        ],
+      },
+      {
+        heading: 'Análise e decisão',
+        items: [
+          { method: 'POST', route: '/propostas/:id/assumir', description: 'O analista assume a proposta (submitted → in_review).', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/propostas/:id/prechecagens', description: 'Reexecuta as pré-checagens automáticas.', access: 'superadmin · platform_admin' },
+          { method: 'PATCH', route: '/propostas/:id/checklist', description: 'Marca/desmarca itens do checklist de compliance, com nota.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/propostas/:id/documentos/:docId/revisao', description: 'Aprova ou recusa (com motivo) um documento.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/propostas/:id/documentos/:docId/arquivo', description: 'Arquivo do documento para o visualizador (a web repassa por proxy, sem expor o token).', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/propostas/:id/pendencias', description: 'Pede pendência com itens; a proposta volta para o contratante e ele recebe e-mail.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/propostas/:id/aprovar', description: 'Aprova (422 com bloqueante/checklist incompleto, salvo override com motivo) e emite a cobrança de ativação.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/propostas/:id/reprovar', description: 'Reprova com motivo (final).', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/propostas/:id/cancelar', description: 'Cancela proposta não final; cobrança de ativação aberta é cancelada.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/propostas/:id/notas', description: 'Nota interna na linha do tempo.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/propostas/:id/cobranca-ativacao', description: 'Emite (de novo) a cobrança de ativação quando o gateway falhou na aprovação.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/propostas/:id/provisionar', description: 'Provisiona manualmente: retentativa após falha ou ativação isenta com justificativa.', access: 'superadmin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Plataforma — Caixa de saída',
+    prefix: '/api/v1/platform/emails',
+    controllerRef: 'platformEmailsController',
+    summary:
+      'Todo e-mail transacional da plataforma é gravado aqui. Com EMAIL_PROVIDER=outbox (padrão da demonstração) é o único canal; com Resend/SendGrid, segredos saem mascarados.',
+    sections: [
+      {
+        heading: 'E-mails',
+        items: [
+          { method: 'GET', route: '/', description: 'Lista com filtro por modelo, situação, proposta e inquilino; busca por destinatário e assunto.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/:id', description: 'E-mail completo (texto e HTML).', access: 'superadmin · platform_admin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Plataforma — Faturamento',
+    prefix: '/api/v1/platform/billing',
+    controllerRef: 'platformBillingController',
+    summary:
+      'Cobrança da ANNETEC aos inquilinos gerenciados: assinaturas de plataforma, faturas (ativação e mensal com excedente), régua que restringe e bloqueia o painel da equipe (nunca os associados) e automação.',
+    sections: [
+      {
+        heading: 'Painel e régua',
+        items: [
+          { method: 'GET', route: '/resumo', description: 'MRR, recebido e a receber no mês, inadimplência, carteira pela régua e 6 meses.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/eventos', description: 'Linha do tempo de eventos (webhook, automação, contratação, manual, simulação, inquilino).', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/configuracoes', description: 'Régua da plataforma, gateway efetivo, automação e ferramentas de demonstração.', access: 'superadmin · platform_admin' },
+          { method: 'PATCH', route: '/configuracoes', description: 'Altera a régua (valida restrição < suspensão < cancelamento).', access: 'superadmin' },
+          { method: 'POST', route: '/automacao/executar', description: 'Roda a automação agora e devolve o relatório.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/precos', description: 'Planos ANNETEC com o preço comercial completo.', access: 'superadmin · platform_admin' },
+          { method: 'PUT', route: '/precos/:planId', description: 'Adesão, vida extra, split e vitrine de um plano.', access: 'superadmin' },
+        ],
+      },
+      {
+        heading: 'Assinaturas de plataforma',
+        items: [
+          { method: 'GET', route: '/assinaturas', description: 'Uma por inquilino gerenciado, com vidas, uso, em aberto e acesso efetivo.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/assinaturas/:id', description: 'Assinatura com faturas e linha do tempo.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/assinaturas/:id/plano', description: 'Upgrade na hora (proporcional na próxima fatura) ou downgrade agendado.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/assinaturas/:id/reativar', description: 'Reabre assinatura cancelada.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/assinaturas/:id/cancelar', description: 'Cancela a assinatura (o inquilino nunca é cancelado automaticamente).', access: 'superadmin' },
+          { method: 'POST', route: '/assinaturas/:id/demo/avancar-dias', description: 'Demonstração: recua as datas N dias e roda a automação (422 sem as ferramentas de demo).', access: 'superadmin' },
+        ],
+      },
+      {
+        heading: 'Faturas',
+        items: [
+          { method: 'GET', route: '/faturas', description: 'Faturas com filtro por situação, tipo, forma, vencimento, inquilino e assinatura.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/faturas/:id', description: 'Fatura com itens, assinatura e linha do tempo.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/faturas/:id/segunda-via', description: 'Novo vencimento (e troca Pix↔boleto).', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/faturas/:id/baixa-manual', description: 'Registra pagamento recebido fora do gateway.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/faturas/:id/cancelar', description: 'Cancela fatura em aberto.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/faturas/:id/simular-pagamento', description: 'Confirma o pagamento no gateway simulado/sandbox.', access: 'superadmin · platform_admin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Plataforma — Holding',
+    prefix: '/api/v1/platform/holding',
+    controllerRef: 'holdingController',
+    summary:
+      'Visão consolidada de todos os inquilinos, calculada na leitura (cache de 60 s; ?fresh=1 ignora): receita da plataforma, GMV, vidas, churn e inadimplência em 2 níveis, saúde, alertas, coortes e controle do ciclo de vida.',
+    sections: [
+      {
+        heading: 'Inteligência',
+        items: [
+          { method: 'GET', route: '/visao-geral?meses=&fresh=', description: 'KPIs, séries mensais, distribuição de saúde e principais alertas.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/inquilinos', description: 'Inquilinos com nota de saúde, uso, tendência e alertas; filtros e ordenação.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/inquilinos/:orgId', description: 'Detalhe do inquilino: séries, fatores da nota, alertas, assinatura e auditoria recente.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/alertas', description: 'Alertas ativos (limite de vidas, inadimplência, queda de vendas, propostas paradas).', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/coortes?nivel=', description: 'Retenção por coorte de inquilinos ou de associados.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/auditoria', description: 'Trilha de auditoria com filtros.', access: 'superadmin · platform_admin' },
+        ],
+      },
+      {
+        heading: 'Controle',
+        items: [
+          { method: 'POST', route: '/inquilinos/:orgId/ciclo-de-vida', description: 'Restringir, suspender, reativar (com prazo) ou voltar à régua; 422 para inquilino não gerenciado.', access: 'superadmin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Fatura ANNETEC (pública)',
+    prefix: '/api/v1/public/faturas-annetec',
+    controllerRef: 'platformPublicInvoiceController',
+    summary:
+      'Página pública de pagamento das faturas da plataforma (ativação e mensalidades) — o link dos e-mails. Exige ?chave= (HMAC da cobrança) e funciona com o painel do inquilino bloqueado.',
+    sections: [
+      {
+        heading: 'Fatura',
+        items: [
+          { method: 'GET', route: '/:chargeId?chave=', description: 'Fatura com Pix/boleto/cartão; sincroniza com o gateway antes.', access: 'público (com chave)' },
+          { method: 'POST', route: '/:chargeId/pagar?chave=', description: 'Paga com o método escolhido (cartão digitado aqui).', access: 'público (com chave)' },
+          { method: 'POST', route: '/:chargeId/simular?chave=', description: 'Simula o pagamento (422 fora do simulado/sandbox).', access: 'público (com chave)' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Minha assinatura ANNETEC',
+    prefix: '/api/v1/t/:tenantSlug/assinatura-annetec',
+    controllerRef: 'tenantPlatformSubscriptionController',
+    summary:
+      'O que o inquilino vê da própria assinatura de plataforma. Passa sempre pelo guard de restrição — é o caminho para pagar e sair do bloqueio. Inquilino não gerenciado recebe managed: false.',
+    sections: [
+      {
+        heading: 'Assinatura',
+        items: [
+          { method: 'GET', route: '/', description: 'Plano, uso de vidas, próxima fatura, abertas, histórico e opções de upgrade.', access: 'admin' },
+          { method: 'GET', route: '/acesso', description: 'Nível de acesso do painel e a frase do banner (atraso, somente leitura, bloqueio).', access: 'admin · vendedor' },
+          { method: 'GET', route: '/faturas', description: 'Faturas da ANNETEC para o inquilino.', access: 'admin' },
+          { method: 'GET', route: '/faturas/:chargeId', description: 'Fatura com itens e linha do tempo.', access: 'admin' },
+          { method: 'POST', route: '/faturas/:chargeId/segunda-via', description: 'Segunda via de Pix/boleto.', access: 'admin' },
+          { method: 'POST', route: '/plano', description: 'Troca de plano pelo próprio inquilino (422 se o acesso não é completo).', access: 'admin' },
         ],
       },
     ],

@@ -141,6 +141,51 @@ export type AppointmentMessageKind = z.infer<typeof appointmentMessageKind>
 export const activeStatus = z.enum(['active', 'inactive'])
 export type ActiveStatus = z.infer<typeof activeStatus>
 
+// ---------------------------------------------------------------------------
+// Clube de Benefícios — enums usados pelo plano (catalog.ts) E pela cobrança
+// (club-billing.ts). Moram aqui para o plano poder usá-los sem ciclo de import
+// (club-billing importa catalog). Mesmos nomes e valores de antes: quem
+// importa de `@annetec/contracts` não percebe a mudança.
+// ---------------------------------------------------------------------------
+
+export const clubPaymentMethod = z.enum(['pix', 'boleto', 'credit_card'])
+export type ClubPaymentMethod = z.infer<typeof clubPaymentMethod>
+
+export const dependentRelationship = z.enum(['conjuge', 'filho', 'enteado', 'pai_mae', 'irmao', 'neto', 'outro'])
+export type DependentRelationship = z.infer<typeof dependentRelationship>
+
+/** Categoria de uma cobertura do plano do clube (agrupa e dá o ícone na tela). */
+export const clubCoverageCategory = z.enum([
+  'telemedicine',
+  'consultations',
+  'exams',
+  'pharmacy',
+  'dental',
+  'mental_health',
+  'wellness',
+  'assistance',
+  'discounts',
+  'other',
+])
+export type ClubCoverageCategory = z.infer<typeof clubCoverageCategory>
+
+/**
+ * Como a cobertura funciona para o associado:
+ *  - `included`: sem custo no uso (pode ter limite de usos);
+ *  - `discount_percent`: desconto de `value`% sobre o preço do parceiro;
+ *  - `copay`: coparticipação — o associado paga `value` R$ por uso;
+ *  - `usage_limit`: incluso até `limitQuantity` usos por `limitPeriod`.
+ */
+export const clubCoverageKind = z.enum(['included', 'discount_percent', 'copay', 'usage_limit'])
+export type ClubCoverageKind = z.infer<typeof clubCoverageKind>
+
+export const clubCoverageChannel = z.enum(['in_person', 'online', 'both'])
+export type ClubCoverageChannel = z.infer<typeof clubCoverageChannel>
+
+/** Janela do limite de uso: por mês, por ano ou durante todo o contrato. */
+export const clubCoverageLimitPeriod = z.enum(['month', 'year', 'contract'])
+export type ClubCoverageLimitPeriod = z.infer<typeof clubCoverageLimitPeriod>
+
 /** 'page_view' = navegação; 'action' = evento pontual (login, logout, ...). */
 export const activityKind = z.enum(['page_view', 'action'])
 export type ActivityKind = z.infer<typeof activityKind>

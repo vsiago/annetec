@@ -33,7 +33,7 @@ export function CTASection() {
           </h2>
 
           <p className="text-lg text-white/80 max-w-2xl mx-auto mb-8">
-            Por apenas R$ 14,90/mês, você tem acesso a diversos benefícios, vantagens, 
+            Tenha acesso a diversos benefícios, vantagens, 
             descontos e muito mais. Consulte também Plano Empresarial com condições 
             especiais para grupos!
           </p>
@@ -54,11 +54,9 @@ export function CTASection() {
 
           {/* Price */}
           <div className="inline-block bg-white/10 backdrop-blur-sm rounded-2xl px-8 py-6 mb-10">
-            <p className="text-white/70 text-sm mb-1">A partir de</p>
+            <p className="text-white/70 text-sm mb-1">Valores</p>
             <div className="flex items-baseline justify-center gap-1">
-              <span className="text-white text-lg">R$</span>
-              <span className="text-6xl font-bold text-white">14,90</span>
-              <span className="text-white/70">/mês</span>
+              <span className="text-4xl font-bold text-white">Consulte</span>
             </div>
           </div>
 

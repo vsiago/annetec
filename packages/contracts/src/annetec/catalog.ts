@@ -1,6 +1,17 @@
 import { z } from 'zod'
 import { uf, uuid } from '../common/primitives'
-import { activeStatus, benefitCategory, partnerCategory, registrationFeeKind } from './enums'
+import {
+  activeStatus,
+  benefitCategory,
+  clubCoverageCategory,
+  clubCoverageChannel,
+  clubCoverageKind,
+  clubCoverageLimitPeriod,
+  clubPaymentMethod,
+  dependentRelationship,
+  partnerCategory,
+  registrationFeeKind,
+} from './enums'
 
 /**
  * Catálogo comercial. Planos, produtos e convênios são espelhos read-only da
@@ -150,7 +161,45 @@ export type UpdateBenefitInput = z.infer<typeof updateBenefitInput>
  *
  * `upstreamPlanCodigo` é a ponte opcional entre os dois: preenchido, amarra o
  * plano vendido ao produto que será contratado lá na hora da adesão.
+ *
+ * Modelo completo (identidade, preço, elegibilidade, coberturas, pagamento e
+ * contrato): todos os campos além dos originais são OPCIONAIS e, ausentes,
+ * reproduzem o comportamento de antes. Regras puras (elegibilidade, métodos,
+ * consistência, carência) em `club-plan-rules.ts`; preço em `quoteClubPlan`.
  */
+
+/**
+ * Cobertura estruturada do plano — o que o associado usa, como e quando.
+ * O plano do clube NÃO é plano de saúde: coberturas são benefícios, descontos
+ * e assistências prestados por parceiros (ver `CLUB_PLAN_LEGAL_NOTICE`).
+ */
+export const clubPlanCoverage = z.object({
+  /** Chave estável dentro do plano (a tela gera; ex. `cov_telemed`). Ordem do array = ordem de exibição. */
+  id: z.string().trim().min(1).max(40),
+  category: clubCoverageCategory,
+  title: z.string().trim().min(2, 'Informe o título da cobertura').max(80, 'Título longo demais'),
+  description: z.string().trim().max(400, 'Descrição longa demais').nullable(),
+  kind: clubCoverageKind,
+  /** `discount_percent` → % (0–100); `copay` → R$ por uso; `included`/`usage_limit` → `null`. */
+  value: z.number().nonnegative().nullable(),
+  /** Usos permitidos por `limitPeriod`; `null` = ilimitado (obrigatório em `usage_limit`). */
+  limitQuantity: z.number().int().positive().nullable(),
+  limitPeriod: clubCoverageLimitPeriod.nullable(),
+  /** Carência em dias contados da ativação; 0 = uso imediato. */
+  waitingDays: z.number().int().min(0).max(730),
+  channel: clubCoverageChannel,
+  /** Parceiro que presta o benefício (assistências, farmácia…); `null` = rede do clube. */
+  provider: z.string().trim().max(80).nullable(),
+})
+export type ClubPlanCoverage = z.infer<typeof clubPlanCoverage>
+
+/** Parentesco aceito como dependente e a idade máxima (inclusive) na adesão; `null` = sem limite. */
+export const clubPlanDependentRule = z.object({
+  relationship: dependentRelationship,
+  maxAge: z.number().int().min(0).max(120).nullable(),
+})
+export type ClubPlanDependentRule = z.infer<typeof clubPlanDependentRule>
+
 export const clubPlan = z.object({
   id: uuid,
   tenantId: uuid,
@@ -162,6 +211,73 @@ export const clubPlan = z.object({
   highlight: z.boolean(),
   upstreamPlanCodigo: z.string().nullable(),
   status: activeStatus,
+  /**
+   * Mensalidade de CADA dependente, somada à do titular (R$/mês).
+   * `null` ou `0` = dependentes inclusos no preço do plano.
+   *
+   * Opcional só para não quebrar quem monta `ClubPlan` à mão enquanto a
+   * coluna nasce; a API sempre devolve (null quando não configurado). O
+   * cálculo oficial do preço é `quoteClubPlan` (club-billing.ts) — tela e API
+   * usam a mesma função.
+   */
+  priceDependentMonthly: z.number().nonnegative().nullable().optional(),
+  /**
+   * Teto de dependentes por assinatura. `null` = sem limite; `0` = plano
+   * individual (não aceita dependente).
+   */
+  maxDependents: z.number().int().nonnegative().nullable().optional(),
+
+  // --- Identidade -----------------------------------------------------------
+  /** Frase curta de venda sob o nome do plano. */
+  tagline: z.string().trim().max(120, 'Use até 120 caracteres').nullable().optional(),
+  /** Selo do card ("Mais escolhido"); com `highlight` e sem selo, a tela usa "Mais escolhido". */
+  badge: z.string().trim().max(30, 'Use até 30 caracteres').nullable().optional(),
+  /** Ordem de exibição (menor primeiro); `null` = ordem padrão (destaque, depois preço). */
+  sortOrder: z.number().int().min(0).max(999).nullable().optional(),
+
+  // --- Preço ----------------------------------------------------------------
+  /**
+   * Dependentes cobertos pela mensalidade do titular; os seguintes pagam
+   * `priceDependentMonthly`. `null`/0 = nenhum incluso (regra de antes).
+   */
+  includedDependents: z.number().int().nonnegative().nullable().optional(),
+  /** Taxa de adesão (R$), cobrada uma vez na 1ª cobrança; `null`/0 = sem adesão. */
+  enrollmentFee: z.number().nonnegative().nullable().optional(),
+  /** Isenção da adesão ativa (a tela mostra "de R$ X por R$ 0"). */
+  enrollmentFeeWaived: z.boolean().optional(),
+
+  // --- Elegibilidade --------------------------------------------------------
+  /** Idade mínima do titular na adesão; `null` = 18 (regra geral do checkout). */
+  holderMinAge: z.number().int().min(18, 'O titular precisa ter 18 anos ou mais').max(120).nullable().optional(),
+  /** Idade máxima do titular na adesão (inclusive); `null` = sem limite. */
+  holderMaxAge: z.number().int().min(18).max(120).nullable().optional(),
+  /**
+   * Parentescos aceitos e a idade máxima de cada um. `null`/ausente/vazio =
+   * qualquer parentesco, sem limite de idade (regra de antes). Plano sem
+   * dependentes é `maxDependents = 0`, não lista vazia.
+   */
+  dependentRules: z.array(clubPlanDependentRule).max(7).nullable().optional(),
+
+  // --- Coberturas -----------------------------------------------------------
+  /** Coberturas estruturadas; ausente/vazio = só `features` (texto livre, legado). */
+  coverages: z.array(clubPlanCoverage).max(40).optional(),
+
+  // --- Pagamento ------------------------------------------------------------
+  /**
+   * Formas de pagamento aceitas NESTE plano, intersectadas com as habilitadas
+   * no clube (`billing_settings.enabledMethods`). `null`/ausente/vazio = todas
+   * as do clube. Ver `effectivePaymentMethods`.
+   */
+  paymentMethods: z.array(clubPaymentMethod).max(3).nullable().optional(),
+
+  // --- Contrato -------------------------------------------------------------
+  /** Fidelidade em meses; 0/`null` = sem fidelidade. */
+  loyaltyMonths: z.number().int().min(0).max(60).nullable().optional(),
+  cancellationPolicy: z.string().trim().max(4000).nullable().optional(),
+  /** Regra de reajuste (índice e data-base). */
+  adjustmentPolicy: z.string().trim().max(2000).nullable().optional(),
+  /** Regulamento / termos de adesão exibidos no checkout. */
+  terms: z.string().trim().max(20000).nullable().optional(),
 })
 export type ClubPlan = z.infer<typeof clubPlan>
 

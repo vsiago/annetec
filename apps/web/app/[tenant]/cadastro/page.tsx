@@ -1,210 +1,96 @@
-"use client"
+'use client'
 
-import { motion } from "framer-motion"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { useState } from "react"
-import { CheckCircle, Send } from "lucide-react"
-import Link from "next/link"
-import { useTenant } from "@/contexts/tenant-context"
-import { useTenantData } from "@/contexts/tenant-data-context"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import Link from 'next/link'
+import { ArrowRight, Clock, MessageCircle, ShieldCheck } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ContactLeadForm } from '@/components/site/lead-forms'
+import { PageHero, Reveal, Section } from '@/components/site/section'
+import { SiteShell } from '@/components/site/site-shell'
+import { useVitrine } from '@/components/site/vitrine-context'
 
-const cadastroSchema = z.object({
-  name: z.string().min(3, "Informe seu nome completo"),
-  phone: z.string().min(8, "Informe um telefone válido"),
-  email: z.string().email("Informe um e-mail válido"),
-  subject: z.string().min(1, "Selecione um assunto"),
-})
-
-type CadastroValues = z.infer<typeof cadastroSchema>
-
-const subjects = [
-  { value: "Quero me associar", label: "Quero me associar" },
-  { value: "Quero contratar um plano", label: "Quero contratar um plano" },
-  { value: "Quero ser afiliado ou consultor de vendas", label: "Quero ser afiliado ou consultor de vendas" },
-  { value: "Outro assunto", label: "Outro assunto" },
-]
-
+/**
+ * "Fale com um consultor". O formulário grava direto no CRM do inquilino
+ * pela rota pública de leads — antes ele chamava a rota do CRM, que exige
+ * sessão de admin/vendedor, e o visitante recebia "enviado" sem o lead existir.
+ */
 export default function CadastroPage() {
-  const { tenant } = useTenant()
-  const { createLead } = useTenantData()
-  const [isSubmitted, setIsSubmitted] = useState(false)
-
-  const form = useForm<CadastroValues>({
-    resolver: zodResolver(cadastroSchema),
-    defaultValues: { name: "", phone: "", email: "", subject: "" },
-  })
-
-  const onSubmit = async (values: CadastroValues) => {
-    if (!tenant) return
-    await createLead({
-      name: values.name,
-      email: values.email,
-      phone: values.phone,
-      source: "Cadastro no site",
-      status: "new",
-      notes: values.subject,
-      value: 0,
-      sellerId: "",
-    })
-    setIsSubmitted(true)
-    form.reset()
-  }
-
   return (
-    <main className="min-h-screen">
-      <header className="h-20 flex items-center px-6 border-b border-border">
-        <Link href={`/${tenant?.slug ?? ""}`} className="flex items-center gap-2">
-          {tenant?.branding.logoUrl ? (
-            <img src={tenant.branding.logoUrl} alt={tenant.name} className="h-8" />
-          ) : (
-            <span className="font-bold text-secondary text-lg">{tenant?.name}</span>
-          )}
-        </Link>
-      </header>
+    <SiteShell mobileCta={false}>
+      <CadastroContent />
+    </SiteShell>
+  )
+}
 
-      <section className="pt-20 pb-20 lg:pt-24 lg:pb-32 bg-gradient-to-b from-white to-[#f0f4f9]">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-12"
-          >
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-secondary mb-6 text-balance">
-              Cadastre-<span className="text-primary">se</span>
-            </h1>
-            <p className="text-lg text-muted-foreground">
-              Preencha seus dados e a equipe {tenant?.name} entrará em contato para te ajudar.
-            </p>
-          </motion.div>
+function CadastroContent() {
+  const { content, primaryCta, whatsapp, paths } = useVitrine()
+  return (
+    <>
+      <PageHero eyebrow="Atendimento" title={content.signup.title} description={content.signup.description} />
+      <Section tone="soft" className="pt-10 sm:pt-12 lg:pt-14">
+        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-start">
+          <Reveal>
+            <div className="rounded-3xl bg-white p-6 shadow-xl ring-1 ring-border/60 sm:p-8">
+              <h2 className="mb-6 text-xl font-bold text-foreground">Seus dados</h2>
+              <ContactLeadForm />
+            </div>
+          </Reveal>
 
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="bg-white rounded-3xl p-8 shadow-xl border border-border/50"
-          >
-            {isSubmitted ? (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-4">
-                  <CheckCircle size={32} className="text-green-600" />
-                </div>
-                <h3 className="text-xl font-bold text-secondary mb-2">Cadastro Enviado!</h3>
-                <p className="text-muted-foreground mb-6">Entraremos em contato em breve.</p>
-                <Button variant="ghost" className="text-secondary" onClick={() => setIsSubmitted(false)}>
-                  Fazer novo cadastro
-                </Button>
-              </div>
-            ) : (
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-secondary">Nome completo</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Seu nome completo" className="h-12" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+          <Reveal delay={0.1} className="space-y-5">
+            <div className="rounded-3xl bg-secondary p-7 text-secondary-foreground shadow-xl">
+              <h2 className="text-xl font-bold">Prefere resolver agora?</h2>
+              <p className="mt-2 text-sm leading-relaxed opacity-85">
+                A adesão é 100% online e leva poucos minutos. Escolha o plano e pague com Pix, boleto ou cartão.
+              </p>
+              <Button size="lg" className="mt-5 h-12 w-full rounded-full font-semibold" asChild>
+                <Link href={primaryCta.href}>
+                  {primaryCta.label}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="mt-3 h-12 w-full rounded-full border-2 border-current bg-transparent font-semibold text-secondary-foreground hover:bg-white/10 hover:text-secondary-foreground"
+                asChild
+              >
+                <Link href={paths.plans}>Ver planos e preços</Link>
+              </Button>
+            </div>
 
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-secondary">Celular / Telefone</FormLabel>
-                        <FormControl>
-                          <Input placeholder="(00) 00000-0000" className="h-12" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-secondary">E-mail</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="seu@email.com" className="h-12" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="subject"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-secondary">Assunto</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger className="h-12 w-full">
-                              <SelectValue placeholder="Selecione um assunto" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {subjects.map((subject) => (
-                              <SelectItem key={subject.value} value={subject.value}>
-                                {subject.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <Button
-                    type="submit"
-                    size="lg"
-                    className="w-full bg-primary hover:opacity-90 text-white h-14"
+            <ul className="space-y-4 rounded-3xl bg-white p-6 ring-1 ring-border/60">
+              {content.signup.promises.map((promise, index) => {
+                const Icon = index === 0 ? Clock : ShieldCheck
+                return (
+                  <li key={promise} className="flex items-start gap-3 text-sm text-muted-foreground">
+                    <Icon className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
+                    {promise}
+                  </li>
+                )
+              })}
+              {whatsapp && (
+                <li>
+                  <a
+                    href={whatsapp}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-3 rounded text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <Send size={18} className="mr-2" />
-                    Enviar Cadastro
-                  </Button>
-                </form>
-              </Form>
-            )}
-          </motion.div>
+                    <MessageCircle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+                    Prefere o WhatsApp? Fale com a gente agora.
+                  </a>
+                </li>
+              )}
+            </ul>
 
-          <p className="text-center text-sm text-muted-foreground mt-8">
-            Já é associado?{" "}
-            <Link href={`/${tenant?.slug ?? ""}/login`} className="text-primary font-medium hover:underline">
-              Acesse sua conta
-            </Link>
-          </p>
+            <p className="text-center text-sm text-muted-foreground">
+              Já é associado?{' '}
+              <Link href={paths.clientArea} className="font-semibold text-primary hover:underline">
+                Acesse a Área do cliente
+              </Link>
+            </p>
+          </Reveal>
         </div>
-      </section>
-    </main>
+      </Section>
+    </>
   )
 }

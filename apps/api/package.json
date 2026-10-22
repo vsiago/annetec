@@ -17,12 +17,19 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
     "demo:seed": "tsx src/db/seed-demo-inquilino.ts",
+    "demo:billing": "tsx src/db/seed-clube-faturamento.ts",
+    "demo:planos": "tsx src/db/seed-planos-completos.ts",
+    "demo:propostas": "tsx src/db/seed-plataforma-propostas.ts",
+    "demo:plataforma": "tsx src/db/seed-plataforma-cobranca.ts",
     "platform:create-admin": "tsx src/db/create-platform-admin.ts",
+    "tenant:create-admin": "tsx src/db/create-tenant-admin.ts",
     "openapi": "tsx src/openapi/generate.ts",
     "dict:check": "tsx scripts/checar-dicionario.ts",
     "espelhos:check": "tsx scripts/checar-espelhos.ts",
     "e2e": "tsx scripts/e2e-inquilino.ts",
-    "probe:ds": "tsx scripts/probe-digitalsaude.ts"
+    "probe:ds": "tsx scripts/probe-digitalsaude.ts",
+    "asaas:setup": "tsx scripts/asaas-setup.ts",
+    "platform:migrar-gateway": "tsx scripts/migrar-gateway-plataforma.ts"
   },
   "dependencies": {
     "@annetec/contracts": "workspace:*",
@@ -35,10 +42,12 @@
     "hono": "^4.7.4",
     "jose": "^6.0.8",
     "postgres": "^3.4.5",
+    "qrcode": "^1.5.4",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "@types/qrcode": "^1.5.6",
     "drizzle-kit": "^0.31.10",
     "tsup": "^8.4.0",
     "tsx": "^4.23.8",

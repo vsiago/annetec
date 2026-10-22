@@ -12,19 +12,12 @@ import type { Lead, Seller } from '@/lib/types'
 import {
   Search,
   Plus,
-  MoreHorizontal,
   Mail,
   Phone,
   Calendar,
   MessageSquare,
   Filter,
 } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Select,
   SelectContent,
@@ -203,20 +196,6 @@ export default function LeadsPage() {
                       </div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
-                          <DropdownMenuItem>Adicionar Interação</DropdownMenuItem>
-                          <DropdownMenuItem>Editar</DropdownMenuItem>
-                          <DropdownMenuItem>Mover para Pipeline</DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">Marcar como Perdido</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     </td>
                   </tr>
                 ))}

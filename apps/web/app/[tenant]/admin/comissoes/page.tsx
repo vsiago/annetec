@@ -354,32 +354,24 @@ export default function AdminComissoesPage() {
           accent="success"
           value={formatCurrency(Math.round(totalCommission))}
           label="Comissão total"
-          delta={{ value: '18%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={Users}
           accent="info"
           value={activeSellers}
           label="Vendedores ativos"
-          delta={{ value: '12%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={ShoppingBag}
           accent="primary"
           value={totalSales.toLocaleString('pt-BR')}
           label="Vendas com comissão"
-          delta={{ value: '20%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={Percent}
           accent="warning"
           value={`${averageRate.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}
           label="Taxa média de comissão"
-          delta={{ value: '0,8 p.p.', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
       </div>
 

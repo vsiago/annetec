@@ -59,6 +59,30 @@ export async function recordAudit(c: Context<AppEnv>, entry: AuditEntry): Promis
 }
 
 /**
+ * Trilha fora de uma requisição HTTP (scripts internos de operação): mesmo
+ * destino e mesma regra — falha vira log, nunca derruba a operação.
+ */
+export async function recordSystemAudit(
+  entry: AuditEntry & { actorId?: string | null; actorScope?: 'platform' | 'tenant' | null },
+): Promise<void> {
+  try {
+    await db.insert(auditLogs).values({
+      organizationId: entry.organizationId ?? null,
+      actorId: entry.actorId ?? null,
+      actorScope: entry.actorScope ?? (entry.actorId ? 'platform' : null),
+      action: entry.action,
+      resource: entry.resource,
+      resourceId: entry.resourceId ?? null,
+      metadata: entry.metadata ?? null,
+      ip: null,
+      requestId: null,
+    })
+  } catch (error) {
+    logger.error({ err: error, action: entry.action, resource: entry.resource }, 'Falha ao gravar auditoria')
+  }
+}
+
+/**
  * IP de quem chamou. Atrás do proxy da Vercel o socket é da própria
  * infraestrutura, então o valor real vem do cabeçalho — primeiro salto do
  * `x-forwarded-for`, que é o cliente.

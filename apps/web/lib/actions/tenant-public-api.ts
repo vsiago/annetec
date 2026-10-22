@@ -1,6 +1,6 @@
 'use server'
 
-import type { Benefit, Partner, Tenant } from '@annetec/contracts'
+import type { Benefit, ClubPlan, Partner, Tenant } from '@annetec/contracts'
 import { apiFetch } from '@/lib/api/client'
 import type { Tenant as LegacyTenant } from '@/lib/types'
 import { run, type ActionResult } from './_api-result'
@@ -10,7 +10,6 @@ import { run, type ActionResult } from './_api-result'
  * sessão. É o que resolve `/[tenant]/...` antes de qualquer login existir
  * (branding, contato). Sem mock.
  */
-export type { ActionResult }
 
 function toLegacyTenant(tenant: Tenant): LegacyTenant {
   return {
@@ -54,6 +53,66 @@ export async function listPublicBenefitsAction(slug: string): Promise<ActionResu
     const { data } = await apiFetch<Benefit[]>(
       `/api/v1/t/${encodeURIComponent(slug)}/public/beneficios`,
       { token: null },
+    )
+    return data
+  })
+}
+
+/**
+ * Plano do clube como a vitrine recebe. Os dois campos de dependente estão
+ * entrando no contrato; enquanto não chegam, ficam opcionais aqui para a
+ * vitrine já exibi-los quando a API passar a mandá-los.
+ */
+export type PublicClubPlan = ClubPlan & {
+  /** R$/mês por dependente; `null`/0 = dependentes inclusos na mensalidade. */
+  priceDependentMonthly?: number | null
+  /** Teto de dependentes; `null` = sem limite. */
+  maxDependents?: number | null
+}
+
+/** Só planos ativos, destaque primeiro e depois do mais barato ao mais caro. */
+export async function listPublicClubPlansAction(slug: string): Promise<ActionResult<PublicClubPlan[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<PublicClubPlan[]>(
+      `/api/v1/t/${encodeURIComponent(slug)}/public/planos`,
+      { token: null },
+    )
+    return data
+  })
+}
+
+/** Corpo de `POST /t/:slug/public/leads` — o formulário da vitrine, sem sessão. */
+export type PublicLeadInput = {
+  name: string
+  phone: string
+  email?: string
+  origin: 'cadastro' | 'empresas' | 'contato'
+  subject?: string
+  message?: string
+  planId?: string
+  company?: {
+    name: string
+    document?: string
+    employees?: string
+    role?: string
+  }
+  /** Honeypot: fica escondido na tela; preenchido, a API descarta o envio. */
+  website?: string
+}
+
+/**
+ * Lead da vitrine (cadastro e proposta para empresas). Não usa a rota do CRM
+ * porque ela exige sessão de admin/vendedor — o visitante anônimo recebia 401.
+ * `token: null` pelo mesmo motivo das leituras acima.
+ */
+export async function createPublicLeadAction(
+  slug: string,
+  input: PublicLeadInput,
+): Promise<ActionResult<{ received: true }>> {
+  return run(async () => {
+    const { data } = await apiFetch<{ received: true }>(
+      `/api/v1/t/${encodeURIComponent(slug)}/public/leads`,
+      { method: 'POST', body: input, token: null },
     )
     return data
   })

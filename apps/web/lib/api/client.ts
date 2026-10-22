@@ -49,6 +49,8 @@ export interface RequestOptions {
   /** Repassado ao `fetch` do Next para controle de cache/revalidação. */
   next?: { revalidate?: number | false; tags?: string[] }
   cache?: RequestCache
+  /** Cabeçalhos extras (ex.: `x-forwarded-for` com o IP do navegador, para o rate limit da API). */
+  headers?: Record<string, string>
 }
 
 export interface ApiResult<T> {
@@ -77,6 +79,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       accept: 'application/json',
       ...(options.body ? { 'content-type': 'application/json' } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: options.cache ?? 'no-store',

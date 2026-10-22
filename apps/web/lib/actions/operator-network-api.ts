@@ -18,7 +18,6 @@ import { run, type ActionResult } from './_api-result'
  * `/api/v1/t/:tenantSlug/rede`, mesmo padrão dos outros `operator-*-api.ts`.
  * Conteúdo 100% Annetec, sem contrapartida na Digital Saúde.
  */
-export type { ActionResult }
 
 export async function listOperatorPartnersAction(
   tenantSlug: string,

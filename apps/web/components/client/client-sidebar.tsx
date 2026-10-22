@@ -6,6 +6,8 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 import { useTenant } from '@/contexts/tenant-context'
 import { cn, getInitials } from '@/lib/utils'
+import { isChargeLate } from '@/lib/adapters/cliente-assinatura'
+import { useClubMembership } from '@/components/client/club-membership-provider'
 import {
   LayoutDashboard,
   CreditCard,
@@ -20,6 +22,7 @@ import {
   ChevronDown,
   Bell,
   Phone,
+  Receipt,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -34,14 +37,25 @@ export function ClientSidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const { tenant } = useTenant()
+  const { membership } = useClubMembership()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   if (!tenant) return null
 
+  // Faturas em aberto da assinatura do clube: contador no menu, vermelho se alguma venceu.
+  const openCharges = membership?.openCharges ?? []
+  const hasLateCharge = openCharges.some(isChargeLate)
+
   const base = `/${tenant.slug}/cliente`
-  const sidebarLinks = [
+  const sidebarLinks: { href: string; label: string; icon: typeof LayoutDashboard; badge?: number }[] = [
     { href: base, label: 'Meu Painel', icon: LayoutDashboard },
     { href: `${base}/carteirinha`, label: 'Carteirinha Digital', icon: CreditCard },
+    {
+      href: `${base}/faturas`,
+      label: 'Minhas faturas',
+      icon: Receipt,
+      badge: openCharges.length > 0 ? openCharges.length : undefined,
+    },
     { href: `${base}/dependentes`, label: 'Dependentes', icon: Users },
     { href: `${base}/beneficios`, label: 'Benefícios', icon: Gift },
     { href: `${base}/parceiros`, label: 'Rede de Parceiros', icon: Handshake },
@@ -65,9 +79,20 @@ export function ClientSidebar() {
           <span className="font-bold text-foreground">{tenant.name}</span>
         )}
         <div className="flex items-center gap-2">
-          <button className="p-2 text-muted-foreground hover:text-foreground relative">
-            <Bell className="h-5 w-5" />
-          </button>
+          {hasLateCharge ? (
+            <Link
+              href={`${base}/faturas`}
+              className="p-2 text-muted-foreground hover:text-foreground relative"
+              aria-label="Você tem fatura vencida"
+            >
+              <Bell className="h-5 w-5" />
+              <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+            </Link>
+          ) : (
+            <button className="p-2 text-muted-foreground hover:text-foreground relative">
+              <Bell className="h-5 w-5" />
+            </button>
+          )}
         </div>
       </header>
 
@@ -103,14 +128,16 @@ export function ClientSidebar() {
           </button>
         </div>
 
-        {/* Teleorientation Banner */}
-        <div className="mx-4 mt-4 p-3 rounded-lg bg-secondary/20 border border-secondary/30">
-          <div className="flex items-center gap-2 text-white">
-            <Phone className="h-4 w-4" />
-            <span className="text-sm font-medium">Teleorientação 24h</span>
+        {/* Central do clube */}
+        {tenant.phone && (
+          <div className="mx-4 mt-4 p-3 rounded-lg bg-secondary/20 border border-secondary/30">
+            <div className="flex items-center gap-2 text-white">
+              <Phone className="h-4 w-4" />
+              <span className="text-sm font-medium">Central do clube</span>
+            </div>
+            <p className="text-xs text-white/70 mt-1">{tenant.phone}</p>
           </div>
-          <p className="text-xs text-white/70 mt-1">{tenant.phone}</p>
-        </div>
+        )}
 
         {/* Navigation */}
         <nav className="flex-1 p-4 overflow-y-auto">
@@ -132,6 +159,17 @@ export function ClientSidebar() {
                   >
                     <Icon className="h-5 w-5" />
                     {link.label}
+                    {link.badge !== undefined && (
+                      <span
+                        className={cn(
+                          'ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold',
+                          hasLateCharge ? 'bg-red-500 text-white' : 'bg-white/20 text-white',
+                        )}
+                        aria-label={`${link.badge} em aberto`}
+                      >
+                        {link.badge}
+                      </span>
+                    )}
                   </Link>
                 </li>
               )

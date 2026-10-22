@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,14 +17,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { SuperadminOnly, usePlatformRole } from '@/components/admin-platform/billing/console-kit'
 import { getInitials } from '@/lib/utils'
 import {
+  addTenantResponsibleAction,
   listTenantMembersAction,
+  removeTenantMemberAction,
   resetTenantMemberPasswordAction,
+  setTenantMemberAccessAction,
   type TenantMember,
 } from '@/lib/actions/tenants-api'
 import { impersonateTenantMemberAction } from '@/lib/actions/auth-api'
-import { AlertCircle, Check, Copy, KeyRound, Loader2, LogIn, ShieldCheck, Users } from 'lucide-react'
+import {
+  AlertCircle,
+  Check,
+  Copy,
+  KeyRound,
+  Loader2,
+  LogIn,
+  Power,
+  PowerOff,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+  Users,
+} from 'lucide-react'
 
 /**
  * Acesso administrativo ao inquilino.
@@ -38,6 +56,11 @@ import { AlertCircle, Check, Copy, KeyRound, Loader2, LogIn, ShieldCheck, Users 
  * sessão real daquela conta (até 1h), também restrita a superadmin e também
  * auditada — só que em vez de devolver uma credencial pra copiar, já navega
  * pro portal daquela pessoa. Ver `impersonateTenantMemberAction`.
+ *
+ * Responsáveis (admins) ficam no topo: o clube precisa de pelo menos um ativo,
+ * e a API recusa (422) desativar ou remover o último — a mensagem aparece no
+ * diálogo. "Remover" exclui a conta quando era o único vínculo da pessoa; a
+ * lista já diz qual dos casos vale para cada conta (`removal`).
  */
 const PAPEL: Record<TenantMember['role'], { label: string; classe: string }> = {
   admin: { label: 'Admin', classe: 'bg-red-100 text-red-700' },
@@ -51,8 +74,24 @@ const PORTAL_PATH: Record<TenantMember['role'], string> = {
   client: 'cliente',
 }
 
+type AcaoConfirmada = { tipo: 'desativar' | 'remover'; membro: TenantMember }
+
+function formatarAcesso(iso: string | null): string {
+  if (!iso) return 'Nunca acessou'
+  return `Último acesso: ${new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`
+}
+
 export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; tenantSlug: string }) {
+  const { isSuperadmin } = usePlatformRole()
+
   const [membros, setMembros] = useState<TenantMember[]>([])
+  const [adminsAtivos, setAdminsAtivos] = useState(0)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
 
@@ -67,16 +106,32 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
   const [entrando, setEntrando] = useState(false)
   const [erroEntrar, setErroEntrar] = useState('')
 
-  useEffect(() => {
-    listTenantMembersAction(tenantId).then(resultado => {
-      setCarregando(false)
-      if (!resultado.success) {
-        setErro(resultado.error)
-        return
-      }
-      setMembros(resultado.data)
-    })
+  const [acao, setAcao] = useState<AcaoConfirmada | null>(null)
+  const [executando, setExecutando] = useState(false)
+  const [erroAcao, setErroAcao] = useState('')
+  const [reativando, setReativando] = useState<string | null>(null)
+
+  const [novoAberto, setNovoAberto] = useState(false)
+  const [novoNome, setNovoNome] = useState('')
+  const [novoEmail, setNovoEmail] = useState('')
+  const [adicionando, setAdicionando] = useState(false)
+  const [erroNovo, setErroNovo] = useState('')
+
+  const carregar = useCallback(async () => {
+    const resultado = await listTenantMembersAction(tenantId)
+    setCarregando(false)
+    if (!resultado.success) {
+      setErro(resultado.error)
+      return
+    }
+    setErro('')
+    setMembros(resultado.data.items)
+    setAdminsAtivos(resultado.data.activeAdmins)
   }, [tenantId])
+
+  useEffect(() => {
+    void carregar()
+  }, [carregar])
 
   function abrir(membro: TenantMember) {
     setAlvo(membro)
@@ -140,95 +195,299 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
     }
   }
 
+  function pedirConfirmacao(tipo: AcaoConfirmada['tipo'], membro: TenantMember) {
+    setAcao({ tipo, membro })
+    setErroAcao('')
+  }
+
+  async function confirmarAcao() {
+    if (!acao) return
+    setErroAcao('')
+    setExecutando(true)
+    const { tipo, membro } = acao
+
+    if (tipo === 'desativar') {
+      const resultado = await setTenantMemberAccessAction(tenantId, membro.id, false)
+      setExecutando(false)
+      if (!resultado.success) {
+        setErroAcao(resultado.error)
+        return
+      }
+      toast.success(
+        `Acesso de ${membro.name} desativado` +
+          (resultado.data.revokedSessions > 0 ? ` · ${resultado.data.revokedSessions} sessão(ões) encerrada(s)` : ''),
+      )
+    } else {
+      const resultado = await removeTenantMemberAction(tenantId, membro.id)
+      setExecutando(false)
+      if (!resultado.success) {
+        setErroAcao(resultado.error)
+        // Remoção bloqueada por histórico desativa o acesso no lugar: a lista mudou.
+        void carregar()
+        return
+      }
+      toast.success(
+        resultado.data.accountDeleted
+          ? `Conta de ${membro.name} excluída`
+          : `${membro.name} removido(a) deste clube`,
+      )
+    }
+
+    setAcao(null)
+    void carregar()
+  }
+
+  async function reativar(membro: TenantMember) {
+    setReativando(membro.id)
+    const resultado = await setTenantMemberAccessAction(tenantId, membro.id, true)
+    setReativando(null)
+    if (!resultado.success) {
+      toast.error(resultado.error)
+      return
+    }
+    toast.success(`Acesso de ${membro.name} reativado`)
+    void carregar()
+  }
+
+  function abrirNovo() {
+    setNovoAberto(true)
+    setNovoNome('')
+    setNovoEmail('')
+    setErroNovo('')
+  }
+
+  async function adicionarResponsavel() {
+    setErroNovo('')
+    if (novoNome.trim().length < 2) {
+      setErroNovo('Informe o nome.')
+      return
+    }
+    if (!/^\S+@\S+\.\S+$/.test(novoEmail.trim())) {
+      setErroNovo('Informe um e-mail válido.')
+      return
+    }
+    setAdicionando(true)
+    const resultado = await addTenantResponsibleAction(tenantId, {
+      name: novoNome.trim(),
+      email: novoEmail.trim(),
+    })
+    setAdicionando(false)
+    if (!resultado.success) {
+      setErroNovo(resultado.error)
+      return
+    }
+    const envio =
+      resultado.data.emailStatus === 'failed'
+        ? 'mas o convite por e-mail falhou — use "Redefinir senha"'
+        : resultado.data.accountCreated
+          ? 'convite com senha provisória enviado por e-mail'
+          : 'conta já existia; convite enviado sem senha'
+    toast.success(`${resultado.data.member.name} agora é responsável · ${envio}`)
+    setNovoAberto(false)
+    void carregar()
+  }
+
   const admins = membros.filter(m => m.role === 'admin')
+  const demais = membros.filter(m => m.role !== 'admin')
+
+  function linha(membro: TenantMember) {
+    return (
+      <div key={membro.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar className="size-9 bg-secondary">
+            <AvatarFallback className="bg-secondary text-xs font-medium text-white">
+              {getInitials(membro.name)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-foreground">{membro.name}</p>
+            <p className="truncate text-xs text-muted-foreground">{membro.email}</p>
+            <p className="text-xs text-muted-foreground">{formatarAcesso(membro.lastLoginAt)}</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className={PAPEL[membro.role].classe}>
+            {membro.role === 'admin' && <ShieldCheck className="mr-1 h-3 w-3" />}
+            {PAPEL[membro.role].label}
+          </Badge>
+          {membro.active ? (
+            <Badge variant="outline" className="border-emerald-300 text-emerald-700">
+              Ativo
+            </Badge>
+          ) : (
+            <Badge variant="outline">Inativo</Badge>
+          )}
+          {membro.platformStaff && <Badge variant="outline">Equipe da plataforma</Badge>}
+
+          <SuperadminOnly isSuperadmin={isSuperadmin}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAlvoEntrar(membro)
+                setErroEntrar('')
+              }}
+            >
+              <LogIn className="mr-2 h-3.5 w-3.5" />
+              Entrar como
+            </Button>
+          </SuperadminOnly>
+          <SuperadminOnly isSuperadmin={isSuperadmin}>
+            <Button variant="outline" size="sm" onClick={() => abrir(membro)}>
+              <KeyRound className="mr-2 h-3.5 w-3.5" />
+              Redefinir senha
+            </Button>
+          </SuperadminOnly>
+          <SuperadminOnly isSuperadmin={isSuperadmin}>
+            {membro.active ? (
+              <Button variant="outline" size="sm" onClick={() => pedirConfirmacao('desativar', membro)}>
+                <PowerOff className="mr-2 h-3.5 w-3.5" />
+                Desativar
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => reativar(membro)}
+                disabled={reativando === membro.id}
+              >
+                {reativando === membro.id ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Power className="mr-2 h-3.5 w-3.5" />
+                )}
+                Reativar
+              </Button>
+            )}
+          </SuperadminOnly>
+          <SuperadminOnly isSuperadmin={isSuperadmin}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => pedirConfirmacao('remover', membro)}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Remover
+            </Button>
+          </SuperadminOnly>
+        </div>
+      </div>
+    )
+  }
+
+  function explicacaoRemocao(membro: TenantMember) {
+    if (membro.removal === 'blocked') {
+      return (
+        <>
+          Não dá para remover {membro.name}: {membro.removalBlockedReason}. Ao confirmar, o acesso a este
+          clube será apenas <strong>desativado</strong> e as sessões encerradas.
+        </>
+      )
+    }
+    if (membro.removal === 'delete_account') {
+      return (
+        <>
+          Este é o único vínculo de {membro.email}. Ao remover, a <strong>conta será excluída
+          definitivamente</strong> (login, sessões e vínculo). Não dá para desfazer.
+        </>
+      )
+    }
+    return (
+      <>
+        Só o vínculo com este clube será removido e as sessões ligadas a ele, encerradas. A conta de{' '}
+        {membro.email} continua existindo
+        {membro.platformStaff
+          ? ' (é da equipe da plataforma).'
+          : ` (tem ${membro.otherMemberships} vínculo(s) com outro(s) clube(s)).`}
+      </>
+    )
+  }
+
+  const ultimoResponsavel = (membro: TenantMember) =>
+    membro.role === 'admin' && membro.active && !membro.platformStaff && adminsAtivos <= 1
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Users className="h-4 w-4 text-primary" />
-            Contas deste inquilino
-          </CardTitle>
-          <CardDescription>
-            {carregando
-              ? 'Carregando…'
-              : `${membros.length} conta(s) · ${admins.length} com acesso administrativo`}
-          </CardDescription>
-        </CardHeader>
+      {erro && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{erro}</AlertDescription>
+        </Alert>
+      )}
 
-        <CardContent className="p-0">
-          {erro && (
-            <div className="px-6 pb-6">
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{erro}</AlertDescription>
-              </Alert>
-            </div>
-          )}
+      {carregando && (
+        <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Buscando as contas…
+        </div>
+      )}
 
-          {carregando && (
-            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Buscando as contas…
-            </div>
-          )}
-
-          {!carregando && !erro && membros.length === 0 && (
-            <p className="px-6 pb-6 text-sm text-muted-foreground">
-              Este inquilino não tem nenhuma conta. Isso não deveria acontecer — todo inquilino nasce
-              com um admin no wizard de criação.
-            </p>
-          )}
-
-          {!carregando && membros.length > 0 && (
-            <div className="divide-y divide-border">
-              {membros.map(membro => (
-                <div key={membro.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <Avatar className="size-9 bg-secondary">
-                      <AvatarFallback className="bg-secondary text-xs font-medium text-white">
-                        {getInitials(membro.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">{membro.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">{membro.email}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Badge className={PAPEL[membro.role].classe}>
-                      {membro.role === 'admin' && <ShieldCheck className="mr-1 h-3 w-3" />}
-                      {PAPEL[membro.role].label}
-                    </Badge>
-                    {!membro.active && <Badge variant="outline">Inativo</Badge>}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setAlvoEntrar(membro)
-                        setErroEntrar('')
-                      }}
-                    >
-                      <LogIn className="mr-2 h-3.5 w-3.5" />
-                      Entrar como
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => abrir(membro)}>
-                      <KeyRound className="mr-2 h-3.5 w-3.5" />
-                      Redefinir senha
-                    </Button>
-                  </div>
+      {!carregando && !erro && (
+        <>
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+              <div className="space-y-1.5">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  Responsáveis (administradores)
+                </CardTitle>
+                <CardDescription>
+                  {adminsAtivos} ativo(s) de {admins.length}. O clube precisa de pelo menos um responsável
+                  ativo.
+                </CardDescription>
+              </div>
+              <SuperadminOnly isSuperadmin={isSuperadmin}>
+                <Button size="sm" onClick={abrirNovo}>
+                  <UserPlus className="mr-2 h-3.5 w-3.5" />
+                  Adicionar responsável
+                </Button>
+              </SuperadminOnly>
+            </CardHeader>
+            <CardContent className="p-0">
+              {adminsAtivos === 0 && (
+                <div className="px-6 pb-4">
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Este clube está sem nenhum responsável ativo. Adicione ou reative um.
+                    </AlertDescription>
+                  </Alert>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              )}
+              {admins.length === 0 ? (
+                <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhum administrador cadastrado.</p>
+              ) : (
+                <div className="divide-y divide-border border-t border-border">{admins.map(linha)}</div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="h-4 w-4 text-primary" />
+                Demais contas
+              </CardTitle>
+              <CardDescription>
+                {demais.length} conta(s) de vendedores e beneficiários · {membros.length} no total
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {demais.length === 0 ? (
+                <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhuma outra conta neste clube.</p>
+              ) : (
+                <div className="divide-y divide-border border-t border-border">{demais.map(linha)}</div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <p className="text-xs text-muted-foreground">
-        Toda redefinição feita aqui entra na trilha de auditoria com quem fez, quando e para qual
-        conta — a senha em si nunca é registrada.
+        Toda ação feita aqui (redefinir senha, entrar como, desativar, remover, adicionar responsável) entra
+        na trilha de auditoria com quem fez, quando e para qual conta — senhas nunca são registradas.
       </p>
 
       <Dialog open={alvo !== null} onOpenChange={aberto => !aberto && setAlvo(null)}>
@@ -320,6 +579,101 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             <Button onClick={entrarComo} disabled={entrando}>
               {entrando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Entrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={acao !== null} onOpenChange={aberto => !aberto && !executando && setAcao(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {acao?.tipo === 'remover' ? 'Remover do clube' : 'Desativar acesso'} — {acao?.membro.name}
+            </DialogTitle>
+            <DialogDescription>
+              {acao?.tipo === 'remover'
+                ? acao && explicacaoRemocao(acao.membro)
+                : 'A pessoa perde o acesso a este clube e as sessões abertas nele são encerradas na hora. Dá para reativar depois.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {acao && ultimoResponsavel(acao.membro) && !erroAcao && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Este é o único responsável ativo do clube — a plataforma vai recusar. Adicione ou reative
+                outro responsável antes.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {erroAcao && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{erroAcao}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAcao(null)} disabled={executando}>
+              {erroAcao ? 'Fechar' : 'Cancelar'}
+            </Button>
+            {!erroAcao && (
+              <Button variant="destructive" onClick={confirmarAcao} disabled={executando}>
+                {executando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {acao?.tipo === 'remover'
+                  ? acao.membro.removal === 'blocked'
+                    ? 'Desativar no lugar'
+                    : acao.membro.removal === 'delete_account'
+                      ? 'Excluir conta'
+                      : 'Remover vínculo'
+                  : 'Desativar'}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={novoAberto} onOpenChange={aberto => !aberto && !adicionando && setNovoAberto(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar responsável</DialogTitle>
+            <DialogDescription>
+              A pessoa vira administradora deste clube. Se ainda não tem conta, a senha provisória é gerada
+              pela plataforma e enviada só por e-mail, no convite com a marca do clube.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="novo-nome">Nome</Label>
+              <Input id="novo-nome" value={novoNome} onChange={e => setNovoNome(e.target.value)} autoComplete="off" />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="novo-email">E-mail</Label>
+              <Input
+                id="novo-email"
+                type="email"
+                value={novoEmail}
+                onChange={e => setNovoEmail(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+            {erroNovo && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{erroNovo}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNovoAberto(false)} disabled={adicionando}>
+              Cancelar
+            </Button>
+            <Button onClick={adicionarResponsavel} disabled={adicionando}>
+              {adicionando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Adicionar
             </Button>
           </DialogFooter>
         </DialogContent>

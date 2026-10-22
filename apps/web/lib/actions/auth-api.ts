@@ -3,11 +3,16 @@
 import type {
   AuthSession,
   ClientPortalLoginInput,
+  GoogleLoginConfig,
+  GoogleLoginInput,
   LoginInput,
+  LoginMethodInput,
+  LoginMethodOutput,
   RegisterInput,
   SessionUser,
 } from '@annetec/contracts'
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { ApiError, api } from '@/lib/api/client'
 import {
   beginImpersonation,
@@ -27,7 +32,17 @@ import { run, type ActionResult } from './_api-result'
  * `lib/actions/*.ts` já usam, para que a troca do mock pela API real seja
  * trocar o import, não reescrever a tela.
  */
-export type { ActionResult }
+
+/**
+ * IP de quem está no navegador, para o rate limit por IP das rotas de login
+ * da API — sem isso, toda chamada chegaria com o IP do servidor do Next e um
+ * único balde valeria para todo mundo.
+ */
+async function clientIpHeaders(): Promise<Record<string, string>> {
+  const incoming = await headers()
+  const forwardedFor = incoming.get('x-forwarded-for') ?? incoming.get('x-real-ip')
+  return forwardedFor ? { 'x-forwarded-for': forwardedFor } : {}
+}
 
 export async function loginAction(input: LoginInput): Promise<ActionResult<SessionUser>> {
   return run(async () => {
@@ -35,11 +50,27 @@ export async function loginAction(input: LoginInput): Promise<ActionResult<Sessi
       method: 'POST',
       body: input,
       token: null,
+      headers: await clientIpHeaders(),
     })
     await saveSession(token, user)
     revalidatePath('/', 'layout')
     return user
   })
+}
+
+/**
+ * Tela de login do inquilino, etapa 1: com o e-mail, a API diz se o próximo
+ * passo é senha ou CPF (associado sem senha). Não abre sessão nenhuma.
+ */
+export async function loginMethodAction(input: LoginMethodInput): Promise<ActionResult<LoginMethodOutput>> {
+  return run(async () =>
+    api<LoginMethodOutput>('/api/v1/auth/login/method', {
+      method: 'POST',
+      body: input,
+      token: null,
+      headers: await clientIpHeaders(),
+    }),
+  )
 }
 
 /** Primeiro acesso do associado: CPF + e-mail conferidos na Digital Saúde. */
@@ -51,11 +82,35 @@ export async function loginClientPortalAction(
       method: 'POST',
       body: input,
       token: null,
+      headers: await clientIpHeaders(),
     })
     await saveSession(token, user)
     revalidatePath('/', 'layout')
     return user
   })
+}
+
+/**
+ * Login com Google: `idToken` é o `credential` que o Google Identity Services
+ * entregou no navegador. A API valida o token e exige vínculo com o inquilino.
+ */
+export async function loginGoogleAction(input: GoogleLoginInput): Promise<ActionResult<SessionUser>> {
+  return run(async () => {
+    const { token, user } = await api<AuthSession>('/api/v1/auth/login/google', {
+      method: 'POST',
+      body: input,
+      token: null,
+      headers: await clientIpHeaders(),
+    })
+    await saveSession(token, user)
+    revalidatePath('/', 'layout')
+    return user
+  })
+}
+
+/** Se a API tem o login com Google configurado (decide se a tela mostra o botão). */
+export async function googleLoginConfigAction(): Promise<ActionResult<GoogleLoginConfig>> {
+  return run(async () => api<GoogleLoginConfig>('/api/v1/auth/login/google/config', { token: null }))
 }
 
 export async function registerAction(input: RegisterInput): Promise<ActionResult<SessionUser>> {
@@ -79,8 +134,39 @@ export async function logoutAction(): Promise<ActionResult<null>> {
   return { success: true, data: null }
 }
 
+/**
+ * Sessão atual. Sem cookie de token nem chama a API: a falha volta SEM
+ * `unauthorized`, porque "nunca entrou" não é "sessão encerrada" — só um
+ * token enviado e recusado (401) liga o aviso no login.
+ */
 export async function meAction(): Promise<ActionResult<SessionUser>> {
+  if (!(await getToken())) return { success: false, error: 'Nenhuma sessão aberta.' }
   return run(() => api<SessionUser>('/api/v1/auth/me'))
+}
+
+/**
+ * Relê `/auth/me` e regrava o cookie legível do `SessionUser` com o mesmo
+ * token. Existe para o retrato da sessão não ficar velho depois de uma
+ * mudança feita no servidor — p.ex. o associado que acabou de pagar a
+ * assinatura e ainda carregava `needsSubscription: true` desde o login.
+ */
+export async function refreshSessionAction(): Promise<ActionResult<SessionUser>> {
+  const token = await getToken()
+  if (!token) return { success: false, error: 'Nenhuma sessão aberta.' }
+  return run(async () => {
+    const user = await api<SessionUser>('/api/v1/auth/me', { token })
+    await saveSession(token, user)
+    return user
+  })
+}
+
+/**
+ * Só apaga os cookies de sessão deste navegador, sem falar com a API. É o
+ * passo de quem recebeu 401: a sessão já morreu no servidor (derrubada,
+ * expirada, vínculo inativo), então chamar `/auth/logout` seria mais um 401.
+ */
+export async function clearLocalSessionAction(): Promise<void> {
+  await clearSession()
 }
 
 /**

@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import Link from "next/link"
 import { Cross, Percent, Pill, PhoneCall, Video, CheckCircle, Building2, User, Stethoscope, ClipboardList, Receipt, HelpingHand } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
@@ -206,10 +207,11 @@ export default function PlanosPage() {
               <p className="text-white/70 text-sm mb-1">Plano</p>
               <h3 className="text-2xl font-bold text-white mb-4">ANNETEC ESSENCIAL</h3>
               <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-sm text-white">R$</span>
-                <span className="text-5xl font-bold text-white">29,90</span>
+                <span className="text-4xl font-bold text-white">Consulte</span>
               </div>
-              <p className="text-xs text-white/60 mb-8">por mês / por pessoa</p>
+              <p className="text-xs text-white/60 mb-8">
+                <Link href="/contratar" className="underline">Contrate pela ANNETEC</Link>
+              </p>
 
               <div className="space-y-3">
                 {essencialChecklist.map((item) => (

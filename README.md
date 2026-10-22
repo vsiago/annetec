@@ -25,7 +25,7 @@ docs/
 pnpm install
 
 # API
-cp apps/api/.env.example apps/api/.env      # preencha DATABASE_URL e JWT_SECRET
+cp apps/api/.env.example apps/api/.env      # preencha DATABASE_URL e BETTER_AUTH_SECRET (mín. 32 caracteres)
 pnpm db:migrate
 pnpm db:seed
 
@@ -45,6 +45,8 @@ Contas do seed:
 | Inquilino `annetec` — cliente | `ana@email.com` | `client123` |
 | Inquilino `mepcard` — admin | `admin@mepcard.com.br` | `admin123` |
 
+Admin de demo do inquilino `mapcard2` (fora do seed): `admin@mapcard2.com.br` / `Mapcard2@2026`, criado (ou com senha redefinida, idempotente) por `pnpm --filter @annetec/api tenant:create-admin mapcard2 "Administrador MapCard2" admin@mapcard2.com.br 'Mapcard2@2026'`.
+
 ## Scripts
 
 | Comando | O que faz |
@@ -55,7 +57,7 @@ Contas do seed:
 | `pnpm test` | Vitest |
 | `pnpm db:generate` | gera migração a partir do schema Drizzle |
 | `pnpm db:migrate` | aplica as migrações |
-| `pnpm db:seed` | popula dados de desenvolvimento |
+| `pnpm db:seed` | popula dados de desenvolvimento (aborta em produção) |
 | `pnpm db:studio` | Drizzle Studio |
 
 ## Arquitetura da API
@@ -88,7 +90,7 @@ Regras que valem para todo o código:
   a API e o front importam os mesmos tipos.
 - **Nada de `fetch` para o ERP fora de `integrations/digitalsaude/client.ts`.**
 - **Escopo de inquilino é do servidor.** `resolveTenant` resolve pelo slug da rota e
-  `requireTenantRole` confere contra o `tenantId` do JWT.
+  `requireTenantRole` confere contra o inquilino ativo da sessão (Better Auth).
 
 ## Rotas
 
@@ -115,3 +117,14 @@ As credenciais (`token` e `senhaApi`) são por inquilino, gravadas cifradas em
 `tenant_integrations` pela tela do superadmin — que valida contra o ERP antes de salvar.
 `DIGITALSAUDE_APP_TOKEN`/`DIGITALSAUDE_API_PASSWORD` no `.env` servem só de fallback
 em desenvolvimento.
+
+## Produção
+
+- Configuração do gateway de pagamento (Asaas: chave, webhook, sandbox × produção) e
+  checklist de go-live: [docs/pagamentos-asaas-configuracao.md](docs/pagamentos-asaas-configuracao.md#checklist-de-go-live).
+- Seeds e scripts de demonstração (`db:seed`, `demo:*`, `create-platform-operator.ts`)
+  **não rodam em produção**: com `NODE_ENV=production` eles abortam, a menos que
+  `ALLOW_SEED_IN_PRODUCTION=1` seja passado explicitamente. As contas do seed acima têm
+  senhas públicas — nunca devem existir num banco de produção.
+- `create-platform-operator.ts` lê o cadastro da operadora de argumentos `--chave=valor`
+  ou das variáveis `OPERATOR_*` (rode com `--help` para ver o uso).

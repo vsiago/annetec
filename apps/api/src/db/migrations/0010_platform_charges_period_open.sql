@@ -1,0 +1,2 @@
+DROP INDEX "platform_charges_sub_period_key";--> statement-breakpoint
+CREATE UNIQUE INDEX "platform_charges_sub_period_key" ON "platform_charges" USING btree ("subscription_id","period_start") WHERE kind = 'monthly' and status <> 'canceled';

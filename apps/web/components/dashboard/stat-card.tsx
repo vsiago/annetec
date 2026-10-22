@@ -1,7 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { MockBadge } from './mock-badge'
 import { cn } from '@/lib/utils'
 
 type Tone = 'up' | 'down' | 'neutral'
@@ -40,7 +39,6 @@ export function StatCard({
   icon: Icon,
   delta,
   comparison,
-  mock = false,
   className,
 }: {
   label: string
@@ -51,14 +49,12 @@ export function StatCard({
   icon?: LucideIcon
   delta?: { value: string; direction: Tone }
   comparison?: string
-  mock?: boolean
   className?: string
 }) {
   const DeltaIcon = delta?.direction === 'down' ? ArrowDownRight : ArrowUpRight
 
   return (
     <Card className={cn('relative gap-0 py-0 shadow-none', accentClasses[accent].card, className)}>
-      {mock && <MockBadge className="absolute right-3 top-3" />}
       <CardContent className="flex items-start gap-4 p-5">
         {Icon && (
           <div className={cn('shrink-0 rounded-xl p-3', accentClasses[accent].chip)}>

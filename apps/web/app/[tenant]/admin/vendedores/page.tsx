@@ -11,18 +11,11 @@ import type { Seller } from '@/lib/types'
 import {
   Search,
   Plus,
-  MoreHorizontal,
   Mail,
   Phone,
   MapPin,
   TrendingUp,
 } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
 export default function VendedoresPage() {
@@ -94,19 +87,6 @@ export default function VendedoresPage() {
                         <h3 className="font-semibold text-foreground">{seller.name}</h3>
                         <Badge className={performance.color}>{performance.label}</Badge>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
-                          <DropdownMenuItem>Editar</DropdownMenuItem>
-                          <DropdownMenuItem>Ver Clientes</DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">Desativar</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     </div>
 
                     <div className="mt-3 space-y-1 text-sm text-muted-foreground">

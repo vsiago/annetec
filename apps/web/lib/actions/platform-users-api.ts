@@ -18,7 +18,6 @@ import { run, type ActionResult } from './_api-result'
  * `createdAt: Date`) só para o resto do app — construído em cima do mock —
  * não precisar mudar nada além de trocar de onde os dados vêm.
  */
-export type { ActionResult }
 
 function toLegacyShape(user: PlatformUser): LegacyPlatformUser {
   return {

@@ -222,40 +222,30 @@ export default function AdminAtendimentoPage() {
           accent="info"
           value={tickets.length}
           label="Atendimentos no período"
-          delta={{ value: '18%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={Clock}
           accent="warning"
           value={open}
           label="Em aberto"
-          delta={{ value: '12%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={UserRound}
           accent="primary"
           value={waiting}
           label="Aguardando retorno"
-          delta={{ value: '22%', direction: 'down' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={CircleCheckBig}
           accent="success"
           value={countBy('resolvido')}
           label="Resolvidos"
-          delta={{ value: '26%', direction: 'up' }}
-          comparison="vs. mês anterior"
         />
         <StatCard
           icon={Timer}
           accent="primary"
           value="4h 18min"
           label="Tempo médio de resolução"
-          delta={{ value: '30%', direction: 'down' }}
-          comparison="vs. mês anterior"
         />
       </div>
 

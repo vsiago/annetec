@@ -28,6 +28,7 @@ import {
   ClipboardList,
   IdCard,
   LogIn,
+  Rocket,
 } from "lucide-react"
 
 /**
@@ -102,11 +103,12 @@ const navItems: NavItem[] = [
       { icon: Building2, label: "Outras associações", href: "/entidades#outras-associacoes" },
       { icon: HeartHandshake, label: "Planos para sua associação", href: "/planos#associacao" },
       { icon: Building, label: "Planos para sua empresa", href: "/planos#empresa" },
+      { icon: Rocket, label: "Contratar a plataforma", href: "/contratar", descricao: "Seu clube com a sua marca, 100% online" },
     ],
   },
   {
     label: "Crie seu cartão de benefícios",
-    href: "/cadastro",
+    href: "/contratar",
     destaque: true,
   },
   {

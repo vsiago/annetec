@@ -8,6 +8,7 @@ import { AdminScopeProvider } from '@/contexts/admin-scope-context'
 import { ProtectedPlatformRoute } from '@/components/protected-platform-route'
 import { PlatformSidebar } from '@/components/admin-platform/platform-sidebar'
 import { ScopeSwitcher } from '@/components/admin-platform/scope-switcher'
+import { NotificationsProvider } from '@/components/notifications/notifications-provider'
 import { cn } from '@/lib/utils'
 
 /**
@@ -20,7 +21,6 @@ const ROTAS_COM_ESCOPO = [
   '/admin/catalogo',
   '/admin/vendedores',
   '/admin/leads',
-  '/admin/financeiro',
   '/admin/comissoes',
   '/admin/parceiros',
 ]
@@ -100,7 +100,10 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
       <ProtectedPlatformRoute>
         <TenantsProvider>
           <AdminScopeProvider>
-            <PlatformLayoutContent>{children}</PlatformLayoutContent>
+            {/* Sino da equipe Annetec: pagamentos e cadastros de todos os clubes. */}
+            <NotificationsProvider scope={{ kind: 'platform' }}>
+              <PlatformLayoutContent>{children}</PlatformLayoutContent>
+            </NotificationsProvider>
           </AdminScopeProvider>
         </TenantsProvider>
       </ProtectedPlatformRoute>

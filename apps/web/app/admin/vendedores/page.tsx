@@ -219,7 +219,6 @@ function AddSellerDialog({
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
-  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -236,7 +235,6 @@ function AddSellerDialog({
       email,
       phone: phone || null,
       role: 'seller',
-      password: password || undefined,
       active: true,
     })
     setSubmitting(false)
@@ -247,7 +245,6 @@ function AddSellerDialog({
     setName('')
     setEmail('')
     setPhone('')
-    setPassword('')
     onOpenChange(false)
     onCreated()
   }
@@ -262,7 +259,10 @@ function AddSellerDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Novo vendedor</DialogTitle>
-          <DialogDescription>Cria a conta na Annetec. O vínculo com a Digital Saúde é o próximo passo.</DialogDescription>
+          <DialogDescription>
+            Cria a conta do vendedor no clube. A senha provisória é gerada pelo sistema e enviada por e-mail ao
+            vendedor, com a marca do clube. O vínculo com a Digital Saúde é o próximo passo.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-3">
           <div className="grid gap-1.5">
@@ -276,10 +276,6 @@ function AddSellerDialog({
           <div className="grid gap-1.5">
             <Label>Telefone</Label>
             <Input value={phone} onChange={e => setPhone(e.target.value)} />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Senha provisória (opcional)</Label>
-            <Input type="password" value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
