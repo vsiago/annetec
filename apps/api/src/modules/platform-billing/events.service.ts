@@ -10,7 +10,7 @@ import {
   type PlatformBillingEventType,
   type PlatformEventSource,
 } from '@annetec/contracts'
-import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt, ne, or } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { platformBillingEvents, platformCharges, platformSubscriptions, tenantProfiles } from '@/db/schema'
 import { invalidatePlatformAccessCache } from '@/http/middleware/platform-access'
@@ -364,7 +364,9 @@ export async function handlePlatformGatewayEvent(
   ctx: PlatformGatewayEventContext,
 ): Promise<PlatformGatewayEventOutcome> {
   const now = ctx.now ?? new Date()
-  const charge = await findChargeForEvent(payload, ctx.provider)
+  const match = await findChargeForEvent(payload, ctx.provider)
+  if (match?.orphan) return recordOrphanEvent(payload, match.charge, ctx)
+  const charge = match?.charge ?? null
   if (!charge) {
     logger.info(
       { event: payload.event, provider: ctx.provider, source: ctx.source },
@@ -403,19 +405,25 @@ export async function handlePlatformGatewayEvent(
   return outcome
 }
 
-async function findChargeForEvent(payload: PlatformGatewayEventPayload, provider: PaymentGatewayProvider): Promise<PlatformChargeRow | null> {
+/**
+ * Fatura do evento. `orphan`: o `externalReference` aponta para uma fatura
+ * nossa, mas o pagamento no gateway é OUTRO (Pix/boleto antigo cujo
+ * cancelamento best-effort falhou) — ver `recordOrphanEvent`.
+ */
+async function findChargeForEvent(
+  payload: PlatformGatewayEventPayload,
+  provider: PaymentGatewayProvider,
+): Promise<{ charge: PlatformChargeRow; orphan: boolean } | null> {
   const chargeId = parsePlatformReference(payload.payment.externalReference)
   const gatewayId = payload.payment.id
+  let referenced: PlatformChargeRow | null = null
 
   if (chargeId) {
-    const byReference = gatewayId
-      ? and(
-          eq(platformCharges.id, chargeId),
-          or(eq(platformCharges.gatewayChargeId, gatewayId), isNull(platformCharges.gatewayChargeId)),
-        )
-      : eq(platformCharges.id, chargeId)
-    const [row] = await db.select().from(platformCharges).where(byReference).limit(1)
-    if (row) return row
+    const [row] = await db.select().from(platformCharges).where(eq(platformCharges.id, chargeId)).limit(1)
+    if (row) {
+      if (!gatewayId || !row.gatewayChargeId || row.gatewayChargeId === gatewayId) return { charge: row, orphan: false }
+      referenced = row
+    }
   }
 
   if (gatewayId) {
@@ -424,9 +432,72 @@ async function findChargeForEvent(payload: PlatformGatewayEventPayload, provider
       .from(platformCharges)
       .where(and(eq(platformCharges.gatewayProvider, provider), eq(platformCharges.gatewayChargeId, gatewayId)))
       .limit(1)
-    return row ?? null
+    if (row && row.gatewayChargeId === gatewayId) return { charge: row, orphan: false }
   }
-  return null
+  return referenced ? { charge: referenced, orphan: true } : null
+}
+
+/** Eventos que significam dinheiro ENTRANDO num pagamento do gateway. */
+const MONEY_IN_EVENTS = new Set(['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'])
+
+/**
+ * Pagamento órfão: dinheiro recebido num pagamento que não é mais o da
+ * fatura. Grava na timeline (dedupe pelo id do evento) e loga em ERRO com o
+ * necessário para o estorno manual; a fatura não muda. Outros eventos do
+ * pagamento antigo seguem ignorados.
+ */
+async function recordOrphanEvent(
+  payload: PlatformGatewayEventPayload,
+  charge: PlatformChargeRow,
+  ctx: PlatformGatewayEventContext,
+): Promise<PlatformGatewayEventOutcome> {
+  const base = { chargeId: charge.id, subscriptionId: charge.subscriptionId, proposalId: charge.proposalId }
+  if (!MONEY_IN_EVENTS.has(payload.event)) {
+    logger.info(
+      { event: payload.event, chargeId: charge.id, gatewayPaymentId: payload.payment.id, provider: ctx.provider },
+      'Evento de um pagamento antigo da fatura da plataforma (não é o atual) — ignorado',
+    )
+    return { status: 'ignored', ...base }
+  }
+  const value = payload.payment.value ?? null
+  const [inserted] = await db
+    .insert(platformBillingEvents)
+    .values({
+      organizationId: charge.organizationId,
+      subscriptionId: charge.subscriptionId,
+      chargeId: charge.id,
+      proposalId: charge.proposalId,
+      type: 'PAYMENT_ORPHAN_RECEIVED',
+      source: ctx.source,
+      gatewayProvider: ctx.provider,
+      externalEventId: payload.id ?? null,
+      message:
+        `Pagamento de ${value !== null ? formatBRL(value) : 'valor desconhecido'} recebido no pagamento antigo ` +
+        `${payload.payment.id} (a fatura usa ${charge.gatewayChargeId}) — estornar manualmente no gateway`,
+      payload: { ...sanitizePayload(payload), orphan: true, currentGatewayChargeId: charge.gatewayChargeId },
+      actorUserId: ctx.actorUserId ?? null,
+    })
+    .onConflictDoNothing({ target: [platformBillingEvents.gatewayProvider, platformBillingEvents.externalEventId] })
+    .returning({ id: platformBillingEvents.id })
+  if (!inserted) return { status: 'duplicate', ...base }
+  logger.error(
+    {
+      alert: 'orphan_payment',
+      scope: 'platform',
+      event: payload.event,
+      provider: ctx.provider,
+      organizationId: charge.organizationId,
+      chargeId: charge.id,
+      chargeStatus: charge.status,
+      proposalId: charge.proposalId,
+      gatewayPaymentId: payload.payment.id,
+      currentGatewayChargeId: charge.gatewayChargeId,
+      value,
+      billingType: payload.payment.billingType ?? null,
+    },
+    'Pagamento recebido num pagamento antigo/duplicado da fatura da plataforma — ESTORNO MANUAL necessário',
+  )
+  return { status: 'recorded', ...base }
 }
 
 async function applyEvent(
@@ -447,9 +518,33 @@ async function applyEvent(
     case 'PAYMENT_REPROVED_BY_RISK_ANALYSIS':
       return applyRefused(tx, charge, ctx, now, effects)
     case 'PAYMENT_REFUNDED':
-      return applyRefunded(tx, charge, now)
+      return applyRefunded(tx, payload, charge, ctx, now)
     case 'PAYMENT_DELETED':
       return applyDeleted(tx, payload, charge, now)
+    case 'PAYMENT_RESTORED':
+      return applyRestored(tx, payload, charge, ctx, now, effects)
+    case 'PAYMENT_CHARGEBACK_REQUESTED':
+    case 'PAYMENT_CHARGEBACK_DISPUTE':
+      return applyChargeback(tx, payload, charge, ctx, now, effects)
+    case 'PAYMENT_AWAITING_CHARGEBACK_REVERSAL':
+      logger.warn(
+        { alert: 'chargeback_reversal', scope: 'platform', chargeId: charge.id, organizationId: charge.organizationId, gatewayPaymentId: payload.payment.id },
+        'Disputa de chargeback da plataforma ganha (aguardando reversão) — revisar o bloqueio do painel',
+      )
+      return false
+    case 'PAYMENT_PARTIALLY_REFUNDED':
+      logger.warn(
+        {
+          alert: 'partial_refund',
+          scope: 'platform',
+          chargeId: charge.id,
+          organizationId: charge.organizationId,
+          gatewayPaymentId: payload.payment.id,
+          value: payload.payment.value ?? null,
+        },
+        'Estorno parcial de fatura da plataforma — só registrado (fatura e assinatura não mudam)',
+      )
+      return false
     default:
       return false
   }
@@ -489,7 +584,24 @@ async function applyPaid(
     })
     .where(and(eq(platformCharges.id, charge.id), inArray(platformCharges.status, OPEN_PLATFORM_CHARGE_STATUSES)))
     .returning()
-  if (!updated) return false
+  if (!updated) {
+    if (charge.status !== 'paid') {
+      logger.error(
+        {
+          alert: 'payment_on_closed_charge',
+          scope: 'platform',
+          event: payload.event,
+          chargeId: charge.id,
+          chargeStatus: charge.status,
+          organizationId: charge.organizationId,
+          gatewayPaymentId: payment.id,
+          value: paidAmount,
+        },
+        'Pagamento recebido numa fatura da plataforma encerrada — conferir e estornar manualmente se for o caso',
+      )
+    }
+    return false
+  }
 
   const recipient = await chargeRecipient(tx, updated)
   if (recipient) effects.emails.push(chargeEmail('platform_invoice_paid', updated, recipient, { paidAmount }))
@@ -594,13 +706,167 @@ async function applyRefused(
   return true
 }
 
-async function applyRefunded(tx: Executor, charge: PlatformChargeRow, now: Date): Promise<boolean> {
+/** Estorno: só a fatura muda (regra de acesso após estorno ainda é decisão de negócio). */
+async function applyRefunded(
+  tx: Executor,
+  payload: PlatformGatewayEventPayload,
+  charge: PlatformChargeRow,
+  ctx: PlatformGatewayEventContext,
+  now: Date,
+): Promise<boolean> {
   const [updated] = await tx
     .update(platformCharges)
     .set({ status: 'refunded', refundedAt: now, updatedAt: now })
     .where(and(eq(platformCharges.id, charge.id), eq(platformCharges.status, 'paid')))
     .returning({ id: platformCharges.id })
-  return Boolean(updated)
+  if (!updated) return false
+  logger.warn(
+    {
+      alert: 'refund',
+      scope: 'platform',
+      source: ctx.source,
+      chargeId: charge.id,
+      kind: charge.kind,
+      organizationId: charge.organizationId,
+      gatewayPaymentId: payload.payment.id,
+      value: payload.payment.value ?? Number(charge.amount),
+    },
+    'Fatura da plataforma estornada — acesso do inquilino não muda automaticamente (revisar)',
+  )
+  return true
+}
+
+/**
+ * Chargeback numa fatura da plataforma: a fatura paga vira `refunded` e, havendo
+ * assinatura, o painel do inquilino é BLOQUEADO por override manual (o mesmo
+ * "Suspender" da holding, sem data-limite) — vence a régua e a reativação
+ * automática até a holding remover o override. Fatura de ativação (sem
+ * assinatura ainda) só registra e loga.
+ */
+async function applyChargeback(
+  tx: Executor,
+  payload: PlatformGatewayEventPayload,
+  charge: PlatformChargeRow,
+  ctx: PlatformGatewayEventContext,
+  now: Date,
+  effects: PlatformEffects,
+): Promise<boolean> {
+  const value = payload.payment.value ?? Number(charge.paidAmount ?? charge.amount)
+  logger.error(
+    {
+      alert: 'chargeback',
+      scope: 'platform',
+      event: payload.event,
+      organizationId: charge.organizationId,
+      chargeId: charge.id,
+      kind: charge.kind,
+      subscriptionId: charge.subscriptionId,
+      proposalId: charge.proposalId,
+      gatewayPaymentId: payload.payment.id,
+      value,
+    },
+    'Chargeback numa fatura da plataforma — revisar (painel bloqueado até a holding liberar)',
+  )
+  const [updated] = await tx
+    .update(platformCharges)
+    .set({
+      status: 'refunded',
+      refundedAt: now,
+      failureReason: 'Contestação (chargeback) aberta pelo portador do cartão',
+      updatedAt: now,
+    })
+    .where(and(eq(platformCharges.id, charge.id), eq(platformCharges.status, 'paid')))
+    .returning()
+  if (!updated) return false
+  if (!updated.subscriptionId || !updated.organizationId) return true
+
+  const reason = `Chargeback do pagamento de ${formatBRL(value)} (${updated.description}) — revisar antes de liberar`
+  const [blocked] = await tx
+    .update(platformSubscriptions)
+    .set({
+      accessOverride: 'blocked',
+      accessOverrideReason: reason.slice(0, 500),
+      accessOverrideUntil: null,
+      accessOverrideByUserId: null,
+      accessOverrideAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(platformSubscriptions.id, updated.subscriptionId),
+        or(isNull(platformSubscriptions.accessOverride), ne(platformSubscriptions.accessOverride, 'blocked')),
+      ),
+    )
+    .returning({ id: platformSubscriptions.id })
+  if (blocked) {
+    await recordPlatformEvent(tx, {
+      organizationId: updated.organizationId,
+      subscriptionId: updated.subscriptionId,
+      chargeId: updated.id,
+      type: 'ACCESS_OVERRIDE_SET',
+      source: ctx.source,
+      gatewayProvider: ctx.provider,
+      message: `Painel suspenso automaticamente: ${reason}`,
+      payload: { action: 'suspend', level: 'blocked', until: null, reason: 'chargeback' },
+    })
+    effects.invalidateOrgs.add(updated.organizationId)
+  }
+  return true
+}
+
+/**
+ * `PAYMENT_RESTORED` desfaz um `PAYMENT_DELETED`: a fatura cancelada com o
+ * mesmo pagamento volta a ficar em aberto (vencida se já passou do dia, com a
+ * assinatura em atraso como no `applyOverdue`). Assinatura cancelada não
+ * reabre fatura.
+ */
+async function applyRestored(
+  tx: Executor,
+  payload: PlatformGatewayEventPayload,
+  charge: PlatformChargeRow,
+  ctx: PlatformGatewayEventContext,
+  now: Date,
+  effects: PlatformEffects,
+): Promise<boolean> {
+  if (!payload.payment.id || charge.status !== 'canceled' || charge.gatewayChargeId !== payload.payment.id) return false
+  if (charge.subscriptionId) {
+    const [sub] = await tx
+      .select({ status: platformSubscriptions.status })
+      .from(platformSubscriptions)
+      .where(eq(platformSubscriptions.id, charge.subscriptionId))
+      .limit(1)
+    if (!sub || sub.status === 'canceled') {
+      logger.warn(
+        { chargeId: charge.id, subscriptionId: charge.subscriptionId, gatewayPaymentId: payload.payment.id },
+        'Pagamento restaurado no gateway, mas a assinatura da plataforma está cancelada — fatura mantida cancelada (revisar)',
+      )
+      return false
+    }
+  }
+  const overdue = charge.dueDate < todaySP(now)
+  const [updated] = await tx
+    .update(platformCharges)
+    .set({ status: overdue ? 'overdue' : 'pending', canceledAt: null, updatedAt: now })
+    .where(
+      and(
+        eq(platformCharges.id, charge.id),
+        eq(platformCharges.status, 'canceled'),
+        eq(platformCharges.gatewayChargeId, payload.payment.id),
+      ),
+    )
+    .returning()
+  if (!updated) return false
+  if (overdue && updated.subscriptionId && updated.organizationId) {
+    await markPlatformPastDue(
+      tx,
+      { id: updated.subscriptionId, organizationId: updated.organizationId },
+      `fatura de ${formatBRL(Number(updated.amount))} restaurada no gateway, vencida em ${formatDateBR(updated.dueDate)}`,
+      ctx,
+      now,
+      effects,
+    )
+  }
+  return true
 }
 
 async function applyDeleted(tx: Executor, payload: PlatformGatewayEventPayload, charge: PlatformChargeRow, now: Date): Promise<boolean> {
@@ -648,6 +914,16 @@ function eventMessage(payload: PlatformGatewayEventPayload, charge: PlatformChar
       return `Pagamento de ${amount} estornado`
     case 'PAYMENT_DELETED':
       return 'Cobrança removida no gateway'
+    case 'PAYMENT_RESTORED':
+      return 'Cobrança restaurada no gateway'
+    case 'PAYMENT_CHARGEBACK_REQUESTED':
+      return `Chargeback (contestação) aberto no pagamento de ${amount} (${kind})${cardText}`
+    case 'PAYMENT_CHARGEBACK_DISPUTE':
+      return `Chargeback do pagamento de ${amount} (${kind}) em disputa`
+    case 'PAYMENT_AWAITING_CHARGEBACK_REVERSAL':
+      return `Disputa do chargeback de ${amount} ganha — aguardando reversão`
+    case 'PAYMENT_PARTIALLY_REFUNDED':
+      return `Pagamento estornado parcialmente (${amount})`
     default:
       return (
         PLATFORM_BILLING_EVENT_LABELS[payload.event as PlatformBillingEventType] ??

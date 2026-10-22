@@ -10,7 +10,7 @@ import {
   type PaymentEventType,
   type PaymentGatewayProvider,
 } from '@annetec/contracts'
-import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, lt, sql } from 'drizzle-orm'
 import { db } from '@/db/client'
 import {
   clubCharges,
@@ -159,7 +159,11 @@ async function applyGatewayEvent(
 ): Promise<GatewayEventOutcome & { paidNotes: PaidNote[] }> {
   const now = ctx.now ?? new Date()
   const paidNotes: PaidNote[] = []
-  const charge = await findChargeForEvent(payload, ctx.provider)
+  const match = await findChargeForEvent(payload, ctx.provider)
+  if (match?.orphan) {
+    return { ...(await recordOrphanEvent(payload, match.charge, ctx)), paidNotes }
+  }
+  const charge = match?.charge ?? null
   if (!charge) {
     logger.info(
       { event: payload.event, provider: ctx.provider, source: ctx.source },
@@ -200,16 +204,26 @@ async function applyGatewayEvent(
   return { ...outcome, paidNotes: outcome.status === 'applied' ? paidNotes : [] }
 }
 
-async function findChargeForEvent(payload: GatewayEventPayload, provider: PaymentGatewayProvider): Promise<ChargeRow | null> {
+/**
+ * Cobrança do evento. `orphan`: o `externalReference` aponta para uma cobrança
+ * nossa, mas o id do pagamento no gateway é OUTRO (Pix/boleto antigo cujo
+ * cancelamento best-effort falhou na troca de método/segunda via). Nada nela
+ * muda por causa desse pagamento — ver `recordOrphanEvent`.
+ */
+async function findChargeForEvent(
+  payload: GatewayEventPayload,
+  provider: PaymentGatewayProvider,
+): Promise<{ charge: ChargeRow; orphan: boolean } | null> {
   const reference = payload.payment.externalReference
   const gatewayId = payload.payment.id
+  let referenced: ChargeRow | null = null
 
   if (reference && uuid.safeParse(reference).success) {
-    const byReference = gatewayId
-      ? and(eq(clubCharges.id, reference), or(eq(clubCharges.gatewayChargeId, gatewayId), isNull(clubCharges.gatewayChargeId)))
-      : eq(clubCharges.id, reference)
-    const [row] = await db.select().from(clubCharges).where(byReference).limit(1)
-    if (row) return row
+    const [row] = await db.select().from(clubCharges).where(eq(clubCharges.id, reference)).limit(1)
+    if (row) {
+      if (!gatewayId || !row.gatewayChargeId || row.gatewayChargeId === gatewayId) return { charge: row, orphan: false }
+      referenced = row
+    }
   }
 
   if (gatewayId) {
@@ -218,9 +232,71 @@ async function findChargeForEvent(payload: GatewayEventPayload, provider: Paymen
       .from(clubCharges)
       .where(and(eq(clubCharges.gatewayProvider, provider), eq(clubCharges.gatewayChargeId, gatewayId)))
       .limit(1)
-    return row ?? null
+    if (row && row.gatewayChargeId === gatewayId) return { charge: row, orphan: false }
   }
-  return null
+  return referenced ? { charge: referenced, orphan: true } : null
+}
+
+/** Eventos que significam dinheiro ENTRANDO num pagamento do gateway. */
+const MONEY_IN_EVENTS = new Set(['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'])
+
+/**
+ * Pagamento órfão: dinheiro recebido num pagamento que não é mais o da
+ * cobrança. Grava na timeline da cobrança (dedupe pelo id do evento) e loga
+ * em ERRO com o necessário para o estorno manual — a cobrança e a assinatura
+ * não mudam. Outros eventos do pagamento antigo (ex.: o `PAYMENT_DELETED` do
+ * cancelamento que deu certo) seguem ignorados.
+ */
+async function recordOrphanEvent(
+  payload: GatewayEventPayload,
+  charge: ChargeRow,
+  ctx: GatewayEventContext,
+): Promise<GatewayEventOutcome> {
+  const base = { chargeId: charge.id, subscriptionId: charge.subscriptionId }
+  if (!MONEY_IN_EVENTS.has(payload.event)) {
+    logger.info(
+      { event: payload.event, chargeId: charge.id, gatewayPaymentId: payload.payment.id, provider: ctx.provider },
+      'Evento de um pagamento antigo da cobrança (não é o atual) — ignorado',
+    )
+    return { status: 'ignored', ...base }
+  }
+  const value = payload.payment.value ?? null
+  const [inserted] = await db
+    .insert(paymentEvents)
+    .values({
+      organizationId: charge.organizationId,
+      subscriptionId: charge.subscriptionId,
+      chargeId: charge.id,
+      type: 'PAYMENT_ORPHAN_RECEIVED',
+      source: ctx.source,
+      gatewayProvider: ctx.provider,
+      externalEventId: payload.id ?? null,
+      message:
+        `Pagamento de ${value !== null ? formatBRL(value) : 'valor desconhecido'} recebido no pagamento antigo ` +
+        `${payload.payment.id} (a cobrança usa ${charge.gatewayChargeId}) — estornar manualmente no gateway`,
+      payload: { ...sanitizePayload(payload), orphan: true, currentGatewayChargeId: charge.gatewayChargeId },
+      actorUserId: ctx.actorUserId ?? null,
+    })
+    .onConflictDoNothing({ target: [paymentEvents.gatewayProvider, paymentEvents.externalEventId] })
+    .returning({ id: paymentEvents.id })
+  if (!inserted) return { status: 'duplicate', ...base }
+  logger.error(
+    {
+      alert: 'orphan_payment',
+      event: payload.event,
+      provider: ctx.provider,
+      organizationId: charge.organizationId,
+      chargeId: charge.id,
+      chargeStatus: charge.status,
+      subscriptionId: charge.subscriptionId,
+      gatewayPaymentId: payload.payment.id,
+      currentGatewayChargeId: charge.gatewayChargeId,
+      value,
+      billingType: payload.payment.billingType ?? null,
+    },
+    'Pagamento recebido num pagamento antigo/duplicado da cobrança — ESTORNO MANUAL necessário',
+  )
+  return { status: 'recorded', ...base }
 }
 
 async function applyEvent(
@@ -241,9 +317,32 @@ async function applyEvent(
     case 'PAYMENT_REPROVED_BY_RISK_ANALYSIS':
       return applyRefused(tx, charge, ctx, now)
     case 'PAYMENT_REFUNDED':
-      return applyRefunded(tx, charge, now)
+      return applyRefunded(tx, payload, charge, ctx, now)
     case 'PAYMENT_DELETED':
       return applyDeleted(tx, payload, charge, now)
+    case 'PAYMENT_RESTORED':
+      return applyRestored(tx, payload, charge, ctx, now)
+    case 'PAYMENT_CHARGEBACK_REQUESTED':
+    case 'PAYMENT_CHARGEBACK_DISPUTE':
+      return applyChargeback(tx, payload, charge, ctx, now)
+    case 'PAYMENT_AWAITING_CHARGEBACK_REVERSAL':
+      logger.warn(
+        { alert: 'chargeback_reversal', chargeId: charge.id, subscriptionId: charge.subscriptionId, gatewayPaymentId: payload.payment.id },
+        'Disputa de chargeback ganha (aguardando reversão) — revisar a assinatura e reativar manualmente se for o caso',
+      )
+      return false
+    case 'PAYMENT_PARTIALLY_REFUNDED':
+      logger.warn(
+        {
+          alert: 'partial_refund',
+          chargeId: charge.id,
+          subscriptionId: charge.subscriptionId,
+          gatewayPaymentId: payload.payment.id,
+          value: payload.payment.value ?? null,
+        },
+        'Estorno parcial no gateway — só registrado (cobrança e assinatura não mudam)',
+      )
+      return false
     default:
       return false
   }
@@ -293,7 +392,25 @@ async function applyPaid(
     })
     .where(and(eq(clubCharges.id, charge.id), inArray(clubCharges.status, OPEN_CHARGE_STATUSES)))
     .returning()
-  if (!updated) return false
+  if (!updated) {
+    // Já paga = o mesmo pagamento chegando de novo (CONFIRMED + RECEIVED). Cancelada
+    // ou estornada recebendo dinheiro = sobra a devolver.
+    if (charge.status !== 'paid') {
+      logger.error(
+        {
+          alert: 'payment_on_closed_charge',
+          event: payload.event,
+          chargeId: charge.id,
+          chargeStatus: charge.status,
+          subscriptionId: charge.subscriptionId,
+          gatewayPaymentId: payment.id,
+          value: paidAmount,
+        },
+        'Pagamento recebido numa cobrança encerrada — conferir e estornar manualmente se for o caso',
+      )
+    }
+    return false
+  }
 
   // Avulsa: só a cobrança muda. Nada de ativar, renovar período, reativar,
   // emitir carteirinha ou trocar o cartão da recorrência por causa dela.
@@ -439,6 +556,7 @@ export async function reactivateIfSettled(
     )
     .limit(1)
   if (stillOverdue) return false
+  if (await chargebackHold(tx, sub.id)) return false
 
   const [reactivated] = await tx
     .update(clubSubscriptions)
@@ -528,13 +646,123 @@ async function applyRefused(tx: Executor, charge: ChargeRow, ctx: GatewayEventCo
   return true
 }
 
-async function applyRefunded(tx: Executor, charge: ChargeRow, now: Date): Promise<boolean> {
+/**
+ * Estorno: só a cobrança vira `refunded`. Assinatura, período e carteirinha
+ * NÃO mudam — a regra (manter até o fim do período? suspender? cancelar?) é
+ * decisão de negócio ainda em aberto; por ora fica o log para revisão.
+ */
+async function applyRefunded(
+  tx: Executor,
+  payload: GatewayEventPayload,
+  charge: ChargeRow,
+  ctx: GatewayEventContext,
+  now: Date,
+): Promise<boolean> {
   const [updated] = await tx
     .update(clubCharges)
     .set({ status: 'refunded', refundedAt: now, updatedAt: now })
     .where(and(eq(clubCharges.id, charge.id), eq(clubCharges.status, 'paid')))
     .returning({ id: clubCharges.id })
-  return Boolean(updated)
+  if (!updated) return false
+  logger.warn(
+    {
+      alert: 'refund',
+      source: ctx.source,
+      chargeId: charge.id,
+      kind: charge.kind,
+      subscriptionId: charge.subscriptionId,
+      gatewayPaymentId: payload.payment.id,
+      value: payload.payment.value ?? Number(charge.amount),
+    },
+    'Cobrança estornada — a assinatura não muda automaticamente (revisar)',
+  )
+  return true
+}
+
+/**
+ * Chargeback (contestação do portador): a cobrança paga vira `refunded` (o
+ * dinheiro saiu — os relatórios de recebimento já tratam assim) e, se for
+ * mensalidade, a assinatura é SUSPENSA na hora (carteirinhas bloqueadas, como
+ * na suspensão por inadimplência, mas sem aviso ao associado). A suspensão
+ * segura até alguém reativar manualmente (`chargebackHold` barra a reativação
+ * automática). Disputa sobre uma cobrança já marcada só registra.
+ */
+async function applyChargeback(
+  tx: Executor,
+  payload: GatewayEventPayload,
+  charge: ChargeRow,
+  ctx: GatewayEventContext,
+  now: Date,
+): Promise<boolean> {
+  const value = payload.payment.value ?? Number(charge.paidAmount ?? charge.amount)
+  logger.error(
+    {
+      alert: 'chargeback',
+      event: payload.event,
+      organizationId: charge.organizationId,
+      chargeId: charge.id,
+      kind: charge.kind,
+      subscriptionId: charge.subscriptionId,
+      gatewayPaymentId: payload.payment.id,
+      value,
+    },
+    'Chargeback no pagamento de uma cobrança do clube — revisar (assinatura suspensa até reativação manual)',
+  )
+  const [updated] = await tx
+    .update(clubCharges)
+    .set({
+      status: 'refunded',
+      refundedAt: now,
+      failureReason: 'Contestação (chargeback) aberta pelo portador do cartão',
+      updatedAt: now,
+    })
+    .where(and(eq(clubCharges.id, charge.id), eq(clubCharges.status, 'paid')))
+    .returning()
+  if (!updated) return false
+  // Avulsa não mexe na assinatura (mesma regra do vencimento).
+  if (updated.kind === 'one_off') return true
+
+  const [suspended] = await tx
+    .update(clubSubscriptions)
+    .set({ status: 'suspended', suspendedAt: now, updatedAt: now })
+    .where(and(eq(clubSubscriptions.id, updated.subscriptionId), inArray(clubSubscriptions.status, ['active', 'past_due'])))
+    .returning({ id: clubSubscriptions.id })
+  if (suspended) {
+    await recordPaymentEvent(tx, {
+      organizationId: updated.organizationId,
+      subscriptionId: updated.subscriptionId,
+      chargeId: updated.id,
+      type: 'SUBSCRIPTION_SUSPENDED',
+      source: ctx.source,
+      gatewayProvider: ctx.provider,
+      message: `Assinatura suspensa: chargeback do pagamento de ${formatBRL(value)} — carteirinhas bloqueadas até reativação manual`,
+    })
+  }
+  return true
+}
+
+/** Tipos que seguram a assinatura suspensa até uma reativação manual. */
+export const CHARGEBACK_EVENT_TYPES = ['PAYMENT_CHARGEBACK_REQUESTED', 'PAYMENT_CHARGEBACK_DISPUTE'] as const
+
+/**
+ * Chargeback sem reativação MANUAL posterior (`SUBSCRIPTION_REACTIVATED` com
+ * `source = 'manual'`, gravado pelo "Reativar" do admin) → a reativação
+ * automática não libera a assinatura.
+ */
+async function chargebackHold(tx: Executor, subscriptionId: string): Promise<boolean> {
+  const [hold] = await tx
+    .select({ id: paymentEvents.id })
+    .from(paymentEvents)
+    .where(
+      and(
+        eq(paymentEvents.subscriptionId, subscriptionId),
+        inArray(paymentEvents.type, [...CHARGEBACK_EVENT_TYPES]),
+        sql`exists (select 1 from club_charges c where c.id = ${paymentEvents.chargeId} and c.kind = 'cycle')`,
+        sql`not exists (select 1 from payment_events r where r.subscription_id = ${subscriptionId} and r.type = 'SUBSCRIPTION_REACTIVATED' and r.source = 'manual' and r.created_at > ${paymentEvents.createdAt})`,
+      ),
+    )
+    .limit(1)
+  return Boolean(hold)
 }
 
 async function applyDeleted(tx: Executor, payload: GatewayEventPayload, charge: ChargeRow, now: Date): Promise<boolean> {
@@ -551,6 +779,55 @@ async function applyDeleted(tx: Executor, payload: GatewayEventPayload, charge: 
     )
     .returning({ id: clubCharges.id })
   return Boolean(updated)
+}
+
+/**
+ * `PAYMENT_RESTORED` desfaz um `PAYMENT_DELETED`: a cobrança cancelada COM o
+ * mesmo pagamento volta a ficar em aberto (vencida se já passou do dia — e a
+ * mensalidade vencida põe a assinatura em atraso, como no `applyOverdue`).
+ * Assinatura cancelada não reabre cobrança: só registra.
+ */
+async function applyRestored(
+  tx: Executor,
+  payload: GatewayEventPayload,
+  charge: ChargeRow,
+  ctx: GatewayEventContext,
+  now: Date,
+): Promise<boolean> {
+  if (!payload.payment.id || charge.status !== 'canceled' || charge.gatewayChargeId !== payload.payment.id) return false
+  if (charge.kind !== 'one_off') {
+    const [sub] = await tx
+      .select({ status: clubSubscriptions.status })
+      .from(clubSubscriptions)
+      .where(eq(clubSubscriptions.id, charge.subscriptionId))
+      .limit(1)
+    if (!sub || sub.status === 'canceled') {
+      logger.warn(
+        { chargeId: charge.id, subscriptionId: charge.subscriptionId, gatewayPaymentId: payload.payment.id },
+        'Pagamento restaurado no gateway, mas a assinatura está cancelada — cobrança mantida cancelada (revisar)',
+      )
+      return false
+    }
+  }
+  const overdue = charge.dueDate < todaySP(now)
+  const [updated] = await tx
+    .update(clubCharges)
+    .set({ status: overdue ? 'overdue' : 'pending', canceledAt: null, updatedAt: now })
+    .where(
+      and(eq(clubCharges.id, charge.id), eq(clubCharges.status, 'canceled'), eq(clubCharges.gatewayChargeId, payload.payment.id)),
+    )
+    .returning()
+  if (!updated) return false
+  if (overdue && updated.kind !== 'one_off') {
+    await markSubscriptionPastDue(
+      tx,
+      { id: updated.subscriptionId, organizationId: updated.organizationId },
+      `cobrança de ${formatBRL(Number(updated.amount))} restaurada no gateway, vencida em ${formatDateBR(updated.dueDate)}`,
+      ctx,
+      now,
+    )
+  }
+  return true
 }
 
 // ---------------------------------------------------------------------------
@@ -581,6 +858,16 @@ function eventMessage(payload: GatewayEventPayload, charge: ChargeRow, ctx: Gate
       return `Pagamento de ${amount} estornado`
     case 'PAYMENT_DELETED':
       return 'Cobrança removida no gateway'
+    case 'PAYMENT_RESTORED':
+      return 'Cobrança restaurada no gateway'
+    case 'PAYMENT_CHARGEBACK_REQUESTED':
+      return `Chargeback (contestação) aberto no pagamento de ${amount}${cardText}`
+    case 'PAYMENT_CHARGEBACK_DISPUTE':
+      return `Chargeback do pagamento de ${amount} em disputa`
+    case 'PAYMENT_AWAITING_CHARGEBACK_REVERSAL':
+      return `Disputa do chargeback de ${amount} ganha — aguardando reversão`
+    case 'PAYMENT_PARTIALLY_REFUNDED':
+      return `Pagamento estornado parcialmente (${amount})`
     default:
       return PAYMENT_EVENT_LABELS[payload.event as PaymentEventType] ?? `Evento do gateway: ${payload.event.slice(0, 80)}`
   }

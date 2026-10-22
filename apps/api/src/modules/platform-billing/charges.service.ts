@@ -13,7 +13,7 @@ import {
   type PlatformManualPaymentInput,
   type ReissuePlatformChargeInput,
 } from '@annetec/contracts'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { demoToolsAllowed } from '@/config/env'
 import { db } from '@/db/client'
 import { platformCharges, platformSubscriptions } from '@/db/schema'
@@ -164,7 +164,7 @@ export async function submitPlatformChargeToGateway(chargeId: string, attempt: P
     gateway = attempt.gateway ?? platformGatewayFor(currentPlatformProvider(settings), attempt.mode ?? 'passive')
     payer = await payerOf(charge)
   } catch (error) {
-    return markGatewayFailure(charge, error)
+    return markGatewayFailure(charge, error, false)
   }
 
   let card: GatewayCardInput | undefined
@@ -211,10 +211,12 @@ export async function submitPlatformChargeToGateway(chargeId: string, attempt: P
       remoteIp: attempt.remoteIp,
       finePercent: settings.finePercent,
       interestMonthlyPercent: settings.interestMonthlyPercent,
+      // Já houve tentativa nesta fatura: confere no gateway antes de cobrar o cartão de novo.
+      reuseExistingCardPayment: attempt.method === 'credit_card' && (charge.attempts > 0 || charge.lastAttemptAt !== null),
     })
   } catch (error) {
     if (error instanceof CardDeclinedError) return refuse(charge, gateway.provider, attempt, error.message, now)
-    return markGatewayFailure(charge, error)
+    return markGatewayFailure(charge, error, attempt.method === 'credit_card')
   }
 
   await db
@@ -310,7 +312,8 @@ async function refuse(
   return loadPlatformCharge(charge.id)
 }
 
-async function markGatewayFailure(charge: PlatformChargeRow, error: unknown): Promise<PlatformChargeRow> {
+/** `countAttempt`: cartão enviado ao gateway sem resposta conclusiva conta como tentativa (ver o do clube). */
+async function markGatewayFailure(charge: PlatformChargeRow, error: unknown, countAttempt: boolean): Promise<PlatformChargeRow> {
   logger.warn(
     {
       chargeId: charge.id,
@@ -325,6 +328,7 @@ async function markGatewayFailure(charge: PlatformChargeRow, error: unknown): Pr
     .set({
       status: 'failed',
       failureReason: `${GATEWAY_UNAVAILABLE_MESSAGE}${detail}`.slice(0, 300),
+      ...(countAttempt ? { attempts: sql`${platformCharges.attempts} + 1` } : {}),
       lastAttemptAt: new Date(),
       updatedAt: new Date(),
     })

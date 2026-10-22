@@ -37,6 +37,7 @@ import { getSessionByToken, setActiveOrganization } from '@/modules/auth/service
 import { accessUnavailable, admitLogin } from '@/modules/users/member-access'
 import { toClubPlan } from '@/modules/network/controller'
 import { checkoutAccessKey } from './access-key'
+import { assertCardAttemptsAllowed } from './card-attempts'
 import { assertCheckoutEligible, checkoutStartedMessage, firstChargeDescription } from './checkout-rules'
 import { chargesService, submitChargeToGateway, syncChargeIfStale } from './charges.service'
 import { addDays, addMonthsOnDueDay, dueDayOf, monthLabel, todaySP } from './dates'
@@ -360,6 +361,8 @@ export const checkoutService = {
     const existingUser = await findUserByEmail(holder.email)
     const isOwner = Boolean(viewer && existingUser && existingUser.id === viewer.userId)
     await assertCanSubscribe(tenant, holder, existingUser, isOwner)
+    // Card testing: CPF com recusas demais nas últimas 24 h não tenta cartão (antes de criar conta/assinatura).
+    if (method === 'credit_card') await assertCardAttemptsAllowed({ organizationId: tenant.id, cpf: holder.cpf })
     const account = await resolveAccount(tenant, holder, existingUser, isOwner)
     if (account.joined) {
       await notifyClientSignup({
@@ -522,6 +525,10 @@ export const checkoutService = {
     if (!charge) throw AppError.businessRule('Não há cobrança em aberto para esta assinatura')
     const settings = await loadBillingSettings(tenant.id)
     await assertCardAllowed(tenant.id, settings.gatewayOverride, input.card, 'card.number')
+    // Card testing: teto de recusas por assinatura e por CPF do titular (24 h, persistido).
+    if (input.method === 'credit_card') {
+      await assertCardAttemptsAllowed({ organizationId: tenant.id, cpf: sub.holderCpf, subscriptionId: sub.id })
+    }
     await chargesService.pay(charge, input, { source: 'checkout', remoteIp })
     return buildCheckoutStatus(sub.id)
   },

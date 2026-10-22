@@ -107,7 +107,14 @@ vi.mock('@/db/client', async () => {
         const set = arg(ops, 'set')
         if (table === schema.platformCharges) {
           const current = state.charge.status as string
-          const allowed = set.status === 'paid' ? OPEN.includes(current) : set.status === 'overdue' ? current === 'pending' : true
+          const allowed =
+            set.status === 'paid'
+              ? OPEN.includes(current)
+              : set.status === 'overdue'
+                ? current === 'pending'
+                : set.status === 'refunded'
+                  ? current === 'paid'
+                  : true
           if (!allowed) return []
           state.chargeUpdates += 1
           Object.assign(state.charge, set)
@@ -323,6 +330,8 @@ describe('webhook próprio da plataforma', () => {
     })
     expect(wrong.status).toBe(401)
 
+    // A fatura precisa estar com ESTE pagamento (outro id = pagamento órfão, ver o teste próprio).
+    state.charge = { ...activationCharge(), gatewayProvider: 'asaas', gatewayChargeId: 'pay_123' }
     const ok = await webhookApp.request('/webhook', {
       method: 'POST',
       headers: { 'asaas-access-token': WEBHOOK_TOKEN, 'content-type': 'application/json' },
@@ -332,5 +341,49 @@ describe('webhook próprio da plataforma', () => {
     expect(await ok.json()).toEqual({ success: true, data: { received: true } })
     expect(state.charge.status).toBe('paid')
     expect(state.onActivationPaid).toHaveLength(1)
+  })
+})
+
+describe('chargeback e pagamento órfão (plataforma)', () => {
+  it('chargeback na mensalidade paga: fatura estornada, painel bloqueado por override e cache limpo — idempotente', async () => {
+    state.charge = { ...monthlyCharge('paid'), gatewayProvider: 'asaas', gatewayChargeId: 'pay_m1' }
+    state.sub = subscription('active')
+    const chargeback = (id: string, event = 'PAYMENT_CHARGEBACK_REQUESTED') => ({
+      id,
+      event,
+      payment: { id: 'pay_m1', externalReference: platformReference(CHARGE_ID), value: 990, billingType: 'CREDIT_CARD' },
+    })
+
+    const first = await handlePlatformGatewayEvent(chargeback('evt_cb_1'), { source: 'webhook', provider: 'asaas' })
+    expect(first.status).toBe('applied')
+    expect(state.charge.status).toBe('refunded')
+    expect(state.charge.failureReason).toMatch(/chargeback/i)
+    expect(state.sub?.accessOverride).toBe('blocked')
+    expect(state.sub?.accessOverrideUntil).toBeNull()
+    expect(state.events.map(e => e.type)).toEqual(['PAYMENT_CHARGEBACK_REQUESTED', 'ACCESS_OVERRIDE_SET'])
+    expect(state.invalidated).toContain(ORG)
+
+    // Reentrega e disputa (outro id): nada muda de novo.
+    expect((await handlePlatformGatewayEvent(chargeback('evt_cb_1'), { source: 'webhook', provider: 'asaas' })).status).toBe('duplicate')
+    const dispute = await handlePlatformGatewayEvent(chargeback('evt_cb_2', 'PAYMENT_CHARGEBACK_DISPUTE'), { source: 'webhook', provider: 'asaas' })
+    expect(dispute.status).toBe('recorded')
+    expect(state.events.filter(e => e.type === 'ACCESS_OVERRIDE_SET')).toHaveLength(1)
+  })
+
+  it('pagamento num id antigo da fatura: grava PAYMENT_ORPHAN_RECEIVED e não toca na fatura', async () => {
+    state.charge = { ...activationCharge(), gatewayProvider: 'asaas', gatewayChargeId: 'pay_novo' }
+    const orphan = {
+      id: 'evt_orfao',
+      event: 'PAYMENT_RECEIVED',
+      payment: { id: 'pay_antigo', externalReference: platformReference(CHARGE_ID), value: 1980, billingType: 'PIX' },
+    }
+    const outcome = await handlePlatformGatewayEvent(orphan, { source: 'webhook', provider: 'asaas' })
+    expect(outcome.status).toBe('recorded')
+    expect(state.charge.status).toBe('pending')
+    expect(state.chargeUpdates).toBe(0)
+    expect(state.onActivationPaid).toHaveLength(0)
+    expect(state.events).toHaveLength(1)
+    expect(state.events[0]).toMatchObject({ type: 'PAYMENT_ORPHAN_RECEIVED', chargeId: CHARGE_ID, externalEventId: 'evt_orfao' })
+    expect((await handlePlatformGatewayEvent(orphan, { source: 'webhook', provider: 'asaas' })).status).toBe('duplicate')
   })
 })

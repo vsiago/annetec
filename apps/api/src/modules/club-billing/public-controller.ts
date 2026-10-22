@@ -7,6 +7,7 @@ import { created, ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json } from '@/http/validate'
 import { recordAudit } from '@/lib/audit'
+import { rateLimit } from '@/lib/rate-limit'
 import { isValidCheckoutAccessKey } from './access-key'
 import { checkoutService } from './checkout.service'
 import { limitBody, remoteIpOf } from './http'
@@ -25,6 +26,15 @@ function guardedSubscriptionId(c: Context<AppEnv>): string {
   return subscriptionId
 }
 
+const TEN_MINUTES = 10 * 60_000
+
+/**
+ * Freio de card testing por IP (em memória, por processo — a API roda com uma
+ * réplica). O teto persistente por assinatura/CPF fica em `card-attempts.ts`.
+ */
+const checkoutRateLimit = rateLimit({ key: 'clube:checkout', limit: 5, windowMs: TEN_MINUTES })
+const retryRateLimit = rateLimit({ key: 'clube:checkout-pagamento', limit: 5, windowMs: TEN_MINUTES })
+
 export const clubCheckoutController = new Hono<AppEnv>()
   .use('*', resolveTenant)
 
@@ -33,7 +43,7 @@ export const clubCheckoutController = new Hono<AppEnv>()
 
   // Sessão opcional: associado logado NESTE clube compra com a própria conta
   // (e-mail travado no da sessão). Qualquer outra sessão é ignorada.
-  .post('/', limitBody(64), optionalAuth, json(checkoutInput), async c => {
+  .post('/', checkoutRateLimit, limitBody(64), optionalAuth, json(checkoutInput), async c => {
     const tenant = tenantOf(c)
     const session = c.get('auth')
     const viewer =
@@ -62,7 +72,7 @@ export const clubCheckoutController = new Hono<AppEnv>()
 
   .get('/:subscriptionId', async c => ok(c, await checkoutService.status(tenantOf(c), guardedSubscriptionId(c))))
 
-  .post('/:subscriptionId/pagamento', limitBody(16), json(retryPaymentInput), async c => {
+  .post('/:subscriptionId/pagamento', retryRateLimit, limitBody(16), json(retryPaymentInput), async c => {
     const subscriptionId = guardedSubscriptionId(c)
     const status = await checkoutService.retry(tenantOf(c), subscriptionId, c.req.valid('json'), remoteIpOf(c))
     await recordAudit(c, {

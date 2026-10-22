@@ -77,6 +77,14 @@ export interface CreateChargeInput {
   remoteIp?: string
   finePercent?: number
   interestMonthlyPercent?: number
+  /**
+   * Cartão numa cobrança que JÁ teve tentativa: antes de cobrar de novo,
+   * procura pelo `externalReference` um pagamento no cartão aprovado/em
+   * análise (a tentativa anterior pode ter passado com resposta inconclusiva)
+   * e devolve ele em vez de cobrar duas vezes. Falha na consulta → lança, sem
+   * cobrar. Gateways sem consulta (simulado) ignoram.
+   */
+  reuseExistingCardPayment?: boolean
 }
 
 export interface PaymentGateway {

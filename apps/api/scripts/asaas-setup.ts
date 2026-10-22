@@ -3,7 +3,7 @@
  * vezes quiser (ex.: a cada vez que a URL do túnel muda).
  *
  *  1. valida a chave (`GET /myAccount/commercialInfo/`) e mostra conta e ambiente;
- *  2. cria ou atualiza os dois webhooks (clube e plataforma) com os 7 eventos
+ *  2. cria ou atualiza os dois webhooks (clube e plataforma) com os eventos (`EVENTS`)
  *     que o código trata. Webhook já existente (mesma URL ou mesmo nome) é
  *     atualizado com `PUT`, nunca duplicado;
  *  3. com `--pix-key`, cria uma chave Pix aleatória (EVP) se a conta não tiver
@@ -27,7 +27,11 @@ import { randomBytes } from 'node:crypto'
 import type { AsaasClient } from '../src/integrations/asaas/client'
 import type { AsaasEnvironment, AsaasWebhook } from '../src/integrations/asaas/types'
 
-/** Os 7 eventos que `club-billing/events.service.ts` e `platform-billing/events.service.ts` tratam. */
+/**
+ * Os eventos que `club-billing/events.service.ts` e `platform-billing/events.service.ts`
+ * tratam (mudam estado) ou registram na timeline para revisão humana.
+ * Mudou a lista? Rode o setup de novo — o `PUT` ajusta os webhooks existentes.
+ */
 const EVENTS = [
   'PAYMENT_CONFIRMED',
   'PAYMENT_RECEIVED',
@@ -35,7 +39,13 @@ const EVENTS = [
   'PAYMENT_CREDIT_CARD_CAPTURE_REFUSED',
   'PAYMENT_REPROVED_BY_RISK_ANALYSIS',
   'PAYMENT_REFUNDED',
+  'PAYMENT_PARTIALLY_REFUNDED',
   'PAYMENT_DELETED',
+  'PAYMENT_RESTORED',
+  'PAYMENT_UPDATED',
+  'PAYMENT_CHARGEBACK_REQUESTED',
+  'PAYMENT_CHARGEBACK_DISPUTE',
+  'PAYMENT_AWAITING_CHARGEBACK_REVERSAL',
 ]
 
 /** Status de chave Pix que contam como "a conta já tem chave". */

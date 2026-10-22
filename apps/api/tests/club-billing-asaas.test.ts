@@ -235,3 +235,56 @@ describe('webhook do Asaas', () => {
     expect(mapAsaasCardBrand('CABAL')).toBe('outra')
   })
 })
+
+describe('cartão: nova tentativa sem cobrança dupla (reuseExistingCardPayment)', () => {
+  const cardInput = {
+    customerId: 'cus_1',
+    method: 'credit_card' as const,
+    amount: 49.9,
+    dueDate: '2026-09-27',
+    description: 'x',
+    externalReference: 'ref-card',
+    cardToken: 'tok_salvo',
+    reuseExistingCardPayment: true,
+  }
+  const list = (data: unknown[]) => json({ object: 'list', hasMore: false, totalCount: data.length, limit: 20, offset: 0, data })
+
+  it('pagamento no cartão já aprovado para a cobrança → devolve ele e NÃO cobra de novo', async () => {
+    const calls = stubFetch(({ init }) => {
+      if (init.method === 'POST') throw new Error('não deveria cobrar')
+      return list([
+        { id: 'pay_pix_velho', status: 'PENDING', billingType: 'PIX' },
+        { id: 'pay_card_ok', status: 'CONFIRMED', billingType: 'CREDIT_CARD', value: 49.9, creditCard: { creditCardNumber: '4444', creditCardBrand: 'VISA', creditCardToken: 'tok_salvo' } },
+      ])
+    })
+    const charge = await new AsaasGateway(client(), 'production').createCharge(cardInput)
+    expect(charge).toMatchObject({ id: 'pay_card_ok', status: 'paid' })
+    expect(calls.filter(call => call.init.method === 'POST')).toHaveLength(0)
+    expect(calls[0]!.url.searchParams.get('externalReference')).toBe('ref-card')
+  })
+
+  it('só recusas anteriores → cobra normalmente', async () => {
+    const calls = stubFetch(({ init }) => {
+      if (init.method === 'POST') return json({ id: 'pay_novo', status: 'CONFIRMED', billingType: 'CREDIT_CARD', value: 49.9 })
+      return list([{ id: 'pay_recusado', status: 'CREDIT_CARD_CAPTURE_REFUSED', billingType: 'CREDIT_CARD' }])
+    })
+    const charge = await new AsaasGateway(client(), 'production').createCharge(cardInput)
+    expect(charge.id).toBe('pay_novo')
+    expect(calls.filter(call => call.init.method === 'POST')).toHaveLength(1)
+  })
+
+  it('consulta falhou → lança sem cobrar', async () => {
+    const calls = stubFetch(() => json({ errors: [{ code: 'x', description: 'fora do ar' }] }, 503))
+    await expect(new AsaasGateway(client(), 'production').createCharge(cardInput)).rejects.toBeInstanceOf(AppError)
+    expect(calls.filter(call => call.init.method === 'POST')).toHaveLength(0)
+  })
+
+  it('resposta inconclusiva no cartão não confunde com um Pix antigo da mesma cobrança', async () => {
+    stubFetch(({ init }) => {
+      if (init.method === 'POST') return json({}, 504)
+      return list([{ id: 'pay_pix_velho', status: 'PENDING', billingType: 'PIX' }])
+    })
+    const { reuseExistingCardPayment: _ignored, ...firstAttempt } = cardInput
+    await expect(new AsaasGateway(client(), 'production').createCharge(firstAttempt)).rejects.toMatchObject({ inconclusive: true })
+  })
+})

@@ -18,6 +18,9 @@ const BILLING_TYPE: Record<CreateChargeInput['method'], AsaasBillingType> = {
   credit_card: 'CREDIT_CARD',
 }
 
+/** Status de um pagamento no cartão que já tirou (ou pode tirar) dinheiro do portador. */
+const CARD_ALREADY_CHARGED = new Set<string>(['CONFIRMED', 'RECEIVED', 'AUTHORIZED', 'AWAITING_RISK_ANALYSIS', 'APPROVED_BY_RISK_ANALYSIS'])
+
 /**
  * Asaas como processador (blueprint §0.6). Só cria/consulta/cancela/estorna —
  * o ciclo da assinatura é nosso. Cartão é capturado na criação; recusa vem
@@ -95,13 +98,28 @@ export class AsaasGateway implements PaymentGateway {
       if (input.remoteIp) body.remoteIp = input.remoteIp
     }
 
+    if (input.method === 'credit_card' && input.reuseExistingCardPayment) {
+      // Nova tentativa no cartão: a anterior pode ter sido aprovada com resposta
+      // inconclusiva. Consulta ANTES de cobrar; se a consulta falhar, não cobra.
+      const previous = (await this.listByExternalReference(input.externalReference)).find(
+        payment => payment.billingType === 'CREDIT_CARD' && CARD_ALREADY_CHARGED.has(payment.status),
+      )
+      if (previous) {
+        logger.warn(
+          { integration: 'asaas', externalReference: input.externalReference, paymentId: previous.id, status: previous.status },
+          'asaas: pagamento no cartão já existia para esta cobrança — reaproveitado (sem cobrar de novo)',
+        )
+        return this.toGatewayCharge(previous, true)
+      }
+    }
+
     let payment: AsaasPayment
     try {
       payment = await this.client.payments.create(body)
     } catch (error) {
       if (error instanceof AsaasApiError && error.inconclusive) {
         // Timeout/5xx: a cobrança pode ter sido criada. Consulta antes de qualquer repetição.
-        const found = await this.findByExternalReference(input.externalReference)
+        const found = await this.findByExternalReference(input.externalReference, BILLING_TYPE[input.method])
         if (!found) throw error
         logger.warn({ integration: 'asaas', externalReference: input.externalReference }, 'asaas: cobrança recuperada após resposta inconclusiva')
         payment = found
@@ -150,10 +168,16 @@ export class AsaasGateway implements PaymentGateway {
     }
   }
 
-  private async findByExternalReference(externalReference: string): Promise<AsaasPayment | null> {
+  /** Pagamentos não removidos com este `externalReference`. Lança se a consulta falhar. */
+  private async listByExternalReference(externalReference: string): Promise<AsaasPayment[]> {
+    const list = await this.client.payments.list({ externalReference, limit: 20 })
+    return list.data.filter(payment => !payment.deleted)
+  }
+
+  /** Mesmo método (um Pix antigo da mesma cobrança não pode passar por resultado do cartão). */
+  private async findByExternalReference(externalReference: string, billingType: AsaasBillingType): Promise<AsaasPayment | null> {
     try {
-      const list = await this.client.payments.list({ externalReference, limit: 10 })
-      return list.data.find(payment => !payment.deleted) ?? null
+      return (await this.listByExternalReference(externalReference)).find(payment => payment.billingType === billingType) ?? null
     } catch {
       return null
     }

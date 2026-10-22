@@ -13,7 +13,7 @@ import {
   type ReissueClubChargeInput,
   type RetryPaymentInput,
 } from '@annetec/contracts'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { demoToolsAllowed } from '@/config/env'
 import { db } from '@/db/client'
 import { clubCharges, clubSubscriptions } from '@/db/schema'
@@ -142,7 +142,7 @@ export async function submitChargeToGateway(chargeId: string, attempt: PaymentAt
   try {
     gateway = await getPaymentGateway(charge.organizationId)
   } catch (error) {
-    return markGatewayFailure(charge, error)
+    return markGatewayFailure(charge, error, false)
   }
 
   let card: GatewayCardInput | undefined
@@ -185,12 +185,15 @@ export async function submitChargeToGateway(chargeId: string, attempt: PaymentAt
       remoteIp: attempt.remoteIp,
       finePercent: settings.finePercent,
       interestMonthlyPercent: settings.interestMonthlyPercent,
+      // Já houve tentativa nesta cobrança (recusa, falha ou resposta inconclusiva):
+      // confere no gateway antes de cobrar o cartão de novo.
+      reuseExistingCardPayment: attempt.method === 'credit_card' && (charge.attempts > 0 || charge.lastAttemptAt !== null),
     })
   } catch (error) {
     if (error instanceof CardDeclinedError) {
       return refuse(charge, gateway.provider, attempt, error.message, now)
     }
-    return markGatewayFailure(charge, error)
+    return markGatewayFailure(charge, error, attempt.method === 'credit_card')
   }
 
   const [stored] = await db
@@ -292,8 +295,14 @@ async function refuse(
   return loadCharge(charge.id)
 }
 
-/** Gateway fora/erro inesperado: `failed` com mensagem genérica (a tela oferece nova tentativa). */
-async function markGatewayFailure(charge: ChargeRow, error: unknown): Promise<ChargeRow> {
+/**
+ * Gateway fora/erro inesperado: `failed` com mensagem genérica (a tela oferece
+ * nova tentativa). `countAttempt` (cartão que chegou a ser enviado): conta a
+ * tentativa — a resposta pode ter sido inconclusiva com o cartão cobrado, então
+ * a automação respeita `maxCardRetries` e a próxima tentativa consulta o
+ * gateway antes de cobrar (`reuseExistingCardPayment`).
+ */
+async function markGatewayFailure(charge: ChargeRow, error: unknown, countAttempt: boolean): Promise<ChargeRow> {
   logger.warn(
     {
       chargeId: charge.id,
@@ -308,6 +317,7 @@ async function markGatewayFailure(charge: ChargeRow, error: unknown): Promise<Ch
     .set({
       status: 'failed',
       failureReason: `${GATEWAY_UNAVAILABLE_MESSAGE}${detail}`.slice(0, 300),
+      ...(countAttempt ? { attempts: sql`${clubCharges.attempts} + 1` } : {}),
       lastAttemptAt: new Date(),
       updatedAt: new Date(),
     })
