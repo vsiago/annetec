@@ -6,7 +6,7 @@ import { Send, Mail, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "contato@annetec.com.br"
+const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "contato@annetec.org.br"
 
 export function ContactSection() {
   const [formState, setFormState] = useState({

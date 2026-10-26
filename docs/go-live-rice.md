@@ -79,7 +79,7 @@ Itens 10 e 11 têm pontuação menor, mas bloqueiam: sem deploy não há produç
 
 ## 5. Decisões pendentes do dono
 
-- [ ] Domínio de envio de e-mail neutro para o white label (hoje o remetente ainda é `nao-responda@annetec.com.br`).
+- [ ] Domínio de envio de e-mail neutro para o white label (hoje o remetente ainda é `nao-responda@annetec.org.br`).
 - [ ] Repasse aos clubes: manual no início ou split automático (item 16).
 - [ ] Fatura ANNETEC → clube continua com a marca ANNETEC?
 - [ ] O MapCard2 do banco atual vai para produção ou é só demonstração?

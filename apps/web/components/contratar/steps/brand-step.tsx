@@ -155,7 +155,7 @@ export function BrandStep({ ctx }: { ctx: StepContext }) {
   const [busy, setBusy] = useState(false)
   const [logoProgress, setLogoProgress] = useState<number | null>(null)
   const [logoError, setLogoError] = useState<string | null>(null)
-  const [siteBase, setSiteBase] = useState('annetec.com.br')
+  const [siteBase, setSiteBase] = useState('annetec.org.br')
   const logoInput = useRef<HTMLInputElement>(null)
   const initialJson = useRef(JSON.stringify(initialForm(view)))
 

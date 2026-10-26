@@ -241,7 +241,7 @@ export function Tracking({ view, proposalId, chave, onViewChange, onReload }: Tr
           {view.status === 'rejected' ? (
             <Notice tone="error" title="A proposta não foi aprovada.">
               {view.rejectionReason ?? 'A análise cadastral não aprovou a contratação.'} Nenhum valor foi cobrado. Se quiser,
-              fale com o nosso time comercial pelo contato@annetec.com.br.
+              fale com o nosso time comercial pelo contato@annetec.org.br.
             </Notice>
           ) : null}
 

@@ -166,7 +166,7 @@ const envSchema = z.object({
 
   /** E-mail transacional. `outbox` = só grava na caixa de saída (visível no console). */
   EMAIL_PROVIDER: z.preprocess(emptyAsUndefined, z.enum(['outbox', 'resend', 'sendgrid']).default('outbox')),
-  EMAIL_FROM: z.preprocess(emptyAsUndefined, z.string().min(3).default('ANNETEC <nao-responda@annetec.com.br>')),
+  EMAIL_FROM: z.preprocess(emptyAsUndefined, z.string().min(3).default('ANNETEC <nao-responda@annetec.org.br>')),
   RESEND_API_KEY: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),
   SENDGRID_API_KEY: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),
 })

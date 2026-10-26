@@ -50,11 +50,11 @@ export function Footer() {
             {/* Contact Info */}
             <div className="space-y-3">
               <a 
-                href="mailto:contato@annetec.com.br" 
+                href="mailto:contato@annetec.org.br" 
                 className="flex items-center gap-3 text-white/70 hover:text-[#e84364] transition-colors"
               >
                 <Mail size={18} />
-                <span>contato@annetec.com.br</span>
+                <span>contato@annetec.org.br</span>
               </a>
               <a 
                 href="tel:08000000000" 
@@ -143,7 +143,7 @@ export function Footer() {
             <p className="text-white/50 text-sm">
               Desenvolvido por{" "}
               <a 
-                href="https://annetec.com.br" 
+                href="https://annetec.org.br" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-[#e84364] hover:underline"

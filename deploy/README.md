@@ -21,7 +21,7 @@ Fases:
 
 - **Interina** — `www.3-131-89-130.sslip.io` / `api.3-131-89-130.sslip.io` (o sslip.io resolve para o IP;
   o certificado sai normalmente), `DEPLOY_STAGE=preview`, Asaas **sandbox**, e-mail em caixa de saída, disco local.
-- **Final** — `www.annetec.com.br` / `api.annetec.com.br` (raiz `annetec.com.br` → 301 para www), produção estrita.
+- **Final** — `www.annetec.org.br` / `api.annetec.org.br` (raiz `annetec.org.br` → 301 para www), produção estrita.
 
 Atalho usado abaixo (no servidor, dentro de `~/annetec`):
 
@@ -99,14 +99,14 @@ o stdin ou pede sem eco.
 ```bash
 # a) variável de ambiente: `read -rs` não ecoa nem grava no histórico; `-e VAR` sem valor repassa a do shell
 read -rs PLATFORM_ADMIN_PASSWORD; export PLATFORM_ADMIN_PASSWORD
-dc run --rm -e PLATFORM_ADMIN_PASSWORD migrate pnpm platform:create-admin "Nome Sobrenome" voce@annetec.com.br
+dc run --rm -e PLATFORM_ADMIN_PASSWORD migrate pnpm platform:create-admin "Nome Sobrenome" voce@annetec.org.br
 unset PLATFORM_ADMIN_PASSWORD
 
 # b) digitada quando pedida (sem eco) — precisa do TTY: NÃO use `-T` aqui
-dc run --rm migrate pnpm platform:create-admin "Nome Sobrenome" voce@annetec.com.br
+dc run --rm migrate pnpm platform:create-admin "Nome Sobrenome" voce@annetec.org.br
 
 # c) pipe (só a senha, sem outras linhas) — use `-T`: sem TTY o script lê o stdin inteiro
-pass show annetec/admin | head -n1 | dc run --rm -T migrate pnpm platform:create-admin "Nome Sobrenome" voce@annetec.com.br
+pass show annetec/admin | head -n1 | dc run --rm -T migrate pnpm platform:create-admin "Nome Sobrenome" voce@annetec.org.br
 ```
 
 Papel opcional no fim (`superadmin`, o padrão, ou `platform_admin`). Admin de inquilino (este script ainda
@@ -177,13 +177,13 @@ dc run --rm --no-deps -T --entrypoint sh migrate -c 'tar -xzf - -C /data/storage
 dc start api web
 ```
 
-## 7. Virada para o domínio final (annetec.com.br)
+## 7. Virada para o domínio final (annetec.org.br)
 
-1. **DNS na GoDaddy** (zona de `annetec.com.br`) — **não mexa em MX/TXT** (e-mail, SPF, verificações):
-   - `A` `@` → `3.131.89.130`
+1. **DNS no Registro.br** (modo avançado, zona de `annetec.org.br`; o Registro.br **não aceita `@`**: o registro da raiz é criado com o campo Nome **vazio**) — **não mexa em MX/TXT** (e-mail, SPF, verificações):
+   - `A` (Nome vazio) → `3.131.89.130`
    - `A` `api` → `3.131.89.130`
-   - `CNAME` `www` → `annetec.com.br` (ou `A` `www` → `3.131.89.130`; CNAME não aceita IP)
-   - Confira: `dig +short www.annetec.com.br api.annetec.com.br annetec.com.br`
+   - `CNAME` `www` → `annetec.org.br` (ou `A` `www` → `3.131.89.130`; CNAME não aceita IP)
+   - Confira: `dig +short www.annetec.org.br api.annetec.org.br annetec.org.br`
 2. **Banco limpo** (sem contas/dados de demonstração) — antes de abrir para clientes:
    ```bash
    bash ~/annetec/deploy/backup.sh               # guarda a demo, por via das dúvidas
@@ -191,13 +191,13 @@ dc start api web
    docker volume rm annetec_postgres_data annetec_api_storage
    ```
 3. **`deploy/.env.prod`**:
-   - `WEB_DOMAIN=www.annetec.com.br`, `API_DOMAIN=api.annetec.com.br`, `APEX_DOMAIN=annetec.com.br`
-   - `API_BASE_URL=https://api.annetec.com.br`, `WEB_BASE_URL=https://www.annetec.com.br`, `CORS_ORIGINS=https://www.annetec.com.br`
+   - `WEB_DOMAIN=www.annetec.org.br`, `API_DOMAIN=api.annetec.org.br`, `APEX_DOMAIN=annetec.org.br`
+   - `API_BASE_URL=https://api.annetec.org.br`, `WEB_BASE_URL=https://www.annetec.org.br`, `CORS_ORIGINS=https://www.annetec.org.br`
    - remova `DEPLOY_STAGE`
    - `ASAAS_ENV=production`, `ASAAS_API_KEY='$aact_prod_...'` (e `PLATFORM_ASAAS_API_KEY` se houver), tokens de webhook novos
    - `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` (domínio do remetente verificado no Resend)
    - `STORAGE_DRIVER=s3` + `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
-   - Google: adicione `https://www.annetec.com.br` às origens autorizadas do client OAuth
+   - Google: adicione `https://www.annetec.org.br` às origens autorizadas do client OAuth
 4. **Banco primeiro, migrações antes da API** (a API nova nunca sobe com o schema velho):
    ```bash
    dc up -d postgres
@@ -208,9 +208,9 @@ dc start api web
    Depois, o admin: `dc run --rm migrate pnpm platform:create-admin ...` (sem seeds).
 6. **Webhooks do Asaas de produção**:
    ```bash
-   dc run --rm migrate pnpm asaas:setup --public-url https://api.annetec.com.br
+   dc run --rm migrate pnpm asaas:setup --public-url https://api.annetec.org.br
    ```
-   Cadastra `https://api.annetec.com.br/api/v1/webhooks/asaas` e `/api/v1/webhooks/asaas-plataforma`
+   Cadastra `https://api.annetec.org.br/api/v1/webhooks/asaas` e `/api/v1/webhooks/asaas-plataforma`
    com os tokens do `.env.prod` (mínimo 32 caracteres — a API não sobe com menos) e todos os eventos que o
    código trata (inclui chargeback, estorno parcial e restauração). **Rode de novo sempre que a lista
    `EVENTS` de `scripts/asaas-setup.ts` mudar.** Teste com um evento pelo painel do Asaas e acompanhe `dc logs -f api`.

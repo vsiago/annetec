@@ -150,7 +150,7 @@ export function PlanPicker({
 
       {offers && visible.length === 0 ? (
         <Notice tone="info" title="Nenhum plano disponível para contratação online no momento.">
-          Fale com a nossa equipe comercial pelo contato@annetec.com.br que montamos a proposta com você.
+          Fale com a nossa equipe comercial pelo contato@annetec.org.br que montamos a proposta com você.
         </Notice>
       ) : null}
 

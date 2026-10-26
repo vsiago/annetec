@@ -4,7 +4,7 @@
 # o domínio final é só editar o .env.prod e rodar `docker compose up -d`.
 #
 #   interino: WEB_DOMAIN=www.3-131-89-130.sslip.io  API_DOMAIN=api.3-131-89-130.sslip.io  APEX_DOMAIN=3-131-89-130.sslip.io
-#   final:    WEB_DOMAIN=www.annetec.com.br         API_DOMAIN=api.annetec.com.br         APEX_DOMAIN=annetec.com.br
+#   final:    WEB_DOMAIN=www.annetec.org.br         API_DOMAIN=api.annetec.org.br         APEX_DOMAIN=annetec.org.br
 #
 # X-Forwarded-For: o Caddy DESCARTA o valor que vem da internet (nenhum proxy
 # confiável configurado) e grava o IP real — é nisso que o TRUST_PROXY da API confia.

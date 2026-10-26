@@ -12,7 +12,7 @@ export interface OutgoingEmail {
   html: string
 }
 
-/** `"ANNETEC <nao-responda@annetec.com.br>"` → `{ name, email }`. */
+/** `"ANNETEC <nao-responda@annetec.org.br>"` → `{ name, email }`. */
 export function parseAddress(value: string): { email: string; name: string | null } {
   const match = /^\s*(.*?)\s*<\s*([^>]+)\s*>\s*$/.exec(value)
   if (match) return { name: match[1]?.replace(/^"|"$/g, '') || null, email: match[2]!.trim() }
