@@ -23,6 +23,11 @@ export interface RateLimitOptions {
   /** Requisições permitidas por janela, por IP. */
   limit: number
   windowMs: number
+  /**
+   * Chave do balde no lugar do IP (ex.: o inquilino — limite por clube, não
+   * por máquina). `null` cai no IP.
+   */
+  keyOf?: (c: Context<AppEnv>) => string | null
 }
 
 export const DEV_LIMIT_MULTIPLIER = 20
@@ -95,14 +100,14 @@ function formatWait(seconds: number): string {
   return `${minutes} minuto(s)`
 }
 
-/** Middleware Hono: 429 `RATE_LIMITED` com `Retry-After` quando o IP passa do limite. */
-export function rateLimit({ key, limit, windowMs }: RateLimitOptions) {
+/** Middleware Hono: 429 `RATE_LIMITED` com `Retry-After` quando o IP (ou `keyOf`) passa do limite. */
+export function rateLimit({ key, limit, windowMs, keyOf }: RateLimitOptions) {
   const effectiveLimit = isProduction ? limit : limit * DEV_LIMIT_MULTIPLIER
   return createMiddleware<AppEnv>(async (c, next) => {
     const now = Date.now()
     sweep(now)
-    const ip = requestIp(c) ?? 'desconhecido'
-    const result = hitRateLimit(store, `${key}:${ip}`, effectiveLimit, windowMs, now)
+    const subject = keyOf?.(c) ?? requestIp(c) ?? 'desconhecido'
+    const result = hitRateLimit(store, `${key}:${subject}`, effectiveLimit, windowMs, now)
     c.header('RateLimit-Limit', String(effectiveLimit))
     c.header('RateLimit-Remaining', String(result.remaining))
     if (!result.allowed) {

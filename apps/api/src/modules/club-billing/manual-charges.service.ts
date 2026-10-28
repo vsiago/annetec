@@ -12,7 +12,7 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { clubCharges, organization } from '@/db/schema'
 import { AppError } from '@/http/errors'
-import { resolveGatewayProvider } from '@/integrations/payments/provider'
+import { resolveReadyGatewayProvider } from '@/integrations/payments/provider'
 import { deliverReminder, type ClubNotice, type NoticeOutcome } from './automation.service'
 import { submitChargeToGateway, withChargeLock, type PaymentAttempt } from './charges.service'
 import { generateCycleCharge, nextCycleOf, type GenerateCycleOptions } from './cycle.service'
@@ -73,7 +73,8 @@ export interface ManualChargeDeps {
 const defaultDeps: ManualChargeDeps = {
   loadSubscription: findSubscriptionOfTenant,
   loadSettings: loadBillingSettings,
-  resolveProvider: resolveGatewayProvider,
+  // Clube sem conta de recebimento: 409 RECEBIMENTO_NAO_CONFIGURADO antes de gravar a cobrança.
+  resolveProvider: resolveReadyGatewayProvider,
   loadOrgName: async orgId => {
     const [row] = await db.select({ name: organization.name }).from(organization).where(eq(organization.id, orgId)).limit(1)
     return row?.name ?? null

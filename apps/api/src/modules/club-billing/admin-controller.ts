@@ -1,6 +1,7 @@
 import {
   cancelClubChargeInput,
   cancelClubSubscriptionInput,
+  connectClubReceivingAccountInput,
   createManualClubChargeInput,
   listClubChargesQuery,
   listClubReceiptsQuery,
@@ -19,6 +20,7 @@ import { created, ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, param, query } from '@/http/validate'
 import { recordAudit } from '@/lib/audit'
+import { rateLimit } from '@/lib/rate-limit'
 import { runForTenant } from './automation.service'
 import { chargesService, findChargeOfTenant } from './charges.service'
 import { limitBody } from './http'
@@ -26,6 +28,7 @@ import { manualChargesService } from './manual-charges.service'
 import { planStatsService } from './plan-stats.service'
 import { queriesService } from './queries.service'
 import { receiptsService } from './receipts.service'
+import { receivingAccountService } from './receiving-account.service'
 import { settingsService } from './settings.service'
 import { subscriptionsService } from './subscriptions.service'
 import { summaryService } from './summary.service'
@@ -60,6 +63,14 @@ async function optionalJson<T extends ZodTypeAny>(c: Context<AppEnv>, schema: T)
 function actorOf(c: Context<AppEnv>): string | null {
   return c.get('auth')?.user.id ?? null
 }
+
+/** Conectar/testar/desconectar o recebimento: 10 por hora POR CLUBE (cada um chama o Asaas). */
+const receivingRateLimit = rateLimit({
+  key: 'clube:recebimento',
+  limit: 10,
+  windowMs: 60 * 60 * 1000,
+  keyOf: c => c.get('tenant')?.id ?? null,
+})
 
 export const clubBillingAdminController = new Hono<AppEnv>()
   .use('*', resolveTenant, requireAuth, requireTenantRole('admin'))
@@ -207,6 +218,51 @@ export const clubBillingAdminController = new Hono<AppEnv>()
       metadata: { campos: Object.keys(input) },
     })
     return ok(c, settings)
+  })
+
+  // ---- Recebimento: conta Asaas PRÓPRIA do clube ---------------------------
+  // Admin do clube (ou superadmin, para suporte — `requireTenantRole`). A chave
+  // nunca volta nem vai para a auditoria (só ambiente e 4 últimos caracteres).
+  .get('/configuracoes/recebimento', async c => ok(c, await receivingAccountService.status(tenantOf(c).id)))
+
+  .put('/configuracoes/recebimento', receivingRateLimit, limitBody(4), json(connectClubReceivingAccountInput), async c => {
+    const result = await receivingAccountService.connect(tenantOf(c).id, c.req.valid('json'), { userId: actorOf(c) })
+    await recordAudit(c, {
+      action: result.replaced ? 'club_receiving_account.key_replaced' : 'club_receiving_account.connected',
+      resource: 'club_receiving_account',
+      resourceId: tenantOf(c).id,
+      metadata: {
+        ambiente: result.account.env,
+        finalChave: result.account.keyHint,
+        conta: result.account.accountName,
+        trocaDeConta: result.accountChanged,
+        webhook: result.account.webhookStatus,
+      },
+    })
+    return ok(c, result.account)
+  })
+
+  .post('/configuracoes/recebimento/testar', receivingRateLimit, async c => {
+    const account = await receivingAccountService.test(tenantOf(c).id)
+    await recordAudit(c, {
+      action: 'club_receiving_account.tested',
+      resource: 'club_receiving_account',
+      resourceId: tenantOf(c).id,
+      metadata: { ambiente: account.env, webhook: account.webhookStatus, aprovada: account.accountStatus?.approved ?? null },
+    })
+    return ok(c, account)
+  })
+
+  .delete('/configuracoes/recebimento', receivingRateLimit, async c => {
+    const { account, removed } = await receivingAccountService.disconnect(tenantOf(c).id)
+    if (removed) {
+      await recordAudit(c, {
+        action: 'club_receiving_account.disconnected',
+        resource: 'club_receiving_account',
+        resourceId: tenantOf(c).id,
+      })
+    }
+    return ok(c, account)
   })
 
   // ---- Timeline e automação ------------------------------------------------

@@ -93,6 +93,13 @@ vi.mock('@/db/client', async () => {
   return { db, sql: {} }
 })
 
+// Webhook por clube: cada clube tem token próprio (org-2 = outro clube com conta; org-3 = sem conta).
+vi.mock('@/modules/club-billing/receiving-account.service', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/modules/club-billing/receiving-account.service')>()),
+  loadClubWebhookToken: async (orgId: string) =>
+    orgId === 'org-1' ? WEBHOOK_TOKEN : orgId === 'org-2' ? 'token-do-outro-clube-com-mais-de-32-caracteres' : null,
+}))
+
 const { handleGatewayEvent } = await import('@/modules/club-billing/events.service')
 const { webhooksController } = await import('@/modules/club-billing/webhook-controller')
 const { errorHandler } = await import('@/http/errors')
@@ -195,12 +202,12 @@ describe('handleGatewayEvent', () => {
   })
 })
 
-describe('POST /api/v1/webhooks/asaas', () => {
+describe('POST /api/v1/webhooks/asaas/clube/:organizationId', () => {
   const app = new Hono().route('/api/v1/webhooks', webhooksController)
   app.onError(errorHandler)
 
-  const post = (token: string | null, body: unknown) =>
-    app.request('/api/v1/webhooks/asaas', {
+  const post = (token: string | null, body: unknown, orgId = 'org-1') =>
+    app.request(`/api/v1/webhooks/asaas/clube/${orgId}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(token ? { 'asaas-access-token': token } : {}) },
       body: JSON.stringify(body),
@@ -210,6 +217,16 @@ describe('POST /api/v1/webhooks/asaas', () => {
     expect((await post('errado', received('evt_1'))).status).toBe(401)
     expect((await post(null, received('evt_1'))).status).toBe(401)
     expect(state.events).toHaveLength(0)
+  })
+
+  it('clube sem conta de recebimento → 401 (mesmo com o token de outro clube)', async () => {
+    expect((await post(WEBHOOK_TOKEN, received('evt_1'), 'org-3')).status).toBe(401)
+    expect(state.events).toHaveLength(0)
+  })
+
+  it('token de um clube não vale no webhook de outro', async () => {
+    expect((await post(WEBHOOK_TOKEN, received('evt_1'), 'org-2')).status).toBe(401)
+    expect(state.charge.status).toBe('pending')
   })
 
   it('token certo → 200 { received: true } e processa pelo handler único', async () => {
@@ -222,9 +239,28 @@ describe('POST /api/v1/webhooks/asaas', () => {
     expect(state.events.filter(e => e.type === 'PAYMENT_RECEIVED')).toHaveLength(1)
   })
 
+  it('cobrança de OUTRO clube no webhook deste → 200, registrada só no log e ignorada', async () => {
+    const response = await post('token-do-outro-clube-com-mais-de-32-caracteres', received('evt_x'), 'org-2')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ success: true, data: { received: true } })
+    expect(state.charge.status).toBe('pending')
+    expect(state.events).toHaveLength(0)
+  })
+
   it('evento sem cobrança (ex.: transferência) → 200 sem processar', async () => {
     const response = await post(WEBHOOK_TOKEN, { id: 'evt_t', event: 'TRANSFER_DONE' })
     expect(response.status).toBe(200)
     expect(state.events).toHaveLength(0)
+  })
+
+  it('rota global antiga /webhooks/asaas → 410, sem processar', async () => {
+    const response = await app.request('/api/v1/webhooks/asaas', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'asaas-access-token': WEBHOOK_TOKEN },
+      body: JSON.stringify(received('evt_1')),
+    })
+    expect(response.status).toBe(410)
+    expect(state.events).toHaveLength(0)
+    expect(state.charge.status).toBe('pending')
   })
 })

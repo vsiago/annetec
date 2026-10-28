@@ -436,10 +436,11 @@ export const chargesService = {
       if (!settings.enabledMethods.includes(input.method)) {
         throw AppError.businessRule(`${CLUB_PAYMENT_METHOD_LABELS[input.method]} não está disponível para este clube`)
       }
-      // Antes de qualquer efeito colateral: o cartão de aprovação da sandbox
-      // (`4444…`) só passa com gateway de teste — mesma regra do checkout.
+      // Antes de qualquer efeito colateral: clube sem conta de recebimento para
+      // aqui (409 RECEBIMENTO_NAO_CONFIGURADO, sem cancelar o pagamento atual), e o
+      // cartão de aprovação da sandbox (`4444…`) só passa com gateway de teste.
+      const gateway = await getPaymentGateway(charge.organizationId)
       if (input.card) {
-        const gateway = await getPaymentGateway(charge.organizationId)
         const issue = cardNumberIssue(input.card.number, { allowSandboxCard: gateway.sandbox || gateway.canSimulate })
         if (issue) throw AppError.validation([{ path: 'card.number', message: issue }])
       }
@@ -514,6 +515,8 @@ export const chargesService = {
       const today = todaySP()
       const dueDate = input.dueDate ?? addDays(today, settings.boletoDueDays)
       if (dueDate < today) throw AppError.validation([{ path: 'dueDate', message: 'O vencimento não pode estar no passado' }])
+      // Sem conta de recebimento: 409 antes de cancelar o pagamento atual.
+      await getPaymentGateway(charge.organizationId)
 
       if (charge.gatewayChargeId) {
         await syncChargeIfStale(charge, 0, opts.source)

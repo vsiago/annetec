@@ -158,6 +158,11 @@ vi.mock('@/db/client', async () => {
 
 const { db } = await import('@/db/client')
 const { handleGatewayEvent, reactivateIfSettled } = await import('@/modules/club-billing/events.service')
+vi.mock('@/modules/club-billing/receiving-account.service', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/modules/club-billing/receiving-account.service')>()),
+  loadClubWebhookToken: async () => WEBHOOK_TOKEN,
+}))
+
 const { webhooksController } = await import('@/modules/club-billing/webhook-controller')
 const { errorHandler } = await import('@/http/errors')
 
@@ -361,7 +366,7 @@ describe('webhook: eventos novos sempre 200', () => {
   const app = new Hono().route('/api/v1/webhooks', webhooksController)
   app.onError(errorHandler)
   const post = (body: unknown) =>
-    app.request('/api/v1/webhooks/asaas', {
+    app.request('/api/v1/webhooks/asaas/clube/org-1', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'asaas-access-token': WEBHOOK_TOKEN },
       body: JSON.stringify(body),

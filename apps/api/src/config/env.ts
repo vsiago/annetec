@@ -90,15 +90,26 @@ const envSchema = z.object({
   DIGITALSAUDE_GLOBAL_TENANTS: z.preprocess(emptyAsUndefined, z.string().optional()),
 
   /**
-   * Clube de Benefícios — cobrança própria (blueprint §0.10). Tudo opcional:
-   * sem nada configurado o checkout roda no gateway SIMULADO (sem dinheiro).
-   * `asaas` sem `ASAAS_API_KEY` também cai no simulado (com aviso no log).
+   * Clube de Benefícios — cobrança própria (blueprint §0.10). Sem nada
+   * configurado o checkout roda no gateway SIMULADO (sem dinheiro). Com
+   * `asaas`, cada clube recebe na PRÓPRIA conta Asaas (chave colada pelo admin
+   * em Faturamento → Configurações → Recebimento, tabela `tenant_asaas_accounts`);
+   * clube sem conta conectada tem adesão/cobrança bloqueadas
+   * (`RECEBIMENTO_NAO_CONFIGURADO`) — nunca cai na conta da ANNETEC.
    */
   PAYMENT_GATEWAY: z.preprocess(emptyAsUndefined, z.enum(['simulated', 'asaas']).default('simulated')),
-  /** `$aact_hmlg_…` (sandbox) ou `$aact_prod_…` (produção). */
+  /**
+   * Conta Asaas da ANNETEC (PLATAFORMA): `$aact_hmlg_…` (sandbox) ou
+   * `$aact_prod_…` (produção). Usada só pela cobrança da plataforma (fallback de
+   * `PLATFORM_ASAAS_API_KEY`) — o club-billing NUNCA usa esta chave.
+   */
   ASAAS_API_KEY: z.preprocess(emptyAsUndefined, z.string().min(10).optional()),
+  /** Ambiente da conta da ANNETEC. A chave de cada clube carrega o próprio ambiente no prefixo. */
   ASAAS_ENV: z.preprocess(emptyAsUndefined, z.enum(['sandbox', 'production']).default('sandbox')),
-  /** `authToken` cadastrado no webhook do Asaas (32–255 caracteres), conferido no header `asaas-access-token`. */
+  /**
+   * Fallback de `PLATFORM_ASAAS_WEBHOOK_TOKEN` (webhook da plataforma). O webhook
+   * de cada clube tem token próprio, gerado e guardado cifrado ao conectar o recebimento.
+   */
   ASAAS_WEBHOOK_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(1).max(255).optional()),
   /** O Asaas exige `User-Agent` em contas novas. */
   ASAAS_USER_AGENT: z.preprocess(emptyAsUndefined, z.string().default('ANNETEC-Clube/1.0')),

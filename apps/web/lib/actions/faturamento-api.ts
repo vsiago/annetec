@@ -9,8 +9,10 @@ import type {
   ClubCharge,
   ClubChargeDetail,
   ClubReceiptsPage,
+  ClubReceivingAccount,
   ClubSubscription,
   ClubSubscriptionDetail,
+  ConnectClubReceivingAccountInput,
   CreateManualClubChargeInput,
   ListClubChargesQuery,
   ListClubReceiptsQuery,
@@ -357,6 +359,57 @@ export async function updateBillingSettingsAction(
     const { data } = await apiFetch<BillingSettings>(base(tenantSlug, '/configuracoes'), {
       method: 'PATCH',
       body: input,
+    })
+    return data
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Conta de recebimento (Asaas próprio do clube)
+// ---------------------------------------------------------------------------
+
+/**
+ * A chave do Asaas atravessa estas funções só de passagem (browser → API): nada
+ * aqui a loga, e a resposta nunca a devolve (só os 4 últimos caracteres).
+ */
+export async function getReceivingAccountAction(tenantSlug: string): Promise<ActionResult<ClubReceivingAccount>> {
+  return run(async () => {
+    const { data } = await apiFetch<ClubReceivingAccount>(base(tenantSlug, '/configuracoes/recebimento'))
+    return data
+  })
+}
+
+/** Conecta a conta ou troca a chave (mesma rota). */
+export async function connectReceivingAccountAction(
+  tenantSlug: string,
+  input: ConnectClubReceivingAccountInput,
+): Promise<ActionResult<ClubReceivingAccount>> {
+  return run(async () => {
+    const { data } = await apiFetch<ClubReceivingAccount>(base(tenantSlug, '/configuracoes/recebimento'), {
+      method: 'PUT',
+      body: input,
+    })
+    return data
+  })
+}
+
+export async function testReceivingAccountAction(tenantSlug: string): Promise<ActionResult<ClubReceivingAccount>> {
+  return run(async () => {
+    const { data } = await apiFetch<ClubReceivingAccount>(base(tenantSlug, '/configuracoes/recebimento/testar'), {
+      method: 'POST',
+      body: {},
+    })
+    return data
+  })
+}
+
+/** 409 com a mensagem da API quando ainda há assinaturas vinculadas. */
+export async function disconnectReceivingAccountAction(
+  tenantSlug: string,
+): Promise<ActionResult<ClubReceivingAccount>> {
+  return run(async () => {
+    const { data } = await apiFetch<ClubReceivingAccount>(base(tenantSlug, '/configuracoes/recebimento'), {
+      method: 'DELETE',
     })
     return data
   })

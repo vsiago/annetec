@@ -1,16 +1,21 @@
 /**
- * Configura a conta Asaas para a ANNETEC — idempotente, pode rodar quantas
- * vezes quiser (ex.: a cada vez que a URL do túnel muda).
+ * Configura a conta Asaas da ANNETEC (cobrança da PLATAFORMA) — idempotente,
+ * pode rodar quantas vezes quiser (ex.: a cada vez que a URL do túnel muda).
  *
- *  1. valida a chave (`GET /myAccount/commercialInfo/`) e mostra conta e ambiente;
- *  2. cria ou atualiza os dois webhooks (clube e plataforma) com os eventos (`EVENTS`)
- *     que o código trata. Webhook já existente (mesma URL ou mesmo nome) é
- *     atualizado com `PUT`, nunca duplicado;
+ *  1. valida a chave da plataforma (`GET /myAccount/commercialInfo/`) e mostra conta e ambiente;
+ *  2. cria ou atualiza o webhook da PLATAFORMA (`/api/v1/webhooks/asaas-plataforma`)
+ *     com os eventos que o código trata (`ASAAS_WEBHOOK_EVENTS`). Webhook já
+ *     existente (mesma URL ou mesmo nome) é atualizado com `PUT`, nunca duplicado;
  *  3. com `--pix-key`, cria uma chave Pix aleatória (EVP) se a conta não tiver
  *     nenhuma — a sandbox só gera QR Code Pix com chave cadastrada.
  *
- * Lê do `apps/api/.env`: ASAAS_API_KEY, ASAAS_ENV, ASAAS_WEBHOOK_TOKEN,
- * PLATFORM_ASAAS_API_KEY, PLATFORM_ASAAS_WEBHOOK_TOKEN (e ASAAS_USER_AGENT,
+ * O webhook do CLUBE não é mais cadastrado aqui: cada clube recebe na própria
+ * conta Asaas, e o webhook dele (`/api/v1/webhooks/asaas/clube/:organizationId`,
+ * token próprio) é criado/reativado pelo painel — Faturamento → Configurações →
+ * Recebimento (conectar ou "Testar"). Ver `club-billing/receiving-account.service.ts`.
+ *
+ * Lê do `apps/api/.env`: PLATFORM_ASAAS_API_KEY (vazio = ASAAS_API_KEY), ASAAS_ENV,
+ * PLATFORM_ASAAS_WEBHOOK_TOKEN (vazio = ASAAS_WEBHOOK_TOKEN) (e ASAAS_USER_AGENT,
  * ASAAS_TIMEOUT_MS, API_BASE_URL). Nunca escreve no `.env` e nunca imprime
  * chave ou token completos.
  *
@@ -26,27 +31,10 @@ import 'dotenv/config'
 import { randomBytes } from 'node:crypto'
 import type { AsaasClient } from '../src/integrations/asaas/client'
 import type { AsaasEnvironment, AsaasWebhook } from '../src/integrations/asaas/types'
+import { ASAAS_WEBHOOK_EVENTS } from '../src/integrations/asaas/webhook-events'
 
-/**
- * Os eventos que `club-billing/events.service.ts` e `platform-billing/events.service.ts`
- * tratam (mudam estado) ou registram na timeline para revisão humana.
- * Mudou a lista? Rode o setup de novo — o `PUT` ajusta os webhooks existentes.
- */
-const EVENTS = [
-  'PAYMENT_CONFIRMED',
-  'PAYMENT_RECEIVED',
-  'PAYMENT_OVERDUE',
-  'PAYMENT_CREDIT_CARD_CAPTURE_REFUSED',
-  'PAYMENT_REPROVED_BY_RISK_ANALYSIS',
-  'PAYMENT_REFUNDED',
-  'PAYMENT_PARTIALLY_REFUNDED',
-  'PAYMENT_DELETED',
-  'PAYMENT_RESTORED',
-  'PAYMENT_UPDATED',
-  'PAYMENT_CHARGEBACK_REQUESTED',
-  'PAYMENT_CHARGEBACK_DISPUTE',
-  'PAYMENT_AWAITING_CHARGEBACK_REVERSAL',
-]
+/** Mesma lista do webhook de cada clube (fonte única em `webhook-events.ts`). */
+const EVENTS: readonly string[] = ASAAS_WEBHOOK_EVENTS
 
 /** Status de chave Pix que contam como "a conta já tem chave". */
 const LIVE_PIX_STATUSES = new Set(['ACTIVE', 'AWAITING_ACTIVATION'])
@@ -285,113 +273,89 @@ async function ensurePixKey(client: AsaasClient, dryRun: boolean) {
 async function main() {
   const args = parseArgs(process.argv.slice(2))
 
-  const apiKey = envValue('ASAAS_API_KEY')
   const rawEnv = envValue('ASAAS_ENV') ?? 'sandbox'
   if (rawEnv !== 'sandbox' && rawEnv !== 'production') {
     throw new SetupError(`ASAAS_ENV inválido: "${rawEnv}". Use sandbox ou production.`)
   }
   const environment: AsaasEnvironment = rawEnv
-  const platformApiKey = envValue('PLATFORM_ASAAS_API_KEY')
+  const platformKeyVar = envValue('PLATFORM_ASAAS_API_KEY') ? 'PLATFORM_ASAAS_API_KEY' : 'ASAAS_API_KEY'
+  const apiKey = envValue('PLATFORM_ASAAS_API_KEY') ?? envValue('ASAAS_API_KEY')
 
-  console.log(`Asaas setup · ambiente ${environment}${args.dryRun ? ' · DRY-RUN (nada será criado ou alterado)' : ''}`)
+  console.log(`Asaas setup (conta da ANNETEC · plataforma) · ambiente ${environment}${args.dryRun ? ' · DRY-RUN (nada será criado ou alterado)' : ''}`)
 
   if (!apiKey) {
     throw new SetupError(
-      'ASAAS_API_KEY está vazia em apps/api/.env. Gere a chave no painel do Asaas ' +
+      'PLATFORM_ASAAS_API_KEY e ASAAS_API_KEY estão vazias em apps/api/.env. Gere a chave no painel do Asaas da ANNETEC ' +
         `(${environment === 'sandbox' ? 'https://sandbox.asaas.com' : 'https://www.asaas.com'} → Integrações → Chaves de API), ` +
         `cole em ASAAS_API_KEY=${environment === 'sandbox' ? '$aact_hmlg_...' : '$aact_prod_...'} e rode de novo.`,
     )
   }
   const expectedPrefix = environment === 'sandbox' ? '$aact_hmlg_' : '$aact_prod_'
-  for (const [name, key] of [['ASAAS_API_KEY', apiKey], ['PLATFORM_ASAAS_API_KEY', platformApiKey]] as const) {
-    if (key && key.startsWith('$aact_') && !key.startsWith(expectedPrefix)) {
-      throw new SetupError(`${name} (${mask(key)}) não parece ser de ${environment} (esperado prefixo ${expectedPrefix}). Confira ASAAS_ENV.`)
-    }
+  if (apiKey.startsWith('$aact_') && !apiKey.startsWith(expectedPrefix)) {
+    throw new SetupError(`${platformKeyVar} (${mask(apiKey)}) não parece ser de ${environment} (esperado prefixo ${expectedPrefix}). Confira ASAAS_ENV.`)
   }
 
-  let clubToken = envValue('ASAAS_WEBHOOK_TOKEN')
-  if (!clubToken) {
+  const tokenVar = envValue('PLATFORM_ASAAS_WEBHOOK_TOKEN') ? 'PLATFORM_ASAAS_WEBHOOK_TOKEN' : 'ASAAS_WEBHOOK_TOKEN'
+  let platformToken = envValue('PLATFORM_ASAAS_WEBHOOK_TOKEN') ?? envValue('ASAAS_WEBHOOK_TOKEN')
+  if (!platformToken) {
     const generated = randomBytes(32).toString('hex')
-    console.log('\nASAAS_WEBHOOK_TOKEN está vazio. Token gerado agora (não foi gravado em lugar nenhum):')
-    console.log(`\n  ASAAS_WEBHOOK_TOKEN=${generated}\n`)
+    console.log('\nPLATFORM_ASAAS_WEBHOOK_TOKEN (e ASAAS_WEBHOOK_TOKEN) estão vazios. Token gerado agora (não foi gravado em lugar nenhum):')
+    console.log(`\n  PLATFORM_ASAAS_WEBHOOK_TOKEN=${generated}\n`)
     console.log('Grave essa linha em apps/api/.env (e no ambiente do servidor), reinicie a API e rode o setup de novo.')
     if (!args.dryRun) {
-      throw new SetupError('Webhooks não cadastrados: o token precisa estar no .env antes, senão a API responde 401.')
+      throw new SetupError('Webhook não cadastrado: o token precisa estar no .env antes, senão a API responde 401.')
     }
-    clubToken = generated
+    platformToken = generated
   }
-  checkToken('ASAAS_WEBHOOK_TOKEN', clubToken)
-  const platformTokenOwn = envValue('PLATFORM_ASAAS_WEBHOOK_TOKEN')
-  if (platformTokenOwn) checkToken('PLATFORM_ASAAS_WEBHOOK_TOKEN', platformTokenOwn)
-  const platformToken = platformTokenOwn ?? clubToken
+  checkToken(tokenVar, platformToken)
 
   const publicUrl = resolvePublicUrl(args.publicUrl)
 
   console.log('\n1. Conta')
-  const clubClient = await createClient(apiKey, environment)
-  const clubInfo = await describeAccount(clubClient, 'ASAAS_API_KEY', apiKey, environment)
-  const separatePlatform = Boolean(platformApiKey && platformApiKey !== apiKey)
-  let platformClient = clubClient
-  let platformInfo = clubInfo
-  if (separatePlatform) {
-    platformClient = await createClient(platformApiKey!, environment)
-    platformInfo = await describeAccount(platformClient, 'PLATFORM_ASAAS_API_KEY', platformApiKey!, environment)
-  } else {
-    console.log('  plataforma: mesma conta (PLATFORM_ASAAS_API_KEY vazia ou igual)')
-  }
+  const client = await createClient(apiKey, environment)
+  const info = await describeAccount(client, platformKeyVar, apiKey, environment)
   summary.push(`Ambiente: ${environment} · API pública: ${publicUrl}`)
 
-  const clubEmail = args.email ?? clubInfo.email ?? null
-  const platformEmail = args.email ?? platformInfo.email ?? null
-  if (!clubEmail || !platformEmail) {
+  const email = args.email ?? info.email ?? null
+  if (!email) {
     throw new SetupError('A conta não devolveu e-mail; passe --email ops@seudominio para receber os avisos de falha do webhook.')
   }
 
-  console.log('\n2. Webhooks')
-  const clubSpec: WebhookSpec = {
-    label: 'webhook do clube',
-    name: 'ANNETEC clube',
-    url: `${publicUrl}/api/v1/webhooks/asaas`,
-    authToken: clubToken,
-    tokenVar: 'ASAAS_WEBHOOK_TOKEN',
-  }
+  console.log('\n2. Webhook da plataforma')
   const platformSpec: WebhookSpec = {
     label: 'webhook da plataforma',
     name: 'ANNETEC plataforma',
     url: `${publicUrl}/api/v1/webhooks/asaas-plataforma`,
     authToken: platformToken,
-    tokenVar: platformTokenOwn ? 'PLATFORM_ASAAS_WEBHOOK_TOKEN' : 'ASAAS_WEBHOOK_TOKEN (fallback)',
+    tokenVar,
   }
-
-  const clubHooks = await listAllWebhooks(clubClient)
-  console.log(`  conta ${separatePlatform ? 'do clube' : 'única'}: ${clubHooks.length} webhook(s) cadastrado(s)`)
-  await upsertWebhook(clubClient, clubHooks, clubSpec, clubEmail, args.dryRun)
-  if (separatePlatform) {
-    const platformHooks = await listAllWebhooks(platformClient)
-    console.log(`  conta da plataforma: ${platformHooks.length} webhook(s) cadastrado(s)`)
-    await upsertWebhook(platformClient, platformHooks, platformSpec, platformEmail, args.dryRun)
-  } else {
-    await upsertWebhook(clubClient, clubHooks, platformSpec, clubEmail, args.dryRun)
+  const hooks = await listAllWebhooks(client)
+  console.log(`  ${hooks.length} webhook(s) cadastrado(s) na conta`)
+  const legacyClub = hooks.find(w => normalizeUrl(w.url) === normalizeUrl(`${publicUrl}/api/v1/webhooks/asaas`))
+  if (legacyClub) {
+    console.log(
+      `  AVISO: o webhook antigo do clube (${legacyClub.id}, /api/v1/webhooks/asaas) ainda existe nesta conta — a rota foi desativada (410). ` +
+        'Remova-o no painel do Asaas (Integrações → Webhooks).',
+    )
+    summary.push(`Webhook antigo do clube ${legacyClub.id}: remover no painel (rota desativada)`)
   }
+  await upsertWebhook(client, hooks, platformSpec, email, args.dryRun)
 
   if (args.pixKey) {
     console.log('\n3. Chave Pix')
-    await ensurePixKey(clubClient, args.dryRun)
-    if (separatePlatform) {
-      console.log('  (conta da plataforma)')
-      await ensurePixKey(platformClient, args.dryRun)
-    }
+    await ensurePixKey(client, args.dryRun)
   }
 
   console.log('\nResumo')
   for (const line of summary) console.log(`  - ${line}`)
   console.log(`  - Eventos: ${EVENTS.join(', ')}`)
+  console.log('  - Webhook de cada CLUBE: gerido no painel (Faturamento → Configurações → Recebimento), não por este script.')
   console.log(
     args.dryRun
       ? '\nDry-run: nada foi alterado no Asaas. Rode sem --dry-run para aplicar.'
       : '\nPronto. Teste o token: curl -i -X POST "' +
-          clubSpec.url +
-          '" -H "asaas-access-token: <ASAAS_WEBHOOK_TOKEN>" -H "content-type: application/json" -d "{}"  → 200',
+          platformSpec.url +
+          `" -H "asaas-access-token: <${tokenVar}>" -H "content-type: application/json" -d "{}"  → 200`,
   )
 }
 

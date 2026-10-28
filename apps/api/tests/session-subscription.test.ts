@@ -90,6 +90,10 @@ vi.mock('@/modules/network/controller', () => ({ toClubPlan: (row: unknown) => r
 vi.mock('@/modules/club-billing/settings.service', () => ({
   loadBillingSettings: vi.fn(async () => ({ enabledMethods: ['pix'], gatewayOverride: null, boletoDueDays: 3 })),
 }))
+// O clube tem conta de recebimento conectada (com PAYMENT_GATEWAY=asaas o checkout confere antes de tudo).
+vi.mock('@/modules/club-billing/receiving-account.service', () => ({
+  resolveClubAsaasCredentials: vi.fn(async () => ({ apiKey: '$aact_hmlg_chave-de-teste', env: 'sandbox', updatedAt: new Date(0) })),
+}))
 vi.mock('@/modules/club-billing/checkout-rules', async importOriginal => ({
   ...(await importOriginal<typeof import('@/modules/club-billing/checkout-rules')>()),
   // As regras do plano têm testes próprios; aqui interessa a conta do titular.

@@ -11,7 +11,7 @@ import { db } from '@/db/client'
 import { clubCharges, clubSubscriptionDependents, clubSubscriptions, paymentEvents } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { paginate } from '@/http/respond'
-import { resolveGatewayProvider } from '@/integrations/payments/provider'
+import { resolveReadyGatewayProvider } from '@/integrations/payments/provider'
 import { logger } from '@/lib/logger'
 import { cancelAtGateway, submitChargeToGateway } from './charges.service'
 import { addMonthsOnDueDay, dueDayOf, monthLabel, todaySP } from './dates'
@@ -258,7 +258,8 @@ export const subscriptionsService = {
 
     const dueDay = dueDayOf(today)
     const periodEnd = addMonthsOnDueDay(today, 1, dueDay)
-    const provider = await resolveGatewayProvider(orgId)
+    // Sem conta de recebimento: 409 antes de reabrir a assinatura.
+    const provider = await resolveReadyGatewayProvider(orgId)
 
     const [existing] = await db
       .select()

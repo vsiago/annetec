@@ -102,6 +102,25 @@ describe('assertProductionConfig', () => {
     expect(productionConfigViolations({ ...FULL_PRODUCTION, TRUST_PROXY: false, WEB_BASE_URL: undefined })).toEqual([])
   })
 
+  it('produção: a chave/token global é só da plataforma — basta PLATFORM_* (o clube recebe na conta própria)', () => {
+    expect(
+      productionConfigViolations({
+        ...FULL_PRODUCTION,
+        ASAAS_API_KEY: undefined,
+        ASAAS_WEBHOOK_TOKEN: undefined,
+        PLATFORM_ASAAS_WEBHOOK_TOKEN: 'token-da-plataforma-com-mais-de-32-caracteres',
+      }),
+    ).toEqual([])
+    const joined = productionConfigViolations({
+      ...FULL_PRODUCTION,
+      ASAAS_API_KEY: undefined,
+      PLATFORM_ASAAS_API_KEY: undefined,
+      ASAAS_WEBHOOK_TOKEN: undefined,
+    }).join('\n')
+    expect(joined).toContain('ASAAS_API_KEY ausente (conta Asaas da ANNETEC, cobrança da plataforma')
+    expect(joined).toContain('ASAAS_WEBHOOK_TOKEN ausente (token do webhook da plataforma')
+  })
+
   it('produção completa: passa sem avisos', () => {
     const log = { warn: vi.fn() }
     expect(productionConfigViolations(FULL_PRODUCTION)).toEqual([])

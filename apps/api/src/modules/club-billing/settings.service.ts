@@ -4,7 +4,8 @@ import { billingAutomationEnabled, env, isProduction } from '@/config/env'
 import { db } from '@/db/client'
 import { clubBillingSettings } from '@/db/schema'
 import { AppError } from '@/http/errors'
-import { getGatewayFor, effectiveProvider, isAsaasConfigured } from '@/integrations/payments/provider'
+import { describeGateway } from '@/integrations/payments/provider'
+import { resolveClubAsaasCredentials } from './receiving-account.service'
 
 /**
  * Régua de cobrança do inquilino (`billing_settings`). Sem linha = padrões:
@@ -75,20 +76,25 @@ export async function loadBillingSettings(orgId: string): Promise<ResolvedBillin
 export async function toBillingSettingsDto(orgId: string, settings: ResolvedBillingSettings): Promise<BillingSettings> {
   let provider: PaymentGatewayProvider
   let sandbox: boolean
+  let asaasConfigured: boolean
   try {
-    provider = effectiveProvider(settings.gatewayOverride)
-    sandbox = (await getGatewayFor(orgId, provider)).sandbox
+    const gateway = await describeGateway(orgId, settings.gatewayOverride)
+    provider = gateway.provider
+    sandbox = gateway.sandbox
+    asaasConfigured = gateway.provider === 'asaas' ? gateway.receivingConfigured : Boolean(await resolveClubAsaasCredentials(orgId))
   } catch (error) {
-    // Só em produção com override `simulated` gravado/Asaas sem chave: a tela
-    // de configurações precisa abrir mesmo assim para o admin corrigir.
+    // Só em produção com override `simulated` gravado: a tela de configurações
+    // precisa abrir mesmo assim para o admin corrigir.
     if (!isProduction) throw error
+    const credentials = await resolveClubAsaasCredentials(orgId)
     provider = 'asaas'
-    sandbox = false
+    sandbox = credentials?.env === 'sandbox'
+    asaasConfigured = Boolean(credentials)
   }
   return {
     gateway: provider,
     gatewayOverride: settings.gatewayOverride,
-    asaasConfigured: isAsaasConfigured(),
+    asaasConfigured,
     sandbox,
     enabledMethods: settings.enabledMethods,
     generateDaysBefore: settings.generateDaysBefore,
@@ -144,8 +150,8 @@ export const settingsService = {
     if (isProduction && input.gatewayOverride === 'simulated') {
       throw AppError.businessRule('Gateway simulado não é permitido em produção')
     }
-    if (merged.gatewayOverride === 'asaas' && !isAsaasConfigured()) {
-      throw AppError.businessRule('O Asaas ainda não está configurado no servidor (ASAAS_API_KEY)')
+    if (input.gatewayOverride === 'asaas' && !(await resolveClubAsaasCredentials(orgId))) {
+      throw AppError.businessRule('Conecte a conta Asaas do clube (Configurações → Recebimento) antes de escolher o Asaas')
     }
 
     const values = {

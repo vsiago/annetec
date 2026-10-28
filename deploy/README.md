@@ -134,7 +134,10 @@ dc run --rm -e ALLOW_SEED_IN_PRODUCTION=1 migrate pnpm demo:propostas        # 5
 > `demo:billing` e `demo:plataforma` criam cobranças do gateway **simulado**, que não existe com
 > `NODE_ENV=production` — não use no servidor.
 
-Asaas (sandbox agora, produção no fim) — cadastra/atualiza os dois webhooks na conta:
+Asaas (sandbox agora, produção no fim) — cadastra/atualiza o webhook da **plataforma** na conta da ANNETEC.
+Cada clube recebe na própria conta Asaas: o admin do clube cola a chave em Faturamento → Configurações →
+Recebimento e a API cadastra o webhook do clube (`/api/v1/webhooks/asaas/clube/<organizationId>`) sozinha
+(passo a passo em `docs/pagamentos-asaas-configuracao.md`, seção 5). Clube sem chave não vende (409).
 
 ```bash
 dc run --rm migrate pnpm asaas:setup --public-url https://api.3-131-89-130.sslip.io --dry-run      # só consulta
@@ -194,7 +197,10 @@ dc start api web
    - `WEB_DOMAIN=www.annetec.org.br`, `API_DOMAIN=api.annetec.org.br`, `APEX_DOMAIN=annetec.org.br`
    - `API_BASE_URL=https://api.annetec.org.br`, `WEB_BASE_URL=https://www.annetec.org.br`, `CORS_ORIGINS=https://www.annetec.org.br`
    - remova `DEPLOY_STAGE`
-   - `ASAAS_ENV=production`, `ASAAS_API_KEY='$aact_prod_...'` (e `PLATFORM_ASAAS_API_KEY` se houver), tokens de webhook novos
+   - `ASAAS_ENV=production`, `ASAAS_API_KEY='$aact_prod_...'` (conta da ANNETEC — só a cobrança da plataforma;
+     ou `PLATFORM_ASAAS_API_KEY`), token de webhook da plataforma novo. As chaves de **sandbox** que os clubes
+     conectaram na demo deixam de valer: em produção estrita a API só aceita chave `$aact_prod_` de clube —
+     cada clube reconecta com a chave de produção da conta dele
    - `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` (domínio do remetente verificado no Resend)
    - `STORAGE_DRIVER=s3` + `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
    - Google: adicione `https://www.annetec.org.br` às origens autorizadas do client OAuth
@@ -210,8 +216,11 @@ dc start api web
    ```bash
    dc run --rm migrate pnpm asaas:setup --public-url https://api.annetec.org.br
    ```
-   Cadastra `https://api.annetec.org.br/api/v1/webhooks/asaas` e `/api/v1/webhooks/asaas-plataforma`
-   com os tokens do `.env.prod` (mínimo 32 caracteres — a API não sobe com menos) e todos os eventos que o
-   código trata (inclui chargeback, estorno parcial e restauração). **Rode de novo sempre que a lista
-   `EVENTS` de `scripts/asaas-setup.ts` mudar.** Teste com um evento pelo painel do Asaas e acompanhe `dc logs -f api`.
+   Cadastra `https://api.annetec.org.br/api/v1/webhooks/asaas-plataforma` na conta da ANNETEC com o token do
+   `.env.prod` (mínimo 32 caracteres — a API não sobe com menos) e todos os eventos que o código trata (inclui
+   chargeback, estorno parcial e restauração). Se o webhook antigo do clube (`/api/v1/webhooks/asaas`, hoje 410)
+   ainda estiver na conta, o script avisa — remova-o no painel do Asaas. O webhook de cada **clube** é cadastrado
+   na conta dele quando o admin conecta o recebimento (com `API_BASE_URL` pública). **Mudou a lista
+   `ASAAS_WEBHOOK_EVENTS` (`src/integrations/asaas/webhook-events.ts`)? Rode o setup de novo e clique em
+   "Testar" no recebimento de cada clube.** Teste com um evento pelo painel do Asaas e acompanhe `dc logs -f api`.
 7. Os certificados do sslip.io simplesmente deixam de ser renovados; nada a remover.

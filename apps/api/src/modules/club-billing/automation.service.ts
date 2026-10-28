@@ -46,6 +46,7 @@ import {
   onboardingStepFor,
   type OnboardingDeps,
 } from './onboarding.service'
+import { resolveClubAsaasCredentials } from './receiving-account.service'
 import { cancelSubscription } from './subscriptions.service'
 
 /**
@@ -60,6 +61,41 @@ const SYNC_BATCH = 200
 const SYNC_INTERVAL_MS = { simulated: 30_000, asaas: 15 * 60_000 } as const
 
 const runningTenants = new Set<string>()
+
+/** Clubes já alertados por falta de conta de recebimento (1 alerta por clube até conectar). */
+const receivingAlerted = new Set<string>()
+
+/**
+ * Clube com gateway `asaas` e SEM conta de recebimento conectada? Os passos
+ * que falam com o gateway (sincronizar Asaas, gerar ciclo, cartão) ficam de
+ * fora da rodada — o resto (avisos, vencer, inadimplência) segue — e o
+ * alerta sai uma vez por clube. Simulado em produção (erro de configuração)
+ * não é "sem conta": segue falhando por item, como antes.
+ */
+async function receivingNotConfigured(orgId: string): Promise<boolean> {
+  let provider: PaymentGatewayProvider
+  try {
+    provider = await resolveGatewayProvider(orgId)
+  } catch {
+    return false
+  }
+  const blocked = provider === 'asaas' && !(await resolveClubAsaasCredentials(orgId))
+  if (!blocked) {
+    receivingAlerted.delete(orgId)
+    return false
+  }
+  if (!receivingAlerted.has(orgId)) {
+    receivingAlerted.add(orgId)
+    logger.warn(
+      { tenantId: orgId },
+      'Clube sem conta de recebimento (Asaas) conectada: automação pula sincronização, geração de ciclo e cobrança no cartão até o admin conectar',
+    )
+  }
+  return true
+}
+
+const RECEIVING_SKIPPED_MESSAGE =
+  'recebimento não configurado: sincronização, geração de ciclo e cartão pulados até o clube conectar a conta Asaas'
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -338,6 +374,13 @@ async function run(orgId: string, now: Date, onboardingDeps: Partial<OnboardingD
     }
   }
 
+  // 0. Clube sem conta de recebimento: pula o que depende do gateway (sem derrubar a rodada).
+  let receivingBlocked = false
+  await step('recebimento', async () => {
+    receivingBlocked = await receivingNotConfigured(orgId)
+    if (receivingBlocked) report.errors.push(RECEIVING_SKIPPED_MESSAGE)
+  })
+
   // 1. Sincronizar cobranças abertas com o gateway.
   await step('sincronizar', async () => {
     const rows = await db
@@ -364,6 +407,7 @@ async function run(orgId: string, now: Date, onboardingDeps: Partial<OnboardingD
       .orderBy(sql`${clubCharges.lastSyncedAt} asc nulls first`)
       .limit(SYNC_BATCH)
     for (const charge of rows) {
+      if (receivingBlocked && charge.gatewayProvider === 'asaas') continue
       await item(`sincronizar ${charge.id}`, async () => {
         await syncCharge(charge, 'automation', now)
         report.synced += 1
@@ -395,6 +439,7 @@ async function run(orgId: string, now: Date, onboardingDeps: Partial<OnboardingD
   // do admin: período já gerado — adiantado ou não — fica de fora pelo `not exists`
   // e, numa corrida, pelo unique parcial do período).
   await step('gerar ciclo', async () => {
+    if (receivingBlocked) return
     const horizon = addDays(today, settings.generateDaysBefore)
     const rows = await db
       .select()
@@ -427,6 +472,7 @@ async function run(orgId: string, now: Date, onboardingDeps: Partial<OnboardingD
 
   // 4. Cartão: cobra o token salvo no vencimento, com retentativas espaçadas.
   await step('cartão', async () => {
+    if (receivingBlocked) return
     const retryCutoff = new Date(now.getTime() - settings.cardRetryIntervalHours * 3_600_000)
     const rows = await db
       .select({ charge: clubCharges })

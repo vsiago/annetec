@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowLeft, HeartHandshake, MessageCircle, RefreshCw, WifiOff } from 'lucide-react'
+import { ArrowLeft, HeartHandshake, Landmark, MessageCircle, RefreshCw, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -46,6 +46,42 @@ export function CheckoutEmpty({ slug, tenantName }: { slug: string; tenantName: 
           <Link href={`/${slug}/cadastro`}>
             <MessageCircle className="size-5" aria-hidden />
             Falar com um consultor
+          </Link>
+        </Button>
+        <Button asChild size="lg" variant="outline" className="h-12 rounded-xl px-6 text-base">
+          <Link href={`/${slug}`}>
+            <ArrowLeft className="size-5" aria-hidden />
+            Voltar ao site
+          </Link>
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Clube com Asaas mas sem conta de recebimento conectada
+ * (`checkoutContext.receivingConfigured === false`): a API recusaria a adesão
+ * (409 `RECEBIMENTO_NAO_CONFIGURADO`), então a tela avisa antes de a pessoa
+ * preencher o formulário — não há botão de assinar para clicar.
+ */
+export function CheckoutReceivingUnavailable({ slug }: { slug: string }) {
+  return (
+    <div className="mx-auto flex max-w-xl flex-col items-center px-4 py-16 text-center sm:py-24">
+      <div className="mb-6 flex size-16 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+        <Landmark className="size-8" aria-hidden />
+      </div>
+      <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+        A assinatura online ainda não está disponível
+      </h1>
+      <p className="mt-3 text-base leading-relaxed text-muted-foreground" role="status">
+        Este clube ainda não configurou o recebimento das mensalidades. Fale com o clube.
+      </p>
+      <div className="mt-8 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+        <Button asChild size="lg" className="h-12 rounded-xl px-6 text-base">
+          <Link href={`/${slug}/cadastro`}>
+            <MessageCircle className="size-5" aria-hidden />
+            Falar com o clube
           </Link>
         </Button>
         <Button asChild size="lg" variant="outline" className="h-12 rounded-xl px-6 text-base">

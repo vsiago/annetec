@@ -616,6 +616,12 @@ export const checkoutContext = z.object({
   sandbox: z.boolean(),
   /** Mostra o botão "Simular pagamento" (gateway simulado ou Asaas sandbox). */
   canSimulatePayment: z.boolean(),
+  /**
+   * `false` = clube com gateway Asaas mas SEM conta de recebimento conectada:
+   * a adesão é recusada (`RECEBIMENTO_NAO_CONFIGURADO`) — a tela avisa antes
+   * do formulário. Gateway simulado é sempre `true`.
+   */
+  receivingConfigured: z.boolean(),
   /** Regras do modo simulado, para a tela explicar o que vai acontecer; `null` fora dele. */
   simulation: z
     .object({
@@ -859,7 +865,11 @@ export const billingSettings = z.object({
   gateway: paymentGatewayProvider,
   /** Override gravado para o inquilino; `null` = segue a env `PAYMENT_GATEWAY`. */
   gatewayOverride: paymentGatewayProvider.nullable(),
-  /** Há `ASAAS_API_KEY` no servidor. */
+  /**
+   * O clube tem conta Asaas PRÓPRIA conectada (Configurações → Recebimento).
+   * Sem ela, com gateway `asaas`, adesão e cobrança ficam bloqueadas
+   * (`RECEBIMENTO_NAO_CONFIGURADO`). A chave global do servidor não conta.
+   */
   asaasConfigured: z.boolean(),
   sandbox: z.boolean(),
   enabledMethods: z.array(clubPaymentMethod).min(1),
@@ -903,6 +913,65 @@ export const updateBillingSettingsInput = billingSettings
   })
   .partial()
 export type UpdateBillingSettingsInput = z.infer<typeof updateBillingSettingsInput>
+
+// ---------------------------------------------------------------------------
+// Conta de recebimento do clube (Asaas próprio do inquilino)
+// ---------------------------------------------------------------------------
+
+/** Ambiente da chave: `$aact_hmlg_…` = sandbox, `$aact_prod_…` = produção. */
+export const asaasEnvironment = z.enum(['sandbox', 'production'])
+export type AsaasEnvironmentName = z.infer<typeof asaasEnvironment>
+
+/** `ativo` = cadastrado e ligado no Asaas; `pendente` = ainda não deu para cadastrar (ex.: API sem URL pública); `erro` = o Asaas recusou. */
+export const clubReceivingWebhookStatus = z.enum(['ativo', 'pendente', 'erro'])
+export type ClubReceivingWebhookStatus = z.infer<typeof clubReceivingWebhookStatus>
+
+export const CLUB_RECEIVING_WEBHOOK_STATUS_LABELS: Record<ClubReceivingWebhookStatus, string> = {
+  ativo: 'Ativo',
+  pendente: 'Pendente',
+  erro: 'Com erro',
+}
+
+/** Resumo do `GET /myAccount/status` do Asaas (situação cadastral da conta do clube). */
+export const clubReceivingAccountApproval = z.object({
+  /** Conta aprovada (`general = APPROVED`): pode receber e sacar. */
+  approved: z.boolean(),
+  /** Situação geral crua do Asaas (`APPROVED`, `AWAITING_APPROVAL`, `PENDING`, `REJECTED`…); `null` = não informada. */
+  general: z.string().nullable(),
+  /** O que ainda falta aprovar, em português (ex.: "Documentação: aguardando aprovação"). Vazio = nada. */
+  pending: z.array(z.string()),
+})
+export type ClubReceivingAccountApproval = z.infer<typeof clubReceivingAccountApproval>
+
+/**
+ * `GET /t/:slug/faturamento/configuracoes/recebimento` (e resposta das
+ * mutações). NUNCA traz a chave nem o token do webhook.
+ */
+export const clubReceivingAccount = z.object({
+  connected: z.boolean(),
+  env: asaasEnvironment.nullable(),
+  /** 4 últimos caracteres da chave (para o admin reconhecer qual colou). */
+  keyHint: z.string().nullable(),
+  accountName: z.string().nullable(),
+  /** CPF/CNPJ do titular da conta Asaas, mascarado. */
+  cpfCnpj: z.string().nullable(),
+  email: z.string().nullable(),
+  accountStatus: clubReceivingAccountApproval.nullable(),
+  webhookStatus: clubReceivingWebhookStatus.nullable(),
+  /** Motivo do `pendente`/`erro` do webhook, pronto para a tela. */
+  webhookLastError: z.string().nullable(),
+  /** URL que o Asaas chama (`/api/v1/webhooks/asaas/clube/:organizationId`). */
+  webhookUrl: z.string().nullable(),
+  connectedAt: z.string().datetime().nullable(),
+  lastCheckedAt: z.string().datetime().nullable(),
+})
+export type ClubReceivingAccount = z.infer<typeof clubReceivingAccount>
+
+/** `PUT /t/:slug/faturamento/configuracoes/recebimento`. Formato/ambiente da chave são conferidos na API. */
+export const connectClubReceivingAccountInput = z.object({
+  apiKey: z.string().trim().min(1, 'Informe a chave de API do Asaas').max(500, 'Chave de API grande demais'),
+})
+export type ConnectClubReceivingAccountInput = z.infer<typeof connectClubReceivingAccountInput>
 
 /** `GET /t/:slug/faturamento/resumo`. Definições exatas em blueprint §0. */
 export const billingSummary = z.object({

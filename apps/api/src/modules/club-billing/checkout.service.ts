@@ -27,7 +27,7 @@ import {
 } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import type { ResolvedTenant } from '@/http/types'
-import { effectiveProvider, getGatewayFor } from '@/integrations/payments/provider'
+import { assertGatewayReady, describeGateway, effectiveProvider, getGatewayFor } from '@/integrations/payments/provider'
 import { SIMULATED_DECLINED_SUFFIX } from '@/integrations/payments/simulated'
 import { auth } from '@/lib/auth'
 import { logger } from '@/lib/logger'
@@ -304,14 +304,17 @@ export const checkoutService = {
         .where(and(eq(clubPlans.organizationId, tenant.id), eq(clubPlans.status, 'active'))),
       loadBillingSettings(tenant.id),
     ])
-    const provider = effectiveProvider(settings.gatewayOverride)
-    const gateway = await getGatewayFor(tenant.id, provider)
+    // Sem conta de recebimento a vitrine abre (com `receivingConfigured: false`
+    // para a tela avisar); quem barra a adesão é o `checkout`.
+    const { provider, sandbox, receivingConfigured } = await describeGateway(tenant.id, settings.gatewayOverride)
     return {
       plans: sortClubPlansForDisplay(plans.map(toClubPlan)),
       enabledMethods: settings.enabledMethods,
       gateway: provider,
-      sandbox: gateway.sandbox,
-      canSimulatePayment: gateway.canSimulate && demoToolsAllowed,
+      sandbox,
+      // Simulado e Asaas sandbox simulam (mesma regra de `PaymentGateway.canSimulate`).
+      canSimulatePayment: receivingConfigured && (provider === 'simulated' || sandbox) && demoToolsAllowed,
+      receivingConfigured,
       simulation:
         provider === 'simulated'
           ? {
@@ -327,6 +330,8 @@ export const checkoutService = {
   async checkout(tenant: ResolvedTenant, input: CheckoutInput, remoteIp?: string, viewer: CheckoutViewer | null = null): Promise<CheckoutResult> {
     const settings = await loadBillingSettings(tenant.id)
     const method = input.payment.method
+    // Clube sem conta de recebimento: barra ANTES de criar conta/assinatura (409 RECEBIMENTO_NAO_CONFIGURADO).
+    await assertGatewayReady(tenant.id, effectiveProvider(settings.gatewayOverride))
 
     const [plan] = await db
       .select()

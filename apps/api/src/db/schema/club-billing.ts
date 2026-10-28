@@ -1,7 +1,9 @@
 import type {
+  AsaasEnvironmentName,
   ClubChargeKind,
   ClubChargeStatus,
   ClubPaymentMethod,
+  ClubReceivingWebhookStatus,
   ClubSubscriptionStatus,
   DependentRelationship,
   PaymentEventSource,
@@ -82,6 +84,61 @@ export const clubBillingSettings = pgTable('billing_settings', {
   finePercent: numeric('fine_percent', { precision: 5, scale: 2 }).notNull().default('2'),
   interestMonthlyPercent: numeric('interest_monthly_percent', { precision: 5, scale: 2 }).notNull().default('1'),
   lastAutomationRunAt: timestamp('last_automation_run_at', { withTimezone: true }),
+  updatedAt: updatedAt(),
+})
+
+const ASAAS_ENVIRONMENT = ['sandbox', 'production'] as const
+const RECEIVING_WEBHOOK_STATUS = ['ativo', 'pendente', 'erro'] as const
+const RECEIVING_ACCOUNT_SOURCE = ['api_key', 'subaccount'] as const
+ASAAS_ENVIRONMENT satisfies readonly AsaasEnvironmentName[]
+RECEIVING_WEBHOOK_STATUS satisfies readonly ClubReceivingWebhookStatus[]
+
+/** Retrato de `GET /myAccount/status` do Asaas (só a situação cadastral). */
+export interface AsaasAccountStatusSnapshot {
+  id?: string | null
+  commercialInfo?: string | null
+  bankAccountInfo?: string | null
+  documentation?: string | null
+  general?: string | null
+}
+
+/**
+ * Conta Asaas PRÓPRIA do clube, onde caem as mensalidades dos associados
+ * (1:1 com `organization`). Sem linha = recebimento não configurado: com
+ * gateway `asaas`, adesão e cobrança ficam bloqueadas — nunca caem na conta
+ * da ANNETEC (`ASAAS_API_KEY` é só da plataforma).
+ *
+ * Chave e token do webhook gravados cifrados (`lib/crypto.ts`), nunca saem da
+ * API. `source = 'subaccount'` fica reservado para quando a ANNETEC criar a
+ * subconta do clube pela API (a chave devolvida na criação alimenta esta
+ * mesma linha).
+ */
+export const tenantAsaasAccounts = pgTable('tenant_asaas_accounts', {
+  organizationId: text('organization_id')
+    .primaryKey()
+    .references(() => organization.id, { onDelete: 'cascade' }),
+  source: text('source', { enum: RECEIVING_ACCOUNT_SOURCE }).notNull().default('api_key'),
+  apiKeyEncrypted: text('api_key_encrypted').notNull(),
+  env: text('env', { enum: ASAAS_ENVIRONMENT }).notNull(),
+  /** 4 últimos caracteres da chave. */
+  keyHint: text('key_hint').notNull(),
+  /** Id da conta no Asaas (`GET /myAccount/status` → `id`). */
+  asaasAccountId: text('asaas_account_id'),
+  accountName: text('account_name'),
+  /** Só dígitos. */
+  accountCpfCnpj: text('account_cpf_cnpj'),
+  accountEmail: text('account_email'),
+  accountStatusJson: jsonb('account_status_json').$type<AsaasAccountStatusSnapshot>(),
+  webhookId: text('webhook_id'),
+  /** `authToken` do webhook do clube (volta no header `asaas-access-token`). */
+  webhookTokenEncrypted: text('webhook_token_encrypted'),
+  webhookStatus: text('webhook_status', { enum: RECEIVING_WEBHOOK_STATUS }).notNull().default('pendente'),
+  webhookLastError: text('webhook_last_error'),
+  /** Id do usuário que conectou (sem FK: o registro sobrevive à conta). */
+  connectedBy: text('connected_by'),
+  connectedAt: timestamp('connected_at', { withTimezone: true }).notNull().defaultNow(),
+  lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+  createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
 

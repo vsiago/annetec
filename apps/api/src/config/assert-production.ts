@@ -9,6 +9,11 @@ import type { env as runtimeEnv } from './env'
  * aceita Asaas sandbox, `outbox` e disco local — e recusa chave de produção do
  * Asaas. Ver `previewConfigViolations`.
  *
+ * Asaas: `ASAAS_API_KEY`/`PLATFORM_ASAAS_API_KEY` são da conta da ANNETEC e
+ * servem SÓ à cobrança da plataforma. As mensalidades dos associados caem na
+ * conta Asaas de cada clube (chave colada no painel, `tenant_asaas_accounts`),
+ * com a mesma política de ambiente — ver `allowedClubAsaasEnvironments`.
+ *
  * Chamado em `src/index.ts` e `src/vercel.ts` ANTES de subir a API. Junta
  * TODAS as violações e lança um único `Error` com a lista, para quem estiver
  * configurando o deploy corrigir tudo de uma vez.
@@ -64,7 +69,7 @@ export const MIN_WEBHOOK_TOKEN_LENGTH = 32
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'])
 
 /** `null` = URL pública em HTTPS; senão o motivo. */
-function publicHttpsIssue(raw: string): string | null {
+export function publicHttpsIssue(raw: string): string | null {
   let url: URL
   try {
     url = new URL(raw)
@@ -112,6 +117,19 @@ export function isPreviewStage(e: ProductionConfigInput): boolean {
 }
 
 /**
+ * Ambientes de chave Asaas que um CLUBE pode conectar neste servidor — a
+ * mesma política das chaves da ANNETEC abaixo: produção estrita só aceita
+ * `$aact_prod_…`; `DEPLOY_STAGE=preview` só `$aact_hmlg_…` (demo nunca cobra
+ * dinheiro de verdade); fora de produção (dev/test) os dois.
+ */
+export function allowedClubAsaasEnvironments(
+  e: Pick<ProductionConfigInput, 'NODE_ENV' | 'DEPLOY_STAGE'>,
+): ('sandbox' | 'production')[] {
+  if (e.NODE_ENV !== 'production') return ['sandbox', 'production']
+  return isPreviewStage(e) ? ['sandbox'] : ['production']
+}
+
+/**
  * Regras do deploy de DEMONSTRAÇÃO (`DEPLOY_STAGE=preview`). Aceita Asaas
  * sandbox, `outbox` e disco local — e RECUSA chave/ambiente de produção do
  * Asaas: um banco de demo nunca cobra dinheiro de verdade.
@@ -128,9 +146,13 @@ function previewConfigViolations(e: ProductionConfigInput): string[] {
       `PLATFORM_PAYMENT_GATEWAY precisa ser "asaas" (sandbox) mesmo em preview (atual: "${e.PLATFORM_PAYMENT_GATEWAY ?? 'simulated'}")`,
     )
   }
-  if (!e.ASAAS_API_KEY) {
-    v.push(`ASAAS_API_KEY ausente (em preview use uma chave de sandbox ${SANDBOX_KEY_PREFIX}…)`)
-  } else if (!e.ASAAS_API_KEY.startsWith(SANDBOX_KEY_PREFIX)) {
+  // Conta da ANNETEC (cobrança da plataforma): `PLATFORM_ASAAS_API_KEY ?? ASAAS_API_KEY`.
+  if (!e.ASAAS_API_KEY && !e.PLATFORM_ASAAS_API_KEY) {
+    v.push(
+      `ASAAS_API_KEY ausente (conta Asaas da ANNETEC, cobrança da plataforma; em preview use uma chave de sandbox ${SANDBOX_KEY_PREFIX}…)`,
+    )
+  }
+  if (e.ASAAS_API_KEY && !e.ASAAS_API_KEY.startsWith(SANDBOX_KEY_PREFIX)) {
     v.push(`DEPLOY_STAGE=preview não aceita chave de produção: ASAAS_API_KEY precisa começar com ${SANDBOX_KEY_PREFIX}`)
   }
   if (e.PLATFORM_ASAAS_API_KEY && !e.PLATFORM_ASAAS_API_KEY.startsWith(SANDBOX_KEY_PREFIX)) {
@@ -139,8 +161,10 @@ function previewConfigViolations(e: ProductionConfigInput): string[] {
   if ((e.ASAAS_ENV ?? 'sandbox') !== 'sandbox') {
     v.push(`DEPLOY_STAGE=preview exige ASAAS_ENV="sandbox" (atual: "${e.ASAAS_ENV}")`)
   }
-  if (!e.ASAAS_WEBHOOK_TOKEN) {
-    v.push('ASAAS_WEBHOOK_TOKEN ausente (sem ele os webhooks do Asaas são recusados)')
+  // Token do webhook da PLATAFORMA (`PLATFORM_ASAAS_WEBHOOK_TOKEN ?? ASAAS_WEBHOOK_TOKEN`).
+  // O webhook de cada clube tem token próprio, gerado ao conectar o recebimento.
+  if (!e.ASAAS_WEBHOOK_TOKEN && !e.PLATFORM_ASAAS_WEBHOOK_TOKEN) {
+    v.push('ASAAS_WEBHOOK_TOKEN ausente (token do webhook da plataforma; sem ele os webhooks do Asaas são recusados)')
   }
 
   // E-mail: `outbox` é aceito; provedor real continua exigindo a chave.
@@ -176,16 +200,21 @@ export function productionConfigViolations(e: ProductionConfigInput): string[] {
     v.push('TRUST_PROXY precisa ser definido explicitamente (true atrás do Caddy/proxy que sobrescreve X-Forwarded-For)')
   }
 
-  // Cobrança (clube e plataforma) — só Asaas de produção.
+  // Cobrança (clube e plataforma) — só Asaas de produção. O clube recebe na
+  // própria conta (chave colada no painel, só `$aact_prod_` aqui); as chaves
+  // abaixo são da conta da ANNETEC e servem à cobrança da plataforma.
   if (e.PAYMENT_GATEWAY !== 'asaas') {
     v.push(`PAYMENT_GATEWAY precisa ser "asaas" (atual: "${e.PAYMENT_GATEWAY ?? 'simulated'}")`)
   }
   if (e.PLATFORM_PAYMENT_GATEWAY !== 'asaas') {
     v.push(`PLATFORM_PAYMENT_GATEWAY precisa ser "asaas" (atual: "${e.PLATFORM_PAYMENT_GATEWAY ?? 'simulated'}")`)
   }
-  if (!e.ASAAS_API_KEY) {
-    v.push(`ASAAS_API_KEY ausente (precisa ser uma chave de produção ${PROD_KEY_PREFIX}…)`)
-  } else if (!e.ASAAS_API_KEY.startsWith(PROD_KEY_PREFIX)) {
+  if (!e.ASAAS_API_KEY && !e.PLATFORM_ASAAS_API_KEY) {
+    v.push(
+      `ASAAS_API_KEY ausente (conta Asaas da ANNETEC, cobrança da plataforma — chave de produção ${PROD_KEY_PREFIX}…; ou defina PLATFORM_ASAAS_API_KEY)`,
+    )
+  }
+  if (e.ASAAS_API_KEY && !e.ASAAS_API_KEY.startsWith(PROD_KEY_PREFIX)) {
     v.push(`ASAAS_API_KEY não é chave de produção (precisa começar com ${PROD_KEY_PREFIX})`)
   }
   if (e.PLATFORM_ASAAS_API_KEY && !e.PLATFORM_ASAAS_API_KEY.startsWith(PROD_KEY_PREFIX)) {
@@ -194,9 +223,11 @@ export function productionConfigViolations(e: ProductionConfigInput): string[] {
   if (e.ASAAS_ENV !== 'production') {
     v.push(`ASAAS_ENV precisa ser "production" (atual: "${e.ASAAS_ENV ?? 'sandbox'}")`)
   }
-  if (!e.ASAAS_WEBHOOK_TOKEN) {
-    v.push('ASAAS_WEBHOOK_TOKEN ausente (sem ele os webhooks do Asaas são recusados)')
-  } else if (e.ASAAS_WEBHOOK_TOKEN.length < MIN_WEBHOOK_TOKEN_LENGTH) {
+  // Token do webhook da PLATAFORMA (`PLATFORM_ASAAS_WEBHOOK_TOKEN ?? ASAAS_WEBHOOK_TOKEN`).
+  // O webhook de cada clube tem token próprio, gerado ao conectar o recebimento.
+  if (!e.ASAAS_WEBHOOK_TOKEN && !e.PLATFORM_ASAAS_WEBHOOK_TOKEN) {
+    v.push('ASAAS_WEBHOOK_TOKEN ausente (token do webhook da plataforma; sem ele os webhooks do Asaas são recusados)')
+  } else if (e.ASAAS_WEBHOOK_TOKEN && e.ASAAS_WEBHOOK_TOKEN.length < MIN_WEBHOOK_TOKEN_LENGTH) {
     v.push(`ASAAS_WEBHOOK_TOKEN curto demais (mínimo ${MIN_WEBHOOK_TOKEN_LENGTH} caracteres; gere com openssl rand -hex 32)`)
   }
   if (e.PLATFORM_ASAAS_WEBHOOK_TOKEN && e.PLATFORM_ASAAS_WEBHOOK_TOKEN.length < MIN_WEBHOOK_TOKEN_LENGTH) {

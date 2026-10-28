@@ -54,6 +54,12 @@ vi.mock('@/db/client', async () => {
   return { db, sql: { end: async () => undefined } }
 })
 
+// Clube com conta de recebimento conectada (sem ela, com Asaas, o passo do cartão é pulado).
+vi.mock('@/modules/club-billing/receiving-account.service', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/modules/club-billing/receiving-account.service')>()),
+  resolveClubAsaasCredentials: async () => ({ apiKey: '$aact_hmlg_chave-de-teste', env: 'sandbox', updatedAt: new Date(0) }),
+}))
+
 vi.mock('@/modules/club-billing/charges.service', async importOriginal => ({
   ...(await importOriginal<typeof import('@/modules/club-billing/charges.service')>()),
   withChargeLock: async (_id: string, work: () => Promise<unknown>) => work(),

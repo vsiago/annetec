@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { FlaskConical, RefreshCw } from 'lucide-react'
+import { FlaskConical, Landmark, RefreshCw } from 'lucide-react'
 import type { BillingSummary, ClubChargeStatus } from '@annetec/contracts'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
@@ -12,6 +12,7 @@ import { AutomationPanel } from '@/components/admin/faturamento/automation-panel
 import { GatewayBadge, LoadError, MetricTile } from '@/components/admin/faturamento/billing-ui'
 import { ChargesTab } from '@/components/admin/faturamento/charges-tab'
 import { OverviewTab } from '@/components/admin/faturamento/overview-tab'
+import { ReceivingAccountPanel } from '@/components/admin/faturamento/receiving-account-panel'
 import { SubscriptionsTab } from '@/components/admin/faturamento/subscriptions-tab'
 import { useActionData } from '@/components/admin/faturamento/use-action-data'
 import { useTenant } from '@/contexts/tenant-context'
@@ -28,9 +29,9 @@ import {
 } from '@/lib/adapters/faturamento'
 import { cn } from '@/lib/utils'
 
-type TabKey = 'cobrancas' | 'assinaturas' | 'automacao' | 'visao-geral'
+type TabKey = 'cobrancas' | 'assinaturas' | 'automacao' | 'recebimento' | 'visao-geral'
 
-const TAB_KEYS: TabKey[] = ['cobrancas', 'assinaturas', 'automacao', 'visao-geral']
+const TAB_KEYS: TabKey[] = ['cobrancas', 'assinaturas', 'automacao', 'recebimento', 'visao-geral']
 
 /** A tela abre direto nas cobranças; `?tab=` dos links antigos continua valendo. */
 function parseTab(value: string | null): TabKey {
@@ -102,6 +103,9 @@ function FaturamentoContent() {
 
   const lastRunAt = summary.data?.lastAutomationRunAt ?? settings.data?.automation.lastRunAt ?? null
   const automationEnabled = settings.data?.automation.enabled ?? true
+  // Gateway Asaas sem conta própria conectada: a API recusa adesão e cobrança.
+  const receivingMissing = settings.data ? settings.data.gateway === 'asaas' && !settings.data.asaasConfigured : false
+  const reloadSettings = settings.reload
 
   return (
     <div className="space-y-5">
@@ -121,6 +125,23 @@ function FaturamentoContent() {
         </p>
       )}
 
+      {receivingMissing && (
+        <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:flex-row sm:items-center dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          <p className="flex flex-1 items-start gap-2">
+            <Landmark className="mt-0.5 h-4 w-4 shrink-0" />
+            Conecte a conta Asaas do clube: sem ela, novas adesões e cobranças ficam bloqueadas.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 self-start border-amber-300 bg-transparent hover:bg-amber-100 sm:self-auto dark:border-amber-500/40 dark:hover:bg-amber-500/20"
+            onClick={() => setTab('recebimento')}
+          >
+            Conectar agora
+          </Button>
+        </div>
+      )}
+
       {summary.error && !summary.data ? (
         <LoadError message={summary.error} onRetry={() => void summary.reload()} />
       ) : (
@@ -133,6 +154,7 @@ function FaturamentoContent() {
             <SectionTab value="cobrancas">Cobranças</SectionTab>
             <SectionTab value="assinaturas">Assinaturas</SectionTab>
             <SectionTab value="automacao">Régua e eventos</SectionTab>
+            <SectionTab value="recebimento">Recebimento</SectionTab>
             <SectionTab value="visao-geral">Resumo mensal</SectionTab>
           </SectionTabsList>
           <button
@@ -202,7 +224,13 @@ function FaturamentoContent() {
             lastRunAt={lastRunAt}
             onRan={() => refresh()}
             version={version}
+            onOpenReceiving={() => setTab('recebimento')}
           />
+        </TabsContent>
+
+        <TabsContent value="recebimento" className="m-0">
+          {/* `asaasConfigured` das configurações depende da conta: relê quando ela muda. */}
+          <ReceivingAccountPanel tenantSlug={slug} onChanged={() => void reloadSettings({ silent: true })} />
         </TabsContent>
 
         <TabsContent value="visao-geral" className="m-0">

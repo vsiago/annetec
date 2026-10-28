@@ -17,8 +17,8 @@ Convenções deste documento:
 
 | Motor | Quem paga quem | Módulo | Tabelas | Webhook |
 |---|---|---|---|---|
-| **club-billing** | O associado paga o clube do inquilino (checkout, mensalidade, dependentes) | `apps/api/src/modules/club-billing/` | `billing_settings`, `club_subscriptions`, `club_charges`, `payment_events` (migração `0006`) | `POST /api/v1/webhooks/asaas` |
-| **platform-billing** | A ANNETEC cobra o inquilino (ativação, mensalidade, ajustes) | `apps/api/src/modules/platform-billing/` | `tenant_plan_prices`, `platform_billing_settings`, `platform_subscriptions`, `platform_charges`, `platform_billing_events` (migração `0008`) | `POST /api/v1/webhooks/asaas-plataforma` |
+| **club-billing** | O associado paga o clube do inquilino (checkout, mensalidade, dependentes) — o dinheiro cai na **conta Asaas do próprio clube** | `apps/api/src/modules/club-billing/` | `billing_settings`, `club_subscriptions`, `club_charges`, `payment_events` (migração `0006`), `tenant_asaas_accounts` (migração `0015`) | `POST /api/v1/webhooks/asaas/clube/:organizationId` (um por clube, token próprio) |
+| **platform-billing** | A ANNETEC cobra o inquilino (ativação, mensalidade, ajustes) — conta Asaas da ANNETEC (`PLATFORM_ASAAS_API_KEY ?? ASAAS_API_KEY`) | `apps/api/src/modules/platform-billing/` | `tenant_plan_prices`, `platform_billing_settings`, `platform_subscriptions`, `platform_charges`, `platform_billing_events` (migração `0008`) | `POST /api/v1/webhooks/asaas-plataforma` |
 
 Os dois usam o mesmo cliente HTTP (`apps/api/src/integrations/asaas/client.ts`) e a mesma classe `AsaasGateway` (`apps/api/src/integrations/asaas/gateway.ts:26`).
 O ciclo da assinatura é nosso. O Asaas só cria, consulta, cancela, dá baixa e estorna cobranças (`gateway.ts:21-25`).
@@ -28,7 +28,7 @@ O ciclo da assinatura é nosso. O Asaas só cria, consulta, cancela, dá baixa e
 | Gateway | Quando é usado | O que faz |
 |---|---|---|
 | `simulated` (padrão) | Sem configuração nenhuma | Pix/boleto/cartão de mentira, sem dinheiro. Pix compensa sozinho em 20 s, boleto em 120 s. Cartão com final `0002` é recusado (`apps/api/.env.example:61-66`). |
-| `asaas` | `PAYMENT_GATEWAY=asaas` (ou override do inquilino) **e** `ASAAS_API_KEY` preenchida | Cobranças reais na API v3 do Asaas. Sandbox ou produção conforme `ASAAS_ENV`. |
+| `asaas` | `PAYMENT_GATEWAY=asaas` (ou override do inquilino) | Cobranças reais na API v3 do Asaas, na **conta do clube** (chave colada pelo admin do clube — seção 5). Sandbox ou produção conforme o prefixo da chave do clube. Clube sem conta conectada: adesão e cobrança bloqueadas (409 `RECEBIMENTO_NAO_CONFIGURADO`). |
 
 URLs da API do Asaas (`client.ts:44-47`):
 
@@ -43,9 +43,9 @@ Ordem de decisão do clube (`apps/api/src/integrations/payments/provider.ts:56-6
 
 1. `billing_settings.gateway` do inquilino (override gravado pela tela ou pela API).
 2. Se for `null`, vale a env `PAYMENT_GATEWAY`.
-3. Se o resultado for `asaas` mas não houver `ASAAS_API_KEY`, cai no `simulated` e loga um aviso uma vez por processo.
+3. Se o resultado for `asaas`, o clube precisa ter a conta Asaas própria conectada (`tenant_asaas_accounts`). Sem ela, checkout, pagamento de cobrança, segunda via, cobrança manual e reativação respondem **409 `RECEBIMENTO_NAO_CONFIGURADO`** ("Este clube ainda não configurou o recebimento das mensalidades."); a automação pula o clube com um alerta no log. **Nunca** cai no simulado nem na conta da ANNETEC — o club-billing não usa `ASAAS_API_KEY`.
 
-A plataforma segue a mesma lógica com `platform_billing_settings.gateway` → `PLATFORM_PAYMENT_GATEWAY` → `simulated` (`apps/api/src/modules/platform-billing/gateway.ts:48-58`).
+A plataforma segue a lógica antiga com `platform_billing_settings.gateway` → `PLATFORM_PAYMENT_GATEWAY` → `simulated`, na conta da ANNETEC (`apps/api/src/modules/platform-billing/gateway.ts`); sem chave fora de produção ela ainda cai no simulado.
 
 Regra importante: **a cobrança segue no gateway em que nasceu**. Cada linha de `club_charges`/`platform_charges` grava `gateway_provider`. Trocar o gateway do inquilino só afeta as próximas cobranças (`provider.ts:20-22`, `provider.ts:74`).
 
@@ -74,40 +74,42 @@ Detalhes do caminho:
 - Se o `POST /payments` der timeout ou 5xx, o gateway consulta por `externalReference` antes de qualquer repetição (`gateway.ts:96-106`). POST nunca é repetido automaticamente (`client.ts:107`).
 - O webhook e a sincronização periódica chamam o mesmo handler (`apps/api/src/modules/club-billing/events.service.ts:135`).
 
-### Vários inquilinos numa única conta Asaas
+### Cada clube na própria conta Asaas
 
 ```mermaid
 flowchart LR
-    subgraph Servidor["API ANNETEC (uma chave no .env)"]
-        K1[ASAAS_API_KEY]
-        K2[PLATFORM_ASAAS_API_KEY<br/>vazia = usa ASAAS_API_KEY]
+    subgraph Servidor["API ANNETEC"]
+        K1["tenant_asaas_accounts<br/>chave do Clube X (cifrada)"]
+        K2["tenant_asaas_accounts<br/>chave do Clube Y (cifrada)"]
+        K3["PLATFORM_ASAAS_API_KEY<br/>(vazia = ASAAS_API_KEY)"]
     end
-    subgraph Asaas["Conta Asaas da ANNETEC"]
+    subgraph AsaasX["Conta Asaas do Clube X"]
         P1[pay_111<br/>externalReference = uuid A]
+    end
+    subgraph AsaasY["Conta Asaas do Clube Y"]
         P2[pay_222<br/>externalReference = uuid B]
+    end
+    subgraph AsaasA["Conta Asaas da ANNETEC"]
         P3[pay_333<br/>externalReference = plt_...]
     end
-    subgraph Banco["Postgres"]
-        C1[club_charges A<br/>organization_id = Clube X]
-        C2[club_charges B<br/>organization_id = Clube Y]
-        C3[platform_charges<br/>organization_id = Clube X]
-    end
-    K1 --> P1 & P2
-    K2 --> P3
-    P1 <--> C1
-    P2 <--> C2
-    P3 <--> C3
+    K1 --> P1
+    K2 --> P2
+    K3 --> P3
+    P1 -- "webhook /asaas/clube/X" --> C1[club_charges A]
+    P2 -- "webhook /asaas/clube/Y" --> C2[club_charges B]
+    P3 -- "webhook /asaas-plataforma" --> C3[platform_charges]
 ```
 
-| Peça | Onde mora | Papel na separação |
+| Peça | Onde mora | Papel |
 |---|---|---|
-| Chave de API | `.env` do servidor (uma só) | Todos os inquilinos usam a mesma conta Asaas |
+| Chave de API do clube | `tenant_asaas_accounts.api_key_encrypted` (AES-256-GCM, `lib/crypto.ts`) | Cobranças do clube nascem na conta dele; nunca sai da API |
+| Token do webhook do clube | `tenant_asaas_accounts.webhook_token_encrypted` | Conferido no header `asaas-access-token` da rota do clube |
 | `externalReference` da cobrança | Asaas, igual a `club_charges.id` ou `plt_<id>` | Liga o pagamento à linha certa |
-| `organization_id` | `club_charges`, `club_subscriptions`, `platform_charges` | Define de qual inquilino é a cobrança |
-| `gateway_customer_id` | `club_subscriptions` e `platform_subscriptions` | Id do cliente no Asaas, por assinatura |
-| `externalReference` do cliente | Asaas: `user.id` do associado (clube) ou `organization_id` (plataforma) | Só informativo (`charges.service.ts:110-118`) |
+| `organization_id` | `club_charges`, `club_subscriptions`, URL do webhook | O webhook de um clube só mexe em cobrança daquele clube (evento de outro clube é logado e ignorado) |
+| `gateway_customer_id` / `card_token` | `club_subscriptions` | Id do cliente e token do cartão **na conta do clube** — por isso trocar de conta com assinaturas vivas é bloqueado |
+| Chave da ANNETEC | `.env` (`PLATFORM_ASAAS_API_KEY ?? ASAAS_API_KEY`) | Só a cobrança da plataforma |
 
-Atenção: o cliente no Asaas é buscado por CPF/CNPJ (`gateway.ts:40-44`). Se a mesma pessoa for associada de dois clubes, as duas assinaturas apontam para o **mesmo** cliente no Asaas.
+O cliente no Asaas é buscado por CPF/CNPJ **dentro da conta do clube** (`gateway.ts`): a mesma pessoa associada a dois clubes vira dois clientes, um em cada conta.
 
 ---
 
@@ -120,10 +122,10 @@ Arquivo: `apps/api/.env` (modelo em `apps/api/.env.example`). Validação em `ap
 | Variável | Para quê | Valor sandbox | Valor produção | Obrigatória? |
 |---|---|---|---|---|
 | `NODE_ENV` | Liga as regras de produção (webhook sem token = 401, automação e atalhos de demo desligados por padrão) | `development` | `production` | Sim em produção |
-| `PAYMENT_GATEWAY` | Gateway padrão do clube (`env.ts:61`) | `asaas` (ou `simulated` e override por inquilino) | `asaas` (ou override por inquilino) | Não. Padrão `simulated` |
-| `ASAAS_API_KEY` | Chave da conta Asaas usada pelo clube e, por fallback, pela plataforma (`env.ts:63`, mín. 10 caracteres) | `$aact_hmlg_...` | `$aact_prod_...` | Sim para usar Asaas |
-| `ASAAS_ENV` | Escolhe a URL base (`env.ts:64`). Vale para as duas chaves | `sandbox` | `production` | Não. Padrão `sandbox` |
-| `ASAAS_WEBHOOK_TOKEN` | Token conferido no header `asaas-access-token` do webhook do clube (`env.ts:66`) | Gerado, 64 hex | Gerado, 64 hex, diferente do sandbox | Sim em produção (sem ele: 401) |
+| `PAYMENT_GATEWAY` | Gateway padrão do clube | `asaas` (ou `simulated` e override por inquilino) | `asaas` | Não. Padrão `simulated` (produção exige `asaas`) |
+| `ASAAS_API_KEY` | Chave da conta Asaas **da ANNETEC** — só a cobrança da plataforma (fallback de `PLATFORM_ASAAS_API_KEY`). O club-billing **não** usa: cada clube conecta a própria chave no painel | `$aact_hmlg_...` | `$aact_prod_...` | Esta ou `PLATFORM_ASAAS_API_KEY` em produção |
+| `ASAAS_ENV` | URL base da conta da ANNETEC. A chave de cada clube carrega o ambiente no prefixo | `sandbox` | `production` | Não. Padrão `sandbox` |
+| `ASAAS_WEBHOOK_TOKEN` | Fallback de `PLATFORM_ASAAS_WEBHOOK_TOKEN` (webhook da plataforma). O webhook de cada clube tem token próprio, gerado ao conectar | Gerado, 64 hex | Gerado, 64 hex | Este ou `PLATFORM_ASAAS_WEBHOOK_TOKEN` em produção |
 | `ASAAS_USER_AGENT` | `User-Agent` exigido pelo Asaas em contas novas (`env.ts:68`) | `ANNETEC-Clube/1.0` | `ANNETEC-Clube/1.0` | Não. Tem padrão |
 | `ASAAS_TIMEOUT_MS` | Timeout de cada chamada ao Asaas (`env.ts:69`) | `20000` | `20000` | Não. Padrão `20000` |
 | `SIMULATED_PIX_APPROVE_SECONDS` | Segundos até o Pix simulado compensar; `0` = só pelo botão (`env.ts:71`) | `20` | irrelevante com Asaas | Não |
@@ -133,7 +135,7 @@ Arquivo: `apps/api/.env` (modelo em `apps/api/.env.example`). Validação em `ap
 | `BILLING_AUTOMATION_INTERVAL_SECONDS` | Intervalo do timer do clube (`env.ts:81-84`, mín. 10) | `60` | `60` | Não. Padrão `60` |
 | `WEB_BASE_URL` | Base dos links montados pela API: boleto simulado e página pública da fatura da plataforma, usada nos e-mails (`env.ts:86`, `env.ts:158`, `access-key.ts:30-33`) | `http://localhost:3000` | `https://<web de produção>` | Recomendada. Padrão: 1ª origem de `CORS_ORIGINS` |
 | `PLATFORM_PAYMENT_GATEWAY` | Gateway padrão da cobrança ANNETEC → inquilino (`env.ts:95`) | `asaas` | `asaas` | Não. Padrão `simulated` |
-| `PLATFORM_ASAAS_API_KEY` | Chave de uma conta Asaas só para a plataforma (`env.ts:97`) | vazio ou `$aact_hmlg_...` | vazio ou `$aact_prod_...` | Não. Vazio = `ASAAS_API_KEY` |
+| `PLATFORM_ASAAS_API_KEY` | Chave da conta Asaas da ANNETEC (cobrança da plataforma) | vazio ou `$aact_hmlg_...` | vazio ou `$aact_prod_...` | Não. Vazio = `ASAAS_API_KEY` |
 | `PLATFORM_ASAAS_WEBHOOK_TOKEN` | Token do webhook `/asaas-plataforma` (`env.ts:99`) | vazio ou gerado | gerado (recomendado separado) | Não. Vazio = `ASAAS_WEBHOOK_TOKEN` |
 | `PLATFORM_BILLING_AUTOMATION_ENABLED` | Liga o timer da automação da plataforma (`env.ts:101`, regra em `env.ts:161`) | vazio | `true` em servidor persistente | Não. Vazio = segue `BILLING_AUTOMATION_ENABLED` |
 | `PLATFORM_BILLING_AUTOMATION_INTERVAL_SECONDS` | Intervalo do timer da plataforma (`env.ts:102-104`) | `60` | `60` | Não. Padrão `60` |
@@ -151,18 +153,21 @@ API_BASE_URL=http://localhost:3333
 CORS_ORIGINS=http://localhost:3000
 WEB_BASE_URL=http://localhost:3000
 
-# Clube (associado -> inquilino)
+# Clube (associado -> inquilino): cada clube conecta a PRÓPRIA chave no painel
+# (Faturamento -> Configurações -> Recebimento). Nada de chave do clube aqui.
 PAYMENT_GATEWAY=asaas
-ASAAS_API_KEY=$aact_hmlg_COLE_A_CHAVE_DA_SANDBOX_AQUI
-ASAAS_ENV=sandbox
-ASAAS_WEBHOOK_TOKEN=COLE_O_TOKEN_GERADO_AQUI_64_HEX
 ASAAS_USER_AGENT=ANNETEC-Clube/1.0
 ASAAS_TIMEOUT_MS=20000
 
 BILLING_AUTOMATION_ENABLED=true
 BILLING_AUTOMATION_INTERVAL_SECONDS=60
 
-# Plataforma (ANNETEC -> inquilino). Vazio = usa as do clube.
+# Conta Asaas da ANNETEC (cobrança da plataforma)
+ASAAS_API_KEY=$aact_hmlg_COLE_A_CHAVE_DA_SANDBOX_DA_ANNETEC_AQUI
+ASAAS_ENV=sandbox
+ASAAS_WEBHOOK_TOKEN=COLE_O_TOKEN_GERADO_AQUI_64_HEX
+
+# Plataforma (ANNETEC -> inquilino). Vazio = usa ASAAS_API_KEY / ASAAS_WEBHOOK_TOKEN.
 PLATFORM_PAYMENT_GATEWAY=asaas
 PLATFORM_ASAAS_API_KEY=
 PLATFORM_ASAAS_WEBHOOK_TOKEN=
@@ -183,13 +188,15 @@ API_BASE_URL=https://api.SEU-DOMINIO.com.br
 CORS_ORIGINS=https://app.SEU-DOMINIO.com.br
 WEB_BASE_URL=https://app.SEU-DOMINIO.com.br
 
-# Clube (associado -> inquilino)
+# Clube (associado -> inquilino): chave de PRODUÇÃO de cada clube, colada no painel.
 PAYMENT_GATEWAY=asaas
-ASAAS_API_KEY=$aact_prod_COLE_A_CHAVE_DE_PRODUCAO_AQUI
-ASAAS_ENV=production
-ASAAS_WEBHOOK_TOKEN=COLE_UM_TOKEN_NOVO_64_HEX
 ASAAS_USER_AGENT=ANNETEC-Clube/1.0
 ASAAS_TIMEOUT_MS=20000
+
+# Conta Asaas da ANNETEC (cobrança da plataforma)
+ASAAS_API_KEY=$aact_prod_COLE_A_CHAVE_DE_PRODUCAO_DA_ANNETEC_AQUI
+ASAAS_ENV=production
+ASAAS_WEBHOOK_TOKEN=
 
 # Em servidor persistente (Railway/Render/VM): ligue. Na Vercel não há timer (ver seção 6).
 BILLING_AUTOMATION_ENABLED=true
@@ -204,22 +211,22 @@ PLATFORM_BILLING_AUTOMATION_INTERVAL_SECONDS=60
 PLATFORM_DEMO_TOOLS_ENABLED=false
 ```
 
-### Regra de fallback e chave compartilhada
+### Regra de fallback
 
-- `PLATFORM_ASAAS_API_KEY` vazia → a plataforma usa `ASAAS_API_KEY` (`platform-billing/gateway.ts:34-36`).
-- `PLATFORM_ASAAS_WEBHOOK_TOKEN` vazio → usa `ASAAS_WEBHOOK_TOKEN` (`platform-billing/gateway.ts:43-45`).
-- `PLATFORM_BILLING_AUTOMATION_ENABLED` vazio → segue a do clube (`env.ts:161`).
-- A chave do clube é **uma só para todos os inquilinos**. Não existe chave por inquilino (`provider.ts:74-92` cria um único `AsaasGateway` por processo).
+- `PLATFORM_ASAAS_API_KEY` vazia → a plataforma usa `ASAAS_API_KEY` (`platform-billing/gateway.ts`).
+- `PLATFORM_ASAAS_WEBHOOK_TOKEN` vazio → usa `ASAAS_WEBHOOK_TOKEN`.
+- `PLATFORM_BILLING_AUTOMATION_ENABLED` vazio → segue a do clube.
+- **Clube:** não há fallback. A chave é por inquilino (`tenant_asaas_accounts`), cifrada, resolvida em runtime com cache por clube + `updated_at` (`integrations/payments/provider.ts`). Sem ela o clube não cobra no Asaas (409 `RECEBIMENTO_NAO_CONFIGURADO`).
 
-### Duas contas Asaas (clube e plataforma separados)
+### Política de ambiente das chaves dos clubes
 
-Dá para usar uma conta Asaas para o dinheiro dos clubes e outra para o faturamento da ANNETEC:
+A mesma da trava de boot (`config/assert-production.ts` → `allowedClubAsaasEnvironments`):
 
-- `ASAAS_API_KEY` = chave da conta "clubes".
-- `PLATFORM_ASAAS_API_KEY` = chave da conta "ANNETEC".
-- Cada webhook é cadastrado na conta correspondente.
-
-Limite: `ASAAS_ENV`, `ASAAS_USER_AGENT` e `ASAAS_TIMEOUT_MS` são compartilhados (`platform-billing/gateway.ts:201-209`). As duas contas precisam estar no **mesmo ambiente** (as duas sandbox ou as duas produção).
+| Servidor | Chave do clube aceita |
+|---|---|
+| Produção estrita (`NODE_ENV=production`) | só `$aact_prod_…` |
+| Demo (`NODE_ENV=production` + `DEPLOY_STAGE=preview`) | só `$aact_hmlg_…` |
+| Desenvolvimento/teste | as duas |
 
 ---
 
@@ -235,9 +242,12 @@ Limite: `ASAAS_ENV`, `ASAAS_USER_AGENT` e `ASAAS_TIMEOUT_MS` são compartilhados
 
 No painel do Asaas: acesse `https://sandbox.asaas.com` e crie uma conta. A sandbox não movimenta dinheiro e não exige aprovação de documentos para testar.
 
-### 2. Gerar a chave de API
+### 2. Gerar as chaves de API
 
 No painel do Asaas (sandbox): menu de Integrações → Chaves de API → gerar chave. A chave da sandbox começa com `$aact_hmlg_`. Copie na hora; o Asaas só mostra uma vez.
+
+- **Conta da ANNETEC** (plataforma): vai em `ASAAS_API_KEY` (ou `PLATFORM_ASAAS_API_KEY`) no `.env`.
+- **Conta de cada clube**: crie outra conta sandbox para o clube de teste e gere a chave dela. Essa chave **não** vai no `.env`: o admin do clube cola no painel (passo 8).
 
 ### 3. Gerar o token do webhook
 
@@ -249,7 +259,7 @@ openssl rand -hex 32
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Gere um para `ASAAS_WEBHOOK_TOKEN`. Se quiser separar a plataforma, gere outro para `PLATFORM_ASAAS_WEBHOOK_TOKEN`.
+Gere um para `ASAAS_WEBHOOK_TOKEN` (ou `PLATFORM_ASAAS_WEBHOOK_TOKEN`): é o token do webhook da **plataforma**. O token do webhook de cada clube é gerado pela API ao conectar o recebimento e nunca aparece.
 
 ### 4. Preencher o `.env`
 
@@ -268,7 +278,7 @@ pnpm dev            # API + web em paralelo
 No log, confira:
 
 - `Automação de cobrança do clube agendada` (primeira rodada 10 s após o boot, `apps/api/src/modules/club-billing/automation.service.ts:497-502`).
-- Nenhum aviso `PAYMENT_GATEWAY=asaas sem ASAAS_API_KEY` (`provider.ts:61`). Se aparecer, a chave não foi lida.
+- Clube com Asaas sem conta conectada aparece uma vez no log: `Clube sem conta de recebimento (Asaas) conectada` — conecte no passo 8.
 
 ### 6. Expor a API local para o webhook
 
@@ -280,29 +290,36 @@ ngrok http 3333
 cloudflared tunnel --url http://localhost:3333
 ```
 
-Anote a URL pública, por exemplo `https://abc123.ngrok-free.app`. Ela muda a cada execução do túnel gratuito; quando mudar, rode o `asaas:setup` de novo (passo 7), que atualiza a URL dos webhooks já cadastrados.
+Anote a URL pública, por exemplo `https://abc123.ngrok-free.app`, e use-a como `API_BASE_URL` da API (o webhook de cada clube é montado a partir dela; com `localhost` ele fica `pendente`). Ela muda a cada execução do túnel gratuito; quando mudar, atualize `API_BASE_URL`, rode o `asaas:setup` de novo (passo 7, webhook da plataforma) e clique em **Testar** no recebimento de cada clube (passo 8), que atualiza a URL dos webhooks já cadastrados.
 
 Teste o token antes de cadastrar no Asaas:
 
 ```bash
 TUNNEL=https://abc123.ngrok-free.app
-TOKEN_WH=COLE_O_ASAAS_WEBHOOK_TOKEN
+TOKEN_WH=COLE_O_PLATFORM_ASAAS_WEBHOOK_TOKEN_OU_ASAAS_WEBHOOK_TOKEN
 
-# Token certo: 200 {"success":true,"data":{"received":true}}
-curl -i -X POST "$TUNNEL/api/v1/webhooks/asaas" \
+# Webhook da plataforma — token certo: 200 {"success":true,"data":{"received":true}}
+curl -i -X POST "$TUNNEL/api/v1/webhooks/asaas-plataforma" \
   -H "asaas-access-token: $TOKEN_WH" -H 'content-type: application/json' \
   -d '{"id":"evt_teste_1","event":"PAYMENT_RECEIVED","payment":{"id":"pay_inexistente"}}'
 
 # Token errado: 401
-curl -i -X POST "$TUNNEL/api/v1/webhooks/asaas" \
+curl -i -X POST "$TUNNEL/api/v1/webhooks/asaas-plataforma" \
   -H "asaas-access-token: errado" -H 'content-type: application/json' -d '{}'
+
+# Webhook de um clube SEM conta conectada (ou token errado): 401
+curl -i -X POST "$TUNNEL/api/v1/webhooks/asaas/clube/ID_DA_ORGANIZACAO" \
+  -H "asaas-access-token: qualquer" -H 'content-type: application/json' -d '{}'
+
+# Rota global antiga do clube: 410 (desativada)
+curl -i -X POST "$TUNNEL/api/v1/webhooks/asaas" -H 'content-type: application/json' -d '{}'
 ```
 
-O primeiro chega como "sem cobrança correspondente — ignorado" no log (`events.service.ts:141-146`), o que é esperado.
+O primeiro chega como "sem cobrança correspondente — ignorado" no log, o que é esperado. O webhook do clube só se testa depois de conectar o recebimento (passo 8): o token dele é gerado pela API e não é exibido — use **Testar** no painel e confira as entregas no painel do Asaas do clube.
 
-### 7. Cadastrar os DOIS webhooks e a chave Pix (script)
+### 7. Cadastrar o webhook da PLATAFORMA e a chave Pix (script)
 
-Com a chave em `ASAAS_API_KEY` e o túnel no ar, rode na raiz do repositório:
+Com a chave da ANNETEC em `PLATFORM_ASAAS_API_KEY` (ou `ASAAS_API_KEY`) e o túnel no ar, rode na raiz do repositório:
 
 ```bash
 pnpm --filter @annetec/api asaas:setup --public-url https://abc123.ngrok-free.app --pix-key
@@ -310,32 +327,36 @@ pnpm --filter @annetec/api asaas:setup --public-url https://abc123.ngrok-free.ap
 pnpm --filter @annetec/api asaas:setup --public-url https://abc123.ngrok-free.app --pix-key --dry-run
 ```
 
-O script (`apps/api/scripts/asaas-setup.ts`) é idempotente:
+O script (`apps/api/scripts/asaas-setup.ts`) é idempotente e cuida **só da conta da ANNETEC**:
 
 1. Valida a chave em `GET /v3/myAccount/commercialInfo/` e mostra nome, e-mail e situação da conta. Chave recusada, ou prefixo `$aact_prod_` com `ASAAS_ENV=sandbox` (e o contrário), param o script com erro.
 2. Lista os webhooks da conta (`GET /v3/webhooks`). Se já existir um com a mesma URL, ou com o mesmo nome (o túnel mudou), atualiza com `PUT /v3/webhooks/{id}`; senão cria com `POST /v3/webhooks`. Nunca duplica.
-3. Cadastra os dois webhooks da tabela abaixo: ativos, fila não interrompida, v3, envio sequencial, os 7 eventos e o token do `.env`. Se `PLATFORM_ASAAS_API_KEY` for outra chave, o webhook da plataforma vai na conta da plataforma.
+3. Cadastra o webhook da plataforma (`/api/v1/webhooks/asaas-plataforma`): ativo, fila não interrompida, v3, envio sequencial, os eventos de `ASAAS_WEBHOOK_EVENTS` (`apps/api/src/integrations/asaas/webhook-events.ts`) e o token do `.env`. Se encontrar o webhook antigo do clube (`/api/v1/webhooks/asaas`) na conta, avisa para removê-lo no painel.
 4. Com `--pix-key`, cria uma chave Pix aleatória (EVP) se a conta não tiver nenhuma ativa ou aguardando ativação (`/v3/pix/addressKeys`). Sem chave Pix a sandbox não gera QR Code.
 5. Imprime um resumo e sai com código 1 em qualquer erro. Chave e token nunca aparecem inteiros.
 
-Outras opções: `--email ops@seudominio` (e-mail que o Asaas avisa quando o webhook falha; padrão: e-mail da conta). Sem `--public-url`, o script usa `API_BASE_URL`, desde que não seja `localhost`. Se `ASAAS_WEBHOOK_TOKEN` estiver vazio, o script gera um, imprime e para: grave o valor no `.env`, reinicie a API e rode de novo. O script nunca escreve no `.env`.
+O webhook de **cada clube** não passa por aqui: a API cadastra na conta do clube ao conectar o recebimento (passo 8) e reativa a cada **Testar**.
 
-**Alternativa manual.** No painel do Asaas (sandbox): Integrações → Webhooks → Adicionar. Cadastre dois:
+Outras opções: `--email ops@seudominio` (e-mail que o Asaas avisa quando o webhook falha; padrão: e-mail da conta). Sem `--public-url`, o script usa `API_BASE_URL`, desde que não seja `localhost`. Se o token estiver vazio, o script gera um, imprime e para: grave o valor no `.env`, reinicie a API e rode de novo. O script nunca escreve no `.env`.
 
-| Campo no painel | Webhook do clube | Webhook da plataforma |
-|---|---|---|
-| Nome | `ANNETEC clube` | `ANNETEC plataforma` |
-| URL | `https://<túnel>/api/v1/webhooks/asaas` | `https://<túnel>/api/v1/webhooks/asaas-plataforma` |
-| Token de autenticação | valor de `ASAAS_WEBHOOK_TOKEN` | valor de `PLATFORM_ASAAS_WEBHOOK_TOKEN` (ou o mesmo do clube, se vazio) |
-| Versão da API | v3 | v3 |
-| Tipo de envio | Sequencial | Sequencial |
-| Fila de sincronização | Ativada | Ativada |
-| Webhook ativo | Sim | Sim |
-| E-mail de erro | e-mail técnico da equipe | idem |
+**Alternativa manual (plataforma).** No painel do Asaas da ANNETEC: Integrações → Webhooks → Adicionar.
+
+| Campo no painel | Webhook da plataforma |
+|---|---|
+| Nome | `ANNETEC plataforma` |
+| URL | `https://<túnel>/api/v1/webhooks/asaas-plataforma` |
+| Token de autenticação | valor de `PLATFORM_ASAAS_WEBHOOK_TOKEN` (ou `ASAAS_WEBHOOK_TOKEN`, se vazio) |
+| Versão da API | v3 |
+| Tipo de envio | Sequencial |
+| Fila de sincronização | Ativada |
+| Webhook ativo | Sim |
+| E-mail de erro | e-mail técnico da equipe |
+
+O webhook de cada clube é cadastrado pela API com nome `ANNETEC — Clube <slug>`, URL `<API_BASE_URL>/api/v1/webhooks/asaas/clube/<organizationId>`, os mesmos eventos e um token aleatório guardado cifrado. Não cadastre à mão (o token não é exibido).
 
 O Asaas envia o token no header `asaas-access-token`. A API compara em tempo constante, com SHA-256 dos dois lados (`apps/api/src/integrations/asaas/webhook.ts:20-26`).
 
-Eventos a marcar (os 7 que o código trata, `events.service.ts:210-222` e `platform-billing/events.service.ts:437-447`):
+Eventos que os webhooks assinam (lista única em `integrations/asaas/webhook-events.ts`; os que mudam estado):
 
 | Evento | Efeito no sistema |
 |---|---|
@@ -349,15 +370,15 @@ Eventos a marcar (os 7 que o código trata, `events.service.ts:210-222` e `platf
 
 Outros eventos são gravados na timeline mas não mudam estado. Não há prejuízo em marcá-los, mas não há ganho.
 
-Por que dois webhooks na mesma conta funcionam: cada URL recebe todos os eventos da conta. O handler do clube ignora o `externalReference` `plt_...` (não é uuid) e não acha a cobrança pelo `gateway_charge_id`. O da plataforma faz o inverso. Os dois respondem 200 e seguem (`events.service.ts:180-201`, `platform-billing/events.service.ts:402-425`).
+Se a mesma conta Asaas servir a mais de um clube (ou ao clube e à plataforma), cada URL recebe todos os eventos da conta. O webhook do clube só aplica eventos de cobrança **daquele** clube (os de outro clube são logados e ignorados) e ignora o `externalReference` `plt_...`; o da plataforma faz o inverso. Todos respondem 200 e seguem.
 
-### 8. Ativar o Asaas para um inquilino
+### 8. Conectar o recebimento do clube e ativar o Asaas
 
-Se `PAYMENT_GATEWAY=asaas`, todo inquilino sem override já usa o Asaas. Para ativar só um:
+Cada clube recebe na própria conta Asaas. O **admin do clube** (ou o superadmin da ANNETEC, para suporte) cola a chave de API da conta do clube no painel. Passo a passo para o clube gerar a chave: seção 5.
 
-**Pela tela:** `/<slug>/admin/faturamento` → aba **Automação** → campo **Gateway deste clube** → Asaas → salvar. O cartão "Gateway e automação" mostra se a chave está configurada e se é sandbox (`apps/web/components/admin/faturamento/automation-panel.tsx:223-247`).
+**Pela tela:** `/<slug>/admin/faturamento` → Configurações → **Recebimento** → colar a chave → Conectar. A tela mostra a conta (nome, CPF/CNPJ mascarado, e-mail), a situação cadastral no Asaas, o status do webhook e os 4 últimos caracteres da chave. **Testar** revalida a chave e reativa o webhook.
 
-**Pela API:** a API só aceita `Authorization: Bearer <token>`; o token vem do login (`apps/api/src/modules/auth/controller.ts:16-29`).
+**Pela API:** a API só aceita `Authorization: Bearer <token>`; o token vem do login.
 
 ```bash
 API=http://localhost:3333
@@ -367,15 +388,23 @@ TOKEN=$(curl -s -X POST "$API/api/v1/auth/login" \
   -H 'content-type: application/json' \
   -d '{"email":"admin@seuclube.com.br","password":"SENHA"}' | jq -r '.data.token')
 
-# Grava o override. O campo é gatewayOverride; null volta a seguir PAYMENT_GATEWAY.
+# Conecta (ou renova) a chave do clube. Valida no Asaas e cadastra o webhook do clube.
+curl -s -X PUT "$API/api/v1/t/$SLUG/faturamento/configuracoes/recebimento" \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"apiKey":"$aact_hmlg_CHAVE_DA_CONTA_DO_CLUBE"}' | jq '.data'
+
+# Situação (sem segredo)
+curl -s "$API/api/v1/t/$SLUG/faturamento/configuracoes/recebimento" -H "authorization: Bearer $TOKEN" | jq '.data'
+
+# Grava o override (opcional). O campo é gatewayOverride; null volta a seguir PAYMENT_GATEWAY.
 curl -s -X PATCH "$API/api/v1/t/$SLUG/faturamento/configuracoes" \
   -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"gatewayOverride":"asaas"}' | jq '.data | {gateway, gatewayOverride, asaasConfigured, sandbox}'
 ```
 
-Esperado: `gateway: "asaas"`, `asaasConfigured: true`, `sandbox: true`. Se o servidor estiver sem chave, a API recusa com "O Asaas ainda não está configurado no servidor" (`apps/api/src/modules/club-billing/settings.service.ts:134-136`).
+Esperado: recebimento `connected: true`, `webhookStatus: "ativo"` (com `API_BASE_URL` pública) e configurações com `gateway: "asaas"`, `asaasConfigured: true`, `sandbox: true`. Escolher o override `asaas` sem conta conectada é recusado ("Conecte a conta Asaas do clube…").
 
-As rotas `/faturamento/*` exigem admin do inquilino ou sessão da equipe ANNETEC (`apps/api/src/modules/club-billing/admin-controller.ts:61`, `apps/api/src/http/middleware/auth.ts:55-59`).
+As rotas `/faturamento/*` exigem admin do inquilino; a equipe ANNETEC só lê, e só o superadmin grava (`apps/api/src/http/middleware/auth.ts`, `requireTenantRole`).
 
 ### 9. Fazer um checkout de teste
 
@@ -449,7 +478,7 @@ No painel do Asaas, a tela do webhook mostra cada entrega e o status HTTP devolv
 pnpm test:api
 ```
 
-`apps/api/tests/club-billing-asaas.test.ts` cobre o cliente (header, GET sem corpo, retry só em GET, 400 de cartão, 401), o gateway (Pix, cartão, recuperação por `externalReference`) e o token do webhook. Usa `fetch` falso; não chama o Asaas.
+`apps/api/tests/club-billing-asaas.test.ts` cobre o cliente (header, GET sem corpo, retry só em GET, 400 de cartão, 401), o gateway (Pix, cartão, recuperação por `externalReference`) e o token do webhook. `club-billing-receiving-account.test.ts` e `club-billing-receiving-provider.test.ts` cobrem a conta do clube (formato/ambiente da chave, conectar, rotação × troca de conta, webhook, desconectar, cache do provider, checkout bloqueado e automação pulando o clube). Usam `fetch`/banco falsos; não chamam o Asaas.
 
 ---
 
@@ -457,8 +486,8 @@ pnpm test:api
 
 ### Pré-requisitos
 
-- Conta Asaas de produção **aprovada**. No painel do Asaas: envio de documentos da empresa e análise cadastral. Sem aprovação o Asaas pode recusar operações (a API devolve 403, ver `client.ts:172-179`).
-- Chave de produção, prefixo `$aact_prod_`.
+- Contas Asaas de produção **aprovadas** — a da ANNETEC (plataforma) e a de cada clube. No painel do Asaas: envio de documentos da empresa e análise cadastral. Sem aprovação o Asaas pode recusar operações (a API devolve 403, ver `client.ts:172-179`).
+- Chaves de produção, prefixo `$aact_prod_` (a da ANNETEC no `.env`; a de cada clube colada no painel — o servidor de produção recusa chave de sandbox de clube).
 - **Banco de produção separado** do banco onde você testou a sandbox. O banco não registra em qual ambiente/conta a cobrança nasceu, só `gateway_provider = 'asaas'`. Cobranças, clientes e tokens de cartão da sandbox não existem na produção.
 - API publicada com URL HTTPS pública e estável.
 
@@ -467,23 +496,21 @@ pnpm test:api
 1. **Variáveis.** Use o bloco de produção da seção 2. Pontos obrigatórios:
    - `NODE_ENV=production`.
    - `ASAAS_ENV=production`.
-   - `ASAAS_WEBHOOK_TOKEN` preenchido. Em produção, sem token, os dois webhooks respondem 401 a qualquer chamada (`apps/api/src/modules/club-billing/webhook-controller.ts:26-27`, `apps/api/src/modules/platform-billing/webhook-controller.ts:26-27`).
+   - `PLATFORM_ASAAS_WEBHOOK_TOKEN` (ou `ASAAS_WEBHOOK_TOKEN`) preenchido: sem ele o webhook da plataforma responde 401 e a API nem sobe (`config/assert-production.ts`). O webhook de cada clube usa token próprio, gerado ao conectar.
    - Tokens **novos**, diferentes dos da sandbox.
-2. **Webhooks.** Com as variáveis de produção carregadas (`ASAAS_ENV=production`, chave `$aact_prod_`, tokens novos), rode o script da seção 3, passo 7, com a URL de produção:
+2. **Webhook da plataforma.** Com as variáveis de produção carregadas (`ASAAS_ENV=production`, chave `$aact_prod_`, tokens novos), rode o script da seção 3, passo 7, com a URL de produção:
 
    ```bash
    pnpm --filter @annetec/api asaas:setup --public-url https://api.SEU-DOMINIO.com.br --dry-run   # confere
    pnpm --filter @annetec/api asaas:setup --public-url https://api.SEU-DOMINIO.com.br             # aplica
    ```
 
-   - Cadastra `https://api.SEU-DOMINIO.com.br/api/v1/webhooks/asaas` e `https://api.SEU-DOMINIO.com.br/api/v1/webhooks/asaas-plataforma`.
-   - Se usar duas contas (`PLATFORM_ASAAS_API_KEY` diferente), cada webhook vai na sua conta.
+   - Cadastra `https://api.SEU-DOMINIO.com.br/api/v1/webhooks/asaas-plataforma` na conta da ANNETEC. Se ainda existir o webhook antigo do clube (`/api/v1/webhooks/asaas`, hoje 410), o script avisa: remova-o no painel.
+   - Os webhooks dos clubes são cadastrados pela API quando cada clube conecta o recebimento (seção 5).
    - `--pix-key` também funciona em produção, mas o Asaas só cria chave Pix em conta aprovada. Se recusar, cadastre a chave pelo painel.
    - O script lê `apps/api/.env`. Rode onde as variáveis de produção estejam disponíveis (no servidor, ou localmente com elas exportadas no shell; variável do ambiente vence o `.env`).
-   - Alternativa manual: cadastre os dois webhooks no painel do Asaas de produção com os mesmos campos da tabela da seção 3, passo 7.
-3. **Gateway padrão.** Escolha uma estratégia:
-   - `PAYMENT_GATEWAY=asaas`: todo inquilino sem override cobra no Asaas.
-   - `PAYMENT_GATEWAY=simulated` e override `asaas` só nos inquilinos já liberados (tela ou `PATCH /configuracoes`).
+   - Alternativa manual: cadastre o webhook da plataforma no painel do Asaas de produção com os campos da tabela da seção 3, passo 7.
+3. **Recebimento dos clubes.** Com `PAYMENT_GATEWAY=asaas` (obrigatório em produção), cada clube só vende depois que o admin dele conecta a chave de produção da conta do clube (seção 5). Até lá a vitrine mostra o aviso (`receivingConfigured: false`) e a adesão responde 409 `RECEBIMENTO_NAO_CONFIGURADO`.
 4. **Automação.** Em produção o padrão é **desligado** (`env.ts:155`).
    - Servidor persistente (Railway, Render, VM com `pnpm --filter @annetec/api start`): defina `BILLING_AUTOMATION_ENABLED=true` e `PLATFORM_BILLING_AUTOMATION_ENABLED=true`. Os timers sobem em `apps/api/src/index.ts:16` e `apps/api/src/index.ts:22`.
    - **Vercel:** o ponto de entrada é `apps/api/src/vercel.ts`, que não chama os `start*Automation`. Não há timer, qualquer que seja a env. É preciso um cron externo chamando `POST .../automacao/executar` (seção 6). Sem isso nenhum ciclo novo é gerado, nada vence e nada é suspenso.
@@ -492,25 +519,18 @@ pnpm test:api
 
 ### Rotação de chaves
 
-**Mesma conta Asaas, chave nova** (caso normal):
+**Chave de um clube** (mesma conta Asaas, chave nova): o admin do clube gera a nova chave na MESMA conta e cola em Configurações → Recebimento. Vale na hora (o cache do gateway é invalidado pelo `updated_at` da conta; não precisa reiniciar). Depois ele desativa a chave antiga no Asaas. Ids de cobrança, clientes e tokens de cartão pertencem à conta, não à chave.
+
+**Clube trocando de conta Asaas:** a API compara a conta da chave nova com a salva (`/myAccount/status` → `id`; sem id, o CPF/CNPJ; ambiente diferente = conta diferente). Se houver assinaturas com cliente/cartão na conta atual (aguardando pagamento, ativas, em atraso ou suspensas), responde **409** "a conta atual ainda tem N assinaturas vinculadas". Sem vínculo, troca: o webhook da conta antiga é apagado (best effort, com a chave antiga), o token do webhook do clube é trocado (o antigo ficava visível no painel da conta anterior) e o webhook novo, com token novo, é cadastrado na conta nova; os ids de cliente/cartão das assinaturas **encerradas** são esquecidos (uma reativação cria o cliente na conta nova). Desconectar segue a mesma regra.
+
+**Chave da ANNETEC (plataforma):**
 
 1. No painel do Asaas, gere a nova chave.
-2. Troque `ASAAS_API_KEY` (e/ou `PLATFORM_ASAAS_API_KEY`) no ambiente.
-3. Reinicie a API. O `AsaasGateway` fica em cache no processo (`provider.ts:82`, `platform-billing/gateway.ts:201`); só pega a chave nova no boot.
-4. Teste uma consulta (abra uma cobrança no painel de faturamento).
-5. Só então desative a chave antiga no painel do Asaas.
+2. Troque `PLATFORM_ASAAS_API_KEY` (ou `ASAAS_API_KEY`) no ambiente.
+3. Reinicie a API (o `AsaasGateway` da plataforma fica em cache no processo).
+4. Só então desative a chave antiga no painel do Asaas.
 
-Nada quebra: os ids de cobrança, clientes e tokens de cartão pertencem à conta, não à chave.
-
-**Token do webhook:** troque no `.env` e rode `asaas:setup` (ou edite no painel do Asaas) quase ao mesmo tempo. Entre uma troca e outra, as entregas recebem 401 e se acumulam na fila do Asaas. A sincronização de 15 min cobre o intervalo.
-
-**Outra conta Asaas** (trocar de conta): **não faça com cobranças abertas.** O código não lida com isso:
-
-- Cobranças antigas continuam com `gateway_provider = 'asaas'` e o sync passa a receber 404 da conta nova.
-- A assinatura reaproveita o `gateway_customer_id` gravado (`charges.service.ts:111`). A busca por CPF/CNPJ só acontece quando esse campo está vazio. Na conta nova, esse id não existe e a criação da cobrança falha.
-- Tokens de cartão salvos não valem na conta nova.
-
-Se precisar migrar de conta, limpe `gateway_customer_id` e `card_token` das assinaturas afetadas e encerre as cobranças abertas antes.
+**Token do webhook da plataforma:** troque no `.env` e rode `asaas:setup` (ou edite no painel do Asaas) quase ao mesmo tempo. Entre uma troca e outra, as entregas recebem 401 e se acumulam na fila do Asaas. A sincronização de 15 min cobre o intervalo.
 
 ### Limites do Asaas que o código já respeita
 
@@ -526,80 +546,74 @@ Se precisar migrar de conta, limpe `gateway_customer_id` e `card_token` das assi
 
 ### Checklist de go-live
 
-- [ ] Conta Asaas de produção aprovada.
+- [ ] Conta Asaas de produção da ANNETEC aprovada.
 - [ ] Banco de produção sem dados da sandbox.
 - [ ] `NODE_ENV=production` e `ASAAS_ENV=production`.
-- [ ] `ASAAS_API_KEY` com prefixo `$aact_prod_`.
-- [ ] `ASAAS_WEBHOOK_TOKEN` novo (64 hex) e, se separado, `PLATFORM_ASAAS_WEBHOOK_TOKEN`.
-- [ ] `WEB_BASE_URL` e `API_BASE_URL` com os domínios de produção.
-- [ ] Webhook `/api/v1/webhooks/asaas` cadastrado, ativo, v3, sequencial, 7 eventos, token conferido.
-- [ ] Webhook `/api/v1/webhooks/asaas-plataforma` cadastrado nas mesmas condições.
-- [ ] Teste com `curl` do token: certo = 200, errado = 401.
-- [ ] Gateway padrão ou override por inquilino definido.
+- [ ] `PLATFORM_ASAAS_API_KEY` (ou `ASAAS_API_KEY`) com prefixo `$aact_prod_`.
+- [ ] `PLATFORM_ASAAS_WEBHOOK_TOKEN` (ou `ASAAS_WEBHOOK_TOKEN`) novo, 64 hex.
+- [ ] `WEB_BASE_URL` e `API_BASE_URL` com os domínios de produção (`API_BASE_URL` pública: é a base do webhook de cada clube).
+- [ ] Webhook `/api/v1/webhooks/asaas-plataforma` cadastrado, ativo, v3, sequencial, token conferido.
+- [ ] Webhook antigo `/api/v1/webhooks/asaas` removido da conta da ANNETEC (a rota responde 410).
+- [ ] Teste com `curl` do token da plataforma: certo = 200, errado = 401.
+- [ ] Cada clube que vai vender: recebimento conectado com chave `$aact_prod_`, conta aprovada e webhook `ativo`.
 - [ ] Gateway da plataforma definido (env ou tela "Régua e automação").
 - [ ] Automação ligada (servidor persistente) **ou** cron externo configurado (Vercel).
 - [ ] `PLATFORM_DEMO_TOOLS_ENABLED=false`.
 - [ ] `EMAIL_PROVIDER` real (`resend` ou `sendgrid`) para os e-mails da cobrança da plataforma.
 - [ ] Transação real de valor baixo paga, webhook 200 e evento na timeline.
 - [ ] Estorno de teste pelo painel do Asaas refletido como `refunded`.
-- [ ] Rotina de repasse aos inquilinos definida (seção 5).
+- [ ] Clubes orientados a gerar a chave sem permissão de saque via API (seção 5).
 
 ---
 
-## 5. Múltiplos inquilinos: como funciona hoje e limites
+## 5. Múltiplos inquilinos: cada clube recebe na própria conta Asaas
 
-### O que existe hoje
+### O modelo
 
-- **Não há** subconta, split, `walletId` nem chave por inquilino. Nenhum desses termos aparece no código da integração.
-- **Todo recebimento cai na conta Asaas única da ANNETEC** (ou na conta indicada em `ASAAS_API_KEY`).
-- A separação é **lógica**, no nosso banco:
-  - `organization_id` em `club_subscriptions` e `club_charges`;
-  - `externalReference` da cobrança no Asaas = `club_charges.id`;
-  - lock em processo por inquilino na automação (`automation.service.ts:47`, `automation.service.ts:58-75`).
-- O inquilino escolhe apenas **o gateway** (`simulated` ou `asaas`), não a conta.
-- **O repasse ao inquilino é feito fora do sistema.** Não há rota, tabela nem relatório de repasse.
-- `revenue_share_percent` (`apps/api/src/db/schema/platform-billing.ts:61` e `:111`) é um percentual usado no cálculo da fatura que a ANNETEC emite ao inquilino. **Não** é split no gateway.
+- **Cada clube (inquilino) tem a própria conta Asaas** e recebe as mensalidades dos associados direto nela. A ANNETEC não toca no dinheiro do clube; o saque é do clube.
+- Quem conecta é o **admin do clube** (Faturamento → Configurações → Recebimento), colando a chave de API da conta dele. O superadmin da ANNETEC também pode, para suporte; o resto da equipe só consulta.
+- A chave é validada no Asaas (`GET /myAccount/commercialInfo/` e `GET /myAccount/status/`) no ambiente indicado pelo prefixo, gravada **cifrada** em `tenant_asaas_accounts` (AES-256-GCM, chave derivada do `BETTER_AUTH_SECRET`) e nunca devolvida — a tela só vê os 4 últimos caracteres.
+- Ao conectar, a API cadastra na conta do clube o webhook `ANNETEC — Clube <slug>` → `<API_BASE_URL>/api/v1/webhooks/asaas/clube/<organizationId>`, com token aleatório próprio. O webhook só aplica eventos de cobranças daquele clube.
+- **Clube sem chave = sem venda.** Com gateway `asaas`, checkout, pagamento de cobrança, segunda via, cobrança manual e reativação respondem 409 `RECEBIMENTO_NAO_CONFIGURADO` ("Este clube ainda não configurou o recebimento das mensalidades."); a vitrine abre com `receivingConfigured: false`; a automação pula o clube (sincronização, geração de ciclo e cartão) com um alerta no log por clube, sem afetar os outros. **Nunca** cai na conta da ANNETEC.
+- A cobrança da plataforma (ANNETEC → clube) continua na conta da ANNETEC (`PLATFORM_ASAAS_API_KEY ?? ASAAS_API_KEY`), sem mudança.
+- `revenue_share_percent` continua sendo só um percentual no cálculo da fatura que a ANNETEC emite ao clube. **Não** é split.
 
-Consequências práticas:
+### Passo a passo para o clube gerar a chave no Asaas
 
-| Situação | Efeito |
-|---|---|
-| Associado paga o clube X | Dinheiro entra no saldo Asaas da ANNETEC |
-| Mesmo CPF associado a dois clubes | Um só cliente no Asaas para as duas assinaturas |
-| Estorno | Feito no painel do Asaas da ANNETEC (não há rota de estorno) |
-| Extrato por inquilino | Só pelo nosso banco (`club_charges` por `organization_id`) |
+Envie ao responsável financeiro do clube:
 
-### Se precisar que cada inquilino receba na própria conta Asaas
+1. Entre na conta Asaas **do clube** (produção: `https://www.asaas.com`; teste: `https://sandbox.asaas.com`). A conta precisa estar aprovada para receber em produção.
+2. Menu **Integrações → Chaves de API → Gerar chave de API**.
+3. Nome sugerido: `ANNETEC - mensalidades`.
+4. **Sem data de expiração** (uma chave que expira para de cobrar sem aviso).
+5. **NÃO marque "operações de saque via API"** (ou equivalente, como transferências/Pix de saída pela API). A ANNETEC só cria, consulta, cancela e estorna cobranças; nunca precisa sacar.
+6. Opcional: restrinja a chave aos IPs do servidor da ANNETEC (peça o IP de saída do servidor à equipe técnica).
+7. Copie a chave na hora (o Asaas mostra uma vez). Produção começa com `$aact_prod_`; sandbox com `$aact_hmlg_`.
+8. No painel da ANNETEC: **Faturamento → Configurações → Recebimento** → cole a chave → **Conectar**. Confira o nome/CNPJ da conta exibidos, a situação cadastral e o webhook **Ativo**.
 
-No Asaas existem dois caminhos. Os dois exigem mudanças de código. Nada disto está implementado.
+Chave de outro formato (ex.: antiga, sem `prod`/`hmlg`) é recusada como inválida. O ambiente precisa casar com o servidor (seção 2, "Política de ambiente").
 
-**Opção A — subcontas (e white label).** No Asaas, a conta raiz cria subcontas por `POST /v3/accounts`. A resposta traz a `apiKey` e o `walletId` da subconta. Cada inquilino passa a ter a própria conta, saldo e saque. White label (subconta sem acesso ao painel do Asaas) depende de liberação comercial do Asaas.
+### Endpoints (admin do clube; superadmin para suporte)
 
-**Opção B — split.** A cobrança continua na conta da ANNETEC e leva no payload um array `split` com `walletId` do inquilino e `percentualValue` ou `fixedValue`. O Asaas divide o valor na liquidação. O inquilino precisa ter um `walletId` (conta própria ou subconta).
+Base: `/api/v1/t/:tenantSlug/faturamento`. Mutações limitadas a 10 por hora **por clube**; toda mutação vai para a auditoria, sem a chave (só ambiente, 4 últimos caracteres e o nome da conta).
 
-| Critério | A: subconta + chave por inquilino | B: split por `walletId` |
+| Método e rota | Corpo | Resposta (`data`) |
 |---|---|---|
-| Onde a cobrança nasce | Na conta do inquilino | Na conta da ANNETEC |
-| Chaves no servidor | Uma por inquilino (cifrada) | Uma só |
-| Webhooks | Um por subconta | Os dois de hoje |
-| Comissão ANNETEC | Cobrada à parte (platform-billing) | Pode ficar no próprio split |
-| Mudança de código | Maior | Menor |
+| `GET /configuracoes/recebimento` | — | Situação da conta (abaixo) |
+| `PUT /configuracoes/recebimento` | `{ "apiKey": "$aact_…" }` | Situação após validar a chave e cadastrar o webhook |
+| `POST /configuracoes/recebimento/testar` | — | Revalida a chave, atualiza a situação cadastral e reativa o webhook |
+| `DELETE /configuracoes/recebimento` | — | `connected: false` (apaga o webhook no Asaas, best effort) |
 
-O que mudaria no código:
+Situação (`clubReceivingAccount` em `packages/contracts`): `connected`, `env` (`sandbox`/`production`), `keyHint`, `accountName`, `cpfCnpj` (mascarado), `email`, `accountStatus` (`{ approved, general, pending[] }`), `webhookStatus` (`ativo`/`pendente`/`erro`), `webhookLastError`, `webhookUrl`, `connectedAt`, `lastCheckedAt`. A chave e o token do webhook nunca saem.
 
-| Arquivo / tabela | Mudança (A = subconta, B = split) |
-|---|---|
-| Nova tabela ou colunas em `billing_settings` | A: `asaas_account_id`, `asaas_api_key` cifrada (mesmo padrão de `tenant_integrations`), `wallet_id`. B: só `wallet_id` e regra de percentual. |
-| `apps/api/src/integrations/asaas/client.ts` | A: `accounts.create` (`POST /accounts`). B: nada além dos tipos. |
-| `apps/api/src/integrations/asaas/types.ts` | B: campo `split` em `AsaasCreatePaymentInput`. A: tipos de `/accounts`. |
-| `apps/api/src/integrations/asaas/gateway.ts` | B: montar `split` em `createCharge` (`gateway.ts:57-66`). |
-| `apps/api/src/integrations/payments/provider.ts` | A: trocar o `asaasGateway` único (`provider.ts:28`, `:82-90`) por cache por `orgId` com a chave do inquilino. |
-| `apps/api/src/modules/club-billing/webhook-controller.ts` | A: identificar o inquilino (URL com slug ou token por subconta) e conferir o token certo. |
-| `apps/api/src/modules/club-billing/automation.service.ts` | A: sync usa a chave do inquilino (já roda por inquilino). |
-| `club_subscriptions.gateway_customer_id` / `card_token` | A: passam a valer só na subconta; migração de assinaturas existentes. |
-| `apps/api/src/modules/platform-onboarding/` | A: criar a subconta no provisionamento, com os dados do KYB já coletados. |
-| `tenant_plan_prices.revenue_share_percent` | B: pode virar o percentual retido no split. |
-| Telas `/<slug>/admin/faturamento` e `/admin/inquilinos/[id]` | Mostrar status da conta/wallet do inquilino. |
+Erros: chave em formato inválido ou de ambiente não aceito → 400 (campo `apiKey`); chave recusada pelo Asaas → 422; troca de conta ou desconexão com assinaturas vinculadas → 409; testar sem conta → 409 `RECEBIMENTO_NAO_CONFIGURADO`. Falha ao cadastrar o webhook **não** desfaz a conexão: fica `webhookStatus: "erro"` com o motivo (ou `pendente` se `API_BASE_URL` não for pública) — corrija e clique em **Testar**.
+
+Webhook do clube: `POST /api/v1/webhooks/asaas/clube/:organizationId` — token ausente/errado ou clube sem conta → 401; token certo → sempre 200 (evento de cobrança de outro clube é logado e ignorado). A rota global antiga `POST /api/v1/webhooks/asaas` responde **410**.
+
+### Próximos passos (fora desta etapa)
+
+- **Subconta criada pela ANNETEC** (`POST /v3/accounts`): a resposta traz `apiKey` e `walletId` da subconta; a `apiKey` alimenta a mesma `tenant_asaas_accounts` (coluna `source = 'subaccount'` já reservada). White label depende de liberação comercial do Asaas.
+- **Split** (comissão da ANNETEC retida na liquidação): exigiria o `walletId` do clube e o array `split` em `AsaasCreatePaymentInput`.
 
 ---
 
@@ -747,7 +761,8 @@ Essa rota **não existe hoje**. No plano Hobby da Vercel o cron é limitado a um
 ### Validação rápida
 
 - [ ] `GET /api/v1/t/<slug>/faturamento/configuracoes` mostra `gateway: "asaas"`, `asaasConfigured: true` e `sandbox` correto.
-- [ ] `curl` no webhook com token certo devolve 200; com token errado, 401.
+- [ ] `GET /api/v1/t/<slug>/faturamento/configuracoes/recebimento` mostra `connected: true` e `webhookStatus: "ativo"`.
+- [ ] `curl` no webhook da plataforma com token certo devolve 200; com token errado, 401.
 - [ ] Painel do Asaas mostra entregas do webhook com 200.
 - [ ] Checkout de teste gera `gateway_charge_id` (`pay_...`) na cobrança.
 - [ ] Pagamento gera evento com origem `webhook` em `/faturamento/eventos`.
@@ -758,13 +773,17 @@ Essa rota **não existe hoje**. No plano Hobby da Vercel o cron é limitado a um
 
 | Sintoma | Causa provável | Onde olhar |
 |---|---|---|
-| Webhook responde 401 | Token do painel diferente do `.env`; ou produção sem `ASAAS_WEBHOOK_TOKEN`; ou webhook da plataforma com token diferente de `PLATFORM_ASAAS_WEBHOOK_TOKEN ?? ASAAS_WEBHOOK_TOKEN` | `webhook-controller.ts:24-27` (clube e plataforma); tela do webhook no painel do Asaas |
+| Webhook do clube responde 401 | Clube desconectado, token do webhook editado à mão no painel do Asaas, ou URL com `organizationId` de outro clube | Clique em **Testar** no recebimento (reenvia o token certo); `club-billing/webhook-controller.ts` |
+| Webhook da plataforma responde 401 | Token do painel diferente de `PLATFORM_ASAAS_WEBHOOK_TOKEN ?? ASAAS_WEBHOOK_TOKEN` | `platform-billing/webhook-controller.ts`; tela do webhook no painel do Asaas |
+| Webhook responde 410 | Webhook antigo do clube (`/api/v1/webhooks/asaas`) ainda cadastrado na conta da ANNETEC | Remova-o no painel; o `asaas:setup` avisa |
+| 409 `RECEBIMENTO_NAO_CONFIGURADO` no checkout/cobrança | Clube com gateway Asaas sem conta conectada | Configurações → Recebimento |
+| Webhook do clube `pendente` | `API_BASE_URL` não é pública (localhost/http) | Ajuste `API_BASE_URL` e clique em **Testar** |
 | Webhook não chega | URL errada (falta `/api/v1`), túnel caiu ou mudou de endereço, webhook inativo, eventos não marcados, fila pausada | Painel do Asaas → Webhooks → histórico; log da API |
 | Cobrança fica `pending` depois de pago | Webhook não chegou ou falhou; sync só roda a cada 15 min e só com automação ativa | `/faturamento/eventos`; log `Webhook do Asaas processado`; automação ligada? |
-| Log `PAYMENT_GATEWAY=asaas sem ASAAS_API_KEY: usando o gateway simulado` | Chave vazia ou não lida (arquivo `.env` fora de `apps/api`, variável não definida no host) | `provider.ts:58-63`; `platform-billing/gateway.ts:161-166` |
-| "Esta cobrança é do Asaas, mas o servidor está sem ASAAS_API_KEY" | Chave removida com cobranças Asaas ainda abertas | `provider.ts:76-81` |
+| Log `Gateway da plataforma = asaas sem PLATFORM_ASAAS_API_KEY/ASAAS_API_KEY: usando o simulado` | Chave da ANNETEC vazia ou não lida (só afeta a plataforma) | `platform-billing/gateway.ts` |
+| Log `Clube sem conta de recebimento (Asaas) conectada` | Clube com gateway Asaas sem conta: a automação pula sincronização, ciclo e cartão dele | `club-billing/automation.service.ts`; Configurações → Recebimento |
 | Fila do Asaas pausada | No Asaas, 15 falhas seguidas pausam a fila. Nossa API devolve 200 sempre que o token confere, então a causa é token errado (401), API fora do ar, 413 (corpo > 256 KB) ou URL inexistente | `webhook-controller.ts:11-19`; no painel do Asaas, corrija e reative a fila |
-| Erro "O Asaas recusou a chave de API (401)" | Chave de sandbox com `ASAAS_ENV=production` ou o contrário; chave revogada | `client.ts:164-170` |
+| Erro "O Asaas recusou a chave de API (401)" / "O Asaas recusou esta chave de API" | Chave revogada/expirada; na plataforma, chave de sandbox com `ASAAS_ENV=production` ou o contrário | `client.ts`; `club-billing/receiving-account.service.ts` |
 | Erro 403 do Asaas | Conta ainda não aprovada para a operação, ou recurso não liberado | `client.ts:172-179`; situação cadastral no painel do Asaas |
 | Cartão recusado na sandbox | Número diferente de `4444 4444 4444 4444`, validade passada, ou dados do titular (CPF, CEP, número) inválidos | `club-billing.ts:416-421` (contracts); mensagem do Asaas repassada em `client.ts:151-155` |
 | QR do Pix não aparece na sandbox | No Asaas, a conta precisa de chave Pix cadastrada para gerar QR | Painel do Asaas → Pix → chaves |
@@ -772,7 +791,7 @@ Essa rota **não existe hoje**. No plano Hobby da Vercel o cron é limitado a um
 | Evento aparece como duplicado | Normal: o Asaas entrega "pelo menos uma vez" | `events.service.ts:148-170` |
 | Automação não roda em produção | Padrão é desligado com `NODE_ENV=production`; ou hospedado na Vercel (sem timer) | `env.ts:155`, `env.ts:161`; `apps/api/src/vercel.ts`; seção 6 |
 | `POST /automacao/executar` responde 409 | Rodada já em execução | `automation.service.ts:63-68` |
-| Inquilino não consegue mudar para Asaas na tela | Servidor sem chave: a API recusa o override | `club-billing/settings.service.ts:134-136` |
+| Inquilino não consegue mudar para Asaas na tela | Clube sem conta de recebimento conectada: a API recusa o override | `club-billing/settings.service.ts` |
 | Botão "Simular pagamento" sumiu | Gateway Asaas em produção (só existe na sandbox) | `adapters/faturamento.ts:124-127`; `gateway.ts:133-136` |
 
 ---
@@ -787,7 +806,7 @@ Em ordem de prioridade:
 4. ~~**Cadastro de webhook por script.**~~ Feito: `pnpm --filter @annetec/api asaas:setup` (seção 3, passo 7).
 5. **Rota de estorno.** Expor `refundCharge` com auditoria, para não depender do painel do Asaas.
 6. **Alerta de webhook parado.** Monitorar a última entrega com origem `webhook` e avisar se passar de X horas sem nada com cobranças abertas.
-7. **Relatório de repasse por inquilino.** Enquanto não houver split, gerar o extrato de recebimentos por `organization_id` para o financeiro repassar.
-8. **Split ou subcontas.** Decidir entre as opções da seção 5 e implementar.
+7. ~~**Relatório de repasse por inquilino.**~~ Não se aplica mais: cada clube recebe na própria conta Asaas (seção 5).
+8. **Subconta criada pela ANNETEC ou split.** Ver "Próximos passos" da seção 5.
 9. **Validar o token com 32+ caracteres no `env.ts`.** Hoje aceita 1 (`env.ts:66`); o `.env.example` documenta 32–255.
 10. **WhatsApp.** Canal de lembrete e cobrança, depois do item 3.

@@ -118,5 +118,20 @@ export class CardDeclinedError extends AppError {
   }
 }
 
+/** Mensagem do bloqueio de clube sem conta de recebimento (tela do associado e do admin). */
+export const RECEIVING_NOT_CONFIGURED_MESSAGE = 'Este clube ainda não configurou o recebimento das mensalidades.'
+
+/**
+ * Clube com gateway `asaas` sem conta Asaas própria conectada. 409
+ * `RECEBIMENTO_NAO_CONFIGURADO`: adesão, pagamento e cobrança param aqui —
+ * nunca caem na conta da ANNETEC. A automação pula o clube (com alerta).
+ */
+export class GatewayNotConfiguredError extends AppError {
+  constructor(message = RECEIVING_NOT_CONFIGURED_MESSAGE) {
+    super(ERROR_CODES.RECEBIMENTO_NAO_CONFIGURADO, message)
+    this.name = 'GatewayNotConfiguredError'
+  }
+}
+
 /** Mensagem única para falha de comunicação com o processador (a tela oferece nova tentativa). */
 export const GATEWAY_UNAVAILABLE_MESSAGE = 'Não foi possível falar com o processador de pagamento'

@@ -3,6 +3,7 @@ import { AppError } from '@/http/errors'
 import { CardDeclinedError } from '@/integrations/payments/gateway'
 import { logger } from '@/lib/logger'
 import type {
+  AsaasAccountStatus,
   AsaasCreateCustomerInput,
   AsaasCreatePaymentInput,
   AsaasCommercialInfo,
@@ -164,7 +165,7 @@ export function createAsaasClient(config: AsaasClientConfig) {
       if (response.status === 401) {
         throw new AsaasApiError(
           ERROR_CODES.UPSTREAM_UNAUTHORIZED,
-          'O Asaas recusou a chave de API (401). Confira ASAAS_API_KEY e ASAAS_ENV.',
+          'O Asaas recusou a chave de API (401). Confira a chave e o ambiente (sandbox × produção).',
           401,
           codes,
         )
@@ -238,6 +239,8 @@ export function createAsaasClient(config: AsaasClientConfig) {
     account: {
       /** Dados da conta dona da chave — serve para validar a chave e o ambiente. */
       commercialInfo: () => request<AsaasCommercialInfo>('GET', '/myAccount/commercialInfo/'),
+      /** Situação cadastral da conta (aprovada ou com pendências) + `id` da conta. */
+      status: () => request<AsaasAccountStatus>('GET', '/myAccount/status/'),
     },
     webhooks: {
       create: (input: AsaasCreateWebhookInput) => request<AsaasWebhook>('POST', '/webhooks', { body: input }),
@@ -245,6 +248,8 @@ export function createAsaasClient(config: AsaasClientConfig) {
         request<AsaasList<AsaasWebhook>>('GET', '/webhooks', { query: { ...query } }),
       update: (id: string, input: AsaasUpdateWebhookInput) =>
         request<AsaasWebhook>('PUT', `/webhooks/${encodeURIComponent(id)}`, { body: input }),
+      delete: (id: string) =>
+        request<{ deleted: boolean; id: string }>('DELETE', `/webhooks/${encodeURIComponent(id)}`),
     },
     pix: {
       listAddressKeys: (query: { status?: string; statusList?: string; offset?: number; limit?: number } = {}) =>

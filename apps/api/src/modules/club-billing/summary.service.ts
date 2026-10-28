@@ -1,7 +1,7 @@
 import type { BillingSummary, ClubPaymentMethod } from '@annetec/contracts'
 import { sql } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { effectiveProvider, getGatewayFor } from '@/integrations/payments/provider'
+import { describeGateway } from '@/integrations/payments/provider'
 import { addDays, addMonthsOnDueDay, lastMonths, startOfMonth, todaySP } from './dates'
 import { loadBillingSettings } from './settings.service'
 
@@ -101,11 +101,11 @@ export const summaryService = {
     const currentMonth = today.slice(0, 7)
     const receivedThisMonth = money(receivedRows.find(row => row.month === currentMonth)?.received)
 
-    const provider = effectiveProvider(settings.gatewayOverride)
-    const gateway = await getGatewayFor(orgId, provider)
+    // Sem conta de recebimento o resumo abre do mesmo jeito (o aviso fica nas configurações).
+    const gateway = await describeGateway(orgId, settings.gatewayOverride)
 
     return {
-      gateway: provider,
+      gateway: gateway.provider,
       sandbox: gateway.sandbox,
       mrr,
       activeSubscriptions: n(subs.active),

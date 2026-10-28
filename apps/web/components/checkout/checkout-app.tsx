@@ -7,7 +7,7 @@ import { useTenant } from '@/contexts/tenant-context'
 import { getCheckoutContextAction } from '@/lib/actions/checkout-api'
 import { statusPagePath } from '@/lib/adapters/checkout'
 import { CheckoutResultView, type CheckoutHandoff } from './checkout-result'
-import { CheckoutEmpty, CheckoutLoadError, CheckoutSkeleton } from './checkout-states'
+import { CheckoutEmpty, CheckoutLoadError, CheckoutReceivingUnavailable, CheckoutSkeleton } from './checkout-states'
 import { CheckoutWizard } from './checkout-wizard'
 
 /**
@@ -83,6 +83,10 @@ export function CheckoutApp({
   if (!context) return <CheckoutSkeleton />
   if (!context.plans.some(plan => plan.status === 'active')) {
     return <CheckoutEmpty slug={slug} tenantName={tenant.name} />
+  }
+  // Asaas sem conta própria conectada: a API recusa a adesão (409) — avisa antes do formulário.
+  if (context.receivingConfigured === false) {
+    return <CheckoutReceivingUnavailable slug={slug} />
   }
 
   return (

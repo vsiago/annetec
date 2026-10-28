@@ -177,11 +177,14 @@ export function GatewayAutomationCard({
   settings,
   lastRunAt,
   onRan,
+  onOpenReceiving,
 }: {
   tenantSlug: string
   settings: BillingSettings | null
   lastRunAt: string | null
   onRan: (report: BillingAutomationReport) => void
+  /** Leva à aba "Recebimento", onde a conta Asaas do clube é conectada. */
+  onOpenReceiving?: () => void
 }) {
   const [running, setRunning] = useState(false)
   const [report, setReport] = useState<BillingAutomationReport | null>(null)
@@ -241,12 +244,23 @@ export function GatewayAutomationCard({
                     ? 'Modo demonstração: nenhum dinheiro real circula. O Pix compensa sozinho em segundos, o boleto em alguns minutos, e "Simular pagamento" confirma na hora.'
                     : 'Asaas em sandbox: cobranças reais do gateway, com dinheiro de teste.'}
               </p>
-              <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                 <KeyRound className="h-3.5 w-3.5" />
-                Chave do Asaas no servidor: {settings.asaasConfigured ? 'configurada' : 'não configurada'}
-                {settings.gatewayOverride
-                  ? ` · escolhido para este clube: ${gatewayLabel(settings.gatewayOverride)}`
-                  : ' · segue o padrão do servidor'}
+                <span>
+                  Conta Asaas do clube: {settings.asaasConfigured ? 'conectada' : 'não conectada'}
+                  {settings.gatewayOverride
+                    ? ` · escolhido para este clube: ${gatewayLabel(settings.gatewayOverride)}`
+                    : ' · segue o padrão do servidor'}
+                </span>
+                {onOpenReceiving && (
+                  <button
+                    type="button"
+                    onClick={onOpenReceiving}
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    {settings.asaasConfigured ? 'Ver recebimento' : 'Conectar'}
+                  </button>
+                )}
               </p>
             </div>
 
@@ -415,6 +429,7 @@ export function BillingRulesForm({
   error,
   onRetry,
   onSaved,
+  onOpenReceiving,
 }: {
   tenantSlug: string
   settings: BillingSettings | null
@@ -422,6 +437,8 @@ export function BillingRulesForm({
   error: string | null
   onRetry: () => void
   onSaved: (settings: BillingSettings) => void
+  /** Leva à aba "Recebimento", onde a conta Asaas do clube é conectada. */
+  onOpenReceiving?: () => void
 }) {
   const initial = useMemo(() => (settings ? toForm(settings) : null), [settings])
   const [form, setForm] = useState<FormState | null>(initial)
@@ -612,13 +629,32 @@ export function BillingRulesForm({
                 { value: 'default', label: 'Padrão do servidor' },
                 // "Simulado" só existe em demonstração (gateway simulado/sandbox); em produção, só Asaas.
                 ...(demo ? [{ value: 'simulated', label: 'Simulado (demonstração)' }] : []),
-                { value: 'asaas', label: 'Asaas' },
+                // O Asaas é a conta PRÓPRIA do clube: sem ela conectada a API recusa a escolha.
+                // Se já era a escolha gravada, a opção continua visível para o select mostrar o valor atual.
+                {
+                  value: 'asaas',
+                  label: settings.asaasConfigured ? 'Asaas' : 'Asaas (conecte a conta do clube)',
+                  disabled: !settings.asaasConfigured && form.gatewayOverride !== 'asaas',
+                },
               ]}
             />
             <p className="text-xs text-muted-foreground">
-              {settings.asaasConfigured
-                ? 'Vale para as próximas cobranças; as já emitidas seguem no gateway de origem.'
-                : 'Sem chave do Asaas no servidor, "Asaas" continua no modo simulado.'}
+              {settings.asaasConfigured ? (
+                'Vale para as próximas cobranças; as já emitidas seguem no gateway de origem.'
+              ) : (
+                <>
+                  Para usar o Asaas, o clube precisa ter a própria conta conectada.{' '}
+                  {onOpenReceiving && (
+                    <button
+                      type="button"
+                      onClick={onOpenReceiving}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      Conectar na aba Recebimento
+                    </button>
+                  )}
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -659,6 +695,7 @@ export function AutomationPanel({
   lastRunAt,
   onRan,
   version,
+  onOpenReceiving,
 }: {
   tenantSlug: string
   settings: BillingSettings | null
@@ -669,6 +706,7 @@ export function AutomationPanel({
   lastRunAt: string | null
   onRan: (report: BillingAutomationReport) => void
   version: number
+  onOpenReceiving?: () => void
 }) {
   return (
     <div className="space-y-5">
@@ -676,7 +714,13 @@ export function AutomationPanel({
 
       <div className="grid gap-5 xl:grid-cols-12">
         <div className="xl:col-span-4">
-          <GatewayAutomationCard tenantSlug={tenantSlug} settings={settings} lastRunAt={lastRunAt} onRan={onRan} />
+          <GatewayAutomationCard
+            tenantSlug={tenantSlug}
+            settings={settings}
+            lastRunAt={lastRunAt}
+            onRan={onRan}
+            onOpenReceiving={onOpenReceiving}
+          />
         </div>
         <div className="xl:col-span-8">
           <BillingRulesForm
@@ -686,6 +730,7 @@ export function AutomationPanel({
             error={settingsError}
             onRetry={onReloadSettings}
             onSaved={onSettingsSaved}
+            onOpenReceiving={onOpenReceiving}
           />
         </div>
       </div>

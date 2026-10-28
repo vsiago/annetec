@@ -436,7 +436,7 @@ export const annetecModules: ApiModule[] = [
       {
         heading: 'Checkout',
         items: [
-          { method: 'GET', route: '/contexto', description: 'Planos ativos (com preço por dependente e teto), meios habilitados, gateway e regras da simulação.', access: 'público' },
+          { method: 'GET', route: '/contexto', description: 'Planos ativos (com preço por dependente e teto), meios habilitados, gateway, regras da simulação e receivingConfigured (false = clube sem conta de recebimento: adesão recusada).', access: 'público' },
           { method: 'POST', route: '/', description: 'Cria conta (se o e-mail for novo), assinatura, dependentes e a 1ª cobrança. Cartão recusado também responde 201 com a cobrança recusada.', access: 'público' },
           { method: 'GET', route: '/:subscriptionId?chave=', description: 'Situação da assinatura e da cobrança corrente; sincroniza com o gateway (máx. 1×/3 s).', access: 'público (com chave)' },
           { method: 'POST', route: '/:subscriptionId/pagamento?chave=', description: 'Nova tentativa ou troca de método enquanto aguarda pagamento.', access: 'público (com chave)' },
@@ -461,7 +461,11 @@ export const annetecModules: ApiModule[] = [
           { method: 'GET', route: '/eventos', description: 'Linha do tempo de pagamentos (webhook, automação, checkout, manual, simulação).', access: 'admin' },
           { method: 'POST', route: '/automacao/executar', description: 'Roda a automação de cobrança agora, só para este inquilino.', access: 'admin' },
           { method: 'GET', route: '/configuracoes', description: 'Régua de cobrança e gateway efetivo.', access: 'admin' },
-          { method: 'PATCH', route: '/configuracoes', description: 'Altera a régua (meios, prazos, retentativas, multa/juros, gateway).', access: 'admin' },
+          { method: 'PATCH', route: '/configuracoes', description: 'Altera a régua (meios, prazos, retentativas, multa/juros, gateway). Escolher o Asaas exige conta de recebimento conectada (422).', access: 'admin' },
+          { method: 'GET', route: '/configuracoes/recebimento', description: 'Conta Asaas própria do clube: ambiente, final da chave, titular (CPF/CNPJ mascarado), situação cadastral e status do webhook. Nunca devolve a chave.', access: 'admin' },
+          { method: 'PUT', route: '/configuracoes/recebimento', description: 'Conecta a conta ou troca a chave de API do Asaas (valida no Asaas e cadastra o webhook). Chave inválida/ambiente errado 400; recusada pelo Asaas 422; outra conta com assinaturas vinculadas 409; 10 mutações/h por clube (429).', access: 'admin' },
+          { method: 'POST', route: '/configuracoes/recebimento/testar', description: 'Revalida a chave salva, atualiza a situação da conta e recadastra o webhook. Sem conta conectada: 409 RECEBIMENTO_NAO_CONFIGURADO.', access: 'admin' },
+          { method: 'DELETE', route: '/configuracoes/recebimento', description: 'Desconecta a conta de recebimento; 409 enquanto houver assinaturas vinculadas a ela.', access: 'admin' },
         ],
       },
       {
@@ -514,7 +518,8 @@ export const annetecModules: ApiModule[] = [
       {
         heading: 'Asaas',
         items: [
-          { method: 'POST', route: '/asaas', description: 'Eventos PAYMENT_* do Asaas, com dedupe pelo id do evento.', access: 'Asaas (token)' },
+          { method: 'POST', route: '/asaas/clube/:organizationId', description: 'Eventos PAYMENT_* da conta Asaas PRÓPRIA do clube (webhook cadastrado ao conectar o recebimento), com token próprio e dedupe pelo id do evento; só mexe em cobrança deste clube.', access: 'Asaas (token do clube)' },
+          { method: 'POST', route: '/asaas', description: 'Rota global antiga (conta única da ANNETEC): desativada, responde 410. Cada clube usa /asaas/clube/:organizationId.', access: 'Asaas (token)' },
           { method: 'POST', route: '/asaas-plataforma', description: 'Eventos PAYMENT_* das cobranças da ANNETEC aos inquilinos (externalReference plt_…); o handler do clube ignora essas referências.', access: 'Asaas (token)' },
         ],
       },

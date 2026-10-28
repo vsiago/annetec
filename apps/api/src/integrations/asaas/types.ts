@@ -239,10 +239,20 @@ export interface AsaasPixAddressKey {
 export interface AsaasCommercialInfo {
   status?: string
   personType?: string
+  cpfCnpj?: string | null
   name?: string | null
   companyName?: string | null
   tradingName?: string | null
   email?: string | null
+}
+
+/** `GET /myAccount/status` — situação cadastral (`APPROVED`, `AWAITING_APPROVAL`, `PENDING`, `REJECTED`…). */
+export interface AsaasAccountStatus {
+  id?: string | null
+  commercialInfo?: string | null
+  bankAccountInfo?: string | null
+  documentation?: string | null
+  general?: string | null
 }
 
 /** Corpo do webhook de cobrança. */

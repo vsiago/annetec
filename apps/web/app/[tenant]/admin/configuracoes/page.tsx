@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { BadgeCheck, ChevronRight, Package, UserCog, Wallet } from 'lucide-react'
+import { BadgeCheck, ChevronRight, Landmark, Package, UserCog, Wallet } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/dashboard/page-header'
 import { useTenant } from '@/contexts/tenant-context'
@@ -10,7 +10,7 @@ import { useTenant } from '@/contexts/tenant-context'
  * Configurações do clube. Mostra só o que existe de verdade: os dados
  * cadastrais e a identidade visual vindos do cadastro do inquilino, e atalhos
  * para os módulos onde cada ajuste é feito e gravado (régua de cobrança,
- * usuários, planos, assinatura da plataforma).
+ * recebimento das mensalidades, usuários, planos, assinatura da plataforma).
  *
  * A versão anterior era uma maquete — integrações, 2FA, backups e termos com
  * status inventados e botões "Salvar" que não gravavam nada.
@@ -21,6 +21,12 @@ const SETTINGS_SHORTCUTS = [
     label: 'Cobrança automática',
     hint: 'Formas de pagamento, régua de lembretes, multa, juros e suspensão.',
     icon: Wallet,
+  },
+  {
+    segment: 'faturamento?tab=recebimento',
+    label: 'Recebimento (Asaas)',
+    hint: 'A conta Asaas do clube, onde caem as mensalidades. Sem ela, a adesão fica bloqueada.',
+    icon: Landmark,
   },
   {
     segment: 'usuarios',

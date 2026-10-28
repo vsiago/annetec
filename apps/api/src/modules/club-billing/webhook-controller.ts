@@ -1,5 +1,6 @@
-import { Hono } from 'hono'
-import { env, isProduction } from '@/config/env'
+import { randomBytes } from 'node:crypto'
+import { ERROR_CODES } from '@annetec/contracts'
+import { Hono, type Context } from 'hono'
 import { AppError } from '@/http/errors'
 import { ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
@@ -7,30 +8,38 @@ import { asaasWebhookBody, checkAsaasWebhookToken } from '@/integrations/asaas/w
 import { logger } from '@/lib/logger'
 import { handleGatewayEvent } from './events.service'
 import { limitBody } from './http'
+import { loadClubWebhookToken } from './receiving-account.service'
 
 /**
- * Webhooks de gateways — `/api/v1/webhooks`. Só a camada HTTP + token é
- * exclusiva daqui; o processamento é o handler único (`handleGatewayEvent`).
+ * Webhooks de gateways do CLUBE — `/api/v1/webhooks`. Só a camada HTTP +
+ * token é exclusiva daqui; o processamento é o handler único (`handleGatewayEvent`).
  *
- * Token confere → SEMPRE 200 `{ received: true }` (duplicado, desconhecido ou
- * sem cobrança nossa também): 15 falhas seguidas pausam a fila do Asaas, e a
- * sincronização da automação cobre o que não foi aplicado. Token errado → 401.
- * Sem `ASAAS_WEBHOOK_TOKEN`: aceita só fora de produção (com aviso).
+ * `POST /asaas/clube/:organizationId`: cada clube recebe na própria conta
+ * Asaas, e o webhook de cada conta aponta para esta rota com um token PRÓPRIO
+ * (gerado ao conectar o recebimento, guardado cifrado em
+ * `tenant_asaas_accounts`). O evento só mexe em cobrança DESTE clube.
+ *
+ * Token confere → SEMPRE 200 `{ received: true }` (duplicado, desconhecido,
+ * sem cobrança nossa ou de outro clube também): 15 falhas seguidas pausam a
+ * fila do Asaas, e a sincronização da automação cobre o que não foi aplicado.
+ * Token errado/ausente, ou clube sem conta conectada → 401 (não diz qual).
+ *
+ * `POST /asaas` (rota global antiga, conta única da ANNETEC) → 410: o
+ * club-billing não recebe mais pela conta da ANNETEC. O webhook da PLATAFORMA
+ * é outro (`/webhooks/asaas-plataforma`) e não muda.
  */
 
-let warnedMissingToken = false
+const MAX_ORG_ID_LENGTH = 100
 
-export const webhooksController = new Hono<AppEnv>().post('/asaas', limitBody(256), async c => {
-  const check = checkAsaasWebhookToken(c.req.header('asaas-access-token'), env.ASAAS_WEBHOOK_TOKEN)
-  if (check === 'invalid') throw AppError.unauthenticated('Token do webhook inválido')
-  if (check === 'unconfigured') {
-    if (isProduction) throw AppError.unauthenticated('Webhook do Asaas sem token configurado')
-    if (!warnedMissingToken) {
-      warnedMissingToken = true
-      logger.warn('Webhook do Asaas aceito SEM token (ASAAS_WEBHOOK_TOKEN ausente) — só fora de produção')
-    }
-  }
+/**
+ * Clube sem token (sem conta conectada ou id inexistente): o header é
+ * comparado contra este valor aleatório do processo, que nunca confere —
+ * assim resposta E tempo são os mesmos de "token errado", sem revelar quais
+ * ids de clube têm recebimento configurado.
+ */
+const NO_ACCOUNT_TOKEN = randomBytes(32).toString('hex')
 
+async function processClubWebhook(c: Context<AppEnv>, organizationId: string) {
   let raw: unknown
   try {
     raw = await c.req.json()
@@ -39,7 +48,10 @@ export const webhooksController = new Hono<AppEnv>().post('/asaas', limitBody(25
   }
   const parsed = asaasWebhookBody.safeParse(raw)
   if (!parsed.success || !parsed.data.payment) {
-    logger.info({ event: parsed.success ? parsed.data.event : undefined }, 'Webhook do Asaas sem cobrança — ignorado')
+    logger.info(
+      { tenantId: organizationId, event: parsed.success ? parsed.data.event : undefined },
+      'Webhook do Asaas sem cobrança — ignorado',
+    )
     return ok(c, { received: true })
   }
 
@@ -64,12 +76,42 @@ export const webhooksController = new Hono<AppEnv>().post('/asaas', limitBody(25
           creditCard: payment.creditCard ?? null,
         },
       },
-      { source: 'webhook', provider: 'asaas' },
+      { source: 'webhook', provider: 'asaas', organizationId },
     )
-    logger.info({ event: body.event, outcome: outcome.status }, 'Webhook do Asaas processado')
+    logger.info({ tenantId: organizationId, event: body.event, outcome: outcome.status }, 'Webhook do Asaas processado')
   } catch (error) {
     // Nunca devolve erro ao Asaas (a fila pausaria); a sincronização periódica recupera.
-    logger.error({ event: body.event, err: error instanceof Error ? error.message : String(error) }, 'Falha ao processar webhook do Asaas')
+    logger.error(
+      { tenantId: organizationId, event: body.event, err: error instanceof Error ? error.message : String(error) },
+      'Falha ao processar webhook do Asaas',
+    )
   }
   return ok(c, { received: true })
-})
+}
+
+export const webhooksController = new Hono<AppEnv>()
+  .post('/asaas/clube/:organizationId', limitBody(256), async c => {
+    const organizationId = c.req.param('organizationId')
+    if (!organizationId || organizationId.length > MAX_ORG_ID_LENGTH) {
+      throw AppError.unauthenticated('Token do webhook inválido')
+    }
+    const expected = await loadClubWebhookToken(organizationId)
+    const check = checkAsaasWebhookToken(c.req.header('asaas-access-token'), expected ?? NO_ACCOUNT_TOKEN)
+    if (!expected || check !== 'ok') {
+      if (!expected) logger.warn({ tenantId: organizationId }, 'Webhook do Asaas para clube sem conta de recebimento — recusado')
+      throw AppError.unauthenticated('Token do webhook inválido')
+    }
+    return processClubWebhook(c, organizationId)
+  })
+
+  .post('/asaas', async c => {
+    logger.warn(
+      { userAgent: c.req.header('user-agent') ?? null },
+      'Webhook do Asaas na rota global antiga /api/v1/webhooks/asaas — desativada (cada clube tem webhook próprio); remova este webhook da conta da ANNETEC',
+    )
+    throw new AppError(
+      ERROR_CODES.NOT_FOUND,
+      'Rota desativada: cada clube recebe na própria conta Asaas, com webhook em /api/v1/webhooks/asaas/clube/:organizationId.',
+      { status: 410 },
+    )
+  })

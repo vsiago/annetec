@@ -29,6 +29,12 @@ export const ERROR_CODES = {
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
   ALREADY_EXISTS: 'ALREADY_EXISTS',
+  /**
+   * Clube sem conta Asaas própria conectada (Faturamento → Configurações →
+   * Recebimento): adesão, pagamento e cobrança ficam bloqueados — nunca caem
+   * na conta da ANNETEC.
+   */
+  RECEBIMENTO_NAO_CONFIGURADO: 'RECEBIMENTO_NAO_CONFIGURADO',
   // 422
   BUSINESS_RULE_VIOLATION: 'BUSINESS_RULE_VIOLATION',
   // 429
@@ -65,6 +71,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   NOT_FOUND: 404,
   CONFLICT: 409,
   ALREADY_EXISTS: 409,
+  RECEBIMENTO_NAO_CONFIGURADO: 409,
   BUSINESS_RULE_VIOLATION: 422,
   RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,

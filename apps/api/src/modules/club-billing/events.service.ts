@@ -75,6 +75,12 @@ export interface GatewayEventPayload {
 export interface GatewayEventContext {
   source: PaymentEventSource
   provider: PaymentGatewayProvider
+  /**
+   * Escopo do clube (webhook por clube): a cobrança referenciada precisa ser
+   * DESTE inquilino — evento de cobrança de outro clube é registrado no log e
+   * ignorado (a mesma conta Asaas pode servir a mais de um clube).
+   */
+  organizationId?: string | null
   actorUserId?: string | null
   now?: Date
   /** Motivo da recusa (vai para `failure_reason`). */
@@ -160,6 +166,13 @@ async function applyGatewayEvent(
   const now = ctx.now ?? new Date()
   const paidNotes: PaidNote[] = []
   const match = await findChargeForEvent(payload, ctx.provider)
+  if (match && ctx.organizationId && match.charge.organizationId !== ctx.organizationId) {
+    logger.warn(
+      { event: payload.event, provider: ctx.provider, source: ctx.source, tenantId: ctx.organizationId, chargeId: match.charge.id },
+      'Evento de pagamento de cobrança de OUTRO clube no webhook deste clube — ignorado',
+    )
+    return { status: 'ignored', chargeId: null, subscriptionId: null, paidNotes }
+  }
   if (match?.orphan) {
     return { ...(await recordOrphanEvent(payload, match.charge, ctx)), paidNotes }
   }
