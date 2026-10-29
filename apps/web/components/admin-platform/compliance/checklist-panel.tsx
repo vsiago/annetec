@@ -7,7 +7,7 @@ import {
   type ComplianceChecklistItem,
   type OnboardingProposalDetail,
 } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
@@ -18,9 +18,9 @@ import { checklistLabel, formatDateTimeBR, formatRelative } from '@/lib/adapters
 import { cn } from '@/lib/utils'
 
 /**
- * Checklist do analista (§0.6: aprovar exige completo). Cada item salva na
+ * Itens a conferir pela equipe (§0.6: aprovar exige todos). Cada item salva na
  * hora — marcar é uma decisão, não um rascunho — e registra quem e quando.
- * `pep_due_diligence` só entra quando a proposta tem pessoa exposta.
+ * `pep_due_diligence` só entra quando há pessoa politicamente exposta.
  */
 export function ChecklistPanel({
   proposal,
@@ -62,7 +62,7 @@ export function ChecklistPanel({
     void save(
       pending.map(item => ({ item, checked: true, note: proposal.checklist?.[item]?.note ?? undefined })),
       'all',
-      'Checklist marcado por completo',
+      'Todos os itens marcados',
     )
   }
 
@@ -75,7 +75,7 @@ export function ChecklistPanel({
     const ok = await save(
       [{ item, checked: proposal.checklist?.[item]?.checked ?? false, note: noteText.trim() || undefined }],
       item,
-      'Nota salva no checklist',
+      'Nota salva',
     )
     if (ok) setNoteFor(null)
   }
@@ -83,16 +83,16 @@ export function ChecklistPanel({
   return (
     <Card className="gap-4 shadow-none">
       <CardHeader>
-        <CardTitle className="text-base">Checklist de compliance</CardTitle>
+        <CardTitle className="text-base">Itens a conferir</CardTitle>
         <CardDescription>
           {checked} de {items.length} itens conferidos
-          {proposal.hasPep ? ' · inclui diligência reforçada (PEP)' : ''}
+          {proposal.hasPep ? ' · inclui a conferência da pessoa politicamente exposta' : ''}
         </CardDescription>
         {editable && checked < items.length && (
           <CardAction>
             <Button variant="ghost" size="sm" className="gap-2" onClick={markAll} disabled={saving !== null}>
               {saving === 'all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
-              Marcar todos
+              Marcar todos os itens
             </Button>
           </CardAction>
         )}
@@ -170,7 +170,7 @@ export function ChecklistPanel({
                       onClick={() => openNote(item)}
                       disabled={saving !== null}
                       aria-label="Adicionar nota ao item"
-                      title="Nota do analista"
+                      title="Adicionar nota"
                     >
                       <MessageSquarePlus className="h-4 w-4 text-muted-foreground" />
                     </Button>

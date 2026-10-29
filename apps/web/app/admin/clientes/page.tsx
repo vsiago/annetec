@@ -6,7 +6,7 @@ import Link from 'next/link'
 import type { Contract } from '@annetec/contracts'
 import { useAdminScope } from '@/contexts/admin-scope-context'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { EmptyStateCard } from '@/components/dashboard/empty-state'
@@ -127,11 +127,11 @@ export default function OperatorClientesPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
           <p className="text-muted-foreground">
-            Contratos do inquilino selecionado acima, direto da Digital Saúde — não misturado com os
-            inquilinos.
+            Contratos do clube selecionado acima, direto da Digital Saúde — não misturado com os
+            outros clubes.
           </p>
         </div>
-        <Button asChild className="bg-primary hover:opacity-90 text-white">
+        <Button asChild>
           <Link href="/admin/clientes/nova-adesao">
             <Plus className="h-4 w-4 mr-2" /> Nova adesão
           </Link>
@@ -139,8 +139,8 @@ export default function OperatorClientesPage() {
       </div>
 
       {operatorError && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">{operatorError}</CardContent>
+        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
+          <CardContent className="py-4 text-sm text-[#B42318]">{operatorError}</CardContent>
         </Card>
       )}
 
@@ -166,7 +166,7 @@ export default function OperatorClientesPage() {
             </Button>
           </form>
 
-          {searchError && <p className="text-sm text-destructive">{searchError}</p>}
+          {searchError && <p className="text-sm text-[#B42318]">{searchError}</p>}
           {searchMessage && (
             <p className="flex items-center gap-2 text-sm text-emerald-600">
               <CheckCircle2 className="h-4 w-4" /> {searchMessage}

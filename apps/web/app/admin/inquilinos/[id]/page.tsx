@@ -1,475 +1,324 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useParams, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useTenants } from '@/contexts/tenants-context'
-import { useAdminScope } from '@/contexts/admin-scope-context'
-import { IntegrationPanel } from '@/components/admin-platform/integration-panel'
-import { TenantAccessPanel } from '@/components/admin-platform/tenant-access-panel'
-import { TenantShortcuts } from '@/components/admin-platform/tenant-shortcuts'
-import { TenantSubscriptionPanel } from '@/components/admin-platform/billing/tenant-subscription-panel'
-import { TenantHealthPanel } from '@/components/admin-platform/billing/tenant-health-panel'
-import { TenantOnboardingPanel } from '@/components/admin-platform/compliance/tenant-onboarding-panel'
-import type { Tenant, TenantStatus } from '@/lib/types'
+import { AlertCircle, ArrowLeft, Info, Loader2, Lock, Save } from 'lucide-react'
 import type { UF } from '@annetec/contracts'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/admin-platform/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { usePlatformRole } from '@/components/admin-platform/billing/console-kit'
+import { StatusPill } from '@/components/admin-platform/ui/status-pill'
+import { TenantSubscriptionPanel } from '@/components/admin-platform/billing/tenant-subscription-panel'
+import { TenantOnboardingPanel } from '@/components/admin-platform/compliance/tenant-onboarding-panel'
+import { TenantAccessPanel } from '@/components/admin-platform/tenant-access-panel'
+import { AdvancedTab } from '@/components/admin-platform/club-detail/advanced-tab'
+import { ClubDataForm } from '@/components/admin-platform/club-detail/club-data-form'
+import { ClubHeader } from '@/components/admin-platform/club-detail/club-header'
 import {
-  AlertCircle,
-  ArrowLeft,
-  Building2,
-  ExternalLink,
-  Eye,
-  FileCheck2,
-  HeartPulse,
-  KeyRound,
-  Receipt,
-  LayoutGrid,
-  Palette,
-  Plug,
-  Save,
-} from 'lucide-react'
+  CLUB_STATUS_LABEL,
+  CLUB_STATUS_TONE,
+  resolveClubTab,
+  type ClubTab,
+} from '@/components/admin-platform/club-detail/club-model'
+import { ClubSituationSheet } from '@/components/admin-platform/club-detail/club-situation-sheet'
+import { ClubSummary } from '@/components/admin-platform/club-detail/club-summary'
+import { useClubSummary } from '@/components/admin-platform/club-detail/use-club-summary'
+import { usePlatformAuth } from '@/contexts/platform-auth-context'
+import { useTenants } from '@/contexts/tenants-context'
+import type { Tenant, TenantStatus } from '@/lib/types'
 
 /**
- * Gestão de um inquilino.
+ * Detalhe de um clube (/admin/inquilinos/<id>).
  *
- * Dividida em abas porque as cinco coisas que se faz aqui têm ritmos e formas
- * de salvar diferentes: cadastro e marca são um formulário com um botão só;
- * acessos e integração salvam sozinhos, item a item. Misturar tudo numa
- * rolagem única fazia o botão "Salvar" parecer valer para a página inteira,
- * quando ele nunca valeu.
+ * Responde "este clube está pronto para vender e pagando em dia?". Cinco abas
+ * mais Avançado (só superadmin): Resumo · Dados do clube · Pessoas com acesso ·
+ * Plano ANNETEC · Documentos. A aba atual vai em `?tab=` (links antigos como
+ * `?tab=cadastro` ou `?tab=kyb` continuam abrindo a aba certa).
+ *
+ * Só "Dados do clube" tem botão de salvar: o resto salva item a item, dentro de
+ * cada painel. A situação do clube (suspender, encerrar, bloquear o painel) é
+ * outra coisa e tem seção própria, com confirmação.
  */
-const statusLabel: Record<TenantStatus, string> = {
-  trial: 'Trial',
-  active: 'Ativo',
-  suspended: 'Suspenso',
-  cancelled: 'Cancelado',
+
+const TAB_CLASS =
+  'h-auto min-h-11 flex-none rounded-none border-0 border-b-2 border-transparent bg-transparent px-1 text-sm font-medium text-muted-foreground shadow-none ' +
+  'hover:text-foreground data-[state=active]:border-secondary data-[state=active]:bg-transparent data-[state=active]:font-semibold ' +
+  'data-[state=active]:text-secondary data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-secondary'
+
+const TABS: { value: Exclude<ClubTab, 'avancado'>; label: string }[] = [
+  { value: 'resumo', label: 'Resumo' },
+  { value: 'dados', label: 'Dados do clube' },
+  { value: 'pessoas', label: 'Pessoas com acesso' },
+  { value: 'plano', label: 'Plano ANNETEC' },
+  { value: 'documentos', label: 'Documentos' },
+]
+
+/** O que o formulário "Dados do clube" edita. A situação do clube fica de fora de propósito. */
+type FormValues = Pick<Tenant, 'name' | 'legalName' | 'document' | 'email' | 'phone' | 'address' | 'branding' | 'planId'>
+
+function formValues(tenant: Tenant): FormValues {
+  return {
+    name: tenant.name,
+    legalName: tenant.legalName,
+    document: tenant.document,
+    email: tenant.email,
+    phone: tenant.phone,
+    address: tenant.address,
+    branding: tenant.branding,
+    planId: tenant.planId,
+  }
 }
 
-const statusVariante: Record<TenantStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  trial: 'outline',
-  active: 'default',
-  suspended: 'destructive',
-  cancelled: 'destructive',
+export default function ClubDetailPage() {
+  // `useSearchParams` pede Suspense para não segurar a página inteira.
+  return (
+    <Suspense fallback={null}>
+      <ClubDetailLoader />
+    </Suspense>
+  )
 }
 
-/** Abas em que o botão "Salvar alterações" tem o que salvar. */
-const ABAS_DO_FORMULARIO = ['cadastro', 'marca']
-
-export default function InquilinoDetailPage() {
+function ClubDetailLoader() {
   const params = useParams<{ id: string }>()
-  const router = useRouter()
-  const { tenants, plans, updateTenant, isLoading } = useTenants()
-  const { select } = useAdminScope()
-  const [tenant, setTenant] = useState<Tenant | undefined>()
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [salvo, setSalvo] = useState(false)
-  const [aba, setAba] = useState('visao-geral')
+  const { tenants, isLoading } = useTenants()
+  const tenant = tenants.find(item => item.id === params.id)
 
-  useEffect(() => {
-    setTenant(tenants.find(t => t.id === params.id))
-  }, [tenants, params.id])
-
-  if (isLoading) return null
-
+  // Só espera quando ainda não tem o clube: ao salvar, a lista recarrega e a
+  // tela segue montada (senão a aba aberta e o que foi digitado se perdiam).
   if (!tenant) {
+    if (isLoading) return null
     return (
-      <div className="space-y-4">
-        <Link
-          href="/admin/inquilinos"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar
+      <div className="flex flex-col gap-4">
+        <Link href="/admin/inquilinos" className="inline-flex items-center gap-1 text-sm font-medium text-secondary hover:underline">
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          Voltar para Clubes
         </Link>
-        <p className="text-muted-foreground">Inquilino não encontrado.</p>
+        <p className="m-0 text-sm text-muted-foreground">Não encontramos este clube. Volte para a lista e escolha outro.</p>
       </div>
     )
   }
 
-  const plano = plans.find(p => p.id === tenant.planId)
+  return <ClubDetail key={tenant.id} tenant={tenant} />
+}
 
-  /** Atalho de cabeçalho: o destino mais usado ao entrar num inquilino. */
-  const abrirComoSuperadmin = () => {
-    select(tenant.slug)
-    router.push('/admin/clientes')
+function ClubDetail({ tenant }: { tenant: Tenant }) {
+  const { plans, updateTenant } = useTenants()
+  const { isSuperadmin } = usePlatformRole()
+  const { isLoading: authLoading } = usePlatformAuth()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const summary = useClubSummary(tenant)
+
+  // A aba atual: o estado local manda (troca na hora); a URL acompanha e, se
+  // alguém navegar para `?tab=...` (link do Resumo, de outra tela), o estado segue.
+  const urlTab = resolveClubTab(searchParams.get('tab'))
+  const [aba, setAbaState] = useState<ClubTab>(urlTab)
+  useEffect(() => setAbaState(urlTab), [urlTab])
+
+  function setAba(next: string) {
+    const tab = resolveClubTab(next)
+    setAbaState(tab)
+    const query = new URLSearchParams(searchParams.toString())
+    if (tab === 'resumo') query.delete('tab')
+    else query.set('tab', tab)
+    const qs = query.toString()
+    window.history.replaceState(null, '', qs ? `${pathname}?${qs}` : pathname)
   }
 
-  const handleSave = async () => {
+  const [situacaoAberta, setSituacaoAberta] = useState(false)
+
+  // Formulário "Dados do clube": `edits` guarda só o que a pessoa mexeu. Sem
+  // isso, qualquer atualização da lista (mudar a situação, por exemplo)
+  // apagaria o que está digitado.
+  const [edits, setEdits] = useState<FormValues | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [salvo, setSalvo] = useState(false)
+
+  const form: FormValues = edits ?? formValues(tenant)
+  const dirty = edits !== null && JSON.stringify(edits) !== JSON.stringify(formValues(tenant))
+
+  useEffect(() => {
+    if (!salvo) return
+    const timer = setTimeout(() => setSalvo(false), 4000)
+    return () => clearTimeout(timer)
+  }, [salvo])
+
+  async function handleSave() {
     setError('')
     setSalvo(false)
     setIsSaving(true)
     const result = await updateTenant(tenant.id, {
-      name: tenant.name,
-      legalName: tenant.legalName,
-      document: tenant.document,
-      email: tenant.email,
-      phone: tenant.phone,
-      address: { ...tenant.address, state: tenant.address.state as UF },
-      branding: tenant.branding,
-      planId: tenant.planId,
-      status: tenant.status,
+      name: form.name,
+      legalName: form.legalName,
+      document: form.document,
+      email: form.email,
+      phone: form.phone,
+      address: { ...form.address, state: form.address.state as UF },
+      branding: { ...form.branding, logoUrl: form.branding.logoUrl?.trim() || undefined },
+      planId: form.planId,
     })
     setIsSaving(false)
     if (!result.success) {
-      setError(result.error || 'Não foi possível salvar as alterações')
+      setError(result.error || 'Não foi possível salvar as alterações. Confira os campos e tente de novo.')
       return
     }
+    setEdits(null)
     setSalvo(true)
-    setTimeout(() => setSalvo(false), 3000)
   }
 
+  /** Grava só a situação do cadastro (os campos do formulário não vão junto). */
+  async function changeStatus(status: TenantStatus): Promise<string | null> {
+    const result = await updateTenant(tenant.id, { status })
+    if (!result.success) return result.error || 'Tente de novo em instantes.'
+    summary.reloadAll()
+    return null
+  }
+
+  const detail = summary.health.data
+
   return (
-    <div className="space-y-6">
-      <Link
-        href="/admin/inquilinos"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Voltar para inquilinos
-      </Link>
+    <div className="flex flex-col gap-6">
+      <ClubHeader
+        tenant={tenant}
+        panelAccess={detail?.tenant.access}
+        onChangeSituation={() => setSituacaoAberta(true)}
+      />
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs">
-        <div className="h-1.5 w-full" style={{ backgroundColor: tenant.branding.primaryColor }} />
-        <div className="flex flex-wrap items-center justify-between gap-4 p-5">
-          <div className="flex min-w-0 items-center gap-4">
-            <div
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-lg font-bold text-white"
-              style={{ backgroundColor: tenant.branding.primaryColor }}
-              aria-hidden="true"
-            >
-              {tenant.name.slice(0, 2).toUpperCase()}
-            </div>
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-xl font-bold text-foreground">{tenant.name}</h1>
-                <Badge variant={statusVariante[tenant.status]}>{statusLabel[tenant.status]}</Badge>
-              </div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-                <a
-                  href={`/${tenant.slug}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-secondary hover:underline"
-                >
-                  /{tenant.slug}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-                {plano && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span>Plano {plano.name}</span>
-                  </>
-                )}
-                <span aria-hidden="true">·</span>
-                <span>
-                  Desde{' '}
-                  {new Date(tenant.createdAt).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
-                </span>
-              </div>
-            </div>
-          </div>
-          <Button className="bg-primary text-white hover:opacity-90" onClick={abrirComoSuperadmin}>
-            <Eye className="mr-2 h-4 w-4" />
-            Operar como superadmin
-          </Button>
-        </div>
-      </div>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+      {tenant.status === 'cancelled' ? (
+        <Alert>
+          <Info className="size-4" aria-hidden="true" />
+          <AlertDescription>
+            Este clube está encerrado: o site, o login e o painel não abrem. Alguns números do Resumo podem não
+            carregar. Para reabrir, use “Mudar situação do clube”.
+          </AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
-      <Tabs value={aba} onValueChange={setAba} className="space-y-6">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="visao-geral">
-            <LayoutGrid className="h-4 w-4" />
-            Visão geral
-          </TabsTrigger>
-          <TabsTrigger value="cadastro">
-            <Building2 className="h-4 w-4" />
-            Cadastro
-          </TabsTrigger>
-          <TabsTrigger value="marca">
-            <Palette className="h-4 w-4" />
-            Marca
-          </TabsTrigger>
-          <TabsTrigger value="acessos">
-            <KeyRound className="h-4 w-4" />
-            Acessos
-          </TabsTrigger>
-          <TabsTrigger value="integracao">
-            <Plug className="h-4 w-4" />
-            Integração
-          </TabsTrigger>
-          <TabsTrigger value="assinatura-annetec">
-            <Receipt className="h-4 w-4" />
-            Assinatura ANNETEC
-          </TabsTrigger>
-          <TabsTrigger value="kyb">
-            <FileCheck2 className="h-4 w-4" />
-            KYB / Documentos
-          </TabsTrigger>
-          <TabsTrigger value="saude">
-            <HeartPulse className="h-4 w-4" />
-            Saúde
-          </TabsTrigger>
+      <Tabs value={aba} onValueChange={setAba} className="gap-6">
+        <TabsList
+          aria-label="Seções do clube"
+          className="h-auto w-full justify-start gap-6 overflow-x-auto rounded-none border-b border-border bg-transparent p-0"
+        >
+          {TABS.map(item => (
+            <TabsTrigger key={item.value} value={item.value} className={TAB_CLASS}>
+              {item.label}
+            </TabsTrigger>
+          ))}
+          {isSuperadmin ? (
+            <TabsTrigger value="avancado" className={`${TAB_CLASS} ml-auto`}>
+              <Lock className="size-3.5" aria-hidden="true" />
+              Avançado
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
-        {/* ------------------------------------------------ visão geral */}
-        <TabsContent value="visao-geral" className="space-y-4">
-          <TenantShortcuts slug={tenant.slug} tenantId={tenant.id} />
+        <TabsContent value="resumo">
+          <ClubSummary
+            tenant={tenant}
+            summary={summary}
+            isSuperadmin={isSuperadmin}
+            onOpenAdvanced={() => setAba('avancado')}
+          />
         </TabsContent>
 
-        {/* ---------------------------------------------------- cadastro */}
-        <TabsContent value="cadastro" className="space-y-6">
-          <Card className="border border-border/80 bg-card shadow-xs">
-            <CardHeader>
-              <CardTitle>Dados principais</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Nome fantasia</Label>
-                <Input value={tenant.name} onChange={e => setTenant({ ...tenant, name: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Razão social</Label>
-                <Input
-                  value={tenant.legalName}
-                  onChange={e => setTenant({ ...tenant, legalName: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>CNPJ</Label>
-                <Input value={tenant.document} onChange={e => setTenant({ ...tenant, document: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>E-mail</Label>
-                <Input value={tenant.email} onChange={e => setTenant({ ...tenant, email: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Telefone</Label>
-                <Input value={tenant.phone} onChange={e => setTenant({ ...tenant, phone: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Plano</Label>
-                <Select value={tenant.planId} onValueChange={v => setTenant({ ...tenant, planId: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {plans.map(plan => (
-                      <SelectItem key={plan.id} value={plan.id}>
-                        {plan.name} — R$ {plan.priceMonthly.toLocaleString('pt-BR')}/mês
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="dados" className="flex flex-col gap-4">
+          <ClubDataForm
+            draft={{ ...tenant, ...form }}
+            onChange={next => setEdits(formValues(next))}
+            plans={plans}
+          />
 
-          <Card className="border border-border/80 bg-card shadow-xs">
-            <CardHeader>
-              <CardTitle>Endereço</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label>CEP</Label>
-                <Input
-                  value={tenant.address.cep}
-                  onChange={e => setTenant({ ...tenant, address: { ...tenant.address, cep: e.target.value } })}
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Endereço</Label>
-                <Input
-                  value={tenant.address.street}
-                  onChange={e => setTenant({ ...tenant, address: { ...tenant.address, street: e.target.value } })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Número</Label>
-                <Input
-                  value={tenant.address.number}
-                  onChange={e => setTenant({ ...tenant, address: { ...tenant.address, number: e.target.value } })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Bairro</Label>
-                <Input
-                  value={tenant.address.neighborhood}
-                  onChange={e =>
-                    setTenant({ ...tenant, address: { ...tenant.address, neighborhood: e.target.value } })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Cidade</Label>
-                <Input
-                  value={tenant.address.city}
-                  onChange={e => setTenant({ ...tenant, address: { ...tenant.address, city: e.target.value } })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Estado (UF)</Label>
-                <Input
-                  value={tenant.address.state}
-                  maxLength={2}
-                  onChange={e => setTenant({ ...tenant, address: { ...tenant.address, state: e.target.value } })}
-                />
-              </div>
-            </CardContent>
-          </Card>
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white p-6">
+            <div className="min-w-0">
+              <h2 className="m-0 flex flex-wrap items-center gap-2 text-base font-bold text-foreground">
+                Situação do clube
+                <StatusPill tone={CLUB_STATUS_TONE[tenant.status]}>{CLUB_STATUS_LABEL[tenant.status]}</StatusPill>
+              </h2>
+              <p className="m-0 mt-1 text-[13px] text-muted-foreground">
+                Para bloquear o painel, suspender, encerrar ou liberar o acesso do clube.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSituacaoAberta(true)}
+              className="min-h-11 rounded-[10px] border-[#D0D5DD] px-4 text-sm font-semibold text-[#344054]"
+            >
+              Mudar situação do clube
+            </Button>
+          </section>
 
-          <Card className="border border-red-200 bg-card shadow-xs">
-            <CardHeader>
-              <CardTitle className="text-red-600">Zona de risco</CardTitle>
-              <CardDescription>
-                Suspender ou cancelar corta o acesso deste inquilino assim que for salvo. Cancelamento
-                é lógico — nada é apagado, o histórico continua acessível.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap items-center gap-3">
-              <Select
-                value={tenant.status}
-                onValueChange={v => setTenant({ ...tenant, status: v as TenantStatus })}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="trial">Trial</SelectItem>
-                  <SelectItem value="active">Ativo</SelectItem>
-                  <SelectItem value="suspended">Suspenso</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-muted-foreground">Salve as alterações para aplicar o novo status.</p>
-            </CardContent>
-          </Card>
+          {error ? (
+            <Alert variant="destructive">
+              <AlertCircle className="size-4" aria-hidden="true" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-border bg-white p-3 shadow-sm">
+            {salvo ? (
+              <span role="status" className="mr-auto text-sm font-medium text-[#067647]">
+                Alterações salvas
+              </span>
+            ) : dirty ? (
+              <span className="mr-auto text-sm text-muted-foreground">Você tem alterações sem salvar.</span>
+            ) : (
+              <span className="mr-auto text-sm text-muted-foreground">Nenhuma alteração para salvar.</span>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setEdits(null)
+                setError('')
+              }}
+              disabled={!dirty || isSaving}
+              className="min-h-11 rounded-[10px] border-[#D0D5DD] px-4 text-sm font-semibold text-[#344054]"
+            >
+              Descartar alterações
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={!dirty || isSaving}
+              className="min-h-11 gap-2 rounded-[10px] bg-secondary px-4 text-sm font-semibold text-white hover:bg-secondary/90"
+            >
+              {isSaving ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Save aria-hidden="true" />}
+              {isSaving ? 'Salvando…' : 'Salvar alterações'}
+            </Button>
+          </div>
         </TabsContent>
 
-        {/* -------------------------------------------------------- marca */}
-        <TabsContent value="marca">
-          <Card className="border border-border/80 bg-card shadow-xs">
-            <CardHeader>
-              <CardTitle>Marca</CardTitle>
-              <CardDescription>
-                Pinta o site do clube, a tela de login e os portais deste inquilino.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Cor primária</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    aria-label="Cor primária"
-                    value={tenant.branding.primaryColor}
-                    onChange={e =>
-                      setTenant({ ...tenant, branding: { ...tenant.branding, primaryColor: e.target.value } })
-                    }
-                    className="h-10 w-14 rounded border border-input"
-                  />
-                  <Input
-                    value={tenant.branding.primaryColor}
-                    onChange={e =>
-                      setTenant({ ...tenant, branding: { ...tenant.branding, primaryColor: e.target.value } })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Cor secundária</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    aria-label="Cor secundária"
-                    value={tenant.branding.secondaryColor}
-                    onChange={e =>
-                      setTenant({ ...tenant, branding: { ...tenant.branding, secondaryColor: e.target.value } })
-                    }
-                    className="h-10 w-14 rounded border border-input"
-                  />
-                  <Input
-                    value={tenant.branding.secondaryColor}
-                    onChange={e =>
-                      setTenant({ ...tenant, branding: { ...tenant.branding, secondaryColor: e.target.value } })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>URL do logo</Label>
-                <Input
-                  value={tenant.branding.logoUrl ?? ''}
-                  onChange={e =>
-                    setTenant({ ...tenant, branding: { ...tenant.branding, logoUrl: e.target.value } })
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ------------------------------------------------------ acessos */}
-        <TabsContent value="acessos">
+        <TabsContent value="pessoas">
           <TenantAccessPanel tenantId={tenant.id} tenantSlug={tenant.slug} />
         </TabsContent>
 
-        {/* --------------------------------------------------- integração */}
-        <TabsContent value="integracao">
-          <IntegrationPanel tenantId={tenant.id} />
-        </TabsContent>
-
-        {/* ------------------------------------ assinatura ANNETEC (plataforma) */}
-        <TabsContent value="assinatura-annetec">
+        <TabsContent value="plano">
           <TenantSubscriptionPanel tenantId={tenant.id} tenantSlug={tenant.slug} />
         </TabsContent>
 
-        {/* ------------------------------------- contratação: KYB e documentos */}
-        <TabsContent value="kyb">
+        <TabsContent value="documentos">
           <TenantOnboardingPanel tenantId={tenant.id} tenantSlug={tenant.slug} document={tenant.document} />
         </TabsContent>
 
-        {/* ---------------------------------------------------- saúde (holding) */}
-        <TabsContent value="saude">
-          <TenantHealthPanel tenantId={tenant.id} />
+        <TabsContent value="avancado">
+          {authLoading ? null : <AdvancedTab tenant={tenant} isSuperadmin={isSuperadmin} />}
         </TabsContent>
       </Tabs>
 
-      {/*
-        A barra de salvar só aparece nas abas que editam o cadastro do
-        inquilino. Acessos e Integração salvam por conta própria.
-      */}
-      {ABAS_DO_FORMULARIO.includes(aba) && (
-        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-4">
-          {salvo && <span className="mr-auto text-sm text-emerald-700">Alterações salvas.</span>}
-          <Button variant="outline" onClick={() => router.push('/admin/inquilinos')}>
-            Voltar
-          </Button>
-          <Button
-            className="bg-primary text-white hover:opacity-90"
-            onClick={handleSave}
-            disabled={isSaving}
-          >
-            <Save className="mr-2 h-4 w-4" />
-            {isSaving ? 'Salvando…' : 'Salvar alterações'}
-          </Button>
-        </div>
-      )}
+      <ClubSituationSheet
+        open={situacaoAberta}
+        onOpenChange={setSituacaoAberta}
+        tenant={tenant}
+        detail={detail}
+        detailLoading={summary.health.loading}
+        isSuperadmin={isSuperadmin}
+        onChangeStatus={changeStatus}
+        onAccessChanged={summary.reloadAll}
+      />
     </div>
   )
 }

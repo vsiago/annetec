@@ -13,7 +13,7 @@ import {
   type OnboardingSection,
   type PendingRequestItem,
 } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
@@ -34,12 +34,12 @@ import {
   requestOnboardingInfoAction,
 } from '@/lib/actions/platform-onboarding-api'
 import { cn } from '@/lib/utils'
-import type { ApprovalReadiness } from './compliance-ui'
+import { proposalName, type ApprovalReadiness } from './compliance-ui'
 
 /**
- * Diálogos de decisão do compliance: aprovar (com ressalva quando falta
- * algo), pedir pendência (itens por seção/documento/pessoa) e provisionar
- * (superadmin). Reprovar e cancelar usam o `ConfirmDialog` do kit na página.
+ * Diálogos de decisão das Aprovações: aprovar o clube (com ressalva quando
+ * falta algo), pedir correção (itens por seção/documento/pessoa) e liberar o
+ * clube (superadmin). Recusar e cancelar usam o `ConfirmDialog` do kit na página.
  */
 
 function ReadinessLine({ ok, children }: { ok: boolean; children: ReactNode }) {
@@ -48,9 +48,9 @@ function ReadinessLine({ ok, children }: { ok: boolean; children: ReactNode }) {
       {ok ? (
         <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
       ) : (
-        <CircleX className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+        <CircleX className="mt-0.5 h-4 w-4 shrink-0 text-[#B42318]" />
       )}
-      <span className={ok ? 'text-foreground' : 'text-red-700 dark:text-red-300'}>{children}</span>
+      <span className={ok ? 'text-foreground' : 'text-[#B42318] dark:text-red-300'}>{children}</span>
     </li>
   )
 }
@@ -60,16 +60,16 @@ export function ReadinessList({ readiness }: { readiness: ApprovalReadiness }) {
     <ul className="space-y-1.5">
       <ReadinessLine ok={readiness.prechecksRan && readiness.blocking.length === 0}>
         {!readiness.prechecksRan
-          ? 'Pré-checagens ainda não executadas'
+          ? 'A verificação automática ainda não foi feita'
           : readiness.blocking.length === 0
-            ? 'Nenhuma pré-checagem bloqueante em falha'
-            : `Bloqueantes em falha: ${readiness.blocking.map(item => PRECHECK_LABELS[item.code]).join(', ')}`}
+            ? 'Verificação automática sem impedimentos'
+            : `Impedem a aprovação: ${readiness.blocking.map(item => PRECHECK_LABELS[item.code]).join(', ')}`}
       </ReadinessLine>
       <ReadinessLine ok={readiness.requiredApproved === readiness.requiredTotal}>
         Documentos obrigatórios aprovados: {readiness.requiredApproved} de {readiness.requiredTotal}
       </ReadinessLine>
       <ReadinessLine ok={readiness.checklistComplete}>
-        Checklist de compliance: {readiness.checklistChecked} de {readiness.checklistTotal}
+        Itens conferidos: {readiness.checklistChecked} de {readiness.checklistTotal}
       </ReadinessLine>
     </ul>
   )
@@ -122,8 +122,8 @@ export function ApproveDialog({
       }),
       updated =>
         updated.status === 'awaiting_payment'
-          ? 'Proposta aprovada — cobrança de ativação emitida e e-mail enviado'
-          : 'Proposta aprovada',
+          ? 'Clube aprovado. A cobrança de ativação foi enviada por e-mail'
+          : 'Clube aprovado',
     )
     setBusy(false)
     if (detail) {
@@ -136,11 +136,11 @@ export function ApproveDialog({
     <Dialog open={open} onOpenChange={value => !busy && onOpenChange(value)}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Aprovar proposta {proposal.code}?</DialogTitle>
+          <DialogTitle>Aprovar {proposalName(proposal)}?</DialogTitle>
           <DialogDescription>
-            A aprovação emite a cobrança de ativação
-            {typeof total === 'number' ? ` (${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : ''} e
-            envia o link de pagamento ao contratante. O clube entra no ar quando o pagamento for confirmado.
+            Ao aprovar, o clube recebe a cobrança de ativação
+            {typeof total === 'number' ? ` (${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : ''} por
+            e-mail. O acesso é liberado assim que ela for paga.
           </DialogDescription>
         </DialogHeader>
 
@@ -156,7 +156,7 @@ export function ApproveDialog({
                 <span>
                   <span className="font-medium text-amber-900 dark:text-amber-200">Aprovar com ressalva</span>
                   <span className="block text-xs text-amber-800/80 dark:text-amber-300/80">
-                    A justificativa fica gravada na proposta e na trilha de auditoria.
+                    A justificativa fica gravada no cadastro do clube e no histórico.
                   </span>
                 </span>
               </label>
@@ -169,7 +169,7 @@ export function ApproveDialog({
                     onChange={event => setOverrideReason(event.target.value)}
                     rows={3}
                     maxLength={2000}
-                    placeholder="Ex.: CNAE secundário compatível confirmado no estatuto; diretoria validada em diligência."
+                    placeholder="Ex.: atividade compatível confirmada no estatuto; diretoria conferida por telefone."
                   />
                   <p className={cn('text-xs', reasonOk ? 'text-muted-foreground' : 'text-amber-800 dark:text-amber-300')}>
                     Mínimo de 10 caracteres ({overrideReason.trim().length}/10).
@@ -180,14 +180,14 @@ export function ApproveDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="approve-note">Nota da decisão (opcional)</Label>
+            <Label htmlFor="approve-note">Observação para o histórico (opcional)</Label>
             <Textarea
               id="approve-note"
               value={note}
               onChange={event => setNote(event.target.value)}
               rows={2}
               maxLength={2000}
-              placeholder="Registro interno da análise"
+              placeholder="Ex.: conferi os dados do sócio com o presidente por telefone."
             />
           </div>
         </div>
@@ -202,7 +202,7 @@ export function ApproveDialog({
             className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CircleCheck className="h-4 w-4" />}
-            {needsOverride ? 'Aprovar com ressalva' : 'Aprovar proposta'}
+            {needsOverride ? 'Aprovar com ressalva' : 'Aprovar clube'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -211,7 +211,7 @@ export function ApproveDialog({
 }
 
 // ---------------------------------------------------------------------------
-// Pendência
+// Pedir correção
 // ---------------------------------------------------------------------------
 
 interface DraftItem {
@@ -239,7 +239,7 @@ function sameItem(a: Pick<DraftItem, 'section' | 'documentKind' | 'personId'>, b
   return a.section === b.section && (a.documentKind || undefined) === b.documentKind && (a.personId || undefined) === b.personId
 }
 
-/** Sugestões: documentos recusados, obrigatórios faltando e pessoas fora do QSA. */
+/** Sugestões: documentos recusados, obrigatórios faltando e pessoas que a Receita não lista como sócias. */
 export function pendingSuggestions(proposal: OnboardingProposalDetail): PendingRequestItem[] {
   const suggestions: PendingRequestItem[] = []
   for (const doc of proposal.documents ?? []) {
@@ -298,7 +298,7 @@ export function PendingInfoDialog({
     if (!open) return
     setBusy(false)
     setMessage(
-      'Precisamos de alguns ajustes para concluir a análise cadastral. Corrija os itens abaixo e reenvie a proposta pela página de acompanhamento.',
+      'Precisamos de alguns ajustes para concluir a análise do seu cadastro. Corrija os itens abaixo e reenvie pela página de acompanhamento.',
     )
     const base = initialItems && initialItems.length > 0 ? initialItems : suggestions.filter(s => s.section === 'documents' && s.note.startsWith('Reenviar'))
     setItems(base.length > 0 ? base.map(toDraft) : [{ key: newKey(), section: 'documents', documentKind: '', personId: '', note: '' }])
@@ -327,7 +327,7 @@ export function PendingInfoDialog({
           note: item.note.trim().slice(0, 500),
         })),
       }),
-      'Pendência enviada ao contratante',
+      'Pedido de correção enviado ao clube',
     )
     setBusy(false)
     if (detail) {
@@ -340,16 +340,16 @@ export function PendingInfoDialog({
     <Dialog open={open} onOpenChange={value => !busy && onOpenChange(value)}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Pedir pendência ao contratante</DialogTitle>
+          <DialogTitle>Pedir correção ao clube</DialogTitle>
           <DialogDescription>
-            A proposta volta para edição do contratante, que recebe um e-mail com a mensagem e os itens. Ao reenviar, ela retorna à
-            sua fila.
+            O clube recebe um e-mail com a mensagem e os itens, e pode corrigir o cadastro. Quando ele reenviar, o cadastro volta
+            para a sua fila.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="pending-message">Mensagem</Label>
+            <Label htmlFor="pending-message">Mensagem para o clube</Label>
             <Textarea
               id="pending-message"
               value={message}
@@ -357,12 +357,12 @@ export function PendingInfoDialog({
               rows={3}
               maxLength={2000}
             />
-            {!messageOk && <p className="text-xs text-destructive">Explique o que falta (mínimo de 10 caracteres).</p>}
+            {!messageOk && <p className="text-xs text-[#B42318]">Explique o que falta (mínimo de 10 caracteres).</p>}
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Itens ({items.length})</Label>
+              <Label>O que corrigir ({items.length})</Label>
               <Button
                 variant="ghost"
                 size="sm"
@@ -373,7 +373,7 @@ export function PendingInfoDialog({
                 disabled={items.length >= 30}
               >
                 <Plus className="h-4 w-4" />
-                Item
+                Adicionar item
               </Button>
             </div>
 
@@ -432,7 +432,7 @@ export function PendingInfoDialog({
                     <Input
                       value={item.note}
                       onChange={event => update(item.key, { note: event.target.value })}
-                      placeholder="O que o contratante precisa corrigir"
+                      placeholder="O que o clube precisa corrigir"
                       maxLength={500}
                     />
                     <Button
@@ -448,7 +448,7 @@ export function PendingInfoDialog({
                 </li>
               ))}
             </ul>
-            {!itemsOk && <p className="text-xs text-destructive">Cada item precisa de uma orientação (mínimo de 3 caracteres).</p>}
+            {!itemsOk && <p className="text-xs text-[#B42318]">Diga ao clube o que corrigir em cada item (mínimo de 3 caracteres).</p>}
           </div>
 
           {remaining.length > 0 && (
@@ -481,7 +481,7 @@ export function PendingInfoDialog({
           </Button>
           <Button onClick={submit} disabled={!canSubmit} className="gap-2">
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-            Enviar pendência
+            Enviar pedido de correção
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -490,7 +490,7 @@ export function PendingInfoDialog({
 }
 
 // ---------------------------------------------------------------------------
-// Provisionar (superadmin)
+// Liberar o clube (superadmin)
 // ---------------------------------------------------------------------------
 
 export function ProvisionDialog({
@@ -522,7 +522,7 @@ export function ProvisionDialog({
     setBusy(true)
     const result = await runCommand(
       provisionOnboardingAction(proposal.id, { waiveActivation: waive, reason: reason.trim() || undefined }),
-      data => `Clube no ar em /${data.slug} — acesso enviado para ${data.adminEmail}`,
+      data => `Clube liberado em /${data.slug}. O acesso foi enviado para ${data.adminEmail}`,
     )
     setBusy(false)
     if (result) {
@@ -535,21 +535,22 @@ export function ProvisionDialog({
     <Dialog open={open} onOpenChange={value => !busy && onOpenChange(value)}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{waive ? 'Isentar a ativação e provisionar?' : 'Reprocessar o provisionamento?'}</DialogTitle>
+          <DialogTitle>{waive ? 'Liberar o clube sem cobrar a ativação?' : 'Tentar liberar o clube de novo?'}</DialogTitle>
           <DialogDescription>
             {waive
-              ? 'Cria o clube sem esperar o pagamento da ativação: organização, administrador (senha provisória por e-mail), régua, planos e assinatura da plataforma. A cobrança de ativação em aberto é cancelada.'
-              : 'Retoma os passos que faltaram. Cada passo é idempotente — nada do que já foi criado é duplicado.'}
+              ? 'O clube é criado agora, sem esperar o pagamento da ativação. O administrador recebe o acesso por e-mail (com senha provisória), e os planos, a régua de cobrança e a assinatura da plataforma já ficam configurados. A cobrança de ativação em aberto é cancelada.'
+              : 'Retoma os passos que faltaram. Nada do que já foi criado é duplicado.'}
           </DialogDescription>
         </DialogHeader>
         {proposal.provisioning.error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-            Última falha ({proposal.provisioning.attempts} tentativa(s)): {proposal.provisioning.error}
+          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-[#B42318] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+            Última tentativa falhou ({proposal.provisioning.attempts} {proposal.provisioning.attempts === 1 ? 'tentativa' : 'tentativas'}):{' '}
+            {proposal.provisioning.error}
           </p>
         )}
         {waive && (
           <div className="space-y-1.5">
-            <Label htmlFor="waive-reason">Justificativa da isenção</Label>
+            <Label htmlFor="waive-reason">Motivo para liberar sem cobrança</Label>
             <Textarea
               id="waive-reason"
               value={reason}
@@ -558,7 +559,7 @@ export function ProvisionDialog({
               maxLength={500}
               placeholder="Ex.: contrato comercial assinado com ativação cortesia"
             />
-            <p className={cn('text-xs', reasonOk ? 'text-muted-foreground' : 'text-destructive')}>
+            <p className={cn('text-xs', reasonOk ? 'text-muted-foreground' : 'text-[#B42318]')}>
               Mínimo de 10 caracteres ({reason.trim().length}/10).
             </p>
           </div>
@@ -569,7 +570,7 @@ export function ProvisionDialog({
           </Button>
           <Button onClick={submit} disabled={!reasonOk || busy} className="gap-2">
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-            {waive ? 'Isentar e provisionar' : 'Reprocessar'}
+            {waive ? 'Liberar o clube' : 'Tentar de novo'}
           </Button>
         </DialogFooter>
       </DialogContent>

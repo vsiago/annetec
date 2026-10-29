@@ -68,14 +68,14 @@ export function AdminScopeProvider({ children }: { children: ReactNode }) {
       }
       if (!result.data) {
         setError(
-          'A Annetec ainda não está configurada como operadora. Escolha um inquilino para operar, ou crie a operadora em Inquilinos.',
+          'A ANNETEC ainda não tem uma carteira própria configurada. Escolha um clube para ver os dados dele ou cadastre a carteira própria em Clubes.',
         )
         return
       }
       setOperator({
         id: result.data.id,
         slug: result.data.slug,
-        name: `${result.data.name} (operadora)`,
+        name: `${result.data.name} (carteira própria)`,
         kind: 'platform',
         status: result.data.status,
       })
@@ -132,7 +132,7 @@ export function AdminScopeProvider({ children }: { children: ReactNode }) {
         tenantId: current?.id ?? null,
         current,
         options,
-        error: !isLoading && options.length === 0 ? error || 'Nenhum inquilino disponível.' : '',
+        error: !isLoading && options.length === 0 ? error || 'Nenhum clube disponível. Cadastre um clube em Clubes.' : '',
         select,
       }}
     >

@@ -371,12 +371,12 @@ export function platformEventTone(type: string): Tone {
 }
 
 export const PLATFORM_EVENT_SOURCE_LABELS: Record<PlatformEventSource, string> = {
-  webhook: 'Webhook do gateway',
+  webhook: 'Aviso de pagamento',
   automation: 'Automação',
   onboarding: 'Contratação',
   manual: 'Manual',
   simulation: 'Simulação',
-  tenant: 'Inquilino',
+  tenant: 'Clube',
 }
 
 const EVENT_SOURCE_TONE: Record<PlatformEventSource, Tone> = {
@@ -450,7 +450,7 @@ export function dunningSteps(
       key: 'cancel',
       day: settings.cancelAfterDays,
       label: 'Assinatura cancelada',
-      detail: 'O inquilino nunca é cancelado automaticamente',
+      detail: 'O clube nunca é cancelado automaticamente',
       tone: 'neutral',
     },
   ]
@@ -466,7 +466,7 @@ export function formatRelativeDay(day: number): string {
 // ---------------------------------------------------------------------------
 
 const EMAIL_STATUS_LABELS: Record<EmailStatus, string> = {
-  simulated: 'Simulado',
+  simulated: 'Só registrado (não enviado)',
   queued: 'Na fila',
   sent: 'Enviado',
   failed: 'Falhou',

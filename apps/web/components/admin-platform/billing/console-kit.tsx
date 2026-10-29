@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -140,13 +140,13 @@ export function LoadError({ message, onRetry, className }: { message: string; on
   return (
     <div
       className={cn(
-        'flex flex-col items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:flex-row sm:items-center',
+        'flex flex-col items-start gap-3 rounded-xl border border-[#B42318]/30 bg-[#B42318]/5 p-4 text-sm sm:flex-row sm:items-center',
         className,
       )}
       role="alert"
     >
-      <CircleAlert className="h-5 w-5 shrink-0 text-destructive" />
-      <p className="flex-1 text-destructive">{message}</p>
+      <CircleAlert className="h-5 w-5 shrink-0 text-[#B42318]" />
+      <p className="flex-1 text-[#B42318]">{message}</p>
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry} className="gap-2">
           <RefreshCw className="h-4 w-4" />
@@ -296,8 +296,8 @@ export function ConfirmDialog({
               maxLength={2000}
             />
             {min > 0 && (
-              <p className={cn('text-xs', invalid && trimmed.length > 0 ? 'text-destructive' : 'text-muted-foreground')}>
-                {invalid ? `Escreva pelo menos ${min} caracteres (${trimmed.length}/${min}).` : 'Fica registrado na trilha.'}
+              <p className={cn('text-xs', invalid && trimmed.length > 0 ? 'text-[#B42318]' : 'text-muted-foreground')}>
+                {invalid ? `Escreva pelo menos ${min} caracteres (${trimmed.length}/${min}).` : 'Fica registrado no histórico de alterações.'}
               </p>
             )}
           </div>

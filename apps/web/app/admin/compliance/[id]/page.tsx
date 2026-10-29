@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import {
   ArrowLeft,
   Ban,
+  Building2,
   CircleCheck,
   CircleX,
   ClipboardList,
@@ -27,11 +28,10 @@ import {
   CONTRACTOR_TYPE_LABELS,
   LEGAL_FORM_LABELS,
   ONBOARDING_SECTION_LABELS,
-  ONBOARDING_STATUS_LABELS,
   type OnboardingProposalDetail,
   type PendingRequestItem,
 } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   DropdownMenu,
@@ -55,13 +55,17 @@ import { ChecklistPanel } from '@/components/admin-platform/compliance/checklist
 import { CommercialPanel, DecisionNotes } from '@/components/admin-platform/compliance/commercial-panel'
 import { CompanyPanel } from '@/components/admin-platform/compliance/company-panel'
 import {
+  APPROVAL_CONSEQUENCE,
   CANCELABLE_STATUSES,
   DECIDABLE_STATUSES,
+  LOAD_ERROR_MESSAGE,
   REVIEWABLE_STATUSES,
   ProposalStatusPill,
   SlaBadge,
   approvalReadiness,
+  proposalName,
   proposalSla,
+  proposalStatusLabel,
 } from '@/components/admin-platform/compliance/compliance-ui'
 import {
   ApproveDialog,
@@ -86,18 +90,19 @@ import { formatCnpj, formatDateTimeBR, formatRelative } from '@/lib/adapters/pla
 import { cn } from '@/lib/utils'
 
 /**
- * Detalhe da proposta no console de compliance (blueprint §Q4, roteiro §F
- * passo 3): assumir → revisar documentos → checklist → aprovar. Cada comando
- * devolve o detalhe inteiro e a tela troca o estado de uma vez.
+ * Análise de um clube em Aprovações (blueprint §Q4, roteiro §F passo 3):
+ * assumir a análise → revisar os documentos → conferir os itens → aprovar.
+ * Cada comando devolve o detalhe inteiro e a tela troca o estado de uma vez.
  */
 
+/** De onde veio o cadastro. "Demonstração" só aparece quando o dado é mesmo de demonstração (`seed`). */
 const SOURCE_LABEL: Record<OnboardingProposalDetail['source'], string> = {
-  site: 'Site',
-  console: 'Console',
+  site: 'Cadastro pelo site',
+  console: 'Cadastro feito pela equipe',
   seed: 'Demonstração',
 }
 
-/** Status em que o pagamento/provisionamento ainda anda sozinho (a tela acompanha). */
+/** Status em que o pagamento/liberação ainda anda sozinho (a tela acompanha). */
 const IN_FLIGHT = ['approved', 'awaiting_payment', 'provisioning']
 
 function DetailSkeleton() {
@@ -150,9 +155,9 @@ export default function ComplianceProposalPage() {
 
   const onUpdated = (detail: OnboardingProposalDetail) => setData(detail)
 
-  // Depois do pagamento simulado (ou do provisionamento manual) a API anda
-  // sozinha: `awaiting_payment → provisioning → active`. A tela acompanha por
-  // alguns segundos em vez de pedir para a pessoa recarregar.
+  // Depois do pagamento simulado (ou da liberação manual) a API anda sozinha:
+  // `awaiting_payment → provisioning → active`. A tela acompanha por alguns
+  // segundos em vez de pedir para a pessoa recarregar.
   useEffect(() => {
     if (tracking === 0) return
     let attempts = 0
@@ -167,7 +172,7 @@ export default function ComplianceProposalPage() {
   useEffect(() => {
     if (!proposal) return
     if (lastStatus.current && lastStatus.current !== proposal.status && proposal.status === 'active') {
-      toast.success('Clube no ar!', {
+      toast.success('Clube liberado', {
         description: proposal.tenant ? `${proposal.tenant.name} — /${proposal.tenant.slug}` : undefined,
       })
     }
@@ -184,9 +189,12 @@ export default function ComplianceProposalPage() {
       <div className="space-y-4">
         <Link href="/admin/compliance" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
-          Voltar para a fila
+          Voltar para Aprovações
         </Link>
-        <LoadError message={error ?? 'Proposta não encontrada.'} onRetry={() => reload()} />
+        <LoadError
+          message={error ? LOAD_ERROR_MESSAGE : 'Não encontramos este clube. Volte para Aprovações e escolha outro.'}
+          onRetry={() => reload()}
+        />
       </div>
     )
   }
@@ -199,32 +207,31 @@ export default function ComplianceProposalPage() {
   const assignedToMe = !!user && proposal.assignedTo?.userId === user.id
   const canClaim = decidable && !assignedToMe
   const toReview = (proposal.documents ?? []).filter(doc => doc.status === 'uploaded').length
-  const name =
-    proposal.company?.tradeName || proposal.receita?.tradeName || proposal.company?.legalName || proposal.receita?.legalName || 'Proposta'
+  const name = proposalName(proposal)
   const incomplete = (proposal.completeness ?? []).filter(item => !item.complete)
 
   const claim = async () => {
     setBusy('claim')
-    const detail = await runCommand(claimOnboardingProposalAction(proposal.id), 'Análise assumida — a proposta está com você')
+    const detail = await runCommand(claimOnboardingProposalAction(proposal.id), 'Análise assumida. Este clube agora está com você')
     setBusy(null)
     if (detail) onUpdated(detail)
   }
 
   const rerunPrechecks = async () => {
     setBusy('prechecks')
-    const detail = await runCommand(rerunOnboardingPrechecksAction(proposal.id), 'Pré-checagens executadas novamente')
+    const detail = await runCommand(rerunOnboardingPrechecksAction(proposal.id), 'Verificação automática refeita')
     setBusy(null)
     if (detail) onUpdated(detail)
   }
 
   const reject = async (reason: string) => {
-    const detail = await runCommand(rejectOnboardingAction(proposal.id, { reason }), 'Proposta reprovada — o contratante foi avisado')
+    const detail = await runCommand(rejectOnboardingAction(proposal.id, { reason }), 'Clube recusado. Ele foi avisado por e-mail')
     if (detail) onUpdated(detail)
     return !!detail
   }
 
   const cancel = async (reason: string) => {
-    const detail = await runCommand(cancelOnboardingAction(proposal.id, { reason }), 'Proposta cancelada')
+    const detail = await runCommand(cancelOnboardingAction(proposal.id, { reason }), 'Cadastro cancelado')
     if (detail) onUpdated(detail)
     return !!detail
   }
@@ -243,7 +250,7 @@ export default function ComplianceProposalPage() {
     <div className="space-y-6">
       <Link href="/admin/compliance" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" />
-        Voltar para a fila
+        Voltar para Aprovações
       </Link>
 
       {/* ------------------------------------------------------ cabeçalho */}
@@ -252,20 +259,17 @@ export default function ComplianceProposalPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-xs font-semibold text-muted-foreground">
-                  {proposal.code}
-                </span>
                 <ProposalStatusPill status={status} short={false} />
                 {proposal.hasPep && (
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
-                    PEP
+                    Pessoa politicamente exposta
                   </span>
                 )}
-                <SlaBadge slaDueAt={sla.slaDueAt} slaBreached={sla.slaBreached} />
+                <SlaBadge slaDueAt={sla.slaDueAt} slaBreached={sla.slaBreached} withPrefix />
               </div>
               <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{name}</h1>
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-                <span className="font-mono">{formatCnpj(proposal.cnpj)}</span>
+                <span>CNPJ {formatCnpj(proposal.cnpj)}</span>
                 <span aria-hidden>·</span>
                 <span>
                   {CONTRACTOR_TYPE_LABELS[proposal.contractorType]} · {LEGAL_FORM_LABELS[proposal.legalForm]}
@@ -280,117 +284,134 @@ export default function ComplianceProposalPage() {
                 )}
               </p>
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                <span>Origem: {SOURCE_LABEL[proposal.source] ?? proposal.source}</span>
-                <span aria-hidden>·</span>
-                <span title={formatDateTimeBR(proposal.createdAt)}>Criada {formatRelative(proposal.createdAt)}</span>
-                {proposal.submittedAt && (
-                  <>
-                    <span aria-hidden>·</span>
-                    <span title={formatDateTimeBR(proposal.submittedAt)}>Enviada {formatRelative(proposal.submittedAt)}</span>
-                  </>
+                {proposal.submittedAt ? (
+                  <span title={formatDateTimeBR(proposal.submittedAt)}>
+                    Enviado {formatRelative(proposal.submittedAt)} por {proposal.applicant.name}
+                  </span>
+                ) : (
+                  <span title={formatDateTimeBR(proposal.createdAt)}>Cadastro iniciado {formatRelative(proposal.createdAt)}</span>
                 )}
                 <span aria-hidden>·</span>
                 <span className="inline-flex items-center gap-1">
                   <UserRound className="h-3.5 w-3.5" />
-                  {proposal.assignedTo ? `Com ${assignedToMe ? 'você' : proposal.assignedTo.name}` : 'Sem responsável'}
+                  {proposal.assignedTo
+                    ? `Com ${assignedToMe ? 'você' : proposal.assignedTo.name}`
+                    : 'Ninguém assumiu ainda'}
+                </span>
+                {proposal.source === 'seed' && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span>{SOURCE_LABEL.seed}</span>
+                  </>
+                )}
+                <span aria-hidden>·</span>
+                <span>
+                  Código <span className="font-mono">{proposal.code}</span>
                 </span>
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {canClaim && (
-                <Button variant="outline" className="gap-2" onClick={claim} disabled={busy !== null}>
-                  {busy === 'claim' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hand className="h-4 w-4" />}
-                  Assumir análise
-                </Button>
-              )}
-              {decidable && (
-                <>
-                  <Button variant="outline" className="gap-2" onClick={() => openPending()}>
-                    <ShieldQuestion className="h-4 w-4" />
-                    Pedir pendência
+            <div className="flex flex-col gap-2 lg:items-end">
+              <div className="flex flex-wrap items-center gap-2">
+                {canClaim && (
+                  <Button variant="outline" className="gap-2" onClick={claim} disabled={busy !== null}>
+                    {busy === 'claim' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hand className="h-4 w-4" />}
+                    Assumir análise
                   </Button>
-                  <Button
-                    variant="outline"
-                    className="gap-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-500/30"
-                    onClick={() => setConfirm('reject')}
-                  >
-                    <CircleX className="h-4 w-4" />
-                    Reprovar
-                  </Button>
-                  <Button className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => setApproveOpen(true)}>
-                    <CircleCheck className="h-4 w-4" />
-                    Aprovar
-                  </Button>
-                </>
-              )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="Mais ações">
-                    <MoreHorizontal className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-60">
-                  <DropdownMenuItem onClick={() => reload()}>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Recarregar
-                  </DropdownMenuItem>
-                  {reviewable && (
-                    <DropdownMenuItem onClick={rerunPrechecks} disabled={busy !== null}>
-                      <ClipboardList className="mr-2 h-4 w-4" />
-                      Reexecutar pré-checagens
+                )}
+                {decidable && (
+                  <>
+                    <Button variant="outline" className="gap-2" onClick={() => openPending()}>
+                      <ShieldQuestion className="h-4 w-4" />
+                      Pedir correção
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="gap-2 border-red-200 text-[#B42318] hover:bg-red-50 hover:text-[#B42318] dark:border-red-500/30"
+                      onClick={() => setConfirm('reject')}
+                    >
+                      <CircleX className="h-4 w-4" />
+                      Recusar
+                    </Button>
+                    <Button className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => setApproveOpen(true)}>
+                      <CircleCheck className="h-4 w-4" />
+                      Aprovar clube
+                    </Button>
+                  </>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="Mais ações">
+                      <MoreHorizontal className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuItem onClick={() => reload()}>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Atualizar página
                     </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem asChild>
-                    <Link href={`/admin/emails?proposalId=${proposal.id}`}>
-                      <Mail className="mr-2 h-4 w-4" />
-                      E-mails desta proposta
-                    </Link>
-                  </DropdownMenuItem>
-                  {isSuperadmin && (status === 'approved' || status === 'awaiting_payment' || (status === 'provisioning' && proposal.provisioning.error)) && (
-                    <DropdownMenuItem onClick={() => setProvisionOpen(true)}>
-                      <Rocket className="mr-2 h-4 w-4" />
-                      {status === 'provisioning' ? 'Reprocessar provisionamento' : 'Isentar ativação e provisionar'}
-                    </DropdownMenuItem>
-                  )}
-                  {cancelable && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => setConfirm('cancel')} className="text-red-600 focus:text-red-700">
-                        <Ban className="mr-2 h-4 w-4" />
-                        Cancelar proposta
+                    {reviewable && (
+                      <DropdownMenuItem onClick={rerunPrechecks} disabled={busy !== null}>
+                        <ClipboardList className="mr-2 h-4 w-4" />
+                        Refazer a verificação automática
                       </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    )}
+                    <DropdownMenuItem asChild>
+                      <Link href={`/admin/emails?proposalId=${proposal.id}`}>
+                        <Mail className="mr-2 h-4 w-4" />
+                        E-mails enviados a este clube
+                      </Link>
+                    </DropdownMenuItem>
+                    {isSuperadmin && (status === 'approved' || status === 'awaiting_payment' || (status === 'provisioning' && proposal.provisioning.error)) && (
+                      <DropdownMenuItem onClick={() => setProvisionOpen(true)}>
+                        <Rocket className="mr-2 h-4 w-4" />
+                        {status === 'provisioning' ? 'Tentar liberar o clube de novo' : 'Liberar o clube sem cobrança'}
+                      </DropdownMenuItem>
+                    )}
+                    {cancelable && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setConfirm('cancel')} className="text-[#B42318] focus:text-[#B42318]">
+                          <Ban className="mr-2 h-4 w-4" />
+                          Cancelar cadastro
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              {decidable && <p className="max-w-sm text-xs text-muted-foreground lg:text-right">{APPROVAL_CONSEQUENCE}</p>}
             </div>
           </div>
 
           {decidable && readiness && (
             <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-              <span className="mr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Para aprovar</span>
+              <span className="mr-1 text-xs font-medium text-muted-foreground">Antes de aprovar</span>
               <ReadinessChip
                 ok={readiness.prechecksRan && readiness.blocking.length === 0}
-                label={readiness.blocking.length > 0 ? `${readiness.blocking.length} bloqueante(s)` : 'Pré-checagens'}
+                label={
+                  readiness.blocking.length > 0
+                    ? `${readiness.blocking.length} ${readiness.blocking.length === 1 ? 'impedimento' : 'impedimentos'}`
+                    : 'Verificação automática'
+                }
               />
               <ReadinessChip
                 ok={readiness.requiredApproved === readiness.requiredTotal}
-                label={`Documentos ${readiness.requiredApproved}/${readiness.requiredTotal}`}
+                label={`Documentos ${readiness.requiredApproved} de ${readiness.requiredTotal}`}
               />
               <ReadinessChip
                 ok={readiness.checklistComplete}
-                label={`Checklist ${readiness.checklistChecked}/${readiness.checklistTotal}`}
+                label={`Itens conferidos ${readiness.checklistChecked} de ${readiness.checklistTotal}`}
               />
               {readiness.ready && (
-                <span className="ml-auto text-xs font-medium text-emerald-700 dark:text-emerald-300">Pronta para aprovar</span>
+                <span className="ml-auto text-xs font-medium text-emerald-700 dark:text-emerald-300">Pronto para aprovar</span>
               )}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {error && <LoadError message={error} onRetry={() => reload()} />}
+      {error && <LoadError message={LOAD_ERROR_MESSAGE} onRetry={() => reload()} />}
 
       {IN_FLIGHT.includes(status) || status === 'active' || proposal.activationCharge ? (
         <ActivationCard
@@ -407,27 +428,27 @@ export default function ComplianceProposalPage() {
         <SectionTabsList>
           <SectionTab value="analise">
             <ClipboardList className="h-4 w-4" />
-            Análise
+            Verificação
           </SectionTab>
           <SectionTab value="cadastro">
-            <Receipt className="h-4 w-4" />
-            Dados cadastrais
+            <Building2 className="h-4 w-4" />
+            Empresa
           </SectionTab>
           <SectionTab value="pessoas" badge={(proposal.people ?? []).length}>
             <Users className="h-4 w-4" />
-            Sócios e representantes
+            Sócios
           </SectionTab>
-          <SectionTab value="documentos" badge={toReview > 0 ? `${toReview} a revisar` : (proposal.documents ?? []).length}>
+          <SectionTab value="documentos" badge={toReview > 0 ? `${toReview} para revisar` : (proposal.documents ?? []).length}>
             <FileStack className="h-4 w-4" />
             Documentos
           </SectionTab>
           <SectionTab value="comercial">
             <Receipt className="h-4 w-4" />
-            Plano, marca e contrato
+            Plano contratado
           </SectionTab>
           <SectionTab value="historico" badge={(proposal.events ?? []).length}>
             <History className="h-4 w-4" />
-            Linha do tempo
+            Histórico
           </SectionTab>
         </SectionTabsList>
 
@@ -436,7 +457,7 @@ export default function ComplianceProposalPage() {
           {incomplete.length > 0 && (status === 'draft' || status === 'pending_info') && (
             <Card className="gap-2 py-4 shadow-none">
               <CardContent className="space-y-2 px-5">
-                <p className="text-sm font-semibold text-foreground">O contratante ainda precisa completar</p>
+                <p className="text-sm font-semibold text-foreground">O clube ainda precisa completar</p>
                 <ul className="space-y-1 text-sm">
                   {incomplete.map(item => (
                     <li key={item.section} className="text-muted-foreground">
@@ -455,10 +476,10 @@ export default function ComplianceProposalPage() {
               {decidable && readiness && (
                 <Card className="gap-3 py-4 shadow-none">
                   <CardContent className="space-y-3 px-5">
-                    <p className="text-sm font-semibold text-foreground">Prontidão para aprovar</p>
+                    <p className="text-sm font-semibold text-foreground">Antes de aprovar</p>
                     <ReadinessList readiness={readiness} />
                     <p className="text-xs text-muted-foreground">
-                      A API reexecuta as pré-checagens na aprovação quando têm mais de 24 h.
+                      Ao aprovar, a verificação automática é refeita se a última tiver mais de 24 horas.
                     </p>
                   </CardContent>
                 </Card>
@@ -521,26 +542,26 @@ export default function ComplianceProposalPage() {
       <ConfirmDialog
         open={confirm === 'reject'}
         onOpenChange={value => !value && setConfirm(null)}
-        title={`Reprovar a proposta ${proposal.code}?`}
+        title={`Recusar o clube ${name}?`}
         description={
           <p>
-            A decisão é final: a proposta vai para “{ONBOARDING_STATUS_LABELS.rejected}” e o contratante recebe o motivo por
-            e-mail. Para corrigir algo, prefira pedir pendência.
+            A decisão é final: o cadastro fica como “{proposalStatusLabel('rejected')}” e o clube recebe o motivo por e-mail.
+            Se for algo que ele pode corrigir, prefira pedir correção.
           </p>
         }
-        confirmLabel="Reprovar proposta"
+        confirmLabel="Recusar clube"
         destructive
-        reason={{ label: 'Motivo (o contratante vai ler)', placeholder: 'Ex.: situação cadastral BAIXADA na Receita Federal.', minLength: 10 }}
+        reason={{ label: 'Motivo (o clube vai ler)', placeholder: 'Ex.: situação cadastral BAIXADA na Receita Federal.', minLength: 10 }}
         onConfirm={reject}
       />
       <ConfirmDialog
         open={confirm === 'cancel'}
         onOpenChange={value => !value && setConfirm(null)}
-        title={`Cancelar a proposta ${proposal.code}?`}
-        description="Encerra a proposta sem decisão de mérito (desistência, duplicidade). Cobrança de ativação em aberto é cancelada. Não há como desfazer."
-        confirmLabel="Cancelar proposta"
+        title={`Cancelar o cadastro de ${name}?`}
+        description="Encerra o cadastro sem decisão sobre o clube (desistência, duplicidade). A cobrança de ativação em aberto é cancelada. Não há como desfazer."
+        confirmLabel="Cancelar cadastro"
         destructive
-        reason={{ label: 'Motivo do cancelamento', placeholder: 'Ex.: contratante desistiu por telefone', minLength: 3 }}
+        reason={{ label: 'Motivo do cancelamento', placeholder: 'Ex.: o clube desistiu por telefone', minLength: 3 }}
         onConfirm={cancel}
       />
       <EmailPreviewDialog emailId={emailId} onOpenChange={open => !open && setEmailId(null)} />

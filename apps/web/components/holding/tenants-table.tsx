@@ -10,7 +10,7 @@ import {
   holdingAlertKind,
   type HoldingTenantRow,
 } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -90,7 +90,7 @@ export function TenantsTable({
     <Card id="ranking" className="scroll-mt-24 gap-4 border-0 shadow-sm">
       <CardHeader>
         <div className="flex items-center gap-1.5">
-          <CardTitle className="text-base">Ranking de inquilinos</CardTitle>
+          <CardTitle className="text-base">Ranking de clubes</CardTitle>
           <FormulaHint>{HEALTH_FORMULA}</FormulaHint>
         </div>
         <CardDescription className="text-xs">
@@ -104,9 +104,9 @@ export function TenantsTable({
             <Input
               value={filters.q}
               onChange={event => set('q', event.target.value)}
-              placeholder="Buscar inquilino"
+              placeholder="Buscar clube"
               className="h-8 pl-8"
-              aria-label="Buscar inquilino por nome ou slug"
+              aria-label="Buscar clube por nome ou endereço do site"
             />
           </div>
           <Select value={filters.band} onValueChange={value => set('band', value as HoldingTenantFilters['band'])}>
@@ -185,7 +185,7 @@ export function TenantsTable({
           )}
           {rows && (
             <span className="ml-auto text-xs text-muted-foreground">
-              {formatInt(visible.length)} de {formatInt(rows.length)} inquilinos
+              {formatInt(visible.length)} de {formatInt(rows.length)} clubes
             </span>
           )}
         </div>
@@ -199,16 +199,16 @@ export function TenantsTable({
             ))}
           </div>
         ) : !rows || rows.length === 0 ? (
-          <EmptyNote>Nenhum inquilino operador cadastrado ainda.</EmptyNote>
+          <EmptyNote>Nenhum clube operador cadastrado ainda.</EmptyNote>
         ) : visible.length === 0 ? (
-          <EmptyNote icon={Search}>Nenhum inquilino com esses filtros.</EmptyNote>
+          <EmptyNote icon={Search}>Nenhum clube com esses filtros.</EmptyNote>
         ) : (
           <div className={cn('overflow-x-auto rounded-lg border', loading && 'opacity-60 transition-opacity')}>
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead className="w-10 text-center">#</TableHead>
-                  <TableHead>Inquilino</TableHead>
+                  <TableHead>Clube</TableHead>
                   <TableHead>Saúde</TableHead>
                   <TableHead className="min-w-37.5">Vidas / limite</TableHead>
                   <TableHead className="text-right">Receita ANNETEC/mês</TableHead>
@@ -229,7 +229,7 @@ export function TenantsTable({
                         <TableCell className="text-center text-xs tabular-nums text-muted-foreground">{index + 1}</TableCell>
                         <TableCell className="max-w-55">
                           <Link
-                            href={`/admin/holding/${row.organizationId}`}
+                            href={`/admin/inquilinos/${row.organizationId}`}
                             className="block truncate font-medium text-foreground hover:underline"
                           >
                             {row.name}
@@ -270,7 +270,7 @@ export function TenantsTable({
                         <TableCell className="text-right">
                           <p className="text-sm tabular-nums">{row.managed ? formatBRL(row.platformMrr) : '—'}</p>
                           {row.platformOpenAmount > 0 && (
-                            <p className={cn('text-xs tabular-nums', row.platformDaysLate > 0 ? 'text-red-700' : 'text-muted-foreground')}>
+                            <p className={cn('text-xs tabular-nums', row.platformDaysLate > 0 ? 'text-[#B42318]' : 'text-muted-foreground')}>
                               {formatBRL(row.platformOpenAmount)} em aberto
                               {row.platformDaysLate > 0 ? ` · ${row.platformDaysLate} d` : ''}
                             </p>
@@ -320,7 +320,7 @@ export function TenantsTable({
                         </TableCell>
                         <TableCell>
                           <Button asChild variant="ghost" size="icon-sm" aria-label={`Detalhar ${row.name}`}>
-                            <Link href={`/admin/holding/${row.organizationId}`}>
+                            <Link href={`/admin/inquilinos/${row.organizationId}`}>
                               <ChevronRight className="h-4 w-4" />
                             </Link>
                           </Button>

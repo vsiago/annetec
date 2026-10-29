@@ -9,9 +9,10 @@ import { SubscriptionDetailView } from '@/components/admin-platform/billing/subs
 import { getPlatformBillingSettingsAction, getPlatformSubscriptionAction } from '@/lib/actions/platform-billing-api'
 
 /**
- * Detalhe de uma assinatura de plataforma — a tela da demonstração da régua
- * (roteiro §F passo 7): avançar dias, ver o degrau mudar e o painel do
- * inquilino reagir, pagar e ver a reativação.
+ * Detalhe de um clube pagante (a assinatura de plataforma) — a tela da
+ * demonstração das regras de cobrança (roteiro §F passo 7): avançar dias, ver a
+ * etapa mudar e o painel do clube reagir, pagar e ver a reativação. O
+ * histórico do clube fica aqui; "avançar dias" só aparece em demonstração.
  */
 export default function PlatformSubscriptionPage() {
   const params = useParams<{ id: string }>()
@@ -26,7 +27,7 @@ export default function PlatformSubscriptionPage() {
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        Voltar para as assinaturas
+        Voltar aos clubes pagantes
       </Link>
 
       {detail.error && !detail.data ? (

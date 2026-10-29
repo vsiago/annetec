@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { TenantUser } from '@annetec/contracts'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { EmptyStateCard } from '@/components/dashboard/empty-state'
@@ -46,8 +46,8 @@ export default function OperatorComissoesPage() {
       </div>
 
       {mensagemErro && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">{mensagemErro}</CardContent>
+        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
+          <CardContent className="py-4 text-sm text-[#B42318]">{mensagemErro}</CardContent>
         </Card>
       )}
 
@@ -61,7 +61,7 @@ export default function OperatorComissoesPage() {
             ) : sellers.length === 0 ? (
               <EmptyStateCard
                 icon={Receipt}
-                title="Nenhum vendedor neste inquilino"
+                title="Nenhum vendedor neste clube"
                 description="Comissão vem dos recibos do produtor no ERP — sem vendedor com produtor vinculado, não há o que consultar."
                 action={
                   <Button variant="outline" size="sm" asChild>
@@ -74,8 +74,8 @@ export default function OperatorComissoesPage() {
                 {sellers.map(seller => (
                   <div key={seller.id} className="flex items-center justify-between gap-4 p-4">
                     <div className="flex items-center gap-3">
-                      <Avatar className="size-9 bg-primary">
-                        <AvatarFallback className="bg-primary text-white text-xs font-medium">
+                      <Avatar className="size-9 bg-secondary">
+                        <AvatarFallback className="bg-secondary text-secondary-foreground text-xs font-medium">
                           {getInitials(seller.name)}
                         </AvatarFallback>
                       </Avatar>

@@ -9,7 +9,7 @@ import {
   onlyDigits,
   type OnboardingProposalDetail,
 } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/dashboard/empty-state'
@@ -26,13 +26,15 @@ import {
 import { formatCnpj, formatDateTimeBR, precheckSummaryMeta } from '@/lib/adapters/platform-console'
 
 /**
- * Aba "KYB / Documentos" do inquilino: a proposta de contratação que originou
- * o clube (análise cadastral, decisão e documentos), em modo consulta. A
- * proposta vem da assinatura de plataforma ou, na falta dela, da busca pelo
- * CNPJ na fila. Inquilino criado fora da contratação pública não tem KYB aqui.
+ * Aba "Documentos" do clube: o cadastro de contratação que originou o clube
+ * (análise, decisão e "Documentos da empresa"), em modo consulta. O cadastro
+ * vem da assinatura da ANNETEC ou, na falta dela, da busca pelo CNPJ na fila.
+ * Clube criado fora da contratação pública não tem documentos aqui.
+ *
+ * `loadTenantProposal` também alimenta o item "Cadastro aprovado" do Resumo.
  */
 
-async function loadProposal(
+export async function loadTenantProposal(
   tenantId: string,
   tenantSlug: string,
   document: string,
@@ -60,7 +62,7 @@ export function TenantOnboardingPanel({
   document: string
 }) {
   const { data, error, loading, reload } = useConsoleData(
-    () => loadProposal(tenantId, tenantSlug, document),
+    () => loadTenantProposal(tenantId, tenantSlug, document),
     [tenantId, tenantSlug, document],
   )
   const [viewerDoc, setViewerDoc] = useState<string | null>(null)
@@ -81,8 +83,8 @@ export function TenantOnboardingPanel({
         <CardContent>
           <EmptyState
             icon={FileSearch}
-            title="Sem contratação pelo site"
-            description="Este inquilino foi criado fora da contratação pública, então não há análise cadastral (KYB) nem documentos registrados na plataforma."
+            title="Sem documentos da empresa"
+            description="Este clube foi cadastrado direto pela equipe da ANNETEC, sem contratação pelo site. Por isso não há análise do cadastro nem documentos guardados aqui."
           />
         </CardContent>
       </Card>
@@ -94,38 +96,40 @@ export function TenantOnboardingPanel({
       <Card className="gap-4 shadow-none">
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-            Proposta <span className="font-mono">{data.code}</span>
+            Documentos da empresa
             <ProposalStatusPill status={data.status} short={false} />
             <Pill meta={precheckSummaryMeta(data.precheckSummary)} />
           </CardTitle>
           <CardDescription>
             {formatCnpj(data.cnpj)} · {CONTRACTOR_TYPE_LABELS[data.contractorType]} · {LEGAL_FORM_LABELS[data.legalForm]}
+            <span className="block text-xs">
+              Código do cadastro: <span className="font-mono">{data.code}</span>
+            </span>
           </CardDescription>
           <CardAction>
             <Button size="sm" className="gap-1.5" asChild>
               <Link href={`/admin/compliance/${data.id}`}>
-                Abrir no compliance
+                Abrir em Aprovações
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
           </CardAction>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          <Field label="Enviada">{data.submittedAt ? formatDateTimeBR(data.submittedAt) : '—'}</Field>
-          <Field label="Decisão">
-            {data.decision?.decidedAt
-              ? `${formatDateTimeBR(data.decision.decidedAt)}${data.decision.decidedBy ? ` · ${data.decision.decidedBy}` : ''}`
-              : '—'}
-          </Field>
-          <Field label="No ar desde">
+          <Field label="Cadastro enviado em">{data.submittedAt ? formatDateTimeBR(data.submittedAt) : '—'}</Field>
+          <Field label="Aprovado em">{data.decision?.decidedAt ? formatDateTimeBR(data.decision.decidedAt) : '—'}</Field>
+          <Field label="Clube no ar desde">
             {data.provisioning.provisionedAt ? formatDateTimeBR(data.provisioning.provisionedAt) : '—'}
-            {data.provisioning.activationWaived && <span className="block text-xs text-muted-foreground">ativação isenta</span>}
+            {data.provisioning.activationWaived && (
+              <span className="block text-xs text-muted-foreground">sem cobrança de ativação</span>
+            )}
           </Field>
-          <Field label="Pessoas / PEP">
-            {(data.people ?? []).length} pessoa(s){data.hasPep ? ' · com PEP' : ''}
+          <Field label="Pessoas do cadastro">
+            {(data.people ?? []).length} pessoa(s)
+            {data.hasPep ? ' · inclui pessoa politicamente exposta' : ''}
           </Field>
           {data.decision?.overrideReason && (
-            <Field label="Aprovada com ressalva" className="sm:col-span-2 xl:col-span-4">
+            <Field label="Aprovado com ressalva" className="sm:col-span-2 xl:col-span-4">
               {data.decision.overrideReason}
             </Field>
           )}

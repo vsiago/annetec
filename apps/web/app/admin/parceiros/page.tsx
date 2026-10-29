@@ -5,7 +5,7 @@ import type { Benefit, BenefitCategory, Partner, PartnerCategory, UF } from '@an
 import { UFS } from '@annetec/contracts'
 import { useAdminScope } from '@/contexts/admin-scope-context'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -64,8 +64,8 @@ export default function OperatorRedePage() {
       </div>
 
       {operatorError && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">{operatorError}</CardContent>
+        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
+          <CardContent className="py-4 text-sm text-[#B42318]">{operatorError}</CardContent>
         </Card>
       )}
 
@@ -132,8 +132,8 @@ function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
       ) : partners.length === 0 ? (
         <EmptyStateCard
           icon={Handshake}
-          title="Nenhum parceiro neste inquilino"
-          description="A rede credenciada é conteúdo próprio da Annetec — a Digital Saúde não tem equivalente, então cada inquilino monta a sua. Troque de inquilino no seletor acima para ver outra."
+          title="Nenhum parceiro neste clube"
+          description="A rede credenciada é conteúdo próprio da Annetec — a Digital Saúde não tem equivalente, então cada clube monta a sua. Troque de clube no seletor acima para ver outra."
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -158,7 +158,7 @@ function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      className="h-6 w-6 p-0 text-[#B42318] hover:text-[#B42318]"
                       onClick={() => handleDelete(partner.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -279,7 +279,7 @@ function AddPartnerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button className="bg-primary hover:opacity-90 text-white">
+        <Button>
           <Plus className="h-4 w-4 mr-2" /> Novo parceiro
         </Button>
       </DialogTrigger>
@@ -342,7 +342,7 @@ function AddPartnerDialog({
             <Label>Cidade</Label>
             <Input value={city} onChange={e => setCity(e.target.value)} />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-[#B42318]">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -399,8 +399,8 @@ function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
       ) : benefits.length === 0 ? (
         <EmptyStateCard
           icon={Gift}
-          title="Nenhum benefício neste inquilino"
-          description="O clube de benefícios é conteúdo próprio da Annetec, cadastrado por inquilino."
+          title="Nenhum benefício neste clube"
+          description="O clube de benefícios é conteúdo próprio da Annetec, cadastrado por clube."
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -425,7 +425,7 @@ function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      className="h-6 w-6 p-0 text-[#B42318] hover:text-[#B42318]"
                       onClick={() => handleDelete(benefit.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -518,7 +518,7 @@ function AddBenefitDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button className="bg-primary hover:opacity-90 text-white">
+        <Button>
           <Plus className="h-4 w-4 mr-2" /> Novo benefício
         </Button>
       </DialogTrigger>
@@ -560,7 +560,7 @@ function AddBenefitDialog({
             <Label>Fornecedor</Label>
             <Input value={provider} onChange={e => setProvider(e.target.value)} />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-[#B42318]">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

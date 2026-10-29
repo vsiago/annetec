@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 
 /**
  * Plano contratado (com a cotação que vira a cobrança), marca e endereço do
- * site, e o registro do aceite eletrônico — o que o compliance confere em
+ * site, e o registro do aceite eletrônico — o que a equipe confere em
  * "Plano, preço e forma de pagamento" e "Nome, marca e endereço".
  */
 
@@ -49,13 +49,14 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
           {quote && (
             <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
               <div className="flex justify-between py-0.5">
-                <span className="text-muted-foreground">Mensal recorrente estimado</span>
+                <span className="text-muted-foreground">Mensalidade estimada</span>
                 <span className="font-medium text-foreground">{formatBRL(quote.monthlyTotal)}</span>
               </div>
               {quote.extraLives > 0 && (
                 <div className="flex justify-between py-0.5 text-xs">
                   <span className="text-muted-foreground">
-                    inclui {quote.extraLives.toLocaleString('pt-BR')} vida(s) excedente(s) × {formatBRL(quote.pricePerExtraLife)}
+                    inclui {quote.extraLives.toLocaleString('pt-BR')} {quote.extraLives === 1 ? 'vida acima do limite' : 'vidas acima do limite'} ×{' '}
+                    {formatBRL(quote.pricePerExtraLife)}
                   </span>
                   <span className="text-muted-foreground">{formatBRL(quote.overageTotal)}</span>
                 </div>
@@ -68,7 +69,7 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
                 <span className="text-foreground">Cobrança de ativação</span>
                 <span className="text-foreground">{formatBRL(quote.activationTotal)}</span>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">Adesão + 1ª mensalidade, emitida na aprovação.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Adesão mais a 1ª mensalidade. O clube recebe essa cobrança quando você aprova.</p>
             </div>
           )}
         </CardContent>
@@ -80,7 +81,7 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
             <Palette className="h-4 w-4 text-muted-foreground" />
             Marca e site
           </CardTitle>
-          <CardDescription>{brand ? brand.clubName : 'Etapa ainda não preenchida'}</CardDescription>
+          <CardDescription>{brand ? brand.clubName : 'O clube ainda não preencheu esta parte'}</CardDescription>
         </CardHeader>
         {brand && (
           <CardContent className="space-y-4">
@@ -104,7 +105,7 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Endereço do site">
-                <a href={brand.siteUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                <a href={brand.siteUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-secondary hover:underline">
                   /{brand.slug}
                   <ExternalLink className="h-3 w-3" />
                 </a>
@@ -135,7 +136,7 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
             Aceite do contrato
           </CardTitle>
           <CardDescription>
-            {contract ? `Aceito em ${formatDateTimeBR(contract.acceptedAt)}` : 'O contratante ainda não aceitou os termos.'}
+            {contract ? `Aceito em ${formatDateTimeBR(contract.acceptedAt)}` : 'O clube ainda não aceitou os termos.'}
           </CardDescription>
         </CardHeader>
         {contract && (
@@ -145,20 +146,27 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
               <br />
               <span className="font-mono text-xs text-muted-foreground">{formatCpf(contract.signerCpf)}</span>
             </Field>
-            <Field label="Versões">
-              Termos {contract.termsVersion} · DPA {contract.dpaVersion}
+            <Field label="Versões aceitas">
+              Termos de uso {contract.termsVersion} · Tratamento de dados {contract.dpaVersion}
             </Field>
-            <Field label="Integridade (sha-256)">
-              <span className="font-mono text-xs" title={`${contract.termsHash}\n${contract.dpaHash}`}>
-                {contract.termsHash.slice(0, 12)}… · {contract.dpaHash.slice(0, 12)}…
-              </span>
-            </Field>
-            <Field label="Origem">
-              <span className="text-xs">
-                IP {contract.ip ?? '—'}
-                {contract.userAgent ? <span className="block truncate text-muted-foreground">{contract.userAgent}</span> : null}
-              </span>
-            </Field>
+            <details className="min-w-0 sm:col-span-2">
+              <summary className="cursor-pointer select-none text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground">
+                Detalhes técnicos
+              </summary>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <Field label="Código de integridade (sha-256)">
+                  <span className="font-mono text-xs" title={`${contract.termsHash}\n${contract.dpaHash}`}>
+                    {contract.termsHash.slice(0, 12)}… · {contract.dpaHash.slice(0, 12)}…
+                  </span>
+                </Field>
+                <Field label="De onde foi aceito">
+                  <span className="text-xs">
+                    IP {contract.ip ?? '—'}
+                    {contract.userAgent ? <span className="block truncate text-muted-foreground">{contract.userAgent}</span> : null}
+                  </span>
+                </Field>
+              </div>
+            </details>
           </CardContent>
         )}
       </Card>
@@ -166,7 +174,7 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
   )
 }
 
-/** Pendência aberta (ou resolvida) e o motivo de reprovação/decisão, quando houver. */
+/** Correção pedida ao clube (aberta ou resolvida) e o motivo da recusa ou da decisão, quando houver. */
 export function DecisionNotes({ proposal }: { proposal: OnboardingProposalDetail }) {
   const pending = proposal.pendingRequest
   const decision = proposal.decision
@@ -184,7 +192,7 @@ export function DecisionNotes({ proposal }: { proposal: OnboardingProposalDetail
           )}
         >
           <p className="text-sm font-semibold text-foreground">
-            {pending.resolvedAt ? 'Pendência resolvida' : 'Pendência aberta com o contratante'}
+            {pending.resolvedAt ? 'Correção reenviada pelo clube' : 'Correção pedida ao clube'}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">{pending.message}</p>
           <ul className="mt-2 space-y-1 text-sm">
@@ -198,28 +206,28 @@ export function DecisionNotes({ proposal }: { proposal: OnboardingProposalDetail
             ))}
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">
-            Pedida {formatDateTimeBR(pending.requestedAt)}
+            Pedida em {formatDateTimeBR(pending.requestedAt)}
             {pending.requestedBy ? ` por ${pending.requestedBy}` : ''}
-            {pending.resolvedAt ? ` · reenviada ${formatDateTimeBR(pending.resolvedAt)}` : ''}
+            {pending.resolvedAt ? ` · reenviada em ${formatDateTimeBR(pending.resolvedAt)}` : ''}
           </p>
         </div>
       )}
       {proposal.rejectionReason && (
         <div className="rounded-xl border border-red-200 bg-red-50/70 p-4 dark:border-red-500/30 dark:bg-red-500/10">
-          <p className="text-sm font-semibold text-red-700 dark:text-red-300">Motivo da reprovação</p>
+          <p className="text-sm font-semibold text-[#B42318] dark:text-red-300">Motivo da recusa</p>
           <p className="mt-1 text-sm text-red-700/90 dark:text-red-300/90">{proposal.rejectionReason}</p>
         </div>
       )}
       {decision && (decision.note || decision.overrideReason) && (
         <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm">
           <p className="font-semibold text-foreground">
-            Decisão{decision.decidedBy ? ` de ${decision.decidedBy}` : ''}
+            Decisão{decision.decidedBy ? ` tomada por ${decision.decidedBy}` : ''}
             {decision.decidedAt ? ` · ${formatDateTimeBR(decision.decidedAt)}` : ''}
           </p>
           {decision.note && <p className="mt-1 text-muted-foreground">{decision.note}</p>}
           {decision.overrideReason && (
             <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-              Aprovada com ressalva: {decision.overrideReason}
+              Aprovado com ressalva: {decision.overrideReason}
             </p>
           )}
         </div>

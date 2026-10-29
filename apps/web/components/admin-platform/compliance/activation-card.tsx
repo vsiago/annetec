@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Building2, Copy, ExternalLink, FlaskConical, Loader2, LogIn, Rocket, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import type { OnboardingProposalDetail } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   ConfirmDialog,
@@ -27,7 +27,11 @@ import {
 
 /**
  * Da aprovação ao clube no ar: cobrança de ativação (emitir, abrir a fatura
- * pública, simular o pagamento na demonstração) e o provisionamento.
+ * pública, simular o pagamento na demonstração) e a liberação do clube.
+ *
+ * "Simular pagamento" só aparece quando a API diz que dá (`canSimulatePayment`):
+ * gateway simulado ou sandbox, e nunca em produção (`demoToolsAllowed` no
+ * servidor, que também recusa o comando se alguém tentar).
  */
 export function ActivationCard({
   proposal,
@@ -56,7 +60,7 @@ export function ActivationCard({
 
   const issue = async () => {
     setBusy('issue')
-    const detail = await runCommand(issueActivationChargeAction(proposal.id), 'Cobrança de ativação emitida')
+    const detail = await runCommand(issueActivationChargeAction(proposal.id), 'Cobrança de ativação emitida. O clube foi avisado por e-mail')
     setBusy(null)
     if (detail) onUpdated(detail)
   }
@@ -65,14 +69,14 @@ export function ActivationCard({
     if (!charge) return
     const ok = await copyToClipboard(charge.publicUrl)
     if (ok) toast.success('Link da fatura copiado')
-    else toast.error('Não foi possível copiar', { description: charge.publicUrl })
+    else toast.error('Não foi possível copiar o link', { description: charge.publicUrl })
   }
 
   const simulate = async (): Promise<boolean> => {
     if (!charge) return false
     const result = await runCommand(
       simulatePlatformChargePaymentAction(charge.id),
-      'Pagamento simulado — o provisionamento começa em instantes',
+      'Pagamento simulado. O clube será liberado em instantes',
     )
     if (!result) return false
     onPaid()
@@ -80,20 +84,20 @@ export function ActivationCard({
   }
 
   return (
-    <Card className="gap-4 border-primary/20 shadow-none">
+    <Card className="gap-4 border-secondary/20 shadow-none">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Wallet className="h-4 w-4 text-muted-foreground" />
-          Ativação e provisionamento
+          Ativação do clube
         </CardTitle>
         <CardDescription>
           {status === 'active'
-            ? 'Clube no ar.'
+            ? 'Clube liberado.'
             : status === 'provisioning'
-              ? 'Pagamento confirmado — criando o clube.'
+              ? 'Pagamento confirmado. Estamos criando o clube.'
               : charge
-                ? 'Aguardando o pagamento da cobrança de ativação.'
-                : 'Aprovada — a cobrança de ativação ainda não foi emitida.'}
+                ? 'Esperando o clube pagar a cobrança de ativação.'
+                : 'Clube aprovado, mas a cobrança de ativação ainda não foi emitida.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -118,7 +122,7 @@ export function ActivationCard({
               </Button>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={copy}>
                 <Copy className="h-3.5 w-3.5" />
-                Copiar link
+                Copiar link da fatura
               </Button>
               {proposal.canSimulatePayment && isChargeOpen(charge.status) && (
                 <Button
@@ -128,7 +132,7 @@ export function ActivationCard({
                   onClick={() => setConfirmPay(true)}
                 >
                   <FlaskConical className="h-3.5 w-3.5" />
-                  Simular pagamento
+                  Simular pagamento (demonstração)
                 </Button>
               )}
             </div>
@@ -145,14 +149,14 @@ export function ActivationCard({
         {(proposal.provisioning.attempts > 0 || proposal.provisioning.provisionedAt) && (
           <div className="space-y-1 text-sm">
             <p className="text-muted-foreground">
-              Provisionamento: {proposal.provisioning.attempts} tentativa(s)
-              {proposal.provisioning.activationWaived ? ' · ativação isenta' : ''}
+              Tentativas de liberar o clube: {proposal.provisioning.attempts}
+              {proposal.provisioning.activationWaived ? ' · liberado sem cobrança de ativação' : ''}
             </p>
             {proposal.provisioning.provisionedAt && (
               <p className="text-foreground">No ar desde {formatDateTimeBR(proposal.provisioning.provisionedAt)}</p>
             )}
             {proposal.provisioning.error && (
-              <p className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">
+              <p className="rounded-md bg-red-50 px-2 py-1 text-xs text-[#B42318] dark:bg-red-500/10 dark:text-red-300">
                 {proposal.provisioning.error}
               </p>
             )}
@@ -163,7 +167,7 @@ export function ActivationCard({
           <SuperadminOnly isSuperadmin={isSuperadmin}>
             <Button variant="outline" size="sm" className="w-full gap-2" onClick={onProvision}>
               <Rocket className="h-4 w-4" />
-              {canRetry ? 'Reprocessar provisionamento' : 'Isentar ativação e provisionar'}
+              {canRetry ? 'Tentar liberar o clube de novo' : 'Liberar o clube sem cobrança'}
             </Button>
           </SuperadminOnly>
         )}
@@ -180,13 +184,13 @@ export function ActivationCard({
               <Button variant="outline" size="sm" className="gap-1.5 bg-background" asChild>
                 <a href={proposal.tenant.loginUrl} target="_blank" rel="noreferrer">
                   <LogIn className="h-3.5 w-3.5" />
-                  Login
+                  Acesso ao painel
                 </a>
               </Button>
               <Button variant="outline" size="sm" className="gap-1.5 bg-background" asChild>
                 <Link href={`/admin/inquilinos/${proposal.tenant.organizationId}`}>
                   <Building2 className="h-3.5 w-3.5" />
-                  Inquilino
+                  Ver o clube
                 </Link>
               </Button>
             </div>
@@ -198,7 +202,7 @@ export function ActivationCard({
         open={confirmPay}
         onOpenChange={setConfirmPay}
         title="Simular o pagamento da ativação?"
-        description="Só existe no gateway simulado (demonstração). O pagamento confirmado dispara o provisionamento: organização, administrador, régua, planos e assinatura."
+        description="Só existe no modo demonstração. Ao confirmar, o clube é criado como se a ativação tivesse sido paga: administrador, planos, régua de cobrança e assinatura."
         confirmLabel="Simular pagamento"
         onConfirm={simulate}
       />

@@ -11,7 +11,7 @@ import {
   type HoldingTenantDetail,
   type TenantLifecycleAction,
 } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
@@ -74,7 +74,7 @@ export function LifecyclePanel({
       <CardHeader>
         <CardTitle className="text-base">Controle do ciclo de vida</CardTitle>
         <CardDescription className="text-xs">
-          Afeta só o painel da equipe do inquilino (admin e vendedor). Associados, vitrine, checkout e carteirinhas
+          Afeta só o painel da equipe do clube (admin e vendedor). Associados, vitrine, checkout e carteirinhas
           seguem funcionando.
         </CardDescription>
       </CardHeader>
@@ -110,8 +110,8 @@ export function LifecyclePanel({
           <div className="flex gap-2 rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
-              <strong className="font-medium text-foreground">Fora da cobrança automática.</strong> Este inquilino não
-              tem assinatura de plataforma (contrato legado ou próprio da ANNETEC). A holding só acompanha os números —
+              <strong className="font-medium text-foreground">Fora da cobrança automática.</strong> Este clube não
+              tem assinatura de plataforma (contrato legado ou próprio da ANNETEC). A equipe só acompanha os números —
               restringir, suspender e reativar não se aplicam e a API recusa o comando.
             </p>
           </div>
@@ -123,7 +123,7 @@ export function LifecyclePanel({
             <p>
               A assinatura de plataforma está <strong className="font-medium text-foreground">cancelada</strong>. Para
               voltar a cobrar, reative a assinatura no{' '}
-              <Link href={`/admin/financeiro/assinaturas/${subscription.id}`} className="font-medium text-primary hover:underline">
+              <Link href={`/admin/financeiro/assinaturas/${subscription.id}`} className="font-medium text-secondary hover:underline">
                 Financeiro
               </Link>
               ; os comandos abaixo só mudam o acesso ao painel.
@@ -280,7 +280,7 @@ function LifecycleDialog({
                   disabled={submitting}
                 />
                 <div className="flex justify-between gap-2 text-xs">
-                  <span className={cn(errors.reason ? 'text-destructive' : 'text-muted-foreground')}>
+                  <span className={cn(errors.reason ? 'text-[#B42318]' : 'text-muted-foreground')}>
                     {errors.reason ?? 'Mínimo de 5 caracteres.'}
                   </span>
                   <span className="tabular-nums text-muted-foreground">
@@ -302,14 +302,14 @@ function LifecycleDialog({
                     aria-invalid={errors.until ? true : undefined}
                     disabled={submitting}
                   />
-                  <p className={cn('text-xs', errors.until ? 'text-destructive' : 'text-muted-foreground')}>
+                  <p className={cn('text-xs', errors.until ? 'text-[#B42318]' : 'text-muted-foreground')}>
                     {errors.until ?? option.untilHint}
                   </p>
                 </div>
               )}
 
               {errors.form && (
-                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+                <p className="rounded-md bg-[#B42318]/10 px-3 py-2 text-sm text-[#B42318]" role="alert">
                   {errors.form}
                 </p>
               )}

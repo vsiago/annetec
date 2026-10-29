@@ -98,8 +98,8 @@ export default function SellerCommissionsPage() {
       </div>
 
       {(baseError && !loadingBase) && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">{baseError}</CardContent>
+        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
+          <CardContent className="py-4 text-sm text-[#B42318]">{baseError}</CardContent>
         </Card>
       )}
 
@@ -119,7 +119,7 @@ export default function SellerCommissionsPage() {
                   <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
                 </div>
               ) : receiptsError ? (
-                <p className="p-4 text-sm text-destructive">{receiptsError}</p>
+                <p className="p-4 text-sm text-[#B42318]">{receiptsError}</p>
               ) : !receipts || receipts.length === 0 ? (
                 <EmptyStateCard
                   icon={Receipt}
@@ -162,7 +162,7 @@ export default function SellerCommissionsPage() {
                                 href={receipt.documentUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                                className="inline-flex items-center gap-1 text-sm text-secondary hover:underline"
                               >
                                 Ver <ExternalLink className="h-3.5 w-3.5" />
                               </a>

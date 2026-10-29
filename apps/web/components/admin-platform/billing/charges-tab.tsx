@@ -14,7 +14,7 @@ import {
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { DataTable, FilterSelect, SearchInput, TableFooter, type Column } from '@/components/dashboard/table-controls'
 import { LoadError, Pill, TableSkeleton, useConsoleData } from '@/components/admin-platform/billing/console-kit'
-import { ChargeKindPill, MethodLabel } from '@/components/admin-platform/billing/billing-bits'
+import { ChargeKindPill, MethodLabel, pluralize } from '@/components/admin-platform/billing/billing-bits'
 import { ChargeActionsMenu, useChargeActions } from '@/components/admin-platform/billing/charge-actions'
 import { ChargeDetailSheet } from '@/components/admin-platform/billing/charge-detail-sheet'
 import { listPlatformChargesAction } from '@/lib/actions/platform-billing-api'
@@ -31,9 +31,9 @@ import {
 } from '@/lib/adapters/platform-console'
 
 /**
- * Faturas da plataforma (ANNETEC → inquilinos) com filtros e ações. Serve a
+ * Faturas da plataforma (ANNETEC → clubes) com filtros e ações. Serve a
  * aba "Faturas" do financeiro e, com `subscriptionId`, o detalhe de uma
- * assinatura (sem os filtros de inquilino).
+ * assinatura (sem os filtros de clube).
  */
 
 function useDebounced<T>(value: T, delay = 350): T {
@@ -122,13 +122,13 @@ export function ChargesTab({
       ? []
       : [
           {
-            key: 'inquilino',
-            header: 'Inquilino',
+            key: 'clube',
+            header: 'Clube',
             render: (charge: PlatformCharge) => (
               <div className="min-w-0 max-w-56">
                 <p className="truncate font-medium text-foreground">{charge.tenantName ?? 'Nova contratação'}</p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {charge.tenantSlug ? `/${charge.tenantSlug}` : 'antes do provisionamento'}
+                  {charge.tenantSlug ? `/${charge.tenantSlug}` : 'clube ainda não liberado'}
                 </p>
               </div>
             ),
@@ -155,9 +155,13 @@ export function ChargesTab({
         return (
           <div className="whitespace-nowrap text-sm">
             <p className="text-foreground">{formatDateBR(charge.dueDate)}</p>
-            {late && <p className="text-xs text-red-600">há {daysBetweenDates(charge.dueDate, today)} dia(s)</p>}
+            {late && (
+              <p className="text-xs text-[#B42318]">
+                atrasada há {pluralize(daysBetweenDates(charge.dueDate, today), 'dia', 'dias')}
+              </p>
+            )}
             {charge.status === 'paid' && charge.paidAt && (
-              <p className="text-xs text-muted-foreground">paga {formatDateBR(charge.paidAt)}</p>
+              <p className="text-xs text-muted-foreground">paga em {formatDateBR(charge.paidAt)}</p>
             )}
           </div>
         )
@@ -171,7 +175,7 @@ export function ChargesTab({
     },
     {
       key: 'forma',
-      header: 'Forma',
+      header: 'Forma de pagamento',
       hideOnMobile: true,
       render: charge => <MethodLabel method={charge.method} card={charge.card} className="text-xs" />,
     },
@@ -194,7 +198,7 @@ export function ChargesTab({
     <div>
       {!embedded && (
         <div className="flex flex-col gap-3 p-4 lg:flex-row lg:flex-wrap lg:items-center">
-          <SearchInput value={search} onChange={setSearch} placeholder="Buscar por inquilino ou descrição" />
+          <SearchInput value={search} onChange={setSearch} placeholder="Buscar por clube ou descrição" />
           <FilterSelect
             label="Situação"
             value={status}
@@ -210,7 +214,7 @@ export function ChargesTab({
             options={CHARGE_KIND_OPTIONS}
           />
           <FilterSelect
-            label="Forma"
+            label="Forma de pagamento"
             value={method}
             onChange={value => setMethod(value as 'all' | ClubPaymentMethod)}
             allLabel="Todas"
@@ -235,11 +239,11 @@ export function ChargesTab({
       ) : rows.length === 0 ? (
         <EmptyState
           icon={ReceiptText}
-          title={filtered ? 'Nenhuma fatura com esses filtros' : 'Nenhuma fatura ainda'}
+          title={filtered ? 'Nenhuma fatura com esses filtros' : 'Nenhuma fatura por aqui ainda'}
           description={
             filtered
               ? 'Ajuste a busca ou limpe os filtros.'
-              : 'As faturas nascem na aprovação (ativação) e a cada ciclo das assinaturas de plataforma.'
+              : 'A primeira fatura nasce quando um clube é aprovado. Depois, uma nova a cada mês.'
           }
         />
       ) : (

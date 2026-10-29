@@ -23,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -43,7 +43,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { ConfirmDialog, copyToClipboard, runCommand } from '@/components/admin-platform/billing/console-kit'
+import { ConfirmDialog, copyToClipboard, runCommand, usePlatformRole } from '@/components/admin-platform/billing/console-kit'
 import {
   cancelPlatformChargeAction,
   manualPaymentPlatformChargeAction,
@@ -53,9 +53,11 @@ import {
 import { addDays, formatBRL, formatDateBR, isChargeOpen, todaySP } from '@/lib/adapters/platform-console'
 
 /**
- * Ações sobre uma fatura da plataforma: 2ª via, baixa manual, cancelar e
- * simular o pagamento (só no gateway simulado/sandbox). Cancelar e dar baixa
- * pedem confirmação explícita; todas avisam com a frase da própria API.
+ * Ações sobre uma fatura da plataforma: segunda via, marcar como paga,
+ * cancelar e simular o pagamento (só quando o servidor diz que é
+ * demonstração: `canSimulate`). Cancelar e marcar como paga pedem confirmação
+ * explícita; todas avisam com a frase da própria API. Marcar como paga e
+ * cancelar são só do superadmin — para os outros ficam desativadas.
  */
 
 export type ChargeAction = 'reissue' | 'manual' | 'cancel' | 'simulate'
@@ -82,31 +84,32 @@ export function ChargeActionsMenu({
   onDetail?: (charge: PlatformCharge) => void
 }) {
   const can = chargeCapabilities(charge, canSimulate)
+  const { isSuperadmin } = usePlatformRole()
 
   const copyLink = async () => {
     const ok = await copyToClipboard(charge.publicUrl)
     if (ok) toast.success('Link da fatura copiado')
-    else toast.error('Não foi possível copiar', { description: charge.publicUrl })
+    else toast.error('Não foi possível copiar o link', { description: `Copie manualmente: ${charge.publicUrl}` })
   }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Ações da fatura" onClick={event => event.stopPropagation()}>
+        <Button variant="ghost" size="icon-sm" aria-label="Mais ações para esta fatura" onClick={event => event.stopPropagation()}>
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56" onClick={event => event.stopPropagation()}>
+      <DropdownMenuContent align="end" className="w-60" onClick={event => event.stopPropagation()}>
         {onDetail && (
           <DropdownMenuItem onClick={() => onDetail(charge)}>
             <PanelRightOpen className="mr-2 h-4 w-4" />
-            Ver detalhe
+            Ver histórico da fatura
           </DropdownMenuItem>
         )}
         <DropdownMenuItem asChild>
           <a href={charge.publicUrl} target="_blank" rel="noreferrer">
             <ExternalLink className="mr-2 h-4 w-4" />
-            Abrir fatura pública
+            Abrir página da fatura
           </a>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={copyLink}>
@@ -117,17 +120,25 @@ export function ChargeActionsMenu({
         {can.reissue && (
           <DropdownMenuItem onClick={() => onAction('reissue', charge)}>
             <RotateCcw className="mr-2 h-4 w-4" />
-            Emitir 2ª via
+            Emitir segunda via
           </DropdownMenuItem>
         )}
         {can.manual && (
-          <DropdownMenuItem onClick={() => onAction('manual', charge)}>
+          <DropdownMenuItem
+            onClick={() => onAction('manual', charge)}
+            disabled={!isSuperadmin}
+            title={isSuperadmin ? undefined : 'Somente o superadmin pode marcar uma fatura como paga.'}
+          >
             <HandCoins className="mr-2 h-4 w-4" />
-            Dar baixa manual
+            Marcar como pago
           </DropdownMenuItem>
         )}
         {can.simulate && (
-          <DropdownMenuItem onClick={() => onAction('simulate', charge)}>
+          <DropdownMenuItem
+            onClick={() => onAction('simulate', charge)}
+            disabled={!isSuperadmin}
+            title={isSuperadmin ? undefined : 'Somente o superadmin pode simular um pagamento.'}
+          >
             <FlaskConical className="mr-2 h-4 w-4" />
             Simular pagamento
           </DropdownMenuItem>
@@ -135,7 +146,12 @@ export function ChargeActionsMenu({
         {can.cancel && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onAction('cancel', charge)} className="text-red-600 focus:text-red-700">
+            <DropdownMenuItem
+              onClick={() => onAction('cancel', charge)}
+              disabled={!isSuperadmin}
+              title={isSuperadmin ? undefined : 'Somente o superadmin pode cancelar uma fatura.'}
+              className="text-[#B42318] focus:text-[#B42318]"
+            >
               <Ban className="mr-2 h-4 w-4" />
               Cancelar fatura
             </DropdownMenuItem>
@@ -177,7 +193,7 @@ function ReissueDialog({
     setBusy(true)
     const detail = await runCommand(
       reissuePlatformChargeAction(charge.id, { dueDate, ...(method === 'keep' ? {} : { method }) }),
-      `2ª via emitida — vence em ${formatDateBR(dueDate)}`,
+      `Segunda via emitida — vence em ${formatDateBR(dueDate)}`,
     )
     setBusy(false)
     if (detail) {
@@ -190,9 +206,9 @@ function ReissueDialog({
     <Dialog open={!!charge} onOpenChange={open => !open && !busy && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Emitir 2ª via</DialogTitle>
+          <DialogTitle>Emitir segunda via</DialogTitle>
           <DialogDescription>
-            {charge ? `${charge.tenantName ?? 'Fatura'} · ${formatBRL(charge.amount)} · vencia em ${formatDateBR(charge.dueDate)}` : ''}
+            {charge ? `${charge.tenantName ?? 'Fatura'} · ${formatBRL(charge.amount)} · venceu em ${formatDateBR(charge.dueDate)}` : ''}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -214,14 +230,16 @@ function ReissueDialog({
             </Select>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">O link público da fatura continua o mesmo; o e-mail do inquilino não é reenviado.</p>
+        <p className="text-xs text-muted-foreground">
+          O link da fatura continua o mesmo. Nenhum e-mail sai agora, mas o lembrete automático e o aviso de atraso voltam a valer para o novo vencimento. Para avisar o clube já, copie o link no menu da fatura.
+        </p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>
             Voltar
           </Button>
           <Button onClick={submit} disabled={!valid || busy} className="gap-2">
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-            Emitir 2ª via
+            Emitir segunda via
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -265,7 +283,7 @@ function ManualPaymentDialog({
         amount: Math.round(parsed * 100) / 100,
         note: note.trim() || undefined,
       }),
-      'Baixa manual registrada',
+      'Fatura marcada como paga',
     )
     setBusy(false)
     if (detail) {
@@ -278,10 +296,10 @@ function ManualPaymentDialog({
     <AlertDialog open={!!charge} onOpenChange={open => !open && !busy && onClose()}>
       <AlertDialogContent className="sm:max-w-md">
         <AlertDialogHeader>
-          <AlertDialogTitle>Dar baixa manual?</AlertDialogTitle>
+          <AlertDialogTitle>Marcar esta fatura como paga?</AlertDialogTitle>
           <AlertDialogDescription>
-            Registra um pagamento recebido fora do gateway. A fatura vira paga e, se era a última em atraso, o painel do inquilino é
-            reativado. Fica na trilha de auditoria.
+            Use quando o clube pagou por fora, por exemplo com uma transferência. A fatura passa a paga e, se era a última em
+            atraso, o painel do clube volta ao normal. Fica registrado no histórico.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -301,7 +319,7 @@ function ManualPaymentDialog({
               onChange={event => setNote(event.target.value)}
               rows={2}
               maxLength={500}
-              placeholder="Ex.: TED recebida em 27/09, comprovante no e-mail do financeiro"
+              placeholder="Ex.: transferência recebida em 27/09, comprovante no e-mail do financeiro"
             />
           </div>
         </div>
@@ -309,7 +327,7 @@ function ManualPaymentDialog({
           <AlertDialogCancel disabled={busy}>Voltar</AlertDialogCancel>
           <Button onClick={submit} disabled={!valid || busy} className="gap-2">
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-            Confirmar baixa
+            Marcar como pago
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -347,7 +365,7 @@ export function useChargeActions({
     const detail = await runCommand(
       simulatePlatformChargePaymentAction(current.charge.id),
       current.charge.kind === 'activation'
-        ? 'Pagamento simulado — a ativação dispara o provisionamento'
+        ? 'Pagamento simulado — o clube será liberado'
         : 'Pagamento simulado — fatura paga',
     )
     if (detail) onChanged(detail)
@@ -364,7 +382,7 @@ export function useChargeActions({
         title="Cancelar esta fatura?"
         description={
           current
-            ? `${current.charge.tenantName ?? 'Fatura'} · ${formatBRL(current.charge.amount)} · vence ${formatDateBR(current.charge.dueDate)}. A cobrança sai do gateway e deixa de contar para a régua. Não há como desfazer.`
+            ? `${current.charge.tenantName ?? 'Fatura'} · ${formatBRL(current.charge.amount)} · vence em ${formatDateBR(current.charge.dueDate)}. A cobrança deixa de valer e não gera mais lembretes nem bloqueios. Não dá para desfazer.`
             : undefined
         }
         confirmLabel="Cancelar fatura"
@@ -376,7 +394,7 @@ export function useChargeActions({
         open={current?.action === 'simulate'}
         onOpenChange={open => !open && close()}
         title="Simular o pagamento?"
-        description="Só no gateway simulado (demonstração): o pagamento é confirmado como se viesse do webhook — reativa o painel se era a última fatura em atraso."
+        description="Só para demonstração: o pagamento é confirmado como se tivesse chegado do banco. Se era a última fatura em atraso, o painel do clube volta ao normal."
         confirmLabel="Simular pagamento"
         onConfirm={simulate}
       />

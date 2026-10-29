@@ -17,7 +17,7 @@ import {
   type OnboardingProposalDetail,
   type PendingRequestItem,
 } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ConfirmDialog, Field, Pill, runCommand } from '@/components/admin-platform/billing/console-kit'
 import { reviewKybDocumentAction } from '@/lib/actions/platform-onboarding-api'
@@ -29,10 +29,10 @@ import {
 } from '@/lib/adapters/platform-console'
 
 /**
- * Visualizador de documentos KYB: prévia (PDF no leitor do navegador, imagem
+ * Visualizador dos documentos da empresa: prévia (PDF no leitor do navegador, imagem
  * direto) servida pelo proxy do console — o token da equipe nunca vai para o
  * browser — e a decisão por documento: aprovar, recusar com motivo ou pedir
- * reenvio (recusa + item na pendência para o contratante).
+ * reenvio (recusa + item no pedido de correção ao clube).
  */
 
 export function documentFileUrl(proposalId: string, documentId: string): string {
@@ -113,7 +113,7 @@ export function DocumentViewer({
   onOpenChange: (open: boolean) => void
   onUpdated: (detail: OnboardingProposalDetail) => void
   editable: boolean
-  /** Depois de recusar pedindo reenvio: abre a pendência com o item pronto. */
+  /** Depois de recusar pedindo reenvio: abre o pedido de correção com o item pronto. */
   onRequestResend: (item: PendingRequestItem) => void
 }) {
   const [busy, setBusy] = useState<'approve' | null>(null)
@@ -153,7 +153,7 @@ export function DocumentViewer({
     if (!doc) return false
     const detail = await runCommand(
       reviewKybDocumentAction(proposal.id, doc.id, { status: 'rejected', note }),
-      resend ? 'Documento recusado — inclua na pendência para o reenvio' : 'Documento recusado',
+      resend ? 'Documento recusado. Agora envie o pedido de correção ao clube' : 'Documento recusado',
     )
     if (!detail) return false
     onUpdated(detail)
@@ -187,7 +187,7 @@ export function DocumentViewer({
               {doc
                 ? `${doc.fileName} · ${formatBytes(doc.sizeBytes)} · enviado ${formatRelative(doc.uploadedAt)}`
                 : 'Selecione um documento.'}
-              {pendingReview.length > 0 ? ` · ${pendingReview.length} a revisar nesta proposta` : ''}
+              {pendingReview.length > 0 ? ` · ${pendingReview.length} para revisar neste clube` : ''}
             </DialogDescription>
           </DialogHeader>
 
@@ -201,13 +201,13 @@ export function DocumentViewer({
                 <>
                   <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
                     <Field label="Tipo">{KYB_DOCUMENT_KIND_LABELS[doc.kind]}</Field>
-                    <Field label="Pessoa">{doc.personName ?? 'Documento da instituição'}</Field>
+                    <Field label="Pessoa">{doc.personName ?? 'Documento da empresa'}</Field>
                     <Field label="Enviado em">{formatDateTimeBR(doc.uploadedAt)}</Field>
                     <Field label="Situação">{meta?.title}</Field>
                   </div>
 
                   {doc.reviewNote && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-[#B42318] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
                       <p className="text-xs font-medium uppercase tracking-wide">Motivo da recusa</p>
                       <p className="mt-1">{doc.reviewNote}</p>
                       {doc.reviewedAt && <p className="mt-1 text-xs opacity-80">{formatDateTimeBR(doc.reviewedAt)}</p>}
@@ -227,7 +227,7 @@ export function DocumentViewer({
                       <div className="grid grid-cols-2 gap-2">
                         <Button
                           variant="outline"
-                          className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-500/30"
+                          className="gap-1.5 border-red-200 text-[#B42318] hover:bg-red-50 hover:text-[#B42318] dark:border-red-500/30"
                           onClick={() => setConfirm('reject')}
                           disabled={busy !== null || doc.status === 'rejected'}
                         >
@@ -245,18 +245,18 @@ export function DocumentViewer({
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        “Pedir reenvio” recusa o arquivo e já abre a pendência com este item para o contratante.
+                        “Pedir reenvio” recusa o arquivo e já abre o pedido de correção com este item para o clube.
                       </p>
                     </div>
                   ) : (
                     <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
                       {doc.status === 'replaced'
                         ? 'Versão substituída por um envio mais recente.'
-                        : 'A revisão de documentos fica disponível enquanto a proposta está em análise.'}
+                        : 'Os documentos só podem ser revisados enquanto o clube está em análise.'}
                     </p>
                   )}
 
-                  <Button variant="ghost" size="sm" className="justify-start gap-2 px-0 text-primary" asChild>
+                  <Button variant="ghost" size="sm" className="justify-start gap-2 px-0 text-secondary" asChild>
                     <a href={documentFileUrl(proposal.id, doc.id)} target="_blank" rel="noreferrer">
                       <ExternalLink className="h-4 w-4" />
                       Abrir em nova aba
@@ -293,7 +293,7 @@ export function DocumentViewer({
         open={confirm === 'reject'}
         onOpenChange={value => !value && setConfirm(null)}
         title="Recusar documento?"
-        description="O contratante verá o motivo na página de acompanhamento. Para ele reenviar, inclua o item numa pendência."
+        description="O clube verá o motivo na página de acompanhamento. Para ele reenviar, inclua o item num pedido de correção."
         confirmLabel="Recusar documento"
         destructive
         reason={{ label: 'Motivo da recusa', placeholder: 'Ex.: documento ilegível / fora da validade', minLength: 3 }}
@@ -303,8 +303,8 @@ export function DocumentViewer({
         open={confirm === 'resend'}
         onOpenChange={value => !value && setConfirm(null)}
         title="Pedir reenvio do documento?"
-        description="O arquivo atual é recusado e a pendência abre com este item. A proposta só volta para o contratante quando você enviar a pendência."
-        confirmLabel="Recusar e montar pendência"
+        description="O arquivo atual é recusado e o pedido de correção abre com este item. O clube só é avisado quando você enviar o pedido."
+        confirmLabel="Recusar e montar o pedido"
         destructive
         reason={{ label: 'O que precisa ser corrigido', placeholder: 'Ex.: envie a ata registrada em cartório', minLength: 3 }}
         onConfirm={note => reject(note, true)}

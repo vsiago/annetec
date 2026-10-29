@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { BarChart3, LineChart as LineChartIcon, Table2 } from 'lucide-react'
 import { formatBRL } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   ChartContainer,
@@ -296,11 +296,11 @@ export function FlowChart({ data, allowTenantLevel = false }: { data: FlowPoint[
     [data, level],
   )
   const isEmpty = series.length === 0 || series.every(p => p.novos === 0 && p.cancelados === 0)
-  const noun = level === 'associado' ? 'assinaturas de associados' : 'assinaturas de plataforma (inquilinos)'
+  const noun = level === 'associado' ? 'assinaturas de associados' : 'assinaturas de plataforma (clubes)'
   return (
     <ChartCard
       title="Novos × cancelados"
-      description={level === 'associado' ? 'Assinaturas de associados por mês' : 'Inquilinos na cobrança automática por mês'}
+      description={level === 'associado' ? 'Assinaturas de associados por mês' : 'Clubes na cobrança automática por mês'}
       formula={`Novos = ${noun} iniciadas no mês. Cancelados = ${noun} canceladas no mês.`}
       isEmpty={isEmpty}
       emptyText="Nenhuma entrada ou saída no período."
@@ -318,7 +318,7 @@ export function FlowChart({ data, allowTenantLevel = false }: { data: FlowPoint[
               Associados
             </ToggleGroupItem>
             <ToggleGroupItem value="inquilino" className="px-2.5 text-xs">
-              Inquilinos
+              Clubes
             </ToggleGroupItem>
           </ToggleGroup>
         ) : undefined
@@ -354,7 +354,7 @@ export interface ChurnPoint {
 }
 
 const churnConfig = {
-  tenantChurnRate: { label: 'Inquilinos', color: SERIE_1 },
+  tenantChurnRate: { label: 'Clubes', color: SERIE_1 },
   memberChurnRate: { label: 'Associados', color: SERIE_2 },
 } satisfies ChartConfig
 
@@ -363,12 +363,12 @@ export function ChurnChart({ data }: { data: ChurnPoint[] }) {
   return (
     <ChartCard
       title="Churn mensal"
-      description="Inquilinos × associados, em % da base"
-      formula="Churn = canceladas no mês ÷ assinaturas vivas no início do mês × 100. Inquilinos: assinaturas de plataforma; associados: assinaturas dos clubes. Sem base no início do mês = sem ponto."
+      description="Clubes × associados, em % da base"
+      formula="Churn = canceladas no mês ÷ assinaturas vivas no início do mês × 100. Clubes: assinaturas de plataforma; associados: assinaturas dos clubes. Sem base no início do mês = sem ponto."
       isEmpty={isEmpty}
       emptyText="Ainda não há base para calcular churn no período."
       table={{
-        headers: ['Mês', 'Inquilinos', 'Associados'],
+        headers: ['Mês', 'Clubes', 'Associados'],
         rows: data.map(p => [monthShort(p.month), formatPct(p.tenantChurnRate), formatPct(p.memberChurnRate)]),
       }}
     >

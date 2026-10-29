@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import type { Convenio, HealthPlan, PriceTable, WaitingPeriod } from '@annetec/contracts'
 import { useAdminScope } from '@/contexts/admin-scope-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -141,7 +141,7 @@ export default function CatalogoPage() {
             {filtrados.length === 0 && (
               <p className="text-sm text-muted-foreground py-6 text-center">
                 {convenios.length === 0
-                  ? 'Este inquilino não tem convênio ativo no ERP — confira a integração em Inquilinos.'
+                  ? 'Este clube não tem convênio ativo no ERP — confira a integração em Clubes.'
                   : 'Nenhum convênio bate com o filtro.'}
               </p>
             )}

@@ -50,7 +50,7 @@ export function HealthDistribution({
         {!loading && distribution && (
           <CardAction className="text-right">
             <p className="text-2xl font-semibold leading-none">{formatInt(total)}</p>
-            <p className="text-xs text-muted-foreground">inquilinos</p>
+            <p className="text-xs text-muted-foreground">clubes</p>
           </CardAction>
         )}
       </CardHeader>
@@ -65,7 +65,7 @@ export function HealthDistribution({
         ) : !distribution && unavailable ? (
           <EmptyNote>Distribuição indisponível agora — veja o aviso no topo da tela.</EmptyNote>
         ) : !distribution || total === 0 ? (
-          <EmptyNote>Nenhum inquilino avaliado ainda.</EmptyNote>
+          <EmptyNote>Nenhum clube avaliado ainda.</EmptyNote>
         ) : (
           <>
             <div className="flex h-3 w-full gap-0.5 overflow-hidden rounded-full" aria-hidden>
@@ -98,7 +98,7 @@ export function HealthDistribution({
                         'h-4 w-4 shrink-0',
                         band === 'healthy' && 'text-emerald-600',
                         band === 'attention' && 'text-amber-600',
-                        band === 'risk' && 'text-red-600',
+                        band === 'risk' && 'text-[#B42318]',
                       )}
                     />
                     <span className="flex-1 text-foreground">{TENANT_HEALTH_BAND_LABELS[band]}</span>
@@ -143,7 +143,7 @@ export function HealthBreakdown({ row, className }: { row: HoldingTenantRow; cla
                 <p className="text-sm font-medium text-foreground">{component.label}</p>
                 <div className="h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden>
                   <div
-                    className={cn('h-full rounded-full', share >= 0.5 ? 'bg-red-500' : 'bg-amber-500')}
+                    className={cn('h-full rounded-full', share >= 0.5 ? 'bg-[#B42318]' : 'bg-amber-500')}
                     style={{ width: `${share * 100}%` }}
                   />
                 </div>
@@ -151,7 +151,7 @@ export function HealthBreakdown({ row, className }: { row: HoldingTenantRow; cla
               <span
                 className={cn(
                   'text-sm font-semibold tabular-nums sm:text-right',
-                  penalized ? 'text-red-700' : 'text-muted-foreground',
+                  penalized ? 'text-[#B42318]' : 'text-muted-foreground',
                 )}
                 title={`Desconto máximo deste componente: ${component.maxPenalty} pontos`}
               >

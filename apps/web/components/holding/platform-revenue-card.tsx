@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowRight, Landmark, RefreshCw } from 'lucide-react'
 import type { HoldingOverview } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getHoldingOverviewAction } from '@/lib/actions/holding-api'
@@ -38,8 +38,8 @@ export function PlatformRecurringRevenueCard({ className }: { className?: string
     <Card className={cn('gap-0 border-0 py-0 shadow-sm', className)}>
       <CardContent className="flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-start gap-4">
-          <div className="rounded-lg bg-primary/10 p-3">
-            <Landmark className="h-5 w-5 text-primary" />
+          <div className="rounded-lg bg-accent p-3">
+            <Landmark className="h-5 w-5 text-secondary" />
           </div>
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-1.5">
@@ -103,7 +103,7 @@ export function PlatformRecurringRevenueCard({ className }: { className?: string
             <div className="space-y-0.5">
               <dt className="text-xs text-muted-foreground">Na cobrança automática</dt>
               <dd className="font-medium text-foreground">
-                {formatInt(k.tenantsManaged)} de {formatInt(k.tenantsTotal)} inquilinos
+                {formatInt(k.tenantsManaged)} de {formatInt(k.tenantsTotal)} clubes
               </dd>
               <dd className="text-xs text-muted-foreground">
                 {formatInt(k.tenantsByAccess.read_only + k.tenantsByAccess.blocked)} com painel restrito
@@ -113,8 +113,8 @@ export function PlatformRecurringRevenueCard({ className }: { className?: string
         )}
 
         <Button asChild variant="outline" size="sm" className="self-start lg:self-center">
-          <Link href="/admin/holding">
-            Abrir holding
+          <Link href="/admin/inquilinos">
+            Ver os clubes
             <ArrowRight className="h-4 w-4" />
           </Link>
         </Button>

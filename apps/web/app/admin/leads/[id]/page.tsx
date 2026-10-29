@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { Interaction, Lead, LeadStatus, TenantUser } from '@annetec/contracts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -142,8 +142,8 @@ export default function LeadDetailPage() {
     return (
       <div className="space-y-4">
         <BackLink />
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">{error || 'Lead não encontrado.'}</CardContent>
+        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
+          <CardContent className="py-4 text-sm text-[#B42318]">{error || 'Lead não encontrado.'}</CardContent>
         </Card>
       </div>
     )
@@ -343,7 +343,7 @@ function AddInteractionDialog({
             <Label>Descrição *</Label>
             <Textarea value={description} onChange={e => setDescription(e.target.value)} />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-[#B42318]">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -451,7 +451,7 @@ function ConvertToSaleDialog({
               <Input value={planName} onChange={e => setPlanName(e.target.value)} />
             </div>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-[#B42318]">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}

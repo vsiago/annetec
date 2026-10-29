@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { paginationQuery } from '../common/pagination'
 import { dateOnly, uuid } from '../common/primitives'
+import { asaasEnvironment } from './club-billing'
 import { tenantStatus } from './enums'
 import { platformAccessLevel, platformSubscription, platformSubscriptionStatus, type PlatformSubscriptionStatus } from './platform-billing'
 
@@ -45,6 +46,13 @@ export const holdingKpis = z.object({
   tenantsManaged: z.number().int(),
   tenantsByAccess: z.object({ full: z.number().int(), read_only: z.number().int(), blocked: z.number().int() }),
   tenantsNewThisMonth: z.number().int(),
+  /**
+   * Clubes (operadores não cancelados) com problema no recebimento das
+   * mensalidades: `receivingIssue ≠ null` na linha do ranking, ou seja, sem
+   * conta Asaas conectada, conta ainda não aprovada ou webhook `pendente`/`erro`.
+   * Bate com a contagem de linhas de `/holding/inquilinos` com `receivingIssue ≠ null`.
+   */
+  clubsWithoutReceiving: z.number().int(),
   /** Churn do mês nos 2 níveis (fórmulas em blueprint §0.5). */
   tenantChurnRate: z.number().nullable(),
   memberChurnRate: z.number().nullable(),
@@ -144,6 +152,24 @@ export const healthFactor = z.object({
 })
 export type HealthFactor = z.infer<typeof healthFactor>
 
+/**
+ * Problema no recebimento das mensalidades do clube (conta Asaas própria em
+ * `tenant_asaas_accounts`). Precedência: `nao_conectado` > `conta_pendente` >
+ * `aviso_com_erro`; o clube sem nenhum problema fica com `null`.
+ *  - `nao_conectado`: não há conta de recebimento;
+ *  - `conta_pendente`: há conta, mas a situação cadastral no Asaas NÃO está
+ *    aprovada (situação desconhecida — Asaas indisponível na conexão — não conta);
+ *  - `aviso_com_erro`: conta aprovada, mas o webhook de avisos está `erro` ou `pendente`.
+ */
+export const holdingReceivingIssue = z.enum(['nao_conectado', 'conta_pendente', 'aviso_com_erro'])
+export type HoldingReceivingIssue = z.infer<typeof holdingReceivingIssue>
+
+export const HOLDING_RECEIVING_ISSUE_LABELS: Record<HoldingReceivingIssue, string> = {
+  nao_conectado: 'Falta conectar',
+  conta_pendente: 'Conta em aprovação no Asaas',
+  aviso_com_erro: 'Aviso de pagamento com falha',
+}
+
 export const holdingTenantRow = z.object({
   organizationId: z.string(),
   slug: z.string(),
@@ -166,6 +192,22 @@ export const holdingTenantRow = z.object({
   /** (gmvLast30 − gmvPrev30) ÷ gmvPrev30 × 100; `null` sem base. */
   salesTrendPct: z.number().nullable(),
   newMembersLast30: z.number().int(),
+  /** Assinaturas de associados `active` + `past_due` do clube agora (titulares; sem dependentes). */
+  activeMembers: z.number().int(),
+  /** Vidas ativas: titulares + dependentes das assinaturas `active`/`past_due`. Mesmo valor de `lives`. */
+  activeLives: z.number().int(),
+  /**
+   * Variação aproximada de `activeMembers` em 30 dias: assinaturas vivas agora
+   * − vivas há 30 dias (viva = `started_at` < instante e sem `canceled_at` até ele).
+   * O banco não guarda histórico de status, então entrada/saída de `past_due` não aparece.
+   */
+  activeMembersDelta30: z.number().int(),
+  /** Tem linha em `tenant_asaas_accounts` (conta de recebimento Asaas própria). */
+  receivingConnected: z.boolean(),
+  /** Ambiente da chave conectada; `null` = sem conta. */
+  receivingEnv: asaasEnvironment.nullable(),
+  /** `null` = recebimento em ordem (ver `holdingReceivingIssue`). */
+  receivingIssue: holdingReceivingIssue.nullable(),
   memberDelinquencyRate: z.number(),
   /** Idem, 30 dias antes (para "subindo"). */
   memberDelinquencyRatePrev: z.number(),

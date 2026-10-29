@@ -27,9 +27,9 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * Caixa de saída da plataforma (blueprint §Q4): todo e-mail transacional da
- * ANNETEC — contratação, boas-vindas com a senha provisória, faturas e régua.
- * No modo `outbox` (padrão da demonstração) é o único lugar onde eles existem.
+ * E-mails enviados pela plataforma (blueprint §Q4): todo e-mail transacional da
+ * ANNETEC — contratação, boas-vindas com a senha provisória, faturas e lembretes
+ * de cobrança. Responde, no suporte, se o e-mail chegou para o clube.
  */
 
 function useDebounced<T>(value: T, delay = 350): T {
@@ -69,7 +69,7 @@ function EmailRow({
         onClick={onSelect}
         className={cn(
           'flex w-full flex-col gap-1 border-l-2 px-4 py-3 text-left transition-colors',
-          active ? 'border-primary bg-primary/5' : 'border-transparent hover:bg-muted/40',
+          active ? 'border-secondary bg-accent' : 'border-transparent hover:bg-muted/40',
         )}
       >
         <div className="flex items-center justify-between gap-2">
@@ -110,7 +110,7 @@ function PreviewPane({ emailId }: { emailId: string | null }) {
   return <EmailPreview key={data.id} email={data} />
 }
 
-function CaixaDeSaida() {
+function EmailsEnviados() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -143,7 +143,7 @@ function CaixaDeSaida() {
 
   useEffect(() => setPage(1), [q, template, status, proposalId, organizationId, perPage])
 
-  // "Ao vivo": acompanha os e-mails chegando durante a demonstração.
+  // "Ao vivo": acompanha os e-mails chegando, sem precisar atualizar a lista.
   useEffect(() => {
     if (!live) return
     const timer = setInterval(() => void list.reload({ silent: true }), 8000)
@@ -165,8 +165,8 @@ function CaixaDeSaida() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Caixa de saída"
-        description="E-mails transacionais da plataforma: contratação, acesso ao painel, faturas e régua de cobrança."
+        title="E-mails enviados"
+        description="Os e-mails que a ANNETEC mandou aos clubes: contratação, acesso ao painel, faturas e lembretes de cobrança."
       >
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <Switch checked={live} onCheckedChange={setLive} />
@@ -181,7 +181,7 @@ function CaixaDeSaida() {
             <button
               type="button"
               onClick={() => setParam('proposalId', null)}
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/15"
+              className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-medium text-secondary hover:bg-accent/70"
             >
               Só desta proposta
               <X className="h-3.5 w-3.5" />
@@ -191,9 +191,9 @@ function CaixaDeSaida() {
             <button
               type="button"
               onClick={() => setParam('organizationId', null)}
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/15"
+              className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-medium text-secondary hover:bg-accent/70"
             >
-              Só deste inquilino
+              Só deste clube
               <X className="h-3.5 w-3.5" />
             </button>
           )}
@@ -232,11 +232,11 @@ function CaixaDeSaida() {
             ) : rows.length === 0 ? (
               <EmptyState
                 icon={Inbox}
-                title={filtered ? 'Nenhum e-mail com esses filtros' : 'Caixa de saída vazia'}
+                title={filtered ? 'Nenhum e-mail com esses filtros' : 'Nenhum e-mail enviado ainda'}
                 description={
                   filtered
                     ? 'Ajuste a busca ou limpe os filtros.'
-                    : 'Os e-mails aparecem aqui assim que a plataforma dispara o primeiro (ex.: início de uma contratação).'
+                    : 'Quando a plataforma mandar o primeiro e-mail, ele aparece aqui. Isso acontece, por exemplo, no início de uma contratação.'
                 }
               />
             ) : (
@@ -274,10 +274,10 @@ function CaixaDeSaida() {
   )
 }
 
-export default function CaixaDeSaidaPage() {
+export default function EmailsEnviadosPage() {
   return (
     <Suspense fallback={null}>
-      <CaixaDeSaida />
+      <EmailsEnviados />
     </Suspense>
   )
 }

@@ -13,15 +13,25 @@ import {
 } from '@annetec/contracts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Pill } from '@/components/admin-platform/billing/console-kit'
-import { qsaMatchMeta } from '@/lib/adapters/platform-console'
+import { qsaMatchMeta, type StatusMeta } from '@/lib/adapters/platform-console'
 import { cn } from '@/lib/utils'
 
 /**
- * Representantes e sócios declarados × quadro societário da Receita (QSA).
- * A correspondência usa a MESMA regra da pré-checagem (`matchPartnerInQsa`:
- * nome normalizado + dígitos visíveis do CPF mascarado), então o que a tela
- * liga é exatamente o que a API considerou.
+ * Sócios e representantes informados pelo clube × sócios que a Receita Federal
+ * registra (o QSA). A correspondência usa a MESMA regra da verificação
+ * automática (`matchPartnerInQsa`: nome normalizado + dígitos visíveis do CPF
+ * mascarado), então o que a tela liga é exatamente o que a API considerou.
  */
+
+const QSA_LABEL: Record<string, string> = {
+  matched: 'Consta na Receita',
+  not_found: 'Não consta na Receita',
+  not_applicable: 'Não se aplica',
+}
+
+function partnerMatchMeta(match: Parameters<typeof qsaMatchMeta>[0]): StatusMeta {
+  return { ...qsaMatchMeta(match), label: (match && QSA_LABEL[match]) || 'Ainda não verificado' }
+}
 
 function positionOf(person: OnboardingPerson): string {
   if (person.position === 'outro' && person.positionOther) return person.positionOther
@@ -53,16 +63,16 @@ export function PeoplePanel({ proposal }: { proposal: OnboardingProposalDetail }
     <div className="space-y-4">
       <Card className="gap-4 shadow-none">
         <CardHeader>
-          <CardTitle className="text-base">Pessoas declaradas</CardTitle>
+          <CardTitle className="text-base">Pessoas informadas pelo clube</CardTitle>
           <CardDescription>
-            {people.length} pessoa(s)
+            {people.length} {people.length === 1 ? 'pessoa' : 'pessoas'}
             {totalOwnership > 0 ? ` · participações somam ${totalOwnership.toLocaleString('pt-BR')}%` : ''}
             {proposal.hasPep ? ' · há pessoa politicamente exposta' : ''}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           {people.length === 0 ? (
-            <p className="px-6 pb-6 text-sm text-muted-foreground">O contratante ainda não informou as pessoas.</p>
+            <p className="px-6 pb-6 text-sm text-muted-foreground">O clube ainda não informou os sócios e representantes.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -71,7 +81,7 @@ export function PeoplePanel({ proposal }: { proposal: OnboardingProposalDetail }
                     <th className="px-6 py-2.5 font-medium">Pessoa</th>
                     <th className="px-4 py-2.5 font-medium">Cargo e papéis</th>
                     <th className="hidden px-4 py-2.5 font-medium md:table-cell">Contato</th>
-                    <th className="px-4 py-2.5 font-medium">Quadro societário</th>
+                    <th className="px-4 py-2.5 font-medium">Sócios na Receita</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -104,7 +114,7 @@ export function PeoplePanel({ proposal }: { proposal: OnboardingProposalDetail }
                           <p className="mt-1.5 inline-flex items-start gap-1 rounded-md bg-amber-50 px-1.5 py-1 text-[11px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
                             <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
                             <span>
-                              PEP{person.pepRole ? ` — ${person.pepRole}` : ''}
+                              Politicamente exposta{person.pepRole ? ` — ${person.pepRole}` : ''}
                               {person.pepRelationship ? ` (${PEP_RELATIONSHIP_LABELS[person.pepRelationship]})` : ''}
                             </span>
                           </p>
@@ -115,7 +125,7 @@ export function PeoplePanel({ proposal }: { proposal: OnboardingProposalDetail }
                         <p>{person.phone ?? ''}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <Pill meta={qsaMatchMeta(person.qsaMatch)} />
+                        <Pill meta={partnerMatchMeta(person.qsaMatch)} />
                       </td>
                     </tr>
                   ))}
@@ -128,13 +138,13 @@ export function PeoplePanel({ proposal }: { proposal: OnboardingProposalDetail }
 
       <Card className="gap-4 shadow-none">
         <CardHeader>
-          <CardTitle className="text-base">Quadro societário na Receita (QSA)</CardTitle>
+          <CardTitle className="text-base">Sócios na Receita Federal</CardTitle>
           <CardDescription>
             {proposal.receita
               ? partners.length > 0
-                ? `${partners.length} sócio(s)/administrador(es) registrados · correspondência com as pessoas declaradas`
+                ? `${partners.length} ${partners.length === 1 ? 'sócio ou administrador registrado' : 'sócios e administradores registrados'} · comparados com as pessoas informadas pelo clube`
                 : 'A Receita não lista sócios para este CNPJ (comum em entidades sem capital).'
-              : 'Consulta à Receita indisponível para esta proposta.'}
+              : 'A consulta à Receita Federal não está disponível para este clube.'}
           </CardDescription>
         </CardHeader>
         {partners.length > 0 && (
@@ -161,7 +171,7 @@ export function PeoplePanel({ proposal }: { proposal: OnboardingProposalDetail }
                       </p>
                     </div>
                     <p className={cn('text-xs', match ? 'text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground')}>
-                      {match ? `Declarado: ${match.name} (${positionOf(match)})` : 'Não declarado na proposta'}
+                      {match ? `Informado pelo clube: ${match.name} (${positionOf(match)})` : 'Não informado pelo clube'}
                     </p>
                   </li>
                 )
@@ -172,8 +182,8 @@ export function PeoplePanel({ proposal }: { proposal: OnboardingProposalDetail }
         {notFound.length > 0 && (
           <CardContent>
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-              {notFound.map(person => person.name).join(', ')} não {notFound.length === 1 ? 'aparece' : 'aparecem'} no QSA.
-              Confira os poderes de representação no ato constitutivo, na ata de eleição ou na procuração.
+              {notFound.map(person => person.name).join(', ')} não {notFound.length === 1 ? 'aparece' : 'aparecem'} entre os sócios
+              da Receita Federal. Confira os poderes de representação no ato constitutivo, na ata de eleição ou na procuração.
             </p>
           </CardContent>
         )}

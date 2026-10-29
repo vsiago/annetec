@@ -6,7 +6,6 @@ import { AlarmClock, CircleCheckBig, Inbox, ShieldCheck, Wallet } from 'lucide-r
 import {
   CONTRACTOR_TYPE_LABELS,
   LEGAL_FORM_LABELS,
-  ONBOARDING_REVIEW_SLA_HOURS,
   contractorType,
   type ContractorType,
   type OnboardingProposalListItem,
@@ -29,32 +28,32 @@ import {
   TableSkeleton,
   useConsoleData,
 } from '@/components/admin-platform/billing/console-kit'
-import { ProposalStatusPill, SlaBadge } from '@/components/admin-platform/compliance/compliance-ui'
+import {
+  LOAD_ERROR_MESSAGE,
+  PROPOSAL_STATUS_OPTIONS,
+  ProposalStatusPill,
+  REVIEW_DEADLINE_DAYS,
+  SlaBadge,
+  VERIFICATION_OPTIONS,
+  verificationMeta,
+  waitingTime,
+} from '@/components/admin-platform/compliance/compliance-ui'
 import {
   getOnboardingQueueSummaryAction,
   listOnboardingProposalsAction,
 } from '@/lib/actions/platform-onboarding-api'
-import {
-  ONBOARDING_STATUS_OPTIONS,
-  PRECHECK_SUMMARY_OPTIONS,
-  formatCnpj,
-  formatCount,
-  formatDateTimeBR,
-  formatHours,
-  formatRelative,
-  precheckSummaryMeta,
-  slaInfo,
-} from '@/lib/adapters/platform-console'
+import { formatCnpj, formatCount, formatDateTimeBR, formatRelative, slaInfo } from '@/lib/adapters/platform-console'
 
 /**
- * Fila do compliance (blueprint §Q4, roteiro §F passo 3): propostas de
- * suboperadoras por grupo, com pré-checagens, documentos a revisar,
- * responsável e prazo de análise (SLA de 48 h a partir do envio).
+ * Aprovações (blueprint §Q4, roteiro §F passo 3): os clubes que se cadastraram
+ * pelo site e esperam liberação, por grupo, com a verificação automática, os
+ * documentos a revisar, quem assumiu a análise e há quanto tempo esperam
+ * (o prazo de análise é de 2 dias a partir do envio).
  */
 
 const GROUPS: { value: OnboardingStatusGroup; label: string }[] = [
-  { value: 'queue', label: 'Fila de análise' },
-  { value: 'awaiting_applicant', label: 'Com o contratante' },
+  { value: 'queue', label: 'Para analisar' },
+  { value: 'awaiting_applicant', label: 'Esperando o clube' },
   { value: 'awaiting_payment', label: 'Aguardando pagamento' },
   { value: 'done', label: 'Concluídas' },
   { value: 'all', label: 'Todas' },
@@ -68,20 +67,34 @@ const GROUP_STATUSES: Record<OnboardingStatusGroup, OnboardingStatus[] | null> =
   all: null,
 }
 
+const NONE_WAITING = {
+  title: 'Nenhum clube esperando aprovação',
+  description: 'Quando um clube se cadastrar pelo site, ele aparece aqui.',
+}
+
 const EMPTY_TEXT: Record<OnboardingStatusGroup, { title: string; description: string }> = {
-  queue: { title: 'Fila vazia', description: 'Nenhuma proposta esperando análise agora.' },
-  awaiting_applicant: { title: 'Nada com o contratante', description: 'Rascunhos e pendências abertas aparecem aqui.' },
-  awaiting_payment: { title: 'Nenhuma ativação pendente', description: 'Propostas aprovadas aguardando o pagamento aparecem aqui.' },
-  done: { title: 'Nenhuma proposta concluída', description: 'Ativadas, reprovadas e canceladas aparecem aqui.' },
-  all: { title: 'Nenhuma proposta', description: 'As contratações feitas pelo site aparecem aqui.' },
+  queue: NONE_WAITING,
+  awaiting_applicant: {
+    title: 'Nenhum clube esperando correção',
+    description: 'Cadastros em preenchimento e correções pedidas por você aparecem aqui.',
+  },
+  awaiting_payment: {
+    title: 'Nenhuma cobrança de ativação em aberto',
+    description: 'Clubes aprovados que ainda não pagaram aparecem aqui.',
+  },
+  done: {
+    title: 'Nenhum cadastro concluído',
+    description: 'Clubes liberados, recusados e cancelados aparecem aqui.',
+  },
+  all: NONE_WAITING,
 }
 
 type SlaFilter = 'all' | 'breached' | 'due_soon' | 'on_time'
 
 const SLA_OPTIONS: { value: SlaFilter; label: string }[] = [
-  { value: 'breached', label: 'Estourado' },
-  { value: 'due_soon', label: 'Vence em até 12 h' },
-  { value: 'on_time', label: 'No prazo' },
+  { value: 'breached', label: `Mais de ${REVIEW_DEADLINE_DAYS} dias` },
+  { value: 'due_soon', label: `Quase ${REVIEW_DEADLINE_DAYS} dias` },
+  { value: 'on_time', label: 'Dentro do prazo' },
 ]
 
 function matchesSla(item: OnboardingProposalListItem, filter: SlaFilter): boolean {
@@ -115,8 +128,8 @@ export default function CompliancePage() {
   const [perPage, setPerPage] = useState('25')
   const q = useDebounced(search)
 
-  // SLA não é filtro da API: com ele ligado a tela busca o grupo inteiro
-  // (até 200, o teto da API) e filtra aqui — a fila é pequena por natureza.
+  // O tempo de espera não é filtro da API: com ele ligado a tela busca o grupo
+  // inteiro (até 200, o teto da API) e filtra aqui — a fila é pequena por natureza.
   const slaActive = sla !== 'all'
 
   const summary = useConsoleData(() => getOnboardingQueueSummaryAction(), [])
@@ -150,7 +163,7 @@ export default function CompliancePage() {
     all: s ? Object.values(s.byStatus).reduce((acc, value) => acc + (value ?? 0), 0) : undefined,
   }
 
-  const statusOptions = ONBOARDING_STATUS_OPTIONS.filter(option => {
+  const statusOptions = PROPOSAL_STATUS_OPTIONS.filter(option => {
     const allowed = GROUP_STATUSES[group]
     return !allowed || allowed.includes(option.value)
   })
@@ -160,17 +173,19 @@ export default function CompliancePage() {
     void list.reload({ silent: true })
   }
 
+  const filtered = !!q || status !== 'all' || type !== 'all' || sla !== 'all' || precheck !== 'all' || assigned !== 'all'
+
   const columns: Column<OnboardingProposalListItem>[] = [
     {
       key: 'proposta',
-      header: 'Proposta',
+      header: 'Clube',
       render: item => (
         <div className="min-w-0 max-w-72">
-          <p className="truncate font-medium text-foreground">
+          <p className="truncate font-semibold text-foreground">
             {item.clubName || item.tradeName || item.legalName || 'Sem nome ainda'}
           </p>
           <p className="truncate text-xs text-muted-foreground">
-            <span className="font-mono">{item.code}</span> · {formatCnpj(item.cnpj)}
+            CNPJ {formatCnpj(item.cnpj)} · <span className="font-mono">{item.code}</span>
           </p>
         </div>
       ),
@@ -199,14 +214,12 @@ export default function CompliancePage() {
     },
     {
       key: 'prechecagens',
-      header: 'Pré-checagens',
+      header: 'Verificação automática',
       render: item => (
-        <div className="flex flex-wrap items-center gap-1">
-          <Pill meta={precheckSummaryMeta(item.precheckSummary)} />
+        <div className="flex flex-col items-start gap-1">
+          <Pill meta={verificationMeta(item.precheckSummary)} />
           {item.hasPep && (
-            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
-              PEP
-            </span>
+            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">Pessoa politicamente exposta</span>
           )}
         </div>
       ),
@@ -217,9 +230,9 @@ export default function CompliancePage() {
       hideOnMobile: true,
       render: item => (
         <div className="text-xs">
-          {item.documentsToReview > 0 && <p className="font-medium text-sky-700 dark:text-sky-300">{item.documentsToReview} a revisar</p>}
+          {item.documentsToReview > 0 && <p className="font-medium text-sky-700 dark:text-sky-300">{item.documentsToReview} para revisar</p>}
           {item.documentsMissing > 0 && <p className="text-orange-700 dark:text-orange-300">{item.documentsMissing} faltando</p>}
-          {item.documentsToReview === 0 && item.documentsMissing === 0 && <p className="text-muted-foreground">Em dia</p>}
+          {item.documentsToReview === 0 && item.documentsMissing === 0 && <p className="text-muted-foreground">Tudo certo</p>}
         </div>
       ),
     },
@@ -227,11 +240,15 @@ export default function CompliancePage() {
       key: 'responsavel',
       header: 'Responsável',
       hideOnMobile: true,
-      render: item => <span className="text-xs text-foreground">{item.assignedTo?.name ?? <span className="text-muted-foreground">—</span>}</span>,
+      render: item => (
+        <span className="text-xs text-foreground">
+          {item.assignedTo?.name ?? <span className="text-muted-foreground">Ninguém assumiu ainda</span>}
+        </span>
+      ),
     },
     {
       key: 'envio',
-      header: 'Enviada',
+      header: 'Enviado',
       hideOnMobile: true,
       render: item =>
         item.submittedAt ? (
@@ -244,7 +261,7 @@ export default function CompliancePage() {
     },
     {
       key: 'sla',
-      header: 'SLA',
+      header: 'Esperando há',
       render: item => <SlaBadge slaDueAt={item.slaDueAt} slaBreached={item.slaBreached} />,
     },
     {
@@ -256,15 +273,12 @@ export default function CompliancePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Compliance"
-        description="Análise cadastral (KYB) das suboperadoras que contrataram a plataforma pelo site."
-      >
+      <PageHeader title="Aprovações" description="Clubes que se cadastraram pelo site e esperam para ser liberados.">
         <RefreshButton loading={list.loading || summary.loading} onClick={refresh} />
       </PageHeader>
 
       {summary.error && !s ? (
-        <LoadError message={summary.error} onRetry={() => summary.reload()} />
+        <LoadError message={LOAD_ERROR_MESSAGE} onRetry={() => summary.reload()} />
       ) : !s ? (
         <KpiSkeleton />
       ) : (
@@ -273,18 +287,18 @@ export default function CompliancePage() {
             icon={Inbox}
             accent="primary"
             value={formatCount(s.queue)}
-            label="Na fila de análise"
-            hint={s.unassigned > 0 ? `${formatCount(s.unassigned)} sem responsável` : 'Todas com responsável'}
+            label="Para analisar"
+            hint={s.unassigned > 0 ? `${formatCount(s.unassigned)} ainda sem responsável` : 'Todos já têm responsável'}
             tone={s.unassigned > 0 ? 'down' : 'neutral'}
           />
           <StatCard
             icon={AlarmClock}
             accent="warning"
             value={formatCount(s.slaBreached)}
-            label={`SLA estourado (${ONBOARDING_REVIEW_SLA_HOURS} h)`}
+            label={`Esperando há mais de ${REVIEW_DEADLINE_DAYS} dias`}
             hint={
               s.avgDecisionHours !== null
-                ? `Decisão média em ${formatHours(s.avgDecisionHours)} (90 dias)`
+                ? `Decisão em média em ${waitingTime(s.avgDecisionHours)} (últimos 90 dias)`
                 : 'Sem decisões nos últimos 90 dias'
             }
             tone={s.slaBreached > 0 ? 'down' : 'neutral'}
@@ -294,14 +308,14 @@ export default function CompliancePage() {
             accent="info"
             value={formatCount(s.awaitingPayment)}
             label="Aguardando pagamento"
-            hint={`${formatCount(s.awaitingApplicant)} com o contratante (rascunho ou pendência)`}
+            hint={`${formatCount(s.awaitingApplicant)} esperando o clube preencher ou corrigir`}
           />
           <StatCard
             icon={CircleCheckBig}
             accent="success"
             value={formatCount(s.provisionedThisMonth)}
-            label="Clubes ativados no mês"
-            hint="Provisionados após o pagamento da ativação"
+            label="Liberados no mês"
+            hint="Clubes que pagaram a ativação e já entraram no ar"
             tone={s.provisionedThisMonth > 0 ? 'up' : 'neutral'}
           />
         </div>
@@ -322,7 +336,7 @@ export default function CompliancePage() {
           </Tabs>
 
           <div className="flex flex-col gap-3 p-4 lg:flex-row lg:flex-wrap lg:items-center">
-            <SearchInput value={search} onChange={setSearch} placeholder="Buscar por nome, CNPJ ou protocolo" />
+            <SearchInput value={search} onChange={setSearch} placeholder="Buscar por nome do clube, CNPJ ou código" />
             <FilterSelect
               label="Situação"
               value={status}
@@ -338,18 +352,18 @@ export default function CompliancePage() {
               options={contractorType.options.map(value => ({ value, label: CONTRACTOR_TYPE_LABELS[value] }))}
             />
             <FilterSelect
-              label="SLA"
+              label="Esperando há"
               value={sla}
               onChange={value => setSla(value as SlaFilter)}
-              allLabel="Qualquer prazo"
+              allLabel="Qualquer tempo"
               options={SLA_OPTIONS}
             />
             <FilterSelect
-              label="Pré-checagens"
+              label="Verificação automática"
               value={precheck}
               onChange={value => setPrecheck(value as 'all' | PrecheckSummary)}
               allLabel="Qualquer resultado"
-              options={PRECHECK_SUMMARY_OPTIONS}
+              options={VERIFICATION_OPTIONS}
             />
             <FilterSelect
               label="Responsável"
@@ -358,26 +372,22 @@ export default function CompliancePage() {
               allLabel="Qualquer um"
               options={[
                 { value: 'me', label: 'Comigo' },
-                { value: 'unassigned', label: 'Sem responsável' },
+                { value: 'unassigned', label: 'Ninguém assumiu' },
               ]}
             />
           </div>
 
           {list.error && !list.data ? (
             <div className="p-4 pt-0">
-              <LoadError message={list.error} onRetry={() => list.reload()} />
+              <LoadError message={LOAD_ERROR_MESSAGE} onRetry={() => list.reload()} />
             </div>
           ) : list.loading && !list.data ? (
             <TableSkeleton />
           ) : visibleRows.length === 0 ? (
             <EmptyState
               icon={ShieldCheck}
-              title={q || status !== 'all' || type !== 'all' || sla !== 'all' || precheck !== 'all' || assigned !== 'all' ? 'Nenhuma proposta com esses filtros' : EMPTY_TEXT[group].title}
-              description={
-                q || status !== 'all' || type !== 'all' || sla !== 'all' || precheck !== 'all' || assigned !== 'all'
-                  ? 'Ajuste a busca ou limpe os filtros.'
-                  : EMPTY_TEXT[group].description
-              }
+              title={filtered ? 'Nenhum clube com esses filtros' : EMPTY_TEXT[group].title}
+              description={filtered ? 'Ajuste a busca ou limpe os filtros.' : EMPTY_TEXT[group].description}
             />
           ) : (
             <div className={list.loading ? 'opacity-60 transition-opacity' : undefined}>
@@ -395,7 +405,7 @@ export default function CompliancePage() {
               page={page}
               perPage={perPage}
               total={total}
-              noun="propostas"
+              noun="clubes"
               onPageChange={setPage}
               onPerPageChange={setPerPage}
             />

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getActivityOverviewAction, listVisitorsAction } from '@/lib/actions/activity-api'
@@ -75,9 +75,9 @@ export default function LogsPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Activity className="h-6 w-6 text-primary" />
-            Logs e Rastreabilidade
+            Acessos ao sistema
           </h1>
-          <p className="text-muted-foreground">Visitas, atividade do sistema e quem está online agora</p>
+          <p className="text-muted-foreground">Quem está usando o sistema agora, o que visitou e o que fez.</p>
         </div>
         <div className="flex items-center gap-3">
           {lastUpdated && (
@@ -124,9 +124,9 @@ export default function LogsPage() {
           colorClass="bg-purple-100 text-purple-600"
         />
         <StatCard
-          label="Páginas distintas hoje"
+          label="Páginas diferentes hoje"
           value={overview?.topPages.length}
-          hint="Rotas diferentes visitadas"
+          hint="Páginas diferentes visitadas"
           icon={FileText}
           colorClass="bg-amber-100 text-amber-600"
         />
@@ -149,7 +149,7 @@ export default function LogsPage() {
             {isLoading ? (
               <SkeletonRows />
             ) : !overview?.online.length ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">Ninguém online no momento</p>
+                <p className="text-sm text-muted-foreground py-6 text-center">Ninguém online agora.</p>
             ) : (
               overview.online.map(person => <OnlineRow key={person.key} person={person} />)
             )}
@@ -166,7 +166,7 @@ export default function LogsPage() {
             {isLoading ? (
               <SkeletonRows />
             ) : !overview?.topPages.length ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">Sem dados ainda hoje</p>
+              <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma página visitada hoje ainda.</p>
             ) : (
               overview.topPages.map(page => (
                 <div key={page.path} className="space-y-1">
@@ -178,7 +178,7 @@ export default function LogsPage() {
                   </div>
                   <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-primary"
+                      className="h-full rounded-full bg-secondary"
                       style={{ width: `${Math.max(4, (page.count / maxPageCount) * 100)}%` }}
                     />
                   </div>
@@ -199,7 +199,7 @@ export default function LogsPage() {
           {isLoading ? (
             <SkeletonRows rows={6} />
           ) : !overview?.recentActivity.length ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma atividade registrada ainda</p>
+            <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma atividade registrada ainda.</p>
           ) : (
             <ol className="relative border-l border-border ml-2 space-y-5 py-1">
               {overview.recentActivity.map(event => (
@@ -220,7 +220,7 @@ export default function LogsPage() {
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome..."
+              placeholder="Buscar por nome"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-10"
@@ -272,7 +272,7 @@ export default function LogsPage() {
             </table>
           </div>
           {!isLoading && visitors.length === 0 && (
-            <p className="text-sm text-muted-foreground py-12 text-center">Nenhum visitante encontrado</p>
+            <p className="text-sm text-muted-foreground py-12 text-center">Nenhum visitante encontrado.</p>
           )}
         </CardContent>
       </Card>
@@ -366,7 +366,7 @@ function ActivityRow({ event }: { event: ActivityEvent }) {
                 <span className="font-mono text-xs text-muted-foreground">{event.path}</span>
               )}
             </p>
-            {event.tenantSlug && <p className="text-xs text-muted-foreground">Inquilino: {event.tenantSlug}</p>}
+            {event.tenantSlug && <p className="text-xs text-muted-foreground">Clube: {event.tenantSlug}</p>}
           </div>
         </div>
         <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">{timeAgo(event.createdAt)}</span>
@@ -392,11 +392,11 @@ function ActorBadge({
 
   if (actorScope === 'platform') {
     return actorRole === 'superadmin' ? (
-      <Badge className="bg-red-100 text-red-700 text-[11px]">
+      <Badge className="bg-red-100 text-[#B42318] text-[11px]">
         <ShieldCheck className="w-3 h-3 mr-1" /> Superadmin
       </Badge>
     ) : (
-      <Badge className="bg-red-100 text-red-700 text-[11px]">
+      <Badge className="bg-red-100 text-[#B42318] text-[11px]">
         <Shield className="w-3 h-3 mr-1" /> Plataforma
       </Badge>
     )

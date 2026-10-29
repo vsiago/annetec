@@ -1,120 +1,254 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { useTenants } from '@/contexts/tenants-context'
-import { Search, Plus, ExternalLink } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
+import { listClubsOverviewAction } from '@/lib/actions/tenants-api'
+import { ClubsTable, ClubsTableSkeleton } from '@/components/admin-platform/clubs/clubs-table'
+import {
+  CLUBS_PAGE_SIZE,
+  CLUB_FILTERS,
+  CLUB_SORTS,
+  clubsSummary,
+  countByFilter,
+  matchesFilter,
+  matchesSearch,
+  needsAttention,
+  sortClubs,
+  type ClubFilter,
+  type ClubListRow,
+  type ClubSort,
+} from '@/components/admin-platform/clubs/club-list-model'
+import { cn } from '@/lib/utils'
 
-const statusLabel: Record<string, { label: string; color: string }> = {
-  trial: { label: 'Trial', color: 'bg-yellow-100 text-yellow-700' },
-  active: { label: 'Ativo', color: 'bg-green-100 text-green-700' },
-  suspended: { label: 'Suspenso', color: 'bg-red-100 text-red-700' },
-  cancelled: { label: 'Cancelado', color: 'bg-gray-100 text-gray-700' },
-}
+/**
+ * Clubes — "Quais clubes tenho e qual precisa de atenção?"
+ *
+ * Junta o cadastro (`/platform/tenants`) com o ranking da holding
+ * (`/platform/holding/inquilinos`) numa action só e trabalha com a lista
+ * inteira no navegador: filtro, busca, ordenação e as 25 linhas por página.
+ */
 
-export default function InquilinosPage() {
-  const { tenants, plans, isLoading } = useTenants()
+type LoadState =
+  | { phase: 'loading' }
+  | { phase: 'error' }
+  | { phase: 'ready'; rows: ClubListRow[] }
+
+const buttonBase =
+  'inline-flex items-center justify-center gap-2 rounded-[10px] text-sm font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-secondary/40 focus-visible:ring-offset-2'
+const primaryButton = cn(buttonBase, 'min-h-11 border border-secondary bg-secondary px-4 text-white hover:bg-secondary/90')
+const secondaryButton = cn(
+  buttonBase,
+  'min-h-10 border border-[#D0D5DD] bg-white px-3.5 text-[#344054] hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#98A2B3] disabled:hover:bg-white',
+)
+const field =
+  'min-h-11 rounded-[10px] border border-[#D0D5DD] bg-white px-3.5 text-sm text-foreground outline-none placeholder:text-[#667085] focus-visible:border-secondary focus-visible:ring-[3px] focus-visible:ring-secondary/25'
+
+export default function ClubesPage() {
+  const [state, setState] = useState<LoadState>({ phase: 'loading' })
+  const [filter, setFilter] = useState<ClubFilter>('todos')
+  const [sort, setSort] = useState<ClubSort>('atencao')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
 
-  const filtered = tenants.filter(
-    t =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.slug.toLowerCase().includes(search.toLowerCase()) ||
-      t.email.toLowerCase().includes(search.toLowerCase())
+  const load = useCallback(async () => {
+    setState({ phase: 'loading' })
+    const result = await listClubsOverviewAction()
+    setState(result.success ? { phase: 'ready', rows: result.data } : { phase: 'error' })
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const rows = useMemo(() => (state.phase === 'ready' ? state.rows : []), [state])
+
+  // Contagens dos botões respeitam a busca: o número é o que a pessoa vai ver ao clicar.
+  const searched = useMemo(() => rows.filter(row => matchesSearch(row, search)), [rows, search])
+  const counts = useMemo(() => countByFilter(searched), [searched])
+  const attentionTotal = useMemo(() => rows.filter(needsAttention).length, [rows])
+
+  const visible = useMemo(
+    () => sortClubs(searched.filter(row => matchesFilter(row, filter)), sort),
+    [searched, filter, sort],
   )
 
+  const totalPages = Math.max(1, Math.ceil(visible.length / CLUBS_PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const firstIndex = (currentPage - 1) * CLUBS_PAGE_SIZE
+  const pageRows = visible.slice(firstIndex, firstIndex + CLUBS_PAGE_SIZE)
+
+  const hasFilter = filter !== 'todos' || search.trim() !== ''
+
+  const changeFilter = (next: ClubFilter) => {
+    setFilter(next)
+    setPage(1)
+  }
+  const clearFilters = () => {
+    setFilter('todos')
+    setSearch('')
+    setPage(1)
+  }
+
+  const shownLabel =
+    visible.length <= CLUBS_PAGE_SIZE
+      ? `Mostrando ${visible.length} de ${visible.length} ${visible.length === 1 ? 'clube' : 'clubes'}`
+      : `Mostrando ${firstIndex + 1} a ${firstIndex + pageRows.length} de ${visible.length} clubes`
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Inquilinos</h1>
-          <p className="text-muted-foreground">Clubes de benefícios cadastrados na plataforma</p>
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Clubes</h1>
+          <p className="text-[15px] text-muted-foreground" aria-live="polite">
+            {state.phase === 'ready' ? clubsSummary(rows.length, attentionTotal) : 'Carregando clubes…'}
+          </p>
         </div>
-        <Button className="bg-primary hover:opacity-90 text-white" asChild>
-          <Link href="/admin/inquilinos/novo">
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Inquilino
+        <Link href="/admin/inquilinos/novo" className={primaryButton}>
+          <Plus className="size-[18px]" aria-hidden="true" />
+          Cadastrar clube
+        </Link>
+      </header>
+
+      {state.phase === 'error' ? (
+        <div role="alert" className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-white p-7">
+          <strong className="text-lg text-foreground">Não foi possível carregar esta página</strong>
+          <span className="text-[15px] leading-relaxed text-muted-foreground">
+            Verifique sua internet e tente de novo.
+          </span>
+          <button type="button" onClick={() => void load()} className={secondaryButton}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : state.phase === 'loading' ? (
+        <ClubsTableSkeleton />
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-white p-7">
+          <strong className="text-lg text-foreground">Nenhum clube por aqui ainda</strong>
+          <span className="text-[15px] leading-relaxed text-muted-foreground">
+            Cadastre o primeiro clube para começar a vender planos.
+          </span>
+          <Link href="/admin/inquilinos/novo" className={primaryButton}>
+            Cadastrar clube
           </Link>
-        </Button>
-      </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div role="group" aria-label="Filtrar por situação" className="flex flex-wrap gap-2">
+              {CLUB_FILTERS.map(option => {
+                const active = filter === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => changeFilter(option.value)}
+                    className={cn(
+                      'inline-flex min-h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-secondary/40 focus-visible:ring-offset-2',
+                      active
+                        ? 'border-secondary bg-secondary text-white'
+                        : 'border-[#D0D5DD] bg-white text-[#344054] hover:bg-[#F9FAFB]',
+                    )}
+                  >
+                    {option.label}
+                    <span
+                      className={cn(
+                        'rounded-full px-[7px] text-xs font-semibold',
+                        active ? 'bg-white/20 text-white' : 'bg-[#F2F4F7] text-[#344054]',
+                      )}
+                    >
+                      {counts[option.value]}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
 
-      <Card className="border border-border/80 shadow-xs bg-card">
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, slug ou e-mail..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border border-border/80 shadow-xs bg-card">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Inquilino</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Endereço</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Plano</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Status</th>
-                  <th className="text-right py-4 px-6 text-sm font-medium text-muted-foreground">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(tenant => (
-                  <tr key={tenant.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="h-9 w-9 rounded-lg flex items-center justify-center text-white text-sm font-bold"
-                          style={{ backgroundColor: tenant.branding.primaryColor }}
-                        >
-                          {tenant.name.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-medium">{tenant.name}</p>
-                          <p className="text-xs text-muted-foreground">{tenant.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-sm">
-                      <Link
-                        href={`/${tenant.slug}`}
-                        target="_blank"
-                        className="inline-flex items-center gap-1 font-mono text-secondary hover:underline"
-                      >
-                        /{tenant.slug}
-                        <ExternalLink className="h-3 w-3" />
-                      </Link>
-                    </td>
-                    <td className="py-4 px-6 text-sm">{plans.find(p => p.id === tenant.planId)?.name ?? '-'}</td>
-                    <td className="py-4 px-6">
-                      <Badge className={statusLabel[tenant.status]?.color}>{statusLabel[tenant.status]?.label}</Badge>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/admin/inquilinos/${tenant.id}`}>Gerenciar</Link>
-                      </Button>
-                    </td>
-                  </tr>
+            <div className="flex flex-wrap gap-2">
+              <label htmlFor="busca-clubes" className="sr-only">
+                Buscar clube
+              </label>
+              <div className="relative w-full sm:w-[300px]">
+                <Search
+                  className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#667085]"
+                  aria-hidden="true"
+                />
+                <input
+                  id="busca-clubes"
+                  type="search"
+                  value={search}
+                  onChange={event => {
+                    setSearch(event.target.value)
+                    setPage(1)
+                  }}
+                  placeholder="Buscar por nome, CNPJ ou e-mail"
+                  autoComplete="off"
+                  className={cn(field, 'w-full pl-10')}
+                />
+              </div>
+              <label htmlFor="ordem-clubes" className="sr-only">
+                Ordenar por
+              </label>
+              <select
+                id="ordem-clubes"
+                value={sort}
+                onChange={event => {
+                  setSort(event.target.value as ClubSort)
+                  setPage(1)
+                }}
+                className={field}
+              >
+                {CLUB_SORTS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+            </div>
           </div>
-          {!isLoading && filtered.length === 0 && (
-            <p className="text-center text-muted-foreground py-12">Nenhum inquilino encontrado</p>
+
+          {visible.length === 0 ? (
+            <div className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-white p-7">
+              <strong className="text-lg text-foreground">Nenhum clube encontrado com esse filtro.</strong>
+              {hasFilter ? (
+                <button type="button" onClick={clearFilters} className={secondaryButton}>
+                  Limpar filtros
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <ClubsTable rows={pageRows} />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground" aria-live="polite">
+                  {shownLabel}
+                </span>
+                {totalPages > 1 ? (
+                  <nav aria-label="Páginas da lista de clubes" className="flex gap-2">
+                    <button
+                      type="button"
+                      className={secondaryButton}
+                      disabled={currentPage <= 1}
+                      onClick={() => setPage(currentPage - 1)}
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      type="button"
+                      className={secondaryButton}
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setPage(currentPage + 1)}
+                    >
+                      Próxima
+                    </button>
+                  </nav>
+                ) : null}
+              </div>
+            </>
           )}
-        </CardContent>
-      </Card>
+        </>
+      )}
     </div>
   )
 }

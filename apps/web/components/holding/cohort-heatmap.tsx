@@ -27,7 +27,7 @@ function rampColor(t: number): string {
 
 const LEVEL_LABELS: Record<HoldingCohortLevel, { title: string; unit: string }> = {
   associado: { title: 'Associados', unit: 'assinaturas de associados' },
-  inquilino: { title: 'Inquilinos', unit: 'assinaturas de plataforma' },
+  inquilino: { title: 'Clubes', unit: 'assinaturas de plataforma' },
 }
 
 export function CohortHeatmap({
@@ -81,7 +81,7 @@ export function CohortHeatmap({
               Associados
             </ToggleGroupItem>
             <ToggleGroupItem value="inquilino" className="px-2.5 text-xs">
-              Inquilinos
+              Clubes
             </ToggleGroupItem>
           </ToggleGroup>
         </CardAction>

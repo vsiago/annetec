@@ -320,9 +320,15 @@ export async function updatePlatformPlanPricingAction(
 // Saúde do inquilino (leitura da holding, para a aba "Saúde" do inquilino)
 // ---------------------------------------------------------------------------
 
-export async function getTenantHealthAction(organizationId: string): Promise<ActionResult<HoldingTenantDetail>> {
+/** `fresh: true` pede o recálculo da holding (`?fresh=1`): o retrato fica em cache por 60 s. */
+export async function getTenantHealthAction(
+  organizationId: string,
+  options: { fresh?: boolean } = {},
+): Promise<ActionResult<HoldingTenantDetail>> {
   return run(async () => {
-    const { data } = await apiFetch<HoldingTenantDetail>(`/api/v1/platform/holding/inquilinos/${id$(organizationId)}`)
+    const { data } = await apiFetch<HoldingTenantDetail>(`/api/v1/platform/holding/inquilinos/${id$(organizationId)}`, {
+      query: { fresh: options.fresh ? '1' : undefined },
+    })
     return {
       ...data,
       subscription: data.subscription ? normalizePlatformSubscription(data.subscription) : null,

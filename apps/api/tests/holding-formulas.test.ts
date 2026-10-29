@@ -13,6 +13,8 @@ import {
   buildKpis,
   buildMonthlySeries,
   buildTenantRows,
+  receivingInfoOf,
+  receivingIssueOf,
   type HoldingDataset,
 } from '@/modules/holding/snapshot'
 
@@ -174,6 +176,11 @@ function dataset(): HoldingDataset {
       ['org1', new Map([['2026-09', 1200], ['2026-08', 2000]])],
       ['org2', new Map([['2026-09', 300], ['2026-08', 500]])],
     ]),
+    // org1: conta aprovada com webhook em erro · org2: sem conta · org4: conta ainda não aprovada · org3 (cancelado): sem conta.
+    receiving: new Map([
+      ['org1', receivingInfoOf({ env: 'production', webhookStatus: 'erro', accountStatusJson: { general: 'APPROVED' } })],
+      ['org4', receivingInfoOf({ env: 'sandbox', webhookStatus: 'ativo', accountStatusJson: { general: 'AWAITING_APPROVAL', documentation: 'PENDING' } })],
+    ]),
     proposals: [
       { id: 'p-1', code: 'ANN-2609-AAAAA', status: 'submitted', name: 'SINDCOM', organizationId: null, submittedAt: hoursAgo(60), firstSubmittedAt: hoursAgo(60), approvedAt: null, provisionedAt: null, provisioningError: null, pendingSince: null },
       { id: 'p-2', code: 'ANN-2609-BBBBB', status: 'awaiting_payment', name: 'VIDA MAIS', organizationId: null, submittedAt: hoursAgo(200), firstSubmittedAt: hoursAgo(200), approvedAt: hoursAgo(6 * 24), provisionedAt: null, provisioningError: null, pendingSince: null },
@@ -212,6 +219,12 @@ describe('holding — linha por inquilino, KPIs, séries e alertas', () => {
       gmvPrev30: 2500,
       salesTrendPct: -60,
       newMembersLast30: 1,
+      activeMembers: 2,
+      activeLives: 1250,
+      activeMembersDelta30: 0, // +1 (iniciada em 10/09) −1 (cancelada em 05/09)
+      receivingConnected: true,
+      receivingEnv: 'production',
+      receivingIssue: 'aviso_com_erro',
       memberDelinquencyRate: 23.1,
       memberDelinquencyRatePrev: 50,
       // 100 − 30 (restrita) − 23 (inadimplência) − 25 (vendas −60%) = 22
@@ -239,6 +252,7 @@ describe('holding — linha por inquilino, KPIs, séries e alertas', () => {
       tenantsManaged: 2,
       tenantsByAccess: { full: 2, read_only: 1, blocked: 0 },
       tenantsNewThisMonth: 1,
+      clubsWithoutReceiving: 3, // org1 (webhook em erro), org2 (sem conta), org4 (conta pendente); org3 cancelado não conta
       tenantChurnRate: 0,
       memberChurnRate: 33.3,
       platformDelinquencyRate: 33.4,
@@ -282,5 +296,101 @@ describe('holding — linha por inquilino, KPIs, séries e alertas', () => {
     ])
     expect(alerts[0]).toMatchObject({ severity: 'critical', metric: 17, actionHref: '/admin/holding/org1', id: 'platform_delinquency:org1' })
     expect(alerts.find(a => a.proposalId === 'p-1')).toMatchObject({ severity: 'warning', metric: 60, actionHref: '/admin/compliance/p-1' })
+  })
+})
+
+describe('holding — conta de recebimento do clube', () => {
+  const info = (webhookStatus: 'ativo' | 'pendente' | 'erro', accountApproved: boolean | null) => ({
+    env: 'production' as const,
+    webhookStatus,
+    accountApproved,
+  })
+
+  it('sem conta → nao_conectado; tudo certo → null', () => {
+    expect(receivingIssueOf(undefined)).toBe('nao_conectado')
+    expect(receivingIssueOf(info('ativo', true))).toBeNull()
+  })
+
+  it('conta com situação cadastral não aprovada → conta_pendente (vale mais que o webhook)', () => {
+    expect(receivingIssueOf(info('ativo', false))).toBe('conta_pendente')
+    expect(receivingIssueOf(info('erro', false))).toBe('conta_pendente')
+  })
+
+  it('webhook com erro ou pendente numa conta aprovada → aviso_com_erro', () => {
+    expect(receivingIssueOf(info('erro', true))).toBe('aviso_com_erro')
+    expect(receivingIssueOf(info('pendente', true))).toBe('aviso_com_erro')
+  })
+
+  it('situação cadastral desconhecida (retrato indisponível) não vira pendência por si só', () => {
+    expect(receivingIssueOf(info('ativo', null))).toBeNull()
+    expect(receivingIssueOf(info('erro', null))).toBe('aviso_com_erro')
+  })
+
+  it('aprovação sai do retrato do Asaas (general = APPROVED)', () => {
+    const base = { env: 'sandbox' as const, webhookStatus: 'ativo' as const }
+    expect(receivingInfoOf({ ...base, accountStatusJson: { general: 'APPROVED' } })).toEqual({ env: 'sandbox', webhookStatus: 'ativo', accountApproved: true })
+    expect(receivingInfoOf({ ...base, accountStatusJson: { general: 'AWAITING_APPROVAL' } }).accountApproved).toBe(false)
+    expect(receivingInfoOf({ ...base, accountStatusJson: { general: 'REJECTED', bankAccountInfo: 'REJECTED' } }).accountApproved).toBe(false)
+    expect(receivingInfoOf({ ...base, accountStatusJson: null }).accountApproved).toBeNull()
+  })
+
+  it('linha do ranking reflete cada caso (com conta, sem conta, conta pendente, webhook com erro)', () => {
+    const rows = buildTenantRows(dataset())
+    const pick = (slug: string) => {
+      const { receivingConnected, receivingEnv, receivingIssue } = rows.find(r => r.row.slug === slug)!.row
+      return { receivingConnected, receivingEnv, receivingIssue }
+    }
+    expect(pick('mapcard2')).toEqual({ receivingConnected: true, receivingEnv: 'production', receivingIssue: 'aviso_com_erro' })
+    expect(pick('mepcard')).toEqual({ receivingConnected: false, receivingEnv: null, receivingIssue: 'nao_conectado' })
+    expect(pick('asserv')).toEqual({ receivingConnected: true, receivingEnv: 'sandbox', receivingIssue: 'conta_pendente' })
+  })
+
+  it('clubsWithoutReceiving conta só quem tem problema (clube em ordem e cancelado ficam de fora)', () => {
+    const data = dataset()
+    data.receiving.set('org1', receivingInfoOf({ env: 'production', webhookStatus: 'ativo', accountStatusJson: { general: 'APPROVED' } }))
+    const rows = buildTenantRows(data)
+    expect(rows.find(r => r.row.slug === 'mapcard2')!.row.receivingIssue).toBeNull()
+    expect(buildKpis(data, rows).clubsWithoutReceiving).toBe(2)
+  })
+})
+
+describe('holding — associados e vidas ativas por clube', () => {
+  // org2 com todos os status: vidas = titulares + dependentes de active/past_due.
+  const data = dataset()
+  data.clubSubs = [
+    { organizationId: 'org2', status: 'active', amount: 70, dependents: 2, startedAt: at('2025-06-01'), canceledAt: null }, // 1 + 2
+    { organizationId: 'org2', status: 'past_due', amount: 70, dependents: 1, startedAt: at('2026-09-01'), canceledAt: null }, // 1 + 1 · nova
+    { organizationId: 'org2', status: 'active', amount: 70, dependents: 0, startedAt: at('2026-09-20'), canceledAt: null }, // 1 · nova
+    { organizationId: 'org2', status: 'suspended', amount: 70, dependents: 3, startedAt: at('2025-01-10'), canceledAt: null }, // não conta
+    { organizationId: 'org2', status: 'pending_payment', amount: 70, dependents: 4, startedAt: null, canceledAt: null }, // nunca ativou
+    { organizationId: 'org2', status: 'canceled', amount: 70, dependents: 1, startedAt: at('2025-02-01'), canceledAt: at('2026-09-20') }, // saiu nos 30 dias
+    { organizationId: 'org2', status: 'canceled', amount: 70, dependents: 0, startedAt: at('2025-03-01'), canceledAt: at('2026-05-01') }, // saiu antes
+    { organizationId: 'org1', status: 'active', amount: 100, dependents: 5, startedAt: at('2026-01-01'), canceledAt: null }, // outro clube
+  ]
+  data.lives = new Map([
+    ['org1', 6],
+    ['org2', 6],
+  ])
+  const mep = buildTenantRows(data).find(r => r.row.slug === 'mepcard')!.row
+
+  it('activeMembers = assinaturas active + past_due; activeLives = vidas (titular + dependentes), igual a lives', () => {
+    expect(mep.activeMembers).toBe(3)
+    expect(mep.activeLives).toBe(6)
+    expect(mep.activeLives).toBe(mep.lives)
+  })
+
+  it('activeMembersDelta30 = vivas agora − vivas há 30 dias (+2 novas −1 cancelada)', () => {
+    expect(mep.activeMembersDelta30).toBe(1)
+  })
+
+  it('clube sem assinaturas → zeros', () => {
+    const asserv = buildTenantRows(data).find(r => r.row.slug === 'asserv')!.row
+    expect(asserv).toMatchObject({ activeMembers: 0, activeLives: 0, activeMembersDelta30: 0 })
+  })
+
+  it('plataforma: dias de atraso da fatura ANNETEC mais antiga continuam em platformDaysLate (0 = em dia)', () => {
+    const rows = buildTenantRows(data)
+    expect(rows.find(r => r.row.slug === 'mapcard2')!.row.platformDaysLate).toBe(17)
+    expect(rows.find(r => r.row.slug === 'mepcard')!.row.platformDaysLate).toBe(0)
   })
 })

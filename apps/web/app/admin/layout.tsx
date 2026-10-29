@@ -12,9 +12,11 @@ import { NotificationsProvider } from '@/components/notifications/notifications-
 import { cn } from '@/lib/utils'
 
 /**
- * Telas que operam sobre a carteira de UM inquilino — são as que precisam
- * dizer de quem são os dados. Inquilinos, Usuários da Plataforma,
- * Configurações, Logs e Dicionário são da plataforma inteira e não têm escopo.
+ * Telas que operam sobre a carteira de UM clube (ou a carteira própria da
+ * ANNETEC) — são as que precisam dizer de quem são os dados. Hoje ficam no
+ * grupo Avançado do menu. Início, Clubes, Aprovações, Financeiro, Planos e
+ * preços, Equipe ANNETEC e as telas de suporte são da plataforma inteira e
+ * não têm escopo, por isso o seletor não aparece nelas.
  */
 const ROTAS_COM_ESCOPO = [
   '/admin/clientes',
@@ -24,6 +26,12 @@ const ROTAS_COM_ESCOPO = [
   '/admin/comissoes',
   '/admin/parceiros',
 ]
+
+/** A rota é a própria tela ou uma subpágina dela (`/admin/leads` e `/admin/leads/123`). */
+function temEscopo(pathname: string | null): boolean {
+  if (!pathname) return false
+  return ROTAS_COM_ESCOPO.some(rota => pathname === rota || pathname.startsWith(`${rota}/`))
+}
 
 type SidebarContextType = {
   isCollapsed: boolean
@@ -42,7 +50,7 @@ export const usePlatformSidebarContext = () => useContext(PlatformSidebarContext
 function PlatformLayoutContent({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const pathname = usePathname()
-  const mostraEscopo = ROTAS_COM_ESCOPO.some(rota => pathname?.startsWith(rota))
+  const mostraEscopo = temEscopo(pathname)
 
   useEffect(() => {
     const stored = localStorage.getItem('annetec_platform_sidebar_collapsed')

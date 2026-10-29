@@ -23,7 +23,7 @@ import {
   type TenantHealthBand,
 } from '@annetec/contracts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -51,7 +51,7 @@ export type Tone = 'positive' | 'warning' | 'danger' | 'info' | 'neutral'
 const TONE_CLASSES: Record<Tone, string> = {
   positive: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
   warning: 'bg-amber-50 text-amber-800 ring-amber-600/25',
-  danger: 'bg-red-50 text-red-700 ring-red-600/20',
+  danger: 'bg-red-50 text-[#B42318] ring-[#B42318]/20',
   info: 'bg-blue-50 text-blue-700 ring-blue-600/20',
   neutral: 'bg-muted text-muted-foreground ring-border',
 }
@@ -91,7 +91,7 @@ export function SoftBadge({
 export const BAND_META: Record<TenantHealthBand, { tone: Tone; icon: ComponentType<{ className?: string }>; bar: string }> = {
   healthy: { tone: 'positive', icon: CheckCircle2, bar: 'bg-emerald-500' },
   attention: { tone: 'warning', icon: AlertTriangle, bar: 'bg-amber-500' },
-  risk: { tone: 'danger', icon: XCircle, bar: 'bg-red-500' },
+  risk: { tone: 'danger', icon: XCircle, bar: 'bg-[#B42318]' },
 }
 
 export function BandBadge({ band, className }: { band: TenantHealthBand; className?: string }) {
@@ -150,7 +150,7 @@ const ACCESS_META: Record<PlatformAccessLevel, { tone: Tone; icon: ComponentType
 export function AccessBadge({ level, override }: { level: PlatformAccessLevel; override?: boolean }) {
   const meta = ACCESS_META[level]
   return (
-    <SoftBadge tone={meta.tone} icon={meta.icon} title={override ? 'Decisão manual da holding' : undefined}>
+    <SoftBadge tone={meta.tone} icon={meta.icon} title={override ? 'Decisão manual da equipe' : undefined}>
       {PLATFORM_ACCESS_LEVEL_LABELS[level]}
       {override ? ' · manual' : ''}
     </SoftBadge>
@@ -161,7 +161,7 @@ export const SEVERITY_META: Record<
   HoldingAlertSeverity,
   { tone: Tone; icon: ComponentType<{ className?: string }>; iconClass: string }
 > = {
-  critical: { tone: 'danger', icon: XCircle, iconClass: 'text-red-600' },
+  critical: { tone: 'danger', icon: XCircle, iconClass: 'text-[#B42318]' },
   warning: { tone: 'warning', icon: AlertTriangle, iconClass: 'text-amber-600' },
   info: { tone: 'info', icon: Info, iconClass: 'text-blue-600' },
 }
@@ -179,7 +179,7 @@ export function ManagedBadge({ managed }: { managed: boolean }) {
   return managed ? (
     <SoftBadge tone="info">Cobrança automática</SoftBadge>
   ) : (
-    <SoftBadge tone="neutral" title="Sem assinatura de plataforma: a holding só acompanha, nunca restringe">
+    <SoftBadge tone="neutral" title="Sem assinatura de plataforma: a equipe só acompanha, nunca restringe">
       Fora da cobrança automática
     </SoftBadge>
   )
@@ -242,7 +242,7 @@ export function TrendDelta({
       className={cn(
         'inline-flex items-center gap-0.5 whitespace-nowrap text-xs font-medium',
         good === true && 'text-emerald-700',
-        good === false && 'text-red-700',
+        good === false && 'text-[#B42318]',
         good === null && 'text-muted-foreground',
         className,
       )}
@@ -361,7 +361,7 @@ export function UsageMeter({ usagePct, className }: { usagePct: number | null; c
       <div
         className={cn(
           'h-full rounded-full',
-          tone === 'over' && 'bg-red-500',
+          tone === 'over' && 'bg-[#B42318]',
           tone === 'near' && 'bg-amber-500',
           tone === 'ok' && 'bg-blue-500',
         )}

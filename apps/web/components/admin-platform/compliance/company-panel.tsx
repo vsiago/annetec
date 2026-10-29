@@ -19,9 +19,9 @@ import { formatCnpj } from '@/lib/adapters/platform-console'
 import { cn } from '@/lib/utils'
 
 /**
- * Dados cadastrais: o que o contratante declarou lado a lado com o que a
- * Receita devolveu. Divergência fica marcada — é o primeiro lugar que o
- * analista olha antes de abrir o contrato social.
+ * Empresa: o que o clube informou lado a lado com o que a Receita Federal
+ * devolveu. Diferença fica marcada — é o primeiro lugar que a equipe olha
+ * antes de abrir o contrato social.
  */
 
 function normalize(value: string | null | undefined): string {
@@ -58,7 +58,7 @@ function Compare({
       <td className={cn('px-4 py-2.5 text-sm', diverges ? 'text-amber-700 dark:text-amber-300' : 'text-foreground')}>
         <span className="inline-flex items-start gap-1.5">
           {receita || '—'}
-          {diverges && <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-label="Diverge do declarado" />}
+          {diverges && <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-label="Diferente do que o clube informou" />}
         </span>
       </td>
     </tr>
@@ -130,7 +130,7 @@ export function CompanyPanel({ proposal }: { proposal: OnboardingProposalDetail 
                   'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
                   active
                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-                    : 'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300',
+                    : 'bg-red-50 text-[#B42318] dark:bg-red-500/15 dark:text-red-300',
                 )}
               >
                 {active ? <CircleCheck className="h-3 w-3" /> : <CircleAlert className="h-3 w-3" />}
@@ -146,9 +146,9 @@ export function CompanyPanel({ proposal }: { proposal: OnboardingProposalDetail 
               <thead>
                 <tr className="border-y border-border bg-muted/40 text-left text-xs text-muted-foreground">
                   <th className="px-6 py-2.5 font-medium" />
-                  <th className="px-4 py-2.5 font-medium">Declarado pelo contratante</th>
+                  <th className="px-4 py-2.5 font-medium">Informado pelo clube</th>
                   <th className="px-4 py-2.5 font-medium">
-                    Receita Federal{receita ? ` (${receita.provider === 'simulated' ? 'simulada' : 'BrasilAPI'})` : ''}
+                    Receita Federal{receita?.provider === 'simulated' ? ' (dados de demonstração)' : ''}
                   </th>
                 </tr>
               </thead>
@@ -164,13 +164,13 @@ export function CompanyPanel({ proposal }: { proposal: OnboardingProposalDetail 
                   compare={[company?.legalNatureCode, receita?.legalNatureCode]}
                 />
                 <Compare
-                  label="CNAE principal"
+                  label="Atividade principal (CNAE)"
                   declared={company?.mainCnae ? `${company.mainCnae.code} — ${company.mainCnae.description}` : ''}
                   receita={receita?.mainCnae ? `${receita.mainCnae.code} — ${receita.mainCnae.description}` : ''}
                   compare={[onlyDigits(company?.mainCnae?.code), onlyDigits(receita?.mainCnae?.code)]}
                 />
                 <Compare
-                  label="CNAEs secundários"
+                  label="Atividades secundárias"
                   declared={company ? `${company.secondaryCnaes?.length ?? 0} atividade(s)` : ''}
                   receita={receita ? `${receita.secondaryCnaes.length} atividade(s)` : ''}
                   compare={false}
@@ -220,11 +220,11 @@ export function CompanyPanel({ proposal }: { proposal: OnboardingProposalDetail 
       <Card className="gap-4 shadow-none">
         <CardHeader>
           <CardTitle className="text-base">Contatos</CardTitle>
-          <CardDescription>Quem iniciou a contratação e os responsáveis por área.</CardDescription>
+          <CardDescription>Quem fez o cadastro e os responsáveis de cada área.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Solicitante">
+            <Field label="Quem fez o cadastro">
               <span className="font-medium">{proposal.applicant.name}</span>
               <br />
               <span className="text-muted-foreground">{proposal.applicant.email}</span>

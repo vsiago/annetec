@@ -29,7 +29,7 @@ export function ScopeSwitcher() {
   if (options.length === 0) return null
 
   const operadora = options.filter(option => option.kind === 'platform')
-  const inquilinos = options.filter(option => option.kind === 'operator')
+  const clubes = options.filter(option => option.kind === 'operator')
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -41,7 +41,7 @@ export function ScopeSwitcher() {
         <DropdownMenuTrigger asChild>
           <button
             className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="Trocar o inquilino exibido"
+            aria-label="Trocar o clube exibido"
           >
             {current?.kind === 'platform' ? (
               <Layers className="h-4 w-4 text-primary" />
@@ -70,18 +70,18 @@ export function ScopeSwitcher() {
           )}
 
           <DropdownMenuLabel className="text-xs text-muted-foreground">
-            Inquilinos ({inquilinos.length})
+            Clubes ({clubes.length})
           </DropdownMenuLabel>
-          {inquilinos.length === 0 && (
-            <p className="px-2 py-1.5 text-sm text-muted-foreground">Nenhum inquilino ativo.</p>
+          {clubes.length === 0 && (
+            <p className="px-2 py-1.5 text-sm text-muted-foreground">Nenhum clube ativo.</p>
           )}
-          {inquilinos.map(option => (
+          {clubes.map(option => (
             <DropdownMenuItem key={option.slug} onClick={() => select(option.slug)}>
               <Building2 className="mr-2 h-4 w-4 text-secondary" />
               <span className="flex-1 truncate">{option.name}</span>
               {option.status !== 'active' && (
                 <Badge variant="outline" className="ml-2 text-[10px]">
-                  {option.status === 'trial' ? 'Trial' : 'Suspenso'}
+                  {option.status === 'trial' ? 'Em teste' : 'Suspenso'}
                 </Badge>
               )}
             </DropdownMenuItem>
@@ -91,7 +91,7 @@ export function ScopeSwitcher() {
 
       {current?.kind === 'operator' && (
         <span className="text-xs text-muted-foreground">
-          Você está vendo a carteira de um inquilino, não a da Annetec.
+          Você está vendo os dados de um clube, não os da carteira própria da ANNETEC.
         </span>
       )}
     </div>

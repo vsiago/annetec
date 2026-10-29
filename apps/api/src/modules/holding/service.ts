@@ -20,6 +20,7 @@ import {
   platformCharges,
   platformOnboardingProposals,
   platformSubscriptions,
+  tenantAsaasAccounts,
   tenantPlans,
   tenantProfiles,
   user,
@@ -42,6 +43,7 @@ import {
   buildMonthlySeries,
   buildTenantMonthly,
   buildTenantRows,
+  receivingInfoOf,
   type HoldingClubChargeAgg,
   type HoldingClubSub,
   type HoldingDataset,
@@ -75,7 +77,7 @@ async function loadDataset(): Promise<HoldingDataset> {
   const d30 = ts(new Date(now.getTime() - 30 * 86_400_000))
   const d60 = ts(new Date(now.getTime() - 60 * 86_400_000))
 
-  const [tenants, plans, subs, charges, lives, clubSubRows, aggRows, gmvRows, proposals] = await Promise.all([
+  const [tenants, plans, subs, charges, lives, clubSubRows, aggRows, gmvRows, proposals, receivingRows] = await Promise.all([
     db
       .select({
         organizationId: organization.id,
@@ -141,6 +143,15 @@ async function loadDataset(): Promise<HoldingDataset> {
         updatedAt: platformOnboardingProposals.updatedAt,
       })
       .from(platformOnboardingProposals),
+    // Uma linha por clube (PK = organization_id); só colunas sem segredo (nunca a chave nem o token).
+    db
+      .select({
+        organizationId: tenantAsaasAccounts.organizationId,
+        env: tenantAsaasAccounts.env,
+        webhookStatus: tenantAsaasAccounts.webhookStatus,
+        accountStatusJson: tenantAsaasAccounts.accountStatusJson,
+      })
+      .from(tenantAsaasAccounts),
   ])
 
   const clubSubs: HoldingClubSub[] = rowsOf<Record<string, unknown>>(clubSubRows).map(row => ({
@@ -200,6 +211,7 @@ async function loadDataset(): Promise<HoldingDataset> {
     clubSubs,
     clubChargeAgg,
     gmvByOrgMonth,
+    receiving: new Map(receivingRows.map(row => [row.organizationId, receivingInfoOf(row)])),
     proposals: proposals.map(
       (p): HoldingProposalInfo => ({
         id: p.id,

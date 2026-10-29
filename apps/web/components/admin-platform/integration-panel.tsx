@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { IntegrationDiscovery, TenantIntegrationPublic } from '@annetec/contracts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -19,7 +19,7 @@ import {
 import { AlertCircle, CheckCircle2, Loader2, Plug, RefreshCw, Search, XCircle } from 'lucide-react'
 
 /**
- * Ligação do inquilino com a Digital Saúde.
+ * Ligação do clube com a Digital Saúde (aba Avançado, só superadmin).
  *
  * Existia só na API. Sem tela, ninguém via se a credencial estava valendo, e
  * os códigos obrigatórios do ERP (grupo, filial, convênio, produto, grupo de
@@ -92,7 +92,7 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
     setError('')
     setAviso('')
     if (!appToken || !apiPassword) {
-      setError('Informe token e senhaApi. Eles não são exibidos depois de gravados — para trocar os códigos, informe-os de novo.')
+      setError('Informe a chave de acesso e a senha da API. Elas não aparecem depois de salvas: para trocar, digite as duas de novo.')
       return
     }
     setSalvando(true)
@@ -116,7 +116,7 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
     aplica(result.data)
     setAppToken('')
     setApiPassword('')
-    setAviso('Credenciais validadas contra o ERP e gravadas.')
+    setAviso('Credenciais confirmadas na Digital Saúde e salvas.')
   }
 
   async function testar() {
@@ -129,7 +129,7 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
       setError(result.error)
       return
     }
-    setAviso(result.data.ok ? 'A Digital Saúde respondeu.' : 'A Digital Saúde recusou as credenciais.')
+    setAviso(result.data.ok ? 'A Digital Saúde respondeu.' : 'A Digital Saúde recusou a chave de acesso ou a senha da API.')
     const atual = await getTenantIntegrationAction(tenantId)
     if (atual.success) aplica(atual.data)
   }
@@ -172,7 +172,7 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
       <Card>
         <CardContent className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando integração…
+          Carregando a integração…
         </CardContent>
       </Card>
     )
@@ -188,16 +188,17 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <Plug className="h-5 w-5 text-primary" />
-          Integração Digital Saúde
+          Integração com a Digital Saúde
         </CardTitle>
         <CardDescription>
+          Usado pela equipe técnica para conectar o clube ao sistema da operadora.{' '}
           {integration
             ? `Configurada. Última verificação: ${
                 integration.lastCheckedAt
                   ? new Date(integration.lastCheckedAt).toLocaleString('pt-BR')
                   : 'nunca'
-              }`
-            : 'Ainda não configurada — este inquilino não consegue ler o catálogo nem a carteira.'}
+              }.`
+            : 'Ainda não configurada: o clube não consegue ler o catálogo nem a carteira.'}
         </CardDescription>
       </CardHeader>
 
@@ -218,12 +219,12 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
         {integration && (
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={integration.lastCheckOk ? 'default' : 'destructive'}>
-              {integration.lastCheckOk ? 'Credencial aceita' : 'Credencial recusada'}
+              {integration.lastCheckOk ? 'Credenciais aceitas' : 'Credenciais recusadas'}
             </Badge>
             {!integration.enabled && <Badge variant="outline">Integração desativada</Badge>}
             <Button size="sm" variant="outline" onClick={testar} disabled={testando}>
               {testando ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
-              Testar agora
+              Testar conexão
             </Button>
           </div>
         )}
@@ -232,31 +233,32 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
         <div className="space-y-3">
           <h3 className="text-sm font-semibold">Credenciais</h3>
           <p className="text-sm text-muted-foreground">
-            O par <code className="text-xs">token</code>/<code className="text-xs">senhaApi</code> é gerado
-            no painel da Digital Saúde — não há endpoint que o crie. A senha nunca é exibida de volta.
+            A chave de acesso (<code className="text-xs">token</code>) e a senha da API (
+            <code className="text-xs">senhaApi</code>) são geradas no painel da Digital Saúde; não dá para criá-las
+            por aqui. A senha nunca é mostrada de volta.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="appToken">token</Label>
+              <Label htmlFor="appToken">Chave de acesso</Label>
               <Input
                 id="appToken"
                 value={appToken}
                 onChange={e => setAppToken(e.target.value)}
-                placeholder={integration ? '•••••••• (informe para trocar)' : 'Ex: ATX3SHGT3S'}
+                placeholder={integration ? '•••••••• (digite para trocar)' : 'Ex.: ATX3SHGT3S'}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="apiPassword">senhaApi</Label>
+              <Label htmlFor="apiPassword">Senha da API</Label>
               <Input
                 id="apiPassword"
                 type="password"
                 value={apiPassword}
                 onChange={e => setApiPassword(e.target.value)}
-                placeholder={integration ? '•••••••• (informe para trocar)' : ''}
+                placeholder={integration ? '•••••••• (digite para trocar)' : ''}
               />
             </div>
             <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="baseUrl">Base URL</Label>
+              <Label htmlFor="baseUrl">Endereço da API</Label>
               <Input id="baseUrl" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
             </div>
           </div>
@@ -265,16 +267,16 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
         {/* ----------------------------------------------------- descoberta */}
         <div className="space-y-3 border-t pt-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Códigos do ERP</h3>
+            <h3 className="text-sm font-semibold">Códigos na Digital Saúde</h3>
             <Button size="sm" variant="outline" onClick={descobrir} disabled={descobrindo || !integration}>
               {descobrindo ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-2 h-3.5 w-3.5" />}
-              Descobrir no ERP
+              Descobrir códigos
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            A Digital Saúde não tem endpoint de grupo, filial ou grupo de produtor — mas esses códigos
-            aparecem dentro de outras respostas. A descoberta percorre essa trilha para você escolher em
-            vez de digitar.
+            A Digital Saúde não oferece uma lista de grupos, filiais e grupos de produtor, mas esses códigos
+            aparecem dentro de outras respostas. Use “Descobrir códigos” para escolher da lista em vez de
+            digitar.
           </p>
 
           {discovery?.avisos.map(texto => (
@@ -329,21 +331,21 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
         {/* ----------------------------------------------------- permissões */}
         <div className="space-y-3 border-t pt-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">O que este token pode fazer</h3>
+            <h3 className="text-sm font-semibold">O que esta chave de acesso pode fazer</h3>
             <Button size="sm" variant="outline" onClick={apurarPermissoes} disabled={apurando || !integration}>
               {apurando ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
-              Apurar permissões
+              Verificar permissões
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            O 401 da Digital Saúde é por operação, não por credencial: o mesmo token que lê todo o
-            catálogo pode ter a cotação bloqueada. Apurar aqui evita descobrir isso na frente do cliente.
+            A Digital Saúde libera cada operação separadamente: a mesma chave que lê todo o catálogo pode ter a
+            cotação bloqueada. Verificar aqui evita descobrir isso na frente do cliente.
           </p>
 
           {!capabilities && (
             <p className="text-sm text-muted-foreground">
-              Ainda não apurado
-              {integration ? '.' : ' — configure as credenciais primeiro.'}
+              Ainda não verificado
+              {integration ? '.' : '. Configure as credenciais primeiro.'}
             </p>
           )}
 
@@ -362,7 +364,7 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
                       </span>
                       <span
                         className={`inline-flex shrink-0 items-center gap-1.5 text-xs font-medium ${
-                          permitido ? 'text-emerald-700' : 'text-destructive'
+                          permitido ? 'text-emerald-700' : 'text-[#B42318]'
                         }`}
                       >
                         {permitido ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
@@ -377,14 +379,14 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
                     {bloqueadas.length === 1 ? 'Uma operação está bloqueada' : `${bloqueadas.length} operações estão bloqueadas`}{' '}
-                    para este token. Isso se resolve do lado da Digital Saúde — peça liberação ao suporte
-                    deles citando o endpoint.
+                    para esta chave de acesso. Isso se resolve do lado da Digital Saúde: peça a liberação ao
+                    suporte deles, informando a operação.
                   </AlertDescription>
                 </Alert>
               )}
               {integration?.capabilitiesCheckedAt && (
                 <p className="text-xs text-muted-foreground">
-                  Apurado em {new Date(integration.capabilitiesCheckedAt).toLocaleString('pt-BR')}.
+                  Verificado em {new Date(integration.capabilitiesCheckedAt).toLocaleString('pt-BR')}.
                 </p>
               )}
             </>
@@ -392,8 +394,8 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
         </div>
 
         <div className="flex justify-end border-t pt-6">
-          <Button onClick={salvar} disabled={salvando} className="bg-primary text-white hover:opacity-90">
-            {salvando ? 'Validando com o ERP…' : 'Salvar integração'}
+          <Button onClick={salvar} disabled={salvando}>
+            {salvando ? 'Confirmando na Digital Saúde…' : 'Salvar integração'}
           </Button>
         </div>
       </CardContent>
@@ -441,7 +443,7 @@ function CampoCodigo({
           </SelectContent>
         </Select>
       ) : (
-        <Input id={id} value={valor} onChange={e => aoMudar(e.target.value)} placeholder="Código do ERP" />
+        <Input id={id} value={valor} onChange={e => aoMudar(e.target.value)} placeholder="Código na Digital Saúde" />
       )}
     </div>
   )

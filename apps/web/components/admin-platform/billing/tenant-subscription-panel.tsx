@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { ArrowRight, FileSearch, ShieldCheck } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/dashboard/empty-state'
@@ -22,9 +22,9 @@ import {
 import { canSimulatePayments, formatBRL, formatDateBR } from '@/lib/adapters/platform-console'
 
 /**
- * Aba "Assinatura ANNETEC" do inquilino: a assinatura de plataforma (quando
- * existe), as faturas e a linha do tempo. Sem assinatura = contrato fora da
- * cobrança automática — nunca é cobrado nem restringido pela régua.
+ * Aba "Plano ANNETEC" do clube: a assinatura da ANNETEC (quando existe), as
+ * faturas e o histórico. Sem assinatura = contrato fora da cobrança
+ * automática — o clube nunca é cobrado nem restringido pela cobrança.
  */
 export function TenantSubscriptionPanel({ tenantId, tenantSlug }: { tenantId: string; tenantSlug: string }) {
   const sub = useConsoleData(() => findPlatformSubscriptionByTenantAction(tenantId, tenantSlug), [tenantId, tenantSlug])
@@ -48,8 +48,8 @@ export function TenantSubscriptionPanel({ tenantId, tenantSlug }: { tenantId: st
         <CardContent>
           <EmptyState
             icon={ShieldCheck}
-            title="Contrato fora da cobrança automática"
-            description="Este inquilino não tem assinatura de plataforma: a ANNETEC não emite faturas automáticas para ele e a régua nunca restringe o painel. Assinaturas nascem no provisionamento de uma contratação pelo site."
+            title="Este clube não tem cobrança automática"
+            description="O clube não tem assinatura da ANNETEC: a ANNETEC não emite faturas automáticas para ele e o painel nunca é restringido por atraso. A assinatura é criada quando o clube é aprovado e liberado a partir da contratação pelo site."
           />
         </CardContent>
       </Card>
@@ -72,14 +72,14 @@ export function TenantSubscriptionPanel({ tenantId, tenantSlug }: { tenantId: st
           <CardAction>
             <Button size="sm" className="gap-1.5" asChild>
               <Link href={`/admin/financeiro/assinaturas/${data.id}`}>
-                Abrir no financeiro
+                Ver no Financeiro
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
           </CardAction>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          <Field label="Mensal estimado">
+          <Field label="Mensalidade estimada">
             <span className="text-lg font-semibold">{formatBRL(data.estimatedMonthly)}</span>
           </Field>
           <Field label="Vidas">
@@ -87,19 +87,19 @@ export function TenantSubscriptionPanel({ tenantId, tenantSlug }: { tenantId: st
           </Field>
           <Field label="Em aberto">
             <span className="text-lg font-semibold">{formatBRL(data.openAmount)}</span>
-            {data.daysLate > 0 && <span className="block text-xs text-red-600">{data.daysLate} dia(s) de atraso</span>}
+            {data.daysLate > 0 && <span className="block text-xs text-[#B42318]">{data.daysLate} dia(s) de atraso</span>}
           </Field>
           <Field label="Próximo vencimento">{data.nextDueDate ? formatDateBR(data.nextDueDate) : '—'}</Field>
-          <Field label="Forma">
+          <Field label="Forma de pagamento">
             <MethodLabel method={data.paymentMethod} card={data.paymentCard} className="text-foreground" />
           </Field>
-          <Field label="Faturamento">{data.billingEmail}</Field>
-          <Field label="Desde">{data.startedAt ? formatDateBR(data.startedAt) : '—'}</Field>
+          <Field label="E-mail da cobrança">{data.billingEmail}</Field>
+          <Field label="Cliente desde">{data.startedAt ? formatDateBR(data.startedAt) : '—'}</Field>
           {data.proposalId && (
-            <Field label="Contratação">
-              <Link href={`/admin/compliance/${data.proposalId}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+            <Field label="Cadastro de contratação">
+              <Link href={`/admin/compliance/${data.proposalId}`} className="inline-flex items-center gap-1 text-secondary hover:underline">
                 <FileSearch className="h-3.5 w-3.5" />
-                Ver proposta
+                Ver o cadastro
               </Link>
             </Field>
           )}
@@ -122,7 +122,7 @@ export function TenantSubscriptionPanel({ tenantId, tenantSlug }: { tenantId: st
         </Card>
         <Card className="gap-4 shadow-none">
           <CardHeader>
-            <CardTitle className="text-base">Linha do tempo</CardTitle>
+            <CardTitle className="text-base">Histórico da assinatura</CardTitle>
           </CardHeader>
           <CardContent>
             <PlatformEventsTimeline events={[...data.events].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 15)} />

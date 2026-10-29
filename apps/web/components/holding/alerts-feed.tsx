@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { ArrowRight, BellOff } from 'lucide-react'
 import { HOLDING_ALERT_LABELS, type HoldingAlert, type HoldingAlertSeverity } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -31,7 +31,7 @@ function metricText(alert: HoldingAlert): string | null {
 
 function alertHref(alert: HoldingAlert): string | null {
   if (alert.actionHref) return alert.actionHref
-  if (alert.organizationId) return `/admin/holding/${alert.organizationId}`
+  if (alert.organizationId) return `/admin/inquilinos/${alert.organizationId}`
   if (alert.proposalId) return `/admin/compliance/${alert.proposalId}`
   return null
 }
@@ -66,7 +66,7 @@ export function AlertItem({ alert, showTenant = true }: { alert: HoldingAlert; s
           {showTenant && alert.tenantName && (
             <>
               {alert.organizationId ? (
-                <Link href={`/admin/holding/${alert.organizationId}`} className="font-medium text-foreground hover:underline">
+                <Link href={`/admin/inquilinos/${alert.organizationId}`} className="font-medium text-foreground hover:underline">
                   {alert.tenantName}
                 </Link>
               ) : (

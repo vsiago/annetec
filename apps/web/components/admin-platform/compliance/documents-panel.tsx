@@ -6,7 +6,7 @@ import {
   type KybDocument,
   type OnboardingProposalDetail,
 } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Pill } from '@/components/admin-platform/billing/console-kit'
 import {
@@ -18,8 +18,8 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * Documentos da proposta: o checklist de exigências da forma jurídica (uma
- * linha por item, pessoais por pessoa) e, embaixo, os envios que não
+ * Documentos da empresa: a lista do que se exige da forma jurídica (uma
+ * linha por item, os pessoais por pessoa) e, embaixo, os envios que não
  * respondem a nenhuma exigência — extras e versões substituídas.
  */
 
@@ -63,23 +63,23 @@ export function DocumentsPanel({
     <div className="space-y-4">
       <Card className="gap-4 shadow-none">
         <CardHeader>
-          <CardTitle className="text-base">Documentos exigidos</CardTitle>
+          <CardTitle className="text-base">Documentos da empresa</CardTitle>
           <CardDescription>
             {approved} de {required.length} obrigatórios aprovados
-            {toReview.length > 0 ? ` · ${toReview.length} aguardando sua revisão` : ''}
+            {toReview.length > 0 ? ` · ${toReview.length} esperando sua revisão` : ''}
           </CardDescription>
           {toReview.length > 0 && (
             <CardAction>
               <Button size="sm" className="gap-2" onClick={() => onOpenDocument(toReview[0]!.id)}>
                 <ScanSearch className="h-4 w-4" />
-                Revisar ({toReview.length})
+                Revisar documentos ({toReview.length})
               </Button>
             </CardAction>
           )}
         </CardHeader>
         <CardContent className="p-0">
           {requirements.length === 0 ? (
-            <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhuma exigência calculada para esta forma jurídica.</p>
+            <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhum documento exigido para este tipo de organização.</p>
           ) : (
             <ul className="divide-y divide-border border-t border-border">
               {requirements.map(row => {
@@ -117,7 +117,7 @@ export function DocumentsPanel({
                         row.note && <p className="mt-0.5 text-xs text-muted-foreground">{row.note}</p>
                       )}
                       {doc?.reviewNote && row.state === 'rejected' && (
-                        <p className="mt-1 text-xs text-red-600 dark:text-red-300">Recusado: {doc.reviewNote}</p>
+                        <p className="mt-1 text-xs text-[#B42318] dark:text-red-300">Recusado: {doc.reviewNote}</p>
                       )}
                     </div>
                     <Pill meta={stateMeta} />
@@ -138,7 +138,7 @@ export function DocumentsPanel({
         <Card className="gap-4 shadow-none">
           <CardHeader>
             <CardTitle className="text-base">Outros envios</CardTitle>
-            <CardDescription>Documentos extras e versões anteriores substituídas pelo contratante.</CardDescription>
+            <CardDescription>Documentos extras e versões anteriores substituídas pelo clube.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <ul className="divide-y divide-border border-t border-border">

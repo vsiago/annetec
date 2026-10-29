@@ -24,7 +24,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import type { OnboardingProposalDetail } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Pill, runCommand } from '@/components/admin-platform/billing/console-kit'
@@ -41,10 +41,27 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * Linha do tempo da proposta (eventos públicos e internos, mais recente
- * primeiro) com o campo de nota interna, e os e-mails disparados para o
- * contratante — a história inteira da análise num lugar só.
+ * Histórico do clube (registros públicos e internos, mais recente primeiro)
+ * com o campo de nota interna, e os e-mails enviados ao clube — a história
+ * inteira da análise num lugar só.
  */
+
+/** Títulos do histórico na linguagem do console (o contracts guarda a versão que o clube lê). */
+const EVENT_TITLE: Record<string, string> = {
+  PROPOSAL_CREATED: 'Cadastro iniciado',
+  SUBMITTED: 'Enviado para análise',
+  RESUBMITTED: 'Reenviado após correção',
+  PRECHECKS_RAN: 'Verificação automática feita',
+  CHECKLIST_UPDATED: 'Itens conferidos atualizados',
+  INFO_REQUESTED: 'Correção pedida ao clube',
+  APPROVED: 'Clube aprovado',
+  REJECTED: 'Clube recusado',
+  PROVISIONING_STARTED: 'Liberação do clube iniciada',
+  PROVISIONED: 'Clube liberado',
+  PROVISIONING_FAILED: 'Falha ao liberar o clube',
+  CANCELED: 'Cadastro cancelado',
+  EXPIRED: 'Cadastro expirado',
+}
 
 const EVENT_ICON: Record<string, LucideIcon> = {
   PROPOSAL_CREATED: Sparkles,
@@ -90,7 +107,7 @@ export function ProposalTimeline({
     const value = text.trim()
     if (value.length < 2 || saving) return
     setSaving(true)
-    const detail = await runCommand(addOnboardingNoteAction(proposal.id, { text: value }), 'Nota interna registrada')
+    const detail = await runCommand(addOnboardingNoteAction(proposal.id, { text: value }), 'Nota registrada no histórico')
     setSaving(false)
     if (detail) {
       setText('')
@@ -101,9 +118,10 @@ export function ProposalTimeline({
   return (
     <Card className="gap-4 shadow-none">
       <CardHeader>
-        <CardTitle className="text-base">Linha do tempo</CardTitle>
+        <CardTitle className="text-base">Histórico</CardTitle>
         <CardDescription>
-          {events.length} evento(s) · “Interno” só a equipe ANNETEC vê; “Público” aparece no acompanhamento do contratante.
+          {events.length} {events.length === 1 ? 'registro' : 'registros'} · “Interno”: só a equipe ANNETEC vê. “Público”: o clube
+          também vê no acompanhamento.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -112,7 +130,7 @@ export function ProposalTimeline({
             <Textarea
               value={text}
               onChange={event => setText(event.target.value)}
-              placeholder="Nota interna da análise (ex.: contato telefônico com o tesoureiro confirmou a diretoria)"
+              placeholder="Nota interna (ex.: o tesoureiro confirmou a diretoria por telefone)"
               rows={2}
               maxLength={4000}
             />
@@ -126,12 +144,13 @@ export function ProposalTimeline({
         )}
 
         {events.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Nenhum evento registrado.</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">Nenhum registro ainda.</p>
         ) : (
           <ol className="relative space-y-4">
             {events.map((event, index) => {
               const Icon = EVENT_ICON[event.type] ?? Activity
-              const title = onboardingEventLabel(event.type)
+              const originalTitle = onboardingEventLabel(event.type)
+              const title = EVENT_TITLE[event.type] ?? originalTitle
               const isNote = event.type === 'NOTE_ADDED'
               return (
                 <li key={event.id} className="relative flex gap-3">
@@ -160,7 +179,7 @@ export function ProposalTimeline({
                         {event.visibility === 'internal' ? 'Interno' : 'Público'}
                       </span>
                     </div>
-                    {event.message && event.message !== title && (
+                    {event.message && event.message !== title && event.message !== originalTitle && (
                       <p
                         className={cn(
                           'mt-0.5 text-sm',
@@ -196,12 +215,14 @@ export function ProposalEmails({
   return (
     <Card className="gap-4 shadow-none">
       <CardHeader>
-        <CardTitle className="text-base">E-mails ao contratante</CardTitle>
-        <CardDescription>{emails.length} mensagem(ns) na caixa de saída ligadas a esta proposta.</CardDescription>
+        <CardTitle className="text-base">E-mails enviados ao clube</CardTitle>
+        <CardDescription>
+          {emails.length} {emails.length === 1 ? 'mensagem ligada' : 'mensagens ligadas'} a este clube.
+        </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
         {emails.length === 0 ? (
-          <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhum e-mail disparado ainda.</p>
+          <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhum e-mail enviado ainda.</p>
         ) : (
           <ul className="divide-y divide-border border-t border-border">
             {emails.map(email => (

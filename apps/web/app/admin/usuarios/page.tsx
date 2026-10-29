@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -69,7 +69,7 @@ export default function PlatformUsuariosPage() {
     if (editingId) {
       const result = await updatePlatformUserAction(editingId, { name, phone: phone || null, role })
       if (!result.success) {
-        setError(result.error || 'Não foi possível salvar a conta')
+        setError(result.error || 'Não foi possível salvar as alterações. Confira os dados e tente de novo.')
         return
       }
       await refresh()
@@ -79,12 +79,12 @@ export default function PlatformUsuariosPage() {
     }
 
     if (!name || !email || !password) {
-      setError('Preencha nome, e-mail e senha')
+      setError('Preencha nome, e-mail e senha inicial para adicionar a pessoa.')
       return
     }
     const result = await createPlatformUser({ name, email, phone, role, password })
     if (!result.success) {
-      setError(result.error || 'Não foi possível criar o usuário')
+      setError(result.error || 'Não foi possível adicionar a pessoa. Confira os dados e tente de novo.')
       return
     }
     setIsAddOpen(false)
@@ -106,7 +106,7 @@ export default function PlatformUsuariosPage() {
     const result = await updatePlatformUserAction(id, { active: !ativo })
     setBusyId(null)
     if (!result.success) {
-      setListError(result.error || 'Não foi possível alterar a conta')
+      setListError(result.error || 'Não foi possível alterar o acesso desta pessoa. Tente de novo.')
       return
     }
     await refresh()
@@ -116,12 +116,12 @@ export default function PlatformUsuariosPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Usuários da Plataforma</h1>
-          <p className="text-muted-foreground">Contas com acesso ao painel administrativo da Annetec</p>
+          <h1 className="text-2xl font-bold text-foreground">Equipe ANNETEC</h1>
+          <p className="text-muted-foreground">Quem da ANNETEC tem acesso ao console.</p>
         </div>
-        <Button className="bg-primary hover:opacity-90 text-white" onClick={abrirNovo}>
+        <Button onClick={abrirNovo}>
           <Plus className="h-4 w-4 mr-2" />
-          Novo Usuário
+          Adicionar pessoa
         </Button>
       </div>
 
@@ -131,9 +131,9 @@ export default function PlatformUsuariosPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Usuário</th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Pessoa</th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Contato</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Tipo</th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Acesso</th>
                   <th className="text-right py-4 px-6 text-sm font-medium text-muted-foreground">Ações</th>
                 </tr>
               </thead>
@@ -165,7 +165,7 @@ export default function PlatformUsuariosPage() {
                     <td className="py-4 px-6">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {u.role === 'superadmin' ? (
-                          <Badge className="bg-red-100 text-red-700">
+                          <Badge className="bg-red-100 text-[#B42318]">
                             <ShieldCheck className="w-3 h-3 mr-1" /> Superadmin
                           </Badge>
                         ) : (
@@ -188,7 +188,7 @@ export default function PlatformUsuariosPage() {
                           disabled={busyId === u.id || u.id === contaAtual?.id}
                           title={u.id === contaAtual?.id ? 'Você não pode desativar a própria conta' : undefined}
                           onClick={() => alternarAtivacao(u.id, u.active)}
-                          className={u.active ? 'text-destructive hover:text-destructive' : ''}
+                          className={u.active ? 'text-[#B42318] hover:text-[#B42318]' : ''}
                         >
                           {u.active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
                           <span className="sr-only">
@@ -209,15 +209,15 @@ export default function PlatformUsuariosPage() {
         <DialogContent className="sm:max-w-[425px]">
           <form onSubmit={handleAdd}>
             <DialogHeader>
-              <DialogTitle>{editingId ? 'Editar conta' : 'Novo usuário da plataforma'}</DialogTitle>
+              <DialogTitle>{editingId ? 'Editar pessoa' : 'Adicionar pessoa à equipe'}</DialogTitle>
               <DialogDescription>
                 {editingId
-                  ? 'E-mail e senha não mudam por aqui: o e-mail é a identidade da conta e a senha tem fluxo próprio.'
-                  : 'Cadastre um superadmin ou um usuário padrão (operacional)'}
+                  ? 'O e-mail e a senha não mudam por aqui.'
+                  : 'Escolha o nível de acesso: superadmin tem acesso total; padrão cuida da operação.'}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p className="text-sm text-[#B42318]">{error}</p>}
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Nome *</label>
                 <Input value={name} onChange={e => setName(e.target.value)} required />
@@ -237,7 +237,7 @@ export default function PlatformUsuariosPage() {
                 <Input value={phone} onChange={e => setPhone(e.target.value)} />
               </div>
               <div className="grid gap-2">
-                <label className="text-sm font-medium">Tipo *</label>
+                <label className="text-sm font-medium">Acesso *</label>
                 <Select value={role} onValueChange={v => setRole(v as PlatformRole)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -259,8 +259,8 @@ export default function PlatformUsuariosPage() {
               <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-primary hover:opacity-90 text-white">
-                {editingId ? 'Salvar conta' : 'Cadastrar'}
+              <Button type="submit">
+                {editingId ? 'Salvar alterações' : 'Adicionar pessoa'}
               </Button>
             </DialogFooter>
           </form>

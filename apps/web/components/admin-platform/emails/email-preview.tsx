@@ -12,7 +12,7 @@ import { emailStatusMeta, emailTemplateLabel, formatDateTimeBR } from '@/lib/ada
 import { cn } from '@/lib/utils'
 
 /**
- * Prévia de um e-mail da caixa de saída: cabeçalho, versão HTML renderizada
+ * Prévia de um e-mail enviado: cabeçalho, versão HTML renderizada
  * num iframe isolado (`sandbox` sem scripts nem mesma origem — o HTML é
  * gerado pela API, mas quem vê é o console) e a versão texto.
  */
@@ -47,18 +47,18 @@ export function EmailPreview({ email, className }: { email: PlatformEmail; class
             {formatDateTimeBR(email.createdAt)}
             {email.sentAt ? ` · enviado ${formatDateTimeBR(email.sentAt)}` : ''}
             {' · '}
-            {email.provider === 'outbox' ? 'somente caixa de saída (modo demonstração)' : `via ${email.provider}`}
+            {email.provider === 'outbox' ? 'só registrado aqui, não enviado ao destinatário' : `via ${email.provider}`}
           </dd>
         </dl>
         {email.error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-[#B42318] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
             Falha no envio: {email.error}
           </p>
         )}
         {(email.proposalId || email.organizationId) && (
           <div className="flex flex-wrap gap-3 text-xs">
             {email.proposalId && (
-              <Link href={`/admin/compliance/${email.proposalId}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+              <Link href={`/admin/compliance/${email.proposalId}`} className="inline-flex items-center gap-1 text-secondary hover:underline">
                 <FileSearch className="h-3.5 w-3.5" />
                 Ver proposta
               </Link>
@@ -66,10 +66,10 @@ export function EmailPreview({ email, className }: { email: PlatformEmail; class
             {email.organizationId && (
               <Link
                 href={`/admin/inquilinos/${email.organizationId}`}
-                className="inline-flex items-center gap-1 text-primary hover:underline"
+                className="inline-flex items-center gap-1 text-secondary hover:underline"
               >
                 <Building2 className="h-3.5 w-3.5" />
-                Ver inquilino
+                Ver clube
               </Link>
             )}
           </div>
@@ -121,7 +121,7 @@ export function EmailPreviewSkeleton() {
   )
 }
 
-/** Abre um e-mail pelo id (usado no detalhe da proposta e nas abas do inquilino). */
+/** Abre um e-mail pelo id (usado no detalhe da proposta e nas abas do clube). */
 export function EmailPreviewDialog({
   emailId,
   onOpenChange,
@@ -138,8 +138,8 @@ export function EmailPreviewDialog({
     <Dialog open={!!emailId} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader className="sr-only">
-          <DialogTitle>E-mail da caixa de saída</DialogTitle>
-          <DialogDescription>Prévia do e-mail enviado pela plataforma</DialogDescription>
+          <DialogTitle>E-mail enviado</DialogTitle>
+          <DialogDescription>Prévia do e-mail como o destinatário recebe</DialogDescription>
         </DialogHeader>
         {loading && !data ? (
           <EmailPreviewSkeleton />
@@ -154,7 +154,7 @@ export function EmailPreviewDialog({
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
             <Mail className="h-3.5 w-3.5" />
-            Abrir na caixa de saída
+            Abrir em E-mails enviados
             <ExternalLink className="h-3 w-3" />
           </Link>
         )}

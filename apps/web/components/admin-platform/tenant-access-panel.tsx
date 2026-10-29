@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -44,7 +44,7 @@ import {
 } from 'lucide-react'
 
 /**
- * Acesso administrativo ao inquilino.
+ * Aba "Pessoas com acesso" do clube.
  *
  * Redefinir senha aqui é ato da equipe Annetec sobre a conta de outra pessoa —
  * por isso não pede a senha atual (isso é `POST /auth/password`, o fluxo do
@@ -63,9 +63,9 @@ import {
  * lista já diz qual dos casos vale para cada conta (`removal`).
  */
 const PAPEL: Record<TenantMember['role'], { label: string; classe: string }> = {
-  admin: { label: 'Admin', classe: 'bg-red-100 text-red-700' },
+  admin: { label: 'Responsável', classe: 'bg-red-100 text-[#B42318]' },
   seller: { label: 'Vendedor', classe: 'bg-blue-100 text-blue-700' },
-  client: { label: 'Beneficiário', classe: 'bg-slate-100 text-slate-700' },
+  client: { label: 'Associado', classe: 'bg-slate-100 text-slate-700' },
 }
 
 const PORTAL_PATH: Record<TenantMember['role'], string> = {
@@ -214,8 +214,8 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
         return
       }
       toast.success(
-        `Acesso de ${membro.name} desativado` +
-          (resultado.data.revokedSessions > 0 ? ` · ${resultado.data.revokedSessions} sessão(ões) encerrada(s)` : ''),
+        `Acesso de ${membro.name} desativado.` +
+          (resultado.data.revokedSessions > 0 ? ` ${resultado.data.revokedSessions} sessão(ões) encerrada(s).` : ''),
       )
     } else {
       const resultado = await removeTenantMemberAction(tenantId, membro.id)
@@ -228,8 +228,8 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
       }
       toast.success(
         resultado.data.accountDeleted
-          ? `Conta de ${membro.name} excluída`
-          : `${membro.name} removido(a) deste clube`,
+          ? `Conta de ${membro.name} excluída.`
+          : `${membro.name} saiu deste clube.`,
       )
     }
 
@@ -245,7 +245,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
       toast.error(resultado.error)
       return
     }
-    toast.success(`Acesso de ${membro.name} reativado`)
+    toast.success(`Acesso de ${membro.name} reativado.`)
     void carregar()
   }
 
@@ -278,11 +278,11 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
     }
     const envio =
       resultado.data.emailStatus === 'failed'
-        ? 'mas o convite por e-mail falhou — use "Redefinir senha"'
+        ? 'O convite por e-mail não foi enviado. Use "Redefinir senha" para gerar uma senha.'
         : resultado.data.accountCreated
-          ? 'convite com senha provisória enviado por e-mail'
-          : 'conta já existia; convite enviado sem senha'
-    toast.success(`${resultado.data.member.name} agora é responsável · ${envio}`)
+          ? 'O convite com a senha provisória foi enviado por e-mail.'
+          : 'A pessoa já tinha conta, então o convite foi enviado sem senha.'
+    toast.success(`${resultado.data.member.name} agora é responsável pelo clube. ${envio}`)
     setNovoAberto(false)
     void carregar()
   }
@@ -318,7 +318,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
           ) : (
             <Badge variant="outline">Inativo</Badge>
           )}
-          {membro.platformStaff && <Badge variant="outline">Equipe da plataforma</Badge>}
+          {membro.platformStaff && <Badge variant="outline">Equipe ANNETEC</Badge>}
 
           <SuperadminOnly isSuperadmin={isSuperadmin}>
             <Button
@@ -330,7 +330,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
               }}
             >
               <LogIn className="mr-2 h-3.5 w-3.5" />
-              Entrar como
+              Ver como esta pessoa
             </Button>
           </SuperadminOnly>
           <SuperadminOnly isSuperadmin={isSuperadmin}>
@@ -343,7 +343,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             {membro.active ? (
               <Button variant="outline" size="sm" onClick={() => pedirConfirmacao('desativar', membro)}>
                 <PowerOff className="mr-2 h-3.5 w-3.5" />
-                Desativar
+                Desativar acesso
               </Button>
             ) : (
               <Button
@@ -357,7 +357,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
                 ) : (
                   <Power className="mr-2 h-3.5 w-3.5" />
                 )}
-                Reativar
+                Reativar acesso
               </Button>
             )}
           </SuperadminOnly>
@@ -365,11 +365,11 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             <Button
               variant="outline"
               size="sm"
-              className="text-destructive hover:text-destructive"
+              className="text-[#B42318] hover:text-[#B42318]"
               onClick={() => pedirConfirmacao('remover', membro)}
             >
               <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Remover
+              Remover do clube
             </Button>
           </SuperadminOnly>
         </div>
@@ -382,25 +382,25 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
       return (
         <>
           Não dá para remover {membro.name}: {membro.removalBlockedReason}. Ao confirmar, o acesso a este
-          clube será apenas <strong>desativado</strong> e as sessões encerradas.
+          clube será apenas <strong>desativado</strong> e as sessões abertas serão encerradas.
         </>
       )
     }
     if (membro.removal === 'delete_account') {
       return (
         <>
-          Este é o único vínculo de {membro.email}. Ao remover, a <strong>conta será excluída
-          definitivamente</strong> (login, sessões e vínculo). Não dá para desfazer.
+          Este clube é o único acesso de {membro.email}. Ao remover, a <strong>conta será excluída
+          de vez</strong> (login e sessões). Não dá para desfazer.
         </>
       )
     }
     return (
       <>
-        Só o vínculo com este clube será removido e as sessões ligadas a ele, encerradas. A conta de{' '}
+        Só o acesso a este clube será removido e as sessões abertas nele serão encerradas. A conta de{' '}
         {membro.email} continua existindo
         {membro.platformStaff
-          ? ' (é da equipe da plataforma).'
-          : ` (tem ${membro.otherMemberships} vínculo(s) com outro(s) clube(s)).`}
+          ? ' (é da equipe ANNETEC).'
+          : ` (a pessoa também participa de ${membro.otherMemberships} outro(s) clube(s)).`}
       </>
     )
   }
@@ -420,7 +420,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
       {carregando && (
         <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Buscando as contas…
+          Carregando as pessoas…
         </div>
       )}
 
@@ -431,10 +431,10 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
               <div className="space-y-1.5">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <ShieldCheck className="h-4 w-4 text-primary" />
-                  Responsáveis (administradores)
+                  Responsáveis pelo clube
                 </CardTitle>
                 <CardDescription>
-                  {adminsAtivos} ativo(s) de {admins.length}. O clube precisa de pelo menos um responsável
+                  {adminsAtivos} de {admins.length} com acesso ativo. O clube precisa de pelo menos um responsável
                   ativo.
                 </CardDescription>
               </div>
@@ -457,7 +457,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
                 </div>
               )}
               {admins.length === 0 ? (
-                <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhum administrador cadastrado.</p>
+                <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhum responsável cadastrado.</p>
               ) : (
                 <div className="divide-y divide-border border-t border-border">{admins.map(linha)}</div>
               )}
@@ -468,15 +468,15 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Users className="h-4 w-4 text-primary" />
-                Demais contas
+                Vendedores e associados
               </CardTitle>
               <CardDescription>
-                {demais.length} conta(s) de vendedores e beneficiários · {membros.length} no total
+                {demais.length} pessoa(s) entre vendedores e associados · {membros.length} no total
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               {demais.length === 0 ? (
-                <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhuma outra conta neste clube.</p>
+                <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhuma outra pessoa neste clube.</p>
               ) : (
                 <div className="divide-y divide-border border-t border-border">{demais.map(linha)}</div>
               )}
@@ -486,8 +486,8 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
       )}
 
       <p className="text-xs text-muted-foreground">
-        Toda ação feita aqui (redefinir senha, entrar como, desativar, remover, adicionar responsável) entra
-        na trilha de auditoria com quem fez, quando e para qual conta — senhas nunca são registradas.
+        Tudo o que você faz aqui fica no histórico de alterações: quem fez, quando e em qual conta. Senhas nunca
+        são registradas.
       </p>
 
       <Dialog open={alvo !== null} onOpenChange={aberto => !aberto && setAlvo(null)}>
@@ -497,7 +497,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             <DialogDescription>
               {gerada
                 ? 'Esta senha aparece uma única vez. Copie antes de fechar.'
-                : 'Define uma senha nova sem precisar da senha atual. A pessoa entra com ela imediatamente.'}
+                : 'Define uma senha nova sem precisar da senha atual. A pessoa já pode entrar com ela.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -525,7 +525,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
                   autoComplete="off"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Mínimo de 8 caracteres. Em branco, a plataforma gera uma senha provisória.
+                  Mínimo de 8 caracteres. Em branco, a ANNETEC gera uma senha provisória.
                 </p>
               </div>
               {erroDialogo && (
@@ -558,10 +558,10 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
       <Dialog open={alvoEntrar !== null} onOpenChange={aberto => !aberto && !entrando && setAlvoEntrar(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Entrar como — {alvoEntrar?.name}</DialogTitle>
+            <DialogTitle>Ver como esta pessoa — {alvoEntrar?.name}</DialogTitle>
             <DialogDescription>
-              Abre uma sessão real dessa conta, por até 1 hora. Fica registrado na trilha de
-              auditoria quem entrou, quando e em qual conta.
+              Abre o sistema com a conta dessa pessoa, por até 1 hora, para você ver o que ela vê. O que você fizer lá
+              vale de verdade. Fica registrado no histórico de alterações quem entrou, quando e em qual conta.
             </DialogDescription>
           </DialogHeader>
 
@@ -578,7 +578,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             </Button>
             <Button onClick={entrarComo} disabled={entrando}>
               {entrando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Entrar
+              Ver como esta pessoa
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -593,7 +593,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             <DialogDescription>
               {acao?.tipo === 'remover'
                 ? acao && explicacaoRemocao(acao.membro)
-                : 'A pessoa perde o acesso a este clube e as sessões abertas nele são encerradas na hora. Dá para reativar depois.'}
+                : 'A pessoa perde o acesso a este clube e as sessões abertas nele são encerradas na hora. Dá para reativar o acesso depois.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -601,7 +601,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Este é o único responsável ativo do clube — a plataforma vai recusar. Adicione ou reative
+                Este é o único responsável ativo do clube, então a plataforma vai recusar. Adicione ou reative
                 outro responsável antes.
               </AlertDescription>
             </Alert>
@@ -626,8 +626,8 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
                     ? 'Desativar no lugar'
                     : acao.membro.removal === 'delete_account'
                       ? 'Excluir conta'
-                      : 'Remover vínculo'
-                  : 'Desativar'}
+                      : 'Remover do clube'
+                  : 'Desativar acesso'}
               </Button>
             )}
           </DialogFooter>
@@ -639,7 +639,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
           <DialogHeader>
             <DialogTitle>Adicionar responsável</DialogTitle>
             <DialogDescription>
-              A pessoa vira administradora deste clube. Se ainda não tem conta, a senha provisória é gerada
+              A pessoa passa a ser responsável por este clube. Se ainda não tem conta, a senha provisória é gerada
               pela plataforma e enviada só por e-mail, no convite com a marca do clube.
             </DialogDescription>
           </DialogHeader>

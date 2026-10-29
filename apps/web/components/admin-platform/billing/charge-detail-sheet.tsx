@@ -4,11 +4,11 @@ import Link from 'next/link'
 import { Copy, ExternalLink, FileSearch } from 'lucide-react'
 import { toast } from 'sonner'
 import { PLATFORM_CHARGE_ITEM_KIND_LABELS, type PlatformChargeDetail } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Field, LoadError, Pill, copyToClipboard, useConsoleData } from '@/components/admin-platform/billing/console-kit'
-import { ChargeKindPill, MethodLabel, PlatformEventsTimeline } from '@/components/admin-platform/billing/billing-bits'
+import { Field, LoadError, Pill, copyToClipboard, useConsoleData, usePlatformRole } from '@/components/admin-platform/billing/console-kit'
+import { ChargeKindPill, LivesTerm, MethodLabel, PlatformEventsTimeline, pluralize } from '@/components/admin-platform/billing/billing-bits'
 import { chargeCapabilities, type ChargeAction } from '@/components/admin-platform/billing/charge-actions'
 import { getPlatformChargeAction } from '@/lib/actions/platform-billing-api'
 import {
@@ -44,6 +44,7 @@ export function ChargeDetailSheet({
     chargeId ? () => getPlatformChargeAction(chargeId) : null,
     [chargeId, version],
   )
+  const { isSuperadmin } = usePlatformRole()
   const charge = data && data.id === chargeId ? data : null
   const can = charge ? chargeCapabilities(charge, canSimulate) : null
 
@@ -59,7 +60,7 @@ export function ChargeDetailSheet({
         <SheetHeader className="border-b border-border">
           <SheetTitle>{charge ? charge.description : 'Fatura'}</SheetTitle>
           <SheetDescription>
-            {charge ? `${charge.tenantName ?? 'Contratação (antes do provisionamento)'} · criada ${formatDateTimeBR(charge.createdAt)}` : 'Carregando…'}
+            {charge ? `${charge.tenantName ?? 'Nova contratação (clube ainda não liberado)'} · criada em ${formatDateTimeBR(charge.createdAt)}` : 'Carregando…'}
           </SheetDescription>
         </SheetHeader>
 
@@ -89,12 +90,18 @@ export function ChargeDetailSheet({
                 <div className="flex flex-wrap gap-2">
                   {can.reissue && (
                     <Button variant="outline" size="sm" onClick={() => onAction('reissue', charge)}>
-                      Emitir 2ª via
+                      Emitir segunda via
                     </Button>
                   )}
                   {can.manual && (
-                    <Button variant="outline" size="sm" onClick={() => onAction('manual', charge)}>
-                      Dar baixa manual
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onAction('manual', charge)}
+                      disabled={!isSuperadmin}
+                      title={isSuperadmin ? undefined : 'Somente o superadmin pode marcar uma fatura como paga.'}
+                    >
+                      Marcar como pago
                     </Button>
                   )}
                   {can.simulate && (
@@ -103,6 +110,8 @@ export function ChargeDetailSheet({
                       size="sm"
                       className="border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-500/30 dark:text-amber-300"
                       onClick={() => onAction('simulate', charge)}
+                      disabled={!isSuperadmin}
+                      title={isSuperadmin ? undefined : 'Somente o superadmin pode simular um pagamento.'}
                     >
                       Simular pagamento
                     </Button>
@@ -111,28 +120,36 @@ export function ChargeDetailSheet({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-500/30"
+                      className="border-red-200 text-[#B42318] hover:bg-red-50 hover:text-[#B42318] dark:border-red-500/30"
                       onClick={() => onAction('cancel', charge)}
+                      disabled={!isSuperadmin}
+                      title={isSuperadmin ? undefined : 'Somente o superadmin pode cancelar uma fatura.'}
                     >
-                      Cancelar
+                      Cancelar fatura
                     </Button>
                   )}
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Forma">
+                <Field label="Forma de pagamento">
                   <MethodLabel method={charge.method} card={charge.card} className="text-foreground" />
                 </Field>
-                <Field label="Competência">
+                <Field label="Período">
                   {charge.periodStart && charge.periodEnd
                     ? `${formatDateBR(charge.periodStart)} a ${formatDateBR(charge.periodEnd)}`
                     : charge.kind === 'activation'
-                      ? 'Ativação (período nasce no provisionamento)'
+                      ? 'Ativação (o período começa quando o clube é liberado)'
                       : '—'}
                 </Field>
-                <Field label="Vidas apuradas">
-                  {charge.livesCount !== null ? charge.livesCount.toLocaleString('pt-BR') : '—'}
+                <Field label="Vidas cobradas">
+                  {charge.livesCount !== null ? (
+                    <>
+                      {charge.livesCount.toLocaleString('pt-BR')} <LivesTerm />
+                    </>
+                  ) : (
+                    '—'
+                  )}
                 </Field>
                 <Field label="Pagamento">
                   {charge.paidAt
@@ -140,12 +157,12 @@ export function ChargeDetailSheet({
                     : charge.canceledAt
                       ? `Cancelada em ${formatDateTimeBR(charge.canceledAt)}`
                       : charge.attempts > 0
-                        ? `${charge.attempts} tentativa(s)`
+                        ? `Em aberto · ${pluralize(charge.attempts, 'tentativa', 'tentativas')} de cobrança`
                         : 'Em aberto'}
                 </Field>
               </div>
               {charge.failureReason && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-[#B42318] dark:bg-red-500/10 dark:text-red-300">
                   {charge.failureReason}
                 </p>
               )}
@@ -214,7 +231,7 @@ export function ChargeDetailSheet({
                           <Button variant="outline" size="sm" className="gap-1.5" asChild>
                             <a href={charge.boleto.url} target="_blank" rel="noreferrer">
                               <ExternalLink className="h-3.5 w-3.5" />
-                              Boleto
+                              Abrir boleto
                             </a>
                           </Button>
                         )}
@@ -228,32 +245,32 @@ export function ChargeDetailSheet({
                 <Button variant="outline" size="sm" className="gap-1.5" asChild>
                   <a href={charge.publicUrl} target="_blank" rel="noreferrer">
                     <ExternalLink className="h-3.5 w-3.5" />
-                    Fatura pública
+                    Abrir página da fatura
                   </a>
                 </Button>
                 {charge.subscriptionId && (
                   <Button variant="outline" size="sm" className="gap-1.5" asChild>
-                    <Link href={`/admin/financeiro/assinaturas/${charge.subscriptionId}`}>Assinatura</Link>
+                    <Link href={`/admin/financeiro/assinaturas/${charge.subscriptionId}`}>Ver clube pagante</Link>
                   </Button>
                 )}
                 {charge.proposalId && (
                   <Button variant="outline" size="sm" className="gap-1.5" asChild>
                     <Link href={`/admin/compliance/${charge.proposalId}`}>
                       <FileSearch className="h-3.5 w-3.5" />
-                      Proposta
+                      Ver aprovação do clube
                     </Link>
                   </Button>
                 )}
               </section>
 
               <p className="text-xs text-muted-foreground">
-                Gateway: {gatewayLabel(charge.gatewayProvider)}
+                Forma de recebimento: {gatewayLabel(charge.gatewayProvider)}
                 {isDemoMode({ gateway: charge.gatewayProvider }) ? ' (demonstração — sem dinheiro real)' : ''}
-                {charge.gatewayChargeId ? ` · ${charge.gatewayChargeId}` : ''}
+                {charge.gatewayChargeId ? ` · código ${charge.gatewayChargeId}` : ''}
               </p>
 
               <section className="space-y-3">
-                <h3 className="text-sm font-semibold text-foreground">Linha do tempo</h3>
+                <h3 className="text-sm font-semibold text-foreground">Histórico da fatura</h3>
                 <PlatformEventsTimeline events={charge.events} />
               </section>
             </>

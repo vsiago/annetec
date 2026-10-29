@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, ScrollText, Search, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -63,9 +63,9 @@ export default function HoldingAuditPage() {
 }
 
 /**
- * Trilha de auditoria da holding: `audit_logs` de toda a plataforma com nome
- * do inquilino e do ator. Filtros ficam na URL (o detalhe do inquilino abre
- * esta tela já filtrada por `organizationId`).
+ * Histórico de alterações: `audit_logs` de toda a plataforma com nome do clube
+ * e de quem fez. Filtros ficam na URL (o detalhe do clube abre esta tela já
+ * filtrada por `organizationId`). Fica em Avançado: serve ao suporte.
  */
 function AuditContent() {
   const router = useRouter()
@@ -124,21 +124,21 @@ function AuditContent() {
   return (
     <div className="space-y-6">
       <Link
-        href="/admin/holding"
+        href={filters.organizationId ? `/admin/inquilinos/${encodeURIComponent(filters.organizationId)}` : '/admin'}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        Holding
+        {filters.organizationId ? (selectedTenant?.name ?? 'Voltar ao clube') : 'Início'}
       </Link>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
           <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <ScrollText className="h-6 w-6 text-primary" />
-            Trilha de auditoria
+            Histórico de alterações
           </h1>
           <p className="text-sm text-muted-foreground">
-            Quem fez o quê, em qual inquilino e por quê — inclusive restrições, suspensões e reativações da holding
+            Quem mudou o quê, em qual clube e quando, com o motivo. Inclui restrições, suspensões e reativações de clubes.
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => fetchPage()} disabled={page.loading}>
@@ -149,16 +149,16 @@ function AuditContent() {
 
       <Card className="gap-4 border-0 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Registros</CardTitle>
+          <CardTitle className="text-base">Alterações</CardTitle>
           <CardDescription className="text-xs">
-            {meta ? `${formatInt(meta.total)} registro(s)` : 'Carregando…'}
+            {meta ? `${formatInt(meta.total)} ${meta.total === 1 ? 'alteração' : 'alterações'}` : 'Carregando…'}
             {selectedTenant ? ` · ${selectedTenant.name}` : ''}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto_auto] lg:items-end">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Inquilino</Label>
+              <Label className="text-xs text-muted-foreground">Clube</Label>
               <Select
                 value={filters.organizationId || 'all'}
                 onValueChange={value => update({ organizationId: value === 'all' ? '' : value })}
@@ -167,9 +167,9 @@ function AuditContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os inquilinos</SelectItem>
+                  <SelectItem value="all">Todos os clubes</SelectItem>
                   {filters.organizationId && !selectedTenant && (
-                    <SelectItem value={filters.organizationId}>Inquilino selecionado</SelectItem>
+                    <SelectItem value={filters.organizationId}>Clube selecionado</SelectItem>
                   )}
                   {tenantOptions.map(tenant => (
                     <SelectItem key={tenant.id} value={tenant.id}>
@@ -180,13 +180,13 @@ function AuditContent() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Ação</Label>
+              <Label className="text-xs text-muted-foreground">Tipo de alteração</Label>
               <Select value={filters.action || 'all'} onValueChange={value => update({ action: value === 'all' ? '' : value })}>
                 <SelectTrigger size="sm" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas as ações</SelectItem>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
                   {filters.action && !AUDIT_ACTION_FILTERS.some(option => option.value === filters.action) && (
                     <SelectItem value={filters.action}>{filters.action}</SelectItem>
                   )}
@@ -208,7 +208,7 @@ function AuditContent() {
                   id="audit-search"
                   value={search}
                   onChange={event => setSearch(event.target.value)}
-                  placeholder="Ação, recurso, pessoa…"
+                  placeholder="Alteração, pessoa ou clube"
                   className="h-8 pl-8"
                 />
               </div>
@@ -264,7 +264,7 @@ function AuditContent() {
             </div>
           ) : page.data.rows.length === 0 ? (
             <EmptyNote icon={ScrollText}>
-              {hasFilters ? 'Nenhum registro com esses filtros.' : 'Nenhum registro de auditoria ainda.'}
+              {hasFilters ? 'Nenhuma alteração com esses filtros. Ajuste a busca ou limpe os filtros.' : 'Nenhuma alteração registrada ainda.'}
             </EmptyNote>
           ) : (
             <div className={cn('space-y-3', page.loading && 'opacity-60 transition-opacity')}>

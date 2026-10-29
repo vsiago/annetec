@@ -4,25 +4,31 @@ import {
   effectivePlatformAccess,
   formatBRL,
   tenantAlertKinds,
+  type AsaasEnvironmentName,
   type ClubChargeStatus,
+  type ClubReceivingWebhookStatus,
   type ClubSubscriptionStatus,
   type HoldingAlert,
   type HoldingAlertKind,
   type HoldingAlertSeverity,
   type HoldingKpis,
   type HoldingMonthlyPoint,
+  type HoldingReceivingIssue,
   type HoldingTenantRow,
   type OnboardingStatus,
   type PlatformAccessLevel,
   type PlatformSubscriptionStatus,
   type TenantStatus,
 } from '@annetec/contracts'
+import type { AsaasAccountStatusSnapshot } from '@/db/schema'
 import { diffDays, monthOf, toDateSP } from '@/modules/club-billing/dates'
+import { summarizeAccountStatus } from '@/modules/club-billing/receiving-account.rules'
 import { chargeAggregates, daysLateOf, subscriptionQuote } from '@/modules/platform-billing/presenter'
 import {
   churnStats,
   delinquencyOf,
   growthPct,
+  isAliveAt,
   monthOfInstant,
   monthsUntil,
   rateOf,
@@ -103,6 +109,39 @@ export interface HoldingClubChargeAgg {
   gmvPrev30: number
 }
 
+/** Conta de recebimento Asaas do clube (`tenant_asaas_accounts`), sem segredos: só o que a holding precisa. */
+export interface HoldingReceivingInfo {
+  env: AsaasEnvironmentName
+  webhookStatus: ClubReceivingWebhookStatus
+  /** `general = APPROVED` no último retrato do Asaas; `null` = situação desconhecida (retrato indisponível). */
+  accountApproved: boolean | null
+}
+
+/** Linha de `tenant_asaas_accounts` → o que a holding usa (a situação cadastral sai do retrato `GET /myAccount/status`). */
+export function receivingInfoOf(account: {
+  env: AsaasEnvironmentName
+  webhookStatus: ClubReceivingWebhookStatus
+  accountStatusJson: AsaasAccountStatusSnapshot | null
+}): HoldingReceivingInfo {
+  return {
+    env: account.env,
+    webhookStatus: account.webhookStatus,
+    accountApproved: summarizeAccountStatus(account.accountStatusJson)?.approved ?? null,
+  }
+}
+
+/**
+ * Problema de recebimento do clube (`null` = em ordem). Precedência:
+ * sem conta → `nao_conectado`; conta com situação cadastral NÃO aprovada →
+ * `conta_pendente`; webhook `erro`/`pendente` → `aviso_com_erro`.
+ */
+export function receivingIssueOf(info: HoldingReceivingInfo | undefined): HoldingReceivingIssue | null {
+  if (!info) return 'nao_conectado'
+  if (info.accountApproved === false) return 'conta_pendente'
+  if (info.webhookStatus !== 'ativo') return 'aviso_com_erro'
+  return null
+}
+
 export interface HoldingProposalInfo {
   id: string
   code: string
@@ -130,6 +169,8 @@ export interface HoldingDataset {
   clubChargeAgg: Map<string, HoldingClubChargeAgg>
   /** GMV pago por inquilino e mês (`yyyy-MM`, SP), últimos 25 meses. */
   gmvByOrgMonth: Map<string, Map<string, number>>
+  /** Conta de recebimento por inquilino (só quem conectou; ausente = não conectado). */
+  receiving: Map<string, HoldingReceivingInfo>
   proposals: HoldingProposalInfo[]
 }
 
@@ -183,6 +224,10 @@ export function buildTenantRows(data: HoldingDataset): TenantRowInternal[] {
       const clubMrr = round2(club.filter(s => s.status === 'active' || s.status === 'past_due').reduce((acc, s) => acc + s.amount, 0))
       const agg = data.clubChargeAgg.get(tenant.organizationId) ?? EMPTY_AGG
       const newMembersLast30 = club.filter(s => inLast(s.startedAt, data.now, 30, 0)).length
+      const activeMembers = club.filter(s => s.status === 'active' || s.status === 'past_due').length
+      const d30Ago = new Date(data.now.getTime() - 30 * DAY_MS)
+      const activeMembersDelta30 = club.reduce((acc, s) => acc + Number(isAliveAt(s, data.now)) - Number(isAliveAt(s, d30Ago)), 0)
+      const receiving = data.receiving.get(tenant.organizationId)
       const memberDelinquencyRate = rateOf(agg.overdueNow, agg.baseNow)
       const memberDelinquencyRatePrev = rateOf(agg.overduePrev, agg.basePrev)
       const tenantAgeDays = Math.max(0, diffDays(data.today, toDateSP(tenant.createdAt)))
@@ -220,6 +265,12 @@ export function buildTenantRows(data: HoldingDataset): TenantRowInternal[] {
           gmvPrev30: inputs.gmvPrev30,
           salesTrendPct: growthPct(inputs.gmvLast30, inputs.gmvPrev30),
           newMembersLast30,
+          activeMembers,
+          activeLives: lives,
+          activeMembersDelta30,
+          receivingConnected: Boolean(receiving),
+          receivingEnv: receiving?.env ?? null,
+          receivingIssue: receivingIssueOf(receiving),
           memberDelinquencyRate,
           memberDelinquencyRatePrev,
           healthScore: health.score,
@@ -423,6 +474,7 @@ export function buildKpis(data: HoldingDataset, rows: TenantRowInternal[]): Hold
     tenantsManaged: data.subs.filter(sub => sub.status !== 'canceled').length,
     tenantsByAccess: byAccess,
     tenantsNewThisMonth: data.tenants.filter(t => monthOfInstant(t.createdAt) === month).length,
+    clubsWithoutReceiving: rows.filter(({ row }) => row.receivingIssue !== null).length,
     tenantChurnRate: tenantStats.churnRate,
     memberChurnRate: memberStats.churnRate,
     platformDelinquencyRate: platformDelinquency.rate,

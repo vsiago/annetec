@@ -5,6 +5,7 @@ import type {
   AddTenantResponsibleResult,
   CreateTenantInput,
   CreateTenantPlanInput,
+  HoldingTenantRow,
   IntegrationDiscovery,
   RemoveTenantMemberResult,
   ResetTenantUserPasswordInput,
@@ -18,7 +19,8 @@ import type {
   UpdateTenantInput,
   UpdateTenantPlanInput,
 } from '@annetec/contracts'
-import { apiFetch } from '@/lib/api/client'
+import { apiFetch, apiFetchAll } from '@/lib/api/client'
+import type { ClubListRow } from '@/components/admin-platform/clubs/club-list-model'
 import type { Tenant as LegacyTenant, TenantPlan as LegacyTenantPlan } from '@/lib/types'
 import { run, type ActionResult } from './_api-result'
 
@@ -50,8 +52,67 @@ function toLegacyPlan(plan: TenantPlan): LegacyTenantPlan {
 
 export async function listTenantsAction(): Promise<ActionResult<LegacyTenant[]>> {
   return run(async () => {
-    const { data } = await apiFetch<Tenant[]>('/api/v1/platform/tenants', { query: { perPage: 100 } })
+    // Todas as páginas: o detalhe do clube (/admin/inquilinos/<id>) procura o
+    // clube nesta lista, e a lista de Clubes já mostra além dos 100 primeiros.
+    const data = await apiFetchAll<Tenant>('/api/v1/platform/tenants')
     return data.map(toLegacyTenant)
+  })
+}
+
+/**
+ * Lista de Clubes (/admin/inquilinos): cadastro + ranking da holding, juntos
+ * por id (o `organizationId` do ranking é o `id` do clube — ambos vêm de
+ * `organization.id`, só clubes `operator`).
+ *
+ * Segue as páginas das duas listas até o fim (`apiFetchAll`, 200 por página):
+ * nenhum clube some por passar de 100. Quem pagina é a tela, depois de
+ * ordenar por "pede atenção", que só dá para calcular com a lista inteira.
+ */
+export async function listClubsOverviewAction(): Promise<ActionResult<ClubListRow[]>> {
+  return run(async () => {
+    const rankingPath = '/api/v1/platform/holding/inquilinos'
+    const [tenants, firstRanking] = await Promise.all([
+      apiFetchAll<Tenant>('/api/v1/platform/tenants'),
+      apiFetchAll<HoldingTenantRow>(rankingPath, { query: { sort: 'name' } }),
+    ])
+
+    // O ranking fica em cache por 60 s: um clube recém-cadastrado pode ainda
+    // não estar nele. Nesse caso pede uma vez o recálculo, em vez de mostrar o
+    // clube sem números. Clube encerrado nunca entra no ranking (a holding o
+    // deixa de fora), então não conta — senão toda abertura da lista forçaria
+    // o recálculo assim que existisse um clube encerrado.
+    let ranking = firstRanking
+    const known = new Set(ranking.map(row => row.organizationId))
+    if (tenants.some(tenant => tenant.status !== 'cancelled' && !known.has(tenant.id))) {
+      ranking = await apiFetchAll<HoldingTenantRow>(rankingPath, { query: { sort: 'name', fresh: '1' } })
+    }
+    const byOrg = new Map(ranking.map(row => [row.organizationId, row]))
+
+    return tenants.map((tenant): ClubListRow => {
+      const row = byOrg.get(tenant.id)
+      return {
+        id: tenant.id,
+        slug: tenant.slug,
+        name: tenant.name,
+        email: tenant.email,
+        document: tenant.document.replace(/\D/g, ''),
+        status: tenant.status,
+        trialEndsAt: tenant.trialEndsAt,
+        createdAt: tenant.createdAt,
+        metrics: row
+          ? {
+              activeLives: row.activeLives,
+              activeMembersDelta30: row.activeMembersDelta30,
+              receivingIssue: row.receivingIssue,
+              managed: row.managed,
+              platformStatus: row.platformStatus,
+              platformDaysLate: row.platformDaysLate,
+              healthBand: row.healthBand,
+              healthScore: row.healthScore,
+            }
+          : null,
+      }
+    })
   })
 }
 

@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   Activity,
@@ -38,6 +39,7 @@ import {
   CARD_BRAND_LABELS,
   type ClubCardInfo,
   type ClubPaymentMethod,
+  type PaymentGatewayProvider,
   type PlatformAccessLevel,
   type PlatformBillingEvent,
   type PlatformChargeKind,
@@ -68,6 +70,59 @@ import { cn } from '@/lib/utils'
  * (clube e plataforma usam o mesmo). Re-exportado aqui por compatibilidade.
  */
 export { GatewayBadge } from '@/components/admin/faturamento/billing-ui'
+
+/**
+ * Selo de "como a ANNETEC recebe" (o gateway, na língua do dono). Só aparece em
+ * Regras de cobrança; âmbar na demonstração, azul no ambiente de testes, verde no real.
+ */
+export function ReceivingBadge({
+  provider,
+  sandbox = false,
+  className,
+}: {
+  provider: PaymentGatewayProvider | undefined
+  sandbox?: boolean
+  className?: string
+}) {
+  if (!provider) return null
+  const simulated = provider === 'simulated'
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold',
+        simulated
+          ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
+          : sandbox
+            ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300',
+        className,
+      )}
+    >
+      {simulated ? <FlaskConical className="h-3.5 w-3.5" /> : <Wallet className="h-3.5 w-3.5" />}
+      Forma de recebimento: {gatewayLabel(provider, sandbox)}
+    </span>
+  )
+}
+
+/** "1 dia", "3 dias" — o número sempre acompanha a unidade. */
+export function pluralize(count: number, singular: string, plural: string): string {
+  return `${count.toLocaleString('pt-BR')} ${count === 1 ? singular : plural}`
+}
+
+/**
+ * "Vidas" é o termo do ramo e fica; a dica ao passar o mouse explica a conta
+ * (titulares + dependentes) para quem ainda não a conhece.
+ */
+export function LivesTerm({ children = 'vidas', className }: { children?: ReactNode; className?: string }) {
+  return (
+    <abbr
+      title="Vidas são os titulares mais os dependentes"
+      className={cn('cursor-help underline-offset-2', className)}
+    >
+      {children}
+    </abbr>
+  )
+}
 
 const METHOD_ICON: Record<ClubPaymentMethod, LucideIcon> = {
   pix: QrCode,
@@ -118,10 +173,10 @@ export function AccessPill({
   const Icon = ACCESS_ICON[access.level] ?? Zap
   const title =
     access.source === 'override'
-      ? `Definido manualmente na holding${access.overrideReason ? `: ${access.overrideReason}` : ''}${
+      ? `Definido manualmente pela equipe da ANNETEC${access.overrideReason ? `: ${access.overrideReason}` : ''}${
           access.overrideUntil ? ` (até ${formatDateTimeBR(access.overrideUntil)})` : ''
         }`
-      : 'Definido pela régua de cobrança'
+      : 'Definido pelas regras de cobrança'
   return (
     <span
       title={title}
@@ -140,14 +195,17 @@ export function ChargeKindPill({ kind }: { kind: PlatformChargeKind }) {
 
 /** Vidas × limite, com a barra de uso (âmbar a partir de 80%, vermelha acima de 100%). */
 export function UsageBar({ lives, limit, pct, className }: { lives: number; limit: number; pct: number; className?: string }) {
-  const color = pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'
+  const color = pct >= 100 ? 'bg-[#B42318]' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'
   return (
     <div className={cn('min-w-28 space-y-1', className)}>
       <p className="text-xs text-foreground">
         <span className="font-medium">{lives.toLocaleString('pt-BR')}</span>
-        <span className="text-muted-foreground"> / {limit.toLocaleString('pt-BR')} vidas</span>
+        <span className="text-muted-foreground">
+          {' '}
+          / {limit.toLocaleString('pt-BR')} <LivesTerm />
+        </span>
       </p>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted" role="meter" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Uso do limite de vidas">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted" role="meter" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Uso do limite de vidas do plano">
         <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
       </div>
     </div>
@@ -196,15 +254,46 @@ const SOURCE_ICON: Record<PlatformEventSource, LucideIcon> = {
   tenant: UserRound,
 }
 
+/** Rótulos na língua do dono; a cor continua a do adaptador. */
+const SOURCE_LABEL: Record<PlatformEventSource, string> = {
+  webhook: 'Aviso de pagamento',
+  automation: 'Automação',
+  onboarding: 'Contratação',
+  manual: 'Manual',
+  simulation: 'Simulação',
+  tenant: 'Clube',
+}
+
 export function EventSourceBadge({ source }: { source: PlatformEventSource }) {
   const meta = platformEventSourceMeta(source)
   const Icon = SOURCE_ICON[source] ?? Activity
   return (
     <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium', meta.className)}>
       <Icon className="h-3 w-3" />
-      {meta.label}
+      {SOURCE_LABEL[source] ?? meta.label}
     </span>
   )
+}
+
+/** Títulos que o contrato escreve em termo técnico (gateway, baixa manual) trocados pelos do glossário. */
+const EVENT_TITLE: Record<string, string> = {
+  PAYMENT_CREATED: 'Cobrança registrada',
+  PAYMENT_UPDATED: 'Cobrança atualizada',
+  PAYMENT_DELETED: 'Cobrança removida',
+  PAYMENT_RESTORED: 'Cobrança restaurada',
+  PAYMENT_CHARGEBACK_REQUESTED: 'Contestação do cartão aberta',
+  PAYMENT_CHARGEBACK_DISPUTE: 'Contestação do cartão em disputa',
+  PAYMENT_AWAITING_CHARGEBACK_REVERSAL: 'Contestação ganha — aguardando devolução do valor',
+  CHARGE_MANUAL_PAYMENT: 'Marcada como paga',
+  SUBSCRIPTION_CREATED: 'Clube passou a pagar a ANNETEC',
+  SUBSCRIPTION_RESTRICTED: 'Painel do clube em somente leitura',
+  SUBSCRIPTION_SUSPENDED: 'Painel do clube bloqueado',
+  SUBSCRIPTION_GATEWAY_MIGRATED: 'Forma de recebimento trocada',
+  DEMO_TIME_TRAVEL: 'Datas avançadas (demonstração)',
+}
+
+function eventTitle(type: string): string {
+  return EVENT_TITLE[type] ?? platformEventLabel(type)
 }
 
 export function PlatformEventsTimeline({
@@ -216,7 +305,7 @@ export function PlatformEventsTimeline({
 }: {
   events: PlatformBillingEvent[]
   emptyText?: string
-  /** Na linha do tempo global, mostra de qual inquilino é cada evento. */
+  /** Na linha do tempo global, mostra de qual clube é cada evento. */
   showTenant?: boolean
   tenantNames?: Map<string, string>
   className?: string
@@ -229,7 +318,7 @@ export function PlatformEventsTimeline({
     <ol className={cn('relative space-y-4', className)}>
       {events.map((event, index) => {
         const Icon = EVENT_ICON[event.type] ?? Activity
-        const title = platformEventLabel(event.type)
+        const title = eventTitle(event.type)
         const tenant = showTenant && event.organizationId ? tenantNames?.get(event.organizationId) : undefined
         return (
           <li key={event.id} className="relative flex gap-3">

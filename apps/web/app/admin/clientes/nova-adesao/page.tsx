@@ -6,7 +6,7 @@ import Link from 'next/link'
 import type { Convenio, HealthPlan, PriceTable, TenantUser, UF } from '@annetec/contracts'
 import { UFS } from '@annetec/contracts'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -318,8 +318,8 @@ export default function NovaAdesaoPage() {
       </Card>
 
       {baseError && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">{baseError}</CardContent>
+        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
+          <CardContent className="py-4 text-sm text-[#B42318]">{baseError}</CardContent>
         </Card>
       )}
 
@@ -517,7 +517,7 @@ export default function NovaAdesaoPage() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="text-destructive hover:text-destructive"
+                        className="text-[#B42318] hover:text-[#B42318]"
                         onClick={() => removeDependent(index)}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -678,7 +678,7 @@ export default function NovaAdesaoPage() {
             </CardContent>
           </Card>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-[#B42318]">{error}</p>}
 
           <div className="flex flex-wrap items-center justify-end gap-3">
             <p className="mr-auto text-sm text-muted-foreground">

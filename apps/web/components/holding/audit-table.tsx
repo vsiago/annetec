@@ -14,7 +14,7 @@ import {
 import { SoftBadge } from './holding-ui'
 
 /**
- * Trilha de auditoria (`audit_logs` + nome do inquilino e do ator). Ações de
+ * Histórico de alterações (`audit_logs` + nome do clube e de quem fez). Ações de
  * ciclo de vida ganham destaque; o motivo gravado aparece na própria linha e
  * os dados completos ficam em "dados".
  */
@@ -35,8 +35,8 @@ export function AuditTable({
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
             <TableHead className="w-40">Quando</TableHead>
-            {showTenant && <TableHead>Inquilino</TableHead>}
-            <TableHead>Ação</TableHead>
+            {showTenant && <TableHead>Clube</TableHead>}
+            <TableHead>Alteração</TableHead>
             <TableHead className="min-w-55">Motivo e detalhes</TableHead>
             <TableHead>Quem</TableHead>
             {showIp && <TableHead>IP</TableHead>}
@@ -54,7 +54,7 @@ export function AuditTable({
                 {showTenant && (
                   <TableCell className="max-w-50 text-sm">
                     {entry.organizationId && entry.tenantName ? (
-                      <Link href={`/admin/holding/${entry.organizationId}`} className="block truncate hover:underline">
+                      <Link href={`/admin/inquilinos/${entry.organizationId}`} className="block truncate hover:underline">
                         {entry.tenantName}
                       </Link>
                     ) : (
@@ -96,7 +96,7 @@ export function AuditTable({
                   <p>{entry.actorName ?? 'Sistema'}</p>
                   {entry.actorScope && (
                     <p className="text-xs text-muted-foreground">
-                      {entry.actorScope === 'platform' ? 'Equipe ANNETEC' : 'Equipe do inquilino'}
+                      {entry.actorScope === 'platform' ? 'Equipe ANNETEC' : 'Equipe do clube'}
                     </p>
                   )}
                 </TableCell>

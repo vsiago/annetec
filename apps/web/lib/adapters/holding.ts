@@ -257,18 +257,18 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   'tenant.lifecycle.restrict': 'Restringiu o painel (somente leitura)',
   'tenant.lifecycle.suspend': 'Suspendeu o painel',
   'tenant.lifecycle.reactivate': 'Reativou o acesso',
-  'tenant.lifecycle.clear_override': 'Devolveu o acesso à régua automática',
-  'tenant.provisioned': 'Provisionou o inquilino',
-  'tenant.created': 'Criou o inquilino',
-  'tenant.updated': 'Atualizou o cadastro do inquilino',
-  'tenant.cancelled': 'Cancelou o inquilino',
+  'tenant.lifecycle.clear_override': 'Devolveu o acesso ao controle automático da cobrança',
+  'tenant.provisioned': 'Liberou o clube',
+  'tenant.created': 'Cadastrou o clube',
+  'tenant.updated': 'Atualizou os dados do clube',
+  'tenant.cancelled': 'Cancelou o clube',
   'tenant.integration_saved': 'Salvou a integração',
-  'tenant_user.created': 'Criou usuário do inquilino',
-  'tenant_user.updated': 'Atualizou usuário do inquilino',
-  'tenant_user.deactivated': 'Desativou usuário do inquilino',
-  'tenant_user.password_reset': 'Redefiniu senha de usuário',
-  'tenant_user.impersonate_start': 'Entrou como usuário do inquilino',
-  'platform_user.created': 'Criou usuário da plataforma',
+  'tenant_user.created': 'Adicionou uma pessoa ao clube',
+  'tenant_user.updated': 'Atualizou uma pessoa do clube',
+  'tenant_user.deactivated': 'Desativou uma pessoa do clube',
+  'tenant_user.password_reset': 'Redefiniu a senha de uma pessoa',
+  'tenant_user.impersonate_start': 'Viu o sistema como outra pessoa',
+  'platform_user.created': 'Adicionou uma pessoa à equipe ANNETEC',
   'billing_settings.updated': 'Alterou a configuração de cobrança do clube',
   'billing_automation.executed': 'Executou a automação de cobrança do clube',
   'club_plan.created': 'Criou plano do clube',
@@ -282,15 +282,15 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   login: 'Entrou no sistema',
 }
 
-/** Ações pré-definidas do filtro da trilha de auditoria. */
+/** Tipos de alteração pré-definidos do filtro do Histórico de alterações. */
 export const AUDIT_ACTION_FILTERS: { value: string; label: string }[] = [
   { value: 'tenant.lifecycle.restrict', label: 'Restrição de painel' },
   { value: 'tenant.lifecycle.suspend', label: 'Suspensão de painel' },
   { value: 'tenant.lifecycle.reactivate', label: 'Reativação de acesso' },
-  { value: 'tenant.lifecycle.clear_override', label: 'Volta à régua automática' },
-  { value: 'tenant.provisioned', label: 'Provisionamento' },
-  { value: 'tenant.updated', label: 'Cadastro do inquilino' },
-  { value: 'tenant_user.impersonate_start', label: 'Entrar como' },
+  { value: 'tenant.lifecycle.clear_override', label: 'Volta ao controle automático' },
+  { value: 'tenant.provisioned', label: 'Liberação do clube' },
+  { value: 'tenant.updated', label: 'Dados do clube' },
+  { value: 'tenant_user.impersonate_start', label: 'Ver como esta pessoa' },
 ]
 
 export function auditActionLabel(action: string): string {
@@ -403,14 +403,14 @@ export function healthBreakdown(row: HoldingTenantRow, now: Date = new Date()): 
       row.newMembersLast30 > 0
         ? `${formatInt(row.newMembersLast30)} ${row.newMembersLast30 === 1 ? 'associado novo' : 'associados novos'} em 30 dias`
         : age < 30
-          ? 'Nenhum associado novo, mas o inquilino tem menos de 30 dias'
+          ? 'Nenhum associado novo, mas o clube tem menos de 30 dias'
           : 'Nenhum associado novo em 30 dias',
     low_adoption:
       row.usagePct === null
         ? 'Sem limite de vidas definido — não entra na nota'
         : `${formatPct(row.usagePct)} do limite (${formatInt(row.lives)} de ${formatInt(row.memberLimit)} vidas)${
             age < HOLDING_THRESHOLDS.lowAdoptionMinAgeDays
-              ? ` — inquilino com menos de ${HOLDING_THRESHOLDS.lowAdoptionMinAgeDays} dias`
+              ? ` — clube com menos de ${HOLDING_THRESHOLDS.lowAdoptionMinAgeDays} dias`
               : row.usagePct < HOLDING_THRESHOLDS.lowAdoptionPct
                 ? ` — abaixo de ${HOLDING_THRESHOLDS.lowAdoptionPct}%`
                 : ''
@@ -507,7 +507,7 @@ export function lifecycleOptions(
       action: 'clear_override',
       label: TENANT_LIFECYCLE_ACTION_LABELS.clear_override,
       description:
-        'Remove a decisão manual da holding: o acesso volta a seguir o status da assinatura (régua de cobrança automática).',
+        'Remove a decisão manual da equipe: o acesso volta a seguir o status da assinatura (régua de cobrança automática).',
       confirmLabel: 'Voltar à régua',
       tone: 'neutral',
       resultingAccess: null,
@@ -526,7 +526,7 @@ export function lifecycleSuccessMessage(action: TenantLifecycleAction, tenantNam
     reactivate: 'reativado',
     clear_override: 'de volta à régua automática',
   }
-  return `Painel de ${tenantName} ${verbo[action]}. Registrado na auditoria — o painel do inquilino reflete em até 30 s.`
+  return `Painel de ${tenantName} ${verbo[action]}. Registrado na auditoria — o painel do clube reflete em até 30 s.`
 }
 
 // ---------------------------------------------------------------------------

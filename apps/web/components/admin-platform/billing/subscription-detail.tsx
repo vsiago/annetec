@@ -11,7 +11,6 @@ import {
   ExternalLink,
   FastForward,
   FileSearch,
-  Landmark,
   Loader2,
   Play,
   RefreshCw,
@@ -28,7 +27,7 @@ import {
   type PlatformBillingSettings,
   type PlatformSubscriptionDetail,
 } from '@annetec/contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
@@ -50,10 +49,12 @@ import {
 } from '@/components/admin-platform/billing/console-kit'
 import {
   AccessPill,
+  LivesTerm,
   MethodLabel,
   PlatformEventsTimeline,
   SubscriptionStatusPill,
   UsageBar,
+  pluralize,
 } from '@/components/admin-platform/billing/billing-bits'
 import { ChargesTab } from '@/components/admin-platform/billing/charges-tab'
 import { DunningLadder } from '@/components/admin-platform/billing/dunning-tab'
@@ -79,10 +80,11 @@ import { isDemoMode } from '@/lib/demo-mode'
 import { cn } from '@/lib/utils'
 
 /**
- * Detalhe de uma assinatura de plataforma (blueprint §Q4, roteiro §F passo 7):
- * a régua "ao vivo" com o degrau atual, a ferramenta de demonstração "avançar
- * N dias" (recua datas e roda a automação), troca de plano, cancelar/reativar,
- * faturas e linha do tempo.
+ * Detalhe de uma assinatura de plataforma, ou seja, de um clube pagante
+ * (blueprint §Q4, roteiro §F passo 7): a situação da cobrança com a etapa
+ * atual, a ferramenta de demonstração "avançar N dias" (recua datas e roda a
+ * automação; só quando o servidor diz que é demonstração), troca de plano,
+ * cancelar/reativar, faturas e o histórico do clube.
  */
 
 const STATUS_FLOW = platformSubscriptionStatus.options
@@ -123,7 +125,7 @@ function StatusFlow({ sub }: { sub: PlatformSubscriptionDetail }) {
                       ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300'
                       : status === 'restricted'
                         ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-300'
-                        : 'border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300'
+                        : 'border-red-300 bg-red-50 text-[#B42318] dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300'
                   : passed
                     ? 'border-border bg-muted/60 text-muted-foreground'
                     : 'border-dashed border-border text-muted-foreground/70',
@@ -178,7 +180,7 @@ function ChangePlanDialog({
       changePlatformPlanAction(sub.id, { planId: choice.offer.id }),
       updated =>
         updated.scheduledPlanId
-          ? `Troca para ${choice.offer.name} agendada para o próximo ciclo`
+          ? `Troca para ${choice.offer.name} agendada para o próximo mês`
           : `Plano alterado para ${updated.planName}`,
     )
     setBusy(false)
@@ -194,9 +196,10 @@ function ChangePlanDialog({
         <DialogHeader>
           <DialogTitle>Trocar o plano de {sub.tenantName}</DialogTitle>
           <DialogDescription>
-            Upgrade vale na hora, com o proporcional na próxima fatura. Downgrade fica agendado para a virada do ciclo
-            {sub.currentPeriodEnd ? ` (${formatDateBR(sub.currentPeriodEnd)})` : ''}. Cotação com as {sub.lives.toLocaleString('pt-BR')} vidas
-            de hoje.
+            Para um plano maior, a troca vale na hora e o valor proporcional entra na próxima fatura. Para um plano menor, a troca
+            fica agendada
+            {sub.currentPeriodEnd ? ` para ${formatDateBR(sub.currentPeriodEnd)}` : ' para o fim do período'}. Valores calculados com as{' '}
+            {sub.lives.toLocaleString('pt-BR')} <LivesTerm /> de hoje.
           </DialogDescription>
         </DialogHeader>
         {plans.error && !plans.data ? (
@@ -217,7 +220,7 @@ function ChangePlanDialog({
                     onClick={() => setSelected(offer.id)}
                     className={cn(
                       'flex w-full flex-wrap items-center gap-3 rounded-xl border p-3 text-left transition-colors',
-                      active ? 'border-primary bg-primary/5 ring-2 ring-primary/15' : 'border-border hover:bg-muted/40',
+                      active ? 'border-secondary bg-accent ring-2 ring-secondary/15' : 'border-border hover:bg-muted/40',
                       current && 'cursor-default opacity-70',
                     )}
                   >
@@ -227,13 +230,13 @@ function ChangePlanDialog({
                         {current && <span className="ml-2 text-xs font-normal text-muted-foreground">(atual)</span>}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {formatBRL(offer.priceMonthly)}/mês · até {offer.memberLimit.toLocaleString('pt-BR')} vidas · uso{' '}
-                        {formatPercent(quote.usagePct)}
+                        {formatBRL(offer.priceMonthly)} por mês · até {offer.memberLimit.toLocaleString('pt-BR')} <LivesTerm /> · usa{' '}
+                        {formatPercent(quote.usagePct)} do plano
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="font-semibold tabular-nums text-foreground">{formatBRL(quote.monthlyTotal)}</p>
-                      <p className="text-[11px] text-muted-foreground">mensal com as vidas de hoje</p>
+                      <p className="text-[11px] text-muted-foreground">por mês com as vidas de hoje</p>
                     </div>
                     {!current && (
                       <span
@@ -245,7 +248,7 @@ function ChangePlanDialog({
                         )}
                       >
                         {upgrade ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                        {upgrade ? 'Upgrade' : 'Downgrade'}
+                        {upgrade ? 'Plano maior' : 'Plano menor'}
                       </span>
                     )}
                   </button>
@@ -260,7 +263,7 @@ function ChangePlanDialog({
           </Button>
           <Button onClick={submit} disabled={!choice || busy} className="gap-2">
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-            {choice ? (isUpgrade ? 'Fazer upgrade agora' : 'Agendar downgrade') : 'Escolha um plano'}
+            {choice ? (isUpgrade ? 'Trocar agora' : 'Agendar a troca') : 'Escolha um plano'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -268,54 +271,49 @@ function ChangePlanDialog({
   )
 }
 
+/**
+ * Ferramenta de demonstração: só é renderizada quando o servidor diz que as
+ * ferramentas estão ligadas E o recebimento é simulado (`demoToolsAvailable`,
+ * que delega para `isDemoMode`). Em produção estrita o bloco nem existe.
+ */
 function DemoTimeTravel({
   sub,
-  settings,
   isSuperadmin,
   onChanged,
 }: {
   sub: PlatformSubscriptionDetail
-  settings: PlatformBillingSettings | null
   isSuperadmin: boolean
   onChanged: (detail: PlatformSubscriptionDetail) => void
 }) {
   const [busy, setBusy] = useState<number | null>(null)
   const [custom, setCustom] = useState('7')
-  const available = demoToolsAvailable(settings)
   const customDays = Math.trunc(Number(custom))
   const customValid = Number.isInteger(customDays) && customDays >= 1 && customDays <= 120
 
   const travel = async (days: number) => {
-    if (!available || busy !== null) return
+    if (busy !== null) return
     setBusy(days)
     const before = sub.status
     const detail = await runCommand(demoTimeTravelAction(sub.id, { days }))
     setBusy(null)
     if (!detail) return
     onChanged(detail)
+    const advanced = pluralize(days, 'dia', 'dias')
     if (detail.status !== before) {
-      toast.success(`+${days} dia(s): ${PLATFORM_SUBSCRIPTION_STATUS_LABELS[before]} → ${PLATFORM_SUBSCRIPTION_STATUS_LABELS[detail.status]}`, {
+      toast.success(`+${advanced}: ${PLATFORM_SUBSCRIPTION_STATUS_LABELS[before]} → ${PLATFORM_SUBSCRIPTION_STATUS_LABELS[detail.status]}`, {
         description:
           detail.access.level === 'full'
-            ? 'Painel do inquilino com acesso completo.'
+            ? 'Painel do clube com acesso completo.'
             : detail.access.level === 'read_only'
-              ? 'Painel do inquilino em somente leitura.'
-              : 'Painel do inquilino bloqueado (só "Minha assinatura ANNETEC").',
+              ? 'Painel do clube em somente leitura.'
+              : 'Painel do clube bloqueado.',
       })
     } else {
-      toast.success(`+${days} dia(s) — automação executada`, {
-        description: detail.daysLate > 0 ? `${detail.daysLate} dia(s) de atraso` : 'Assinatura em dia',
+      toast.success(`+${advanced}: automação executada`, {
+        description: detail.daysLate > 0 ? `${pluralize(detail.daysLate, 'dia', 'dias')} de atraso` : 'Assinatura em dia',
       })
     }
   }
-
-  const reason = !settings
-    ? 'Carregando configurações…'
-    : !settings.demoToolsEnabled
-      ? 'Ferramentas de demonstração desligadas neste servidor (PLATFORM_DEMO_TOOLS_ENABLED).'
-      : settings.gateway !== 'simulated'
-        ? 'Disponível só com o gateway simulado.'
-        : null
 
   return (
     <div className="space-y-3 rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-4 dark:border-violet-500/40 dark:bg-violet-500/5">
@@ -326,44 +324,35 @@ function DemoTimeTravel({
         </p>
         <span className="text-xs text-muted-foreground">Recua as datas desta assinatura e roda a automação</span>
       </div>
-      {reason ? (
-        <p className="text-xs text-muted-foreground">{reason}</p>
-      ) : (
-        <SuperadminOnly isSuperadmin={isSuperadmin}>
-          <div className="flex flex-wrap items-center gap-2">
-            {[1, 5, 10, 25].map(days => (
-              <Button
-                key={days}
-                variant="outline"
-                size="sm"
-                className="gap-1.5 bg-background"
-                onClick={() => travel(days)}
-                disabled={busy !== null}
-              >
-                {busy === days ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}+{days} dia{days > 1 ? 's' : ''}
-              </Button>
-            ))}
-            <div className="flex items-center gap-1.5">
-              <Input
-                value={custom}
-                onChange={event => setCustom(event.target.value.replace(/\D/g, '').slice(0, 3))}
-                inputMode="numeric"
-                className="h-8 w-16 bg-background"
-                aria-label="Dias para avançar"
-              />
-              <Button
-                size="sm"
-                className="gap-1.5"
-                onClick={() => travel(customDays)}
-                disabled={!customValid || busy !== null}
-              >
-                {busy === customDays ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FastForward className="h-3.5 w-3.5" />}
-                Avançar
-              </Button>
-            </div>
+      <SuperadminOnly isSuperadmin={isSuperadmin}>
+        <div className="flex flex-wrap items-center gap-2">
+          {[1, 5, 10, 25].map(days => (
+            <Button
+              key={days}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 bg-background"
+              onClick={() => travel(days)}
+              disabled={busy !== null}
+            >
+              {busy === days ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}+{days} dia{days > 1 ? 's' : ''}
+            </Button>
+          ))}
+          <div className="flex items-center gap-1.5">
+            <Input
+              value={custom}
+              onChange={event => setCustom(event.target.value.replace(/\D/g, '').slice(0, 3))}
+              inputMode="numeric"
+              className="h-8 w-16 bg-background"
+              aria-label="Dias para avançar"
+            />
+            <Button size="sm" className="gap-1.5" onClick={() => travel(customDays)} disabled={!customValid || busy !== null}>
+              {busy === customDays ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FastForward className="h-3.5 w-3.5" />}
+              Avançar
+            </Button>
           </div>
-        </SuperadminOnly>
-      )}
+        </div>
+      </SuperadminOnly>
     </div>
   )
 }
@@ -391,8 +380,10 @@ export function SubscriptionDetailView({
   const today = todaySP()
   const highlightDay = sub.oldestOpenDueDate ? daysBetweenDates(sub.oldestOpenDueDate, today) : null
   const canSimulate = settings ? canSimulatePayments(settings.gateway, settings.sandbox) : false
-  /** Textos e ferramentas de demonstração só quando o DTO diz que é demonstração. */
+  /** Textos de demonstração só quando o DTO diz que é demonstração. */
   const demo = isDemoMode(settings)
+  /** "Avançar o tempo" só com as ferramentas ligadas e recebimento simulado: em produção o bloco não existe. */
+  const demoTools = demoToolsAvailable(settings)
   const overage = Math.max(0, sub.estimatedMonthly - sub.planPriceMonthly)
 
   const update = (detail: PlatformSubscriptionDetail) => {
@@ -401,7 +392,7 @@ export function SubscriptionDetailView({
   }
 
   const cancel = async (reason: string) => {
-    const detail = await runCommand(cancelPlatformSubscriptionAction(sub.id, { reason }), 'Assinatura de plataforma cancelada')
+    const detail = await runCommand(cancelPlatformSubscriptionAction(sub.id, { reason }), 'Assinatura cancelada')
     if (detail) update(detail)
     return !!detail
   }
@@ -450,7 +441,7 @@ export function SubscriptionDetailView({
               {sub.scheduledPlanName && (
                 <>
                   <span aria-hidden>·</span>
-                  <span className="text-violet-700 dark:text-violet-300">→ {sub.scheduledPlanName} no próximo ciclo</span>
+                  <span className="text-violet-700 dark:text-violet-300">→ {sub.scheduledPlanName} no próximo mês</span>
                 </>
               )}
             </p>
@@ -469,14 +460,14 @@ export function SubscriptionDetailView({
             {sub.status === 'canceled' ? (
               <Button size="sm" className="gap-1.5" onClick={() => setConfirm('reactivate')}>
                 <Zap className="h-4 w-4" />
-                Reativar
+                Reativar assinatura
               </Button>
             ) : (
               <SuperadminOnly isSuperadmin={isSuperadmin}>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-500/30"
+                  className="gap-1.5 border-red-200 text-[#B42318] hover:bg-red-50 hover:text-[#B42318] dark:border-red-500/30"
                   onClick={() => setConfirm('cancel')}
                 >
                   <Ban className="h-4 w-4" />
@@ -487,13 +478,7 @@ export function SubscriptionDetailView({
             <Button variant="ghost" size="sm" className="gap-1.5" asChild>
               <Link href={`/admin/inquilinos/${sub.organizationId}`}>
                 <Building2 className="h-4 w-4" />
-                Inquilino
-              </Link>
-            </Button>
-            <Button variant="ghost" size="sm" className="gap-1.5" asChild>
-              <Link href={`/admin/holding/${sub.organizationId}`}>
-                <Landmark className="h-4 w-4" />
-                Holding
+                Abrir o clube
               </Link>
             </Button>
           </div>
@@ -506,15 +491,17 @@ export function SubscriptionDetailView({
           icon={Wallet}
           accent="primary"
           value={formatBRL(sub.estimatedMonthly)}
-          label="Mensal estimado"
-          hint={overage > 0 ? `Inclui ${formatBRL(overage)} de vidas excedentes` : 'Mensalidade do plano, sem excedente'}
+          label="Mensalidade estimada"
+          hint={overage > 0 ? `Inclui ${formatBRL(overage)} de vidas acima do limite` : 'Só a mensalidade do plano, sem vidas acima do limite'}
         />
         <Card className="gap-0 py-0 shadow-none">
           <CardContent className="space-y-2 p-5">
-            <p className="text-sm text-muted-foreground">Uso de vidas</p>
+            <p className="text-sm text-muted-foreground">
+              Uso do plano (<LivesTerm />)
+            </p>
             <UsageBar lives={sub.lives} limit={sub.memberLimit} pct={sub.usagePct} />
             <p className="text-xs text-muted-foreground">
-              {formatPercent(sub.usagePct)} do limite · {formatBRL(sub.pricePerExtraLife)} por vida extra
+              {formatPercent(sub.usagePct)} do limite · {formatBRL(sub.pricePerExtraLife)} por vida adicional, por mês
             </p>
           </CardContent>
         </Card>
@@ -525,9 +512,9 @@ export function SubscriptionDetailView({
           label="Em aberto"
           hint={
             sub.daysLate > 0
-              ? `${sub.overdueCount} vencida(s) · ${sub.daysLate} dia(s) de atraso`
+              ? `${pluralize(sub.overdueCount, 'fatura vencida', 'faturas vencidas')} · ${pluralize(sub.daysLate, 'dia', 'dias')} de atraso`
               : sub.openAmount > 0
-                ? 'A vencer'
+                ? 'Dentro do prazo'
                 : 'Nada em aberto'
           }
           tone={sub.daysLate > 0 ? 'down' : 'neutral'}
@@ -539,8 +526,8 @@ export function SubscriptionDetailView({
           label="Próximo vencimento"
           hint={
             sub.currentPeriodStart && sub.currentPeriodEnd
-              ? `Ciclo ${formatDateBR(sub.currentPeriodStart)} a ${formatDateBR(sub.currentPeriodEnd)} · dia ${sub.dueDay}`
-              : `Dia ${sub.dueDay}`
+              ? `Período de ${formatDateBR(sub.currentPeriodStart)} a ${formatDateBR(sub.currentPeriodEnd)} · vence todo dia ${sub.dueDay}`
+              : `Vence todo dia ${sub.dueDay}`
           }
         />
       </div>
@@ -548,17 +535,24 @@ export function SubscriptionDetailView({
       {/* ------------------------------------------------------ régua ao vivo */}
       <Card className="shadow-none">
         <CardHeader>
-          <CardTitle className="text-base">Régua ao vivo</CardTitle>
+          <CardTitle className="text-base">Situação da cobrança</CardTitle>
           <CardDescription>
             {sub.oldestOpenDueDate
-              ? `Fatura em aberto mais antiga vence(u) em ${formatDateBR(sub.oldestOpenDueDate)}${
-                  sub.daysLate > 0 ? ` — ${sub.daysLate} dia(s) de atraso` : ''
+              ? `A fatura em aberto mais antiga ${sub.daysLate > 0 ? 'venceu' : 'vence'} em ${formatDateBR(sub.oldestOpenDueDate)}${
+                  sub.daysLate > 0 ? ` (${pluralize(sub.daysLate, 'dia', 'dias')} de atraso)` : ''
                 }.`
-              : 'Nenhuma fatura em aberto: a régua está parada.'}
-            {sub.access.source === 'override' ? ' Acesso definido manualmente na holding (vence a régua).' : ''}
+              : 'Nenhuma fatura em aberto: não há nada a cobrar agora.'}
+            {sub.access.source === 'override' ? ' O acesso foi definido manualmente pela equipe e vale mais que as regras de cobrança.' : ''}
           </CardDescription>
           <CardAction>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={runAutomation} disabled={running}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={runAutomation}
+              disabled={running}
+              title="Roda agora as regras de cobrança para todos os clubes"
+            >
               {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               Executar automação
             </Button>
@@ -567,7 +561,7 @@ export function SubscriptionDetailView({
         <CardContent className="space-y-4">
           <StatusFlow sub={sub} />
           {settings && <DunningLadder settings={settings} highlightDay={highlightDay} />}
-          {demo && <DemoTimeTravel sub={sub} settings={settings} isSuperadmin={isSuperadmin} onChanged={update} />}
+          {demoTools && <DemoTimeTravel sub={sub} isSuperadmin={isSuperadmin} onChanged={update} />}
           {sub.cancelReason && (
             <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">Motivo do cancelamento: {sub.cancelReason}</p>
           )}
@@ -578,7 +572,7 @@ export function SubscriptionDetailView({
         <Card className="gap-0 shadow-none">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Faturas</CardTitle>
-            <CardDescription>Ativação e mensalidades desta assinatura.</CardDescription>
+            <CardDescription>Ativação e mensalidades deste clube.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <ChargesTab
@@ -595,7 +589,7 @@ export function SubscriptionDetailView({
           <Card className="gap-4 shadow-none">
             <CardHeader>
               <CardTitle className="text-base">Cobrança</CardTitle>
-              <CardDescription>Dados de faturamento do inquilino.</CardDescription>
+              <CardDescription>Dados de cobrança do clube.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-4">
               <Field label="Razão social" className="col-span-2">
@@ -604,19 +598,19 @@ export function SubscriptionDetailView({
               <Field label="CNPJ">
                 <span className="font-mono text-xs">{formatCnpj(sub.billingDocument)}</span>
               </Field>
-              <Field label="Forma">
+              <Field label="Forma de pagamento">
                 <MethodLabel method={sub.paymentMethod} card={sub.paymentCard} className="text-foreground" />
               </Field>
               <Field label="E-mail do financeiro" className="col-span-2">
                 {sub.billingEmail}
               </Field>
-              <Field label="Início">{sub.startedAt ? formatDateBR(sub.startedAt) : '—'}</Field>
-              <Field label="Adesão">{formatBRL(sub.setupFee)}</Field>
+              <Field label="Assina desde">{sub.startedAt ? formatDateBR(sub.startedAt) : '—'}</Field>
+              <Field label="Taxa de adesão">{formatBRL(sub.setupFee)}</Field>
               {sub.proposalId && (
                 <Field label="Contratação" className="col-span-2">
-                  <Link href={`/admin/compliance/${sub.proposalId}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+                  <Link href={`/admin/compliance/${sub.proposalId}`} className="inline-flex items-center gap-1 text-secondary hover:underline">
                     <FileSearch className="h-3.5 w-3.5" />
-                    Ver proposta
+                    Ver a aprovação do clube
                   </Link>
                 </Field>
               )}
@@ -625,8 +619,10 @@ export function SubscriptionDetailView({
 
           <Card className="gap-4 shadow-none">
             <CardHeader>
-              <CardTitle className="text-base">Linha do tempo</CardTitle>
-              <CardDescription>{sub.events.length} evento(s), mais recente primeiro.</CardDescription>
+              <CardTitle className="text-base">Histórico do clube</CardTitle>
+              <CardDescription>
+                {pluralize(sub.events.length, 'evento', 'eventos')}, do mais recente para o mais antigo.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <PlatformEventsTimeline events={[...sub.events].sort((a, b) => b.createdAt.localeCompare(a.createdAt))} />
@@ -640,7 +636,7 @@ export function SubscriptionDetailView({
         open={confirm === 'cancel'}
         onOpenChange={open => !open && setConfirm(null)}
         title={`Cancelar a assinatura de ${sub.tenantName}?`}
-        description="O painel da equipe do inquilino fica bloqueado e as faturas em aberto são canceladas. O inquilino, os associados, a vitrine e as carteirinhas continuam funcionando. Volta só por “Reativar”."
+        description="O painel da equipe do clube fica bloqueado e as faturas em aberto são canceladas. O clube em si, os associados, a vitrine e as carteirinhas continuam funcionando. Para voltar, use “Reativar assinatura”."
         confirmLabel="Cancelar assinatura"
         destructive
         reason={{ label: 'Motivo', placeholder: 'Ex.: distrato assinado em 27/09', minLength: 3 }}
@@ -650,8 +646,8 @@ export function SubscriptionDetailView({
         open={confirm === 'reactivate'}
         onOpenChange={open => !open && setConfirm(null)}
         title={`Reativar a assinatura de ${sub.tenantName}?`}
-        description="Reabre a assinatura de plataforma e devolve o acesso do painel conforme a régua."
-        confirmLabel="Reativar"
+        description="Reabre a assinatura e devolve o acesso ao painel do clube conforme as regras de cobrança."
+        confirmLabel="Reativar assinatura"
         onConfirm={reactivate}
       />
     </div>

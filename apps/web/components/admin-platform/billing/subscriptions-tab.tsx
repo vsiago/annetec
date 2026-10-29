@@ -7,7 +7,7 @@ import type { PlatformAccessLevel, PlatformPlanOffer, PlatformSubscription } fro
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { DataTable, FilterSelect, SearchInput, TableFooter, type Column } from '@/components/dashboard/table-controls'
 import { LoadError, TableSkeleton, useConsoleData } from '@/components/admin-platform/billing/console-kit'
-import { AccessPill, SubscriptionStatusPill, UsageBar } from '@/components/admin-platform/billing/billing-bits'
+import { AccessPill, SubscriptionStatusPill, UsageBar, pluralize } from '@/components/admin-platform/billing/billing-bits'
 import { listPlatformSubscriptionsAction } from '@/lib/actions/platform-billing-api'
 import {
   ACCESS_LEVEL_OPTIONS,
@@ -17,9 +17,9 @@ import {
 } from '@/lib/adapters/platform-console'
 
 /**
- * Assinaturas de plataforma — uma por inquilino gerenciado (nasceu pela
- * contratação ou pelo seed de demonstração). Inquilino sem linha aqui é "não
- * gerenciado": nunca é cobrado nem restringido automaticamente.
+ * Clubes pagantes: uma assinatura de plataforma por clube (nasce com a
+ * contratação aprovada). Clube sem linha aqui não paga a ANNETEC pela
+ * plataforma: nunca é cobrado nem restringido automaticamente.
  */
 
 function useDebounced<T>(value: T, delay = 350): T {
@@ -62,8 +62,8 @@ export function SubscriptionsTab({ plans, version = 0 }: { plans: PlatformPlanOf
 
   const columns: Column<PlatformSubscription>[] = [
     {
-      key: 'inquilino',
-      header: 'Inquilino',
+      key: 'clube',
+      header: 'Clube',
       render: sub => (
         <div className="min-w-0 max-w-60">
           <p className="truncate font-medium text-foreground">{sub.tenantName}</p>
@@ -79,7 +79,7 @@ export function SubscriptionsTab({ plans, version = 0 }: { plans: PlatformPlanOf
         <div className="text-xs">
           <p className="text-foreground">{sub.planName}</p>
           <p className="text-muted-foreground">{formatBRL(sub.planPriceMonthly)}/mês</p>
-          {sub.scheduledPlanName && <p className="text-violet-700 dark:text-violet-300">→ {sub.scheduledPlanName} no próximo ciclo</p>}
+          {sub.scheduledPlanName && <p className="text-violet-700 dark:text-violet-300">→ {sub.scheduledPlanName} no próximo mês</p>}
         </div>
       ),
     },
@@ -91,7 +91,7 @@ export function SubscriptionsTab({ plans, version = 0 }: { plans: PlatformPlanOf
     },
     {
       key: 'mensal',
-      header: 'Mensal estimado',
+      header: 'Mensalidade estimada',
       align: 'right',
       render: sub => <span className="whitespace-nowrap font-medium tabular-nums text-foreground">{formatBRL(sub.estimatedMonthly)}</span>,
     },
@@ -104,7 +104,7 @@ export function SubscriptionsTab({ plans, version = 0 }: { plans: PlatformPlanOf
           <div className="whitespace-nowrap text-right text-xs">
             <p className="font-medium tabular-nums text-foreground">{formatBRL(sub.openAmount)}</p>
             {sub.daysLate > 0 ? (
-              <p className="text-red-600">{sub.daysLate} dia(s) de atraso</p>
+              <p className="text-[#B42318]">{pluralize(sub.daysLate, 'dia', 'dias')} de atraso</p>
             ) : (
               <p className="text-muted-foreground">a vencer</p>
             )}
@@ -115,7 +115,7 @@ export function SubscriptionsTab({ plans, version = 0 }: { plans: PlatformPlanOf
     },
     {
       key: 'vencimento',
-      header: 'Próx. vencimento',
+      header: 'Próximo vencimento',
       hideOnMobile: true,
       render: sub => <span className="whitespace-nowrap text-xs text-foreground">{sub.nextDueDate ? formatDateBR(sub.nextDueDate) : '—'}</span>,
     },
@@ -134,7 +134,7 @@ export function SubscriptionsTab({ plans, version = 0 }: { plans: PlatformPlanOf
   return (
     <div>
       <div className="flex flex-col gap-3 p-4 lg:flex-row lg:flex-wrap lg:items-center">
-        <SearchInput value={search} onChange={setSearch} placeholder="Buscar por inquilino, endereço ou CNPJ" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar por clube, endereço do site ou CNPJ" />
         <FilterSelect
           label="Situação"
           value={status}
@@ -143,7 +143,7 @@ export function SubscriptionsTab({ plans, version = 0 }: { plans: PlatformPlanOf
           options={PLATFORM_SUBSCRIPTION_STATUS_OPTIONS}
         />
         <FilterSelect
-          label="Acesso ao painel"
+          label="Acesso do clube"
           value={access}
           onChange={value => setAccess(value as 'all' | PlatformAccessLevel)}
           allLabel="Qualquer"
@@ -169,11 +169,11 @@ export function SubscriptionsTab({ plans, version = 0 }: { plans: PlatformPlanOf
       ) : rows.length === 0 ? (
         <EmptyState
           icon={Building2}
-          title={filtered ? 'Nenhuma assinatura com esses filtros' : 'Nenhuma assinatura de plataforma'}
+          title={filtered ? 'Nenhum clube com esses filtros' : 'Nenhum clube pagante ainda'}
           description={
             filtered
               ? 'Ajuste a busca ou limpe os filtros.'
-              : 'Assinaturas nascem no provisionamento de uma contratação aprovada e paga (ou pelo seed de demonstração).'
+              : 'Um clube aparece aqui quando a contratação é aprovada e a primeira fatura é paga.'
           }
         />
       ) : (
@@ -192,7 +192,7 @@ export function SubscriptionsTab({ plans, version = 0 }: { plans: PlatformPlanOf
           page={page}
           perPage={perPage}
           total={total}
-          noun="assinaturas"
+          noun="clubes"
           onPageChange={setPage}
           onPerPageChange={setPerPage}
         />

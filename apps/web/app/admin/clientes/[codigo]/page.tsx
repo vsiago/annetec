@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import type { Contract, ContractStatus, Invoice, InvoiceStatus } from '@annetec/contracts'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -192,8 +192,8 @@ export default function OperatorClienteDetailPage() {
     return (
       <div className="space-y-4">
         <BackLink />
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">
+        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
+          <CardContent className="py-4 text-sm text-[#B42318]">
             {error || 'Contrato não encontrado.'}
           </CardContent>
         </Card>
@@ -207,8 +207,8 @@ export default function OperatorClienteDetailPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Avatar className="size-12 bg-primary">
-            <AvatarFallback className="bg-primary text-white text-base font-medium">
+          <Avatar className="size-12 bg-secondary">
+            <AvatarFallback className="bg-secondary text-secondary-foreground text-base font-medium">
               {getInitials(contract.holderName ?? '?')}
             </AvatarFallback>
           </Avatar>
@@ -381,7 +381,7 @@ export default function OperatorClienteDetailPage() {
                           href={beneficiary.provisionalCardUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                          className="inline-flex items-center gap-1 text-sm text-secondary hover:underline"
                         >
                           <CreditCard className="h-3.5 w-3.5" /> Ver
                         </a>
@@ -433,7 +433,7 @@ export default function OperatorClienteDetailPage() {
                             href={invoice.invoiceUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                            className="inline-flex items-center gap-1 text-sm text-secondary hover:underline"
                           >
                             Ver <ExternalLink className="h-3.5 w-3.5" />
                           </a>
@@ -508,7 +508,7 @@ function AttachDocumentDialog({
             <Label>URL do arquivo</Label>
             <Input value={fileUrl} onChange={e => setFileUrl(e.target.value)} placeholder="https://..." />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-[#B42318]">{error}</p>}
         </div>
         <DialogFooter>
           <Button
@@ -581,7 +581,7 @@ function DeclarePathologyDialog({
             <Label>Descrição (opcional)</Label>
             <Textarea value={description} onChange={e => setDescription(e.target.value)} />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-[#B42318]">{error}</p>}
         </div>
         <DialogFooter>
           <Button
@@ -631,7 +631,7 @@ function RegisterPendencyDialog({
             <Label>Código da pendência</Label>
             <Input value={pendencyCode} onChange={e => setPendencyCode(e.target.value)} />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-[#B42318]">{error}</p>}
         </div>
         <DialogFooter>
           <Button onClick={() => onSubmit(pendencyCode)} disabled={submitting || !pendencyCode}>

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import type { TenantUser } from '@annetec/contracts'
 import { useAdminScope } from '@/contexts/admin-scope-context'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -75,7 +75,7 @@ export default function OperatorVendedoresPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Vendedores</h1>
           <p className="text-muted-foreground">
-            Vendedores do inquilino selecionado acima, vinculados a um produtor na Digital Saúde.
+            Vendedores do clube selecionado acima, vinculados a um produtor na Digital Saúde.
           </p>
         </div>
         {tenantSlug && (
@@ -89,8 +89,8 @@ export default function OperatorVendedoresPage() {
       </div>
 
       {operatorError && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">{operatorError}</CardContent>
+        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
+          <CardContent className="py-4 text-sm text-[#B42318]">{operatorError}</CardContent>
         </Card>
       )}
 
@@ -123,8 +123,8 @@ export default function OperatorVendedoresPage() {
                       <tr key={seller.id} className="border-b border-border last:border-0">
                         <td className="py-4 px-6">
                           <div className="flex items-center gap-3">
-                            <Avatar className="size-9 bg-primary">
-                              <AvatarFallback className="bg-primary text-white text-xs font-medium">
+                            <Avatar className="size-9 bg-secondary">
+                              <AvatarFallback className="bg-secondary text-secondary-foreground text-xs font-medium">
                                 {getInitials(seller.name)}
                               </AvatarFallback>
                             </Avatar>
@@ -172,7 +172,7 @@ export default function OperatorVendedoresPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-destructive hover:text-destructive"
+                              className="text-[#B42318] hover:text-[#B42318]"
                               onClick={() => handleDeactivate(seller.id)}
                             >
                               <UserX className="h-4 w-4" />
@@ -252,7 +252,7 @@ function AddSellerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button className="bg-primary hover:opacity-90 text-white">
+        <Button>
           <Plus className="h-4 w-4 mr-2" /> Novo vendedor
         </Button>
       </DialogTrigger>
@@ -277,7 +277,7 @@ function AddSellerDialog({
             <Label>Telefone</Label>
             <Input value={phone} onChange={e => setPhone(e.target.value)} />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-[#B42318]">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -417,7 +417,7 @@ function LinkProdutorDialog({
               Login e senha são só necessários para consultar recibos de comissão — sem isso, o vendedor pode
               vender normalmente, mas a tela de Comissões não funciona para ele.
             </p>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-sm text-[#B42318]">{error}</p>}
             <DialogFooter>
               <Button onClick={handleLinkExisting} disabled={submitting}>
                 {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
@@ -469,7 +469,7 @@ function LinkProdutorDialog({
                 </>
               )}
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-sm text-[#B42318]">{error}</p>}
             <DialogFooter>
               <Button onClick={handleCreateNew} disabled={submitting}>
                 {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Lead, LeadStatus, TenantUser } from '@annetec/contracts'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -100,7 +100,7 @@ export default function OperatorLeadsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Leads</h1>
-          <p className="text-muted-foreground">Funil comercial do inquilino selecionado acima — antes de virar contrato.</p>
+          <p className="text-muted-foreground">Funil comercial do clube selecionado acima — antes de virar contrato.</p>
         </div>
         {tenantSlug && (
           <AddLeadDialog
@@ -114,8 +114,8 @@ export default function OperatorLeadsPage() {
       </div>
 
       {operatorError && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">{operatorError}</CardContent>
+        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
+          <CardContent className="py-4 text-sm text-[#B42318]">{operatorError}</CardContent>
         </Card>
       )}
 
@@ -138,8 +138,8 @@ export default function OperatorLeadsPage() {
           ) : leads.length === 0 ? (
             <EmptyStateCard
               icon={UserPlus}
-              title="Nenhum lead neste inquilino"
-              description='O funil é dado da Annetec, não vem da Digital Saúde — começa vazio até alguém criar o primeiro lead. Use "Novo lead", ou troque de inquilino no seletor acima.'
+              title="Nenhum lead neste clube"
+              description='O funil é dado da Annetec, não vem da Digital Saúde — começa vazio até alguém criar o primeiro lead. Use "Novo lead", ou troque de clube no seletor acima.'
             />
           ) : (
             <div className="overflow-x-auto pb-2">
@@ -267,7 +267,7 @@ function AddLeadDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button className="bg-primary hover:opacity-90 text-white">
+        <Button>
           <Plus className="h-4 w-4 mr-2" /> Novo lead
         </Button>
       </DialogTrigger>
@@ -324,7 +324,7 @@ function AddLeadDialog({
             <Label>Observações</Label>
             <Input value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-[#B42318]">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
