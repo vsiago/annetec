@@ -1,14 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCheck, Loader2, MessageSquarePlus, Save } from 'lucide-react'
+import { CheckCheck, ListChecks, Loader2, MessageSquarePlus, Save } from 'lucide-react'
 import {
   complianceChecklistItem,
   type ComplianceChecklistItem,
   type OnboardingProposalDetail,
 } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
 import { Textarea } from '@/components/ui/textarea'
@@ -81,25 +81,35 @@ export function ChecklistPanel({
   }
 
   return (
-    <Card className="gap-4 shadow-none">
-      <CardHeader>
-        <CardTitle className="text-base">Itens a conferir</CardTitle>
-        <CardDescription>
+    <SectionCard
+      title="Itens a conferir"
+      icon={ListChecks}
+      description={
+        <>
           {checked} de {items.length} itens conferidos
           {proposal.hasPep ? ' · inclui a conferência da pessoa politicamente exposta' : ''}
-        </CardDescription>
-        {editable && checked < items.length && (
-          <CardAction>
-            <Button variant="ghost" size="sm" className="gap-2" onClick={markAll} disabled={saving !== null}>
-              {saving === 'all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
-              Marcar todos os itens
-            </Button>
-          </CardAction>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Progress value={pct} className={cn('h-1.5', pct === 100 && '[&>div]:bg-emerald-500')} />
-        <ul className="space-y-1">
+        </>
+      }
+      actions={
+        editable && checked < items.length ? (
+          <Button variant="ghost" className="h-10 gap-2" onClick={markAll} disabled={saving !== null}>
+            {saving === 'all' ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <CheckCheck className="h-4 w-4" aria-hidden="true" />
+            )}
+            Marcar todos os itens
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <Progress
+          value={pct}
+          aria-label="Itens conferidos"
+          className={cn('h-2 bg-accent', pct === 100 ? '[&>div]:bg-[#067647]' : '[&>div]:bg-secondary')}
+        />
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {items.map(item => {
             const entry = proposal.checklist?.[item]
             const isSaving = saving === item
@@ -108,15 +118,15 @@ export function ChecklistPanel({
               <li
                 key={item}
                 className={cn(
-                  'rounded-lg border border-transparent px-3 py-2.5 transition-colors',
-                  entry?.checked ? 'bg-emerald-50/50 dark:bg-emerald-500/5' : 'hover:bg-muted/40',
-                  isPep && !entry?.checked && 'border-amber-200 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/5',
+                  'rounded-xl border border-transparent px-3 py-3 transition-colors',
+                  entry?.checked ? 'bg-[#ECFDF3]/60' : 'hover:bg-accent/30',
+                  isPep && !entry?.checked && 'border-[#FEDF89] bg-[#FFFAEB]/70',
                 )}
               >
                 <div className="flex items-start gap-3">
                   <div className="pt-0.5">
                     {isSaving ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
                     ) : (
                       <Checkbox
                         id={`check-${item}`}
@@ -134,15 +144,15 @@ export function ChecklistPanel({
                       {checklistLabel(item)}
                     </label>
                     {entry?.checked && entry.checkedAt && (
-                      <p className="text-xs text-muted-foreground" title={formatDateTimeBR(entry.checkedAt)}>
+                      <p className="m-0 text-xs text-muted-foreground" title={formatDateTimeBR(entry.checkedAt)}>
                         Conferido{entry.checkedBy ? ` por ${entry.checkedBy}` : ''} {formatRelative(entry.checkedAt)}
                       </p>
                     )}
                     {entry?.note && noteFor !== item && (
-                      <p className="mt-1 rounded-md bg-muted/60 px-2 py-1 text-xs text-foreground">{entry.note}</p>
+                      <p className="m-0 mt-1 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs text-foreground">{entry.note}</p>
                     )}
                     {noteFor === item && (
-                      <div className="mt-2 space-y-2">
+                      <div className="mt-2 flex flex-col gap-2">
                         <Textarea
                           value={noteText}
                           onChange={event => setNoteText(event.target.value)}
@@ -152,11 +162,11 @@ export function ChecklistPanel({
                           autoFocus
                         />
                         <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => setNoteFor(null)} disabled={isSaving}>
+                          <Button variant="ghost" className="h-10" onClick={() => setNoteFor(null)} disabled={isSaving}>
                             Cancelar
                           </Button>
-                          <Button size="sm" className="gap-1.5" onClick={() => saveNote(item)} disabled={isSaving}>
-                            <Save className="h-3.5 w-3.5" />
+                          <Button className="h-10 gap-1.5" onClick={() => saveNote(item)} disabled={isSaving}>
+                            <Save className="h-3.5 w-3.5" aria-hidden="true" />
                             Salvar nota
                           </Button>
                         </div>
@@ -166,13 +176,13 @@ export function ChecklistPanel({
                   {editable && noteFor !== item && (
                     <Button
                       variant="ghost"
-                      size="icon-sm"
+                      size="icon-lg"
                       onClick={() => openNote(item)}
                       disabled={saving !== null}
                       aria-label="Adicionar nota ao item"
                       title="Adicionar nota"
                     >
-                      <MessageSquarePlus className="h-4 w-4 text-muted-foreground" />
+                      <MessageSquarePlus className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     </Button>
                   )}
                 </div>
@@ -180,7 +190,7 @@ export function ChecklistPanel({
             )
           })}
         </ul>
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   )
 }

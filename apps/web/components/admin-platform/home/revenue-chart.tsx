@@ -1,3 +1,8 @@
+import Link from 'next/link'
+import { BarChart3 } from 'lucide-react'
+import { Button } from '@/components/admin-platform/ui/button'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { cn } from '@/lib/utils'
 import type { RevenueBar } from './derive'
 import { formatMil } from './format'
@@ -9,8 +14,10 @@ const BAR_AREA = 180
  * Receita dos últimos 6 meses: barras simples. O mês atual fica em coral (a cor
  * da marca), os outros em azul-marinho claro, e cada barra traz o valor escrito
  * (em R$ mil) em azul-marinho: o coral nunca leva texto pequeno.
+ * Sem receita ainda, mostra um estado vazio explicado (e leva ao cadastro do
+ * primeiro clube quando nenhum existe).
  */
-export function RevenueChartCard({ bars }: { bars: RevenueBar[] }) {
+export function RevenueChartCard({ bars, hasClubs = true }: { bars: RevenueBar[]; hasClubs?: boolean }) {
   const max = Math.max(0, ...bars.map(bar => bar.value))
   const hasData = bars.length > 0 && max > 0
   const description = `Receita recebida pela ANNETEC, em reais: ${bars
@@ -18,17 +25,13 @@ export function RevenueChartCard({ bars }: { bars: RevenueBar[] }) {
     .join('; ')}`
 
   return (
-    <section
-      aria-labelledby="home-receita"
-      className="flex min-w-0 flex-[1.5_1_440px] flex-col gap-5 rounded-2xl border border-border bg-white p-6"
+    <SectionCard
+      id="home-receita"
+      icon={BarChart3}
+      title="Receita dos últimos 6 meses"
+      description="Recebido pela ANNETEC, em R$ mil"
+      className="flex-[1.5_1_440px]"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h2 id="home-receita" className="m-0 text-base font-bold text-foreground">
-          Receita dos últimos 6 meses
-        </h2>
-        <span className="text-[13px] text-muted-foreground">Recebido pela ANNETEC, em R$ mil</span>
-      </div>
-
       {hasData ? (
         <div role="img" aria-label={description}>
           <div className="grid h-[240px] grid-cols-6 items-end gap-2 border-b border-border pt-2 sm:gap-4">
@@ -56,10 +59,20 @@ export function RevenueChartCard({ bars }: { bars: RevenueBar[] }) {
           </div>
         </div>
       ) : (
-        <p className="m-0 py-10 text-center text-sm text-muted-foreground">
-          Ainda não há receita recebida nos últimos 6 meses.
-        </p>
+        <EmptyState
+          size="sm"
+          icon={BarChart3}
+          title="Sem receita ainda"
+          description="Ainda não há receita recebida nos últimos 6 meses."
+          action={
+            hasClubs ? undefined : (
+              <Button asChild className="h-11 rounded-[10px] px-4 font-semibold">
+                <Link href="/admin/inquilinos/novo">Cadastrar clube</Link>
+              </Button>
+            )
+          }
+        />
       )}
-    </section>
+    </SectionCard>
   )
 }

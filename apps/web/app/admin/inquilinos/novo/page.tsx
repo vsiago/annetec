@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, ArrowLeft, Check, Copy } from 'lucide-react'
+import { AlertCircle, Building2, Check, Copy, Tags } from 'lucide-react'
 import { UFS, formatBRL, maskCep, maskPhone } from '@annetec/contracts'
 import {
   Dialog,
@@ -17,6 +17,11 @@ import { useTenants } from '@/contexts/tenants-context'
 import { createTenantAction } from '@/lib/actions/tenants-api'
 import { maskCnpj, formatNumber } from '@/lib/adapters/contratacao'
 import { ColorField, SelectField, StepSection, TextField } from '@/components/admin-platform/clubs/club-form-fields'
+import { Button } from '@/components/admin-platform/ui/button'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { BackLink, PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionSkeleton } from '@/components/admin-platform/ui/section-card'
 import {
   CLUB_FIELD_ORDER,
   DEFAULT_PRIMARY_COLOR,
@@ -38,10 +43,8 @@ import { cn } from '@/lib/utils'
 
 const UF_OPTIONS = UFS.map(uf => ({ value: uf, label: uf }))
 
-const buttonBase =
-  'inline-flex items-center justify-center gap-2 rounded-[10px] text-sm font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-secondary/40 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60'
-const primaryButton = cn(buttonBase, 'min-h-11 border border-secondary bg-secondary px-5 text-white hover:bg-secondary/90')
-const secondaryButton = cn(buttonBase, 'min-h-11 border border-[#D0D5DD] bg-white px-4 text-[#344054] hover:bg-[#F9FAFB]')
+const primaryButton = 'min-h-11 rounded-[10px] px-5 text-sm font-semibold'
+const secondaryButton = 'min-h-11 rounded-[10px] border-[#D0D5DD] px-4 text-sm font-semibold text-[#344054]'
 
 interface CreatedClub {
   id: string
@@ -147,24 +150,21 @@ export default function CadastrarClubePage() {
   const slugPreview = trimSlug(values.slug) || 'endereco-do-clube'
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <header className="flex flex-col gap-2">
-        <Link
-          href="/admin/inquilinos"
-          className="inline-flex w-fit items-center gap-1.5 rounded text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-secondary/40"
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          Voltar para clubes
-        </Link>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Cadastrar clube</h1>
-        <p className="text-[15px] text-muted-foreground">
-          Preencha os três passos abaixo. Os campos marcados com{' '}
-          <span className="font-semibold text-[#B42318]" aria-hidden="true">
-            *
-          </span>
-          <span className="sr-only">asterisco</span> são obrigatórios.
-        </p>
-      </header>
+    <PageContainer size="form">
+      <PageHeader
+        title="Cadastrar clube"
+        icon={Building2}
+        breadcrumb={<BackLink href="/admin/inquilinos">Voltar para clubes</BackLink>}
+        description={
+          <>
+            Preencha os três passos abaixo. Os campos marcados com{' '}
+            <span className="font-semibold text-[#B42318]" aria-hidden="true">
+              *
+            </span>
+            <span className="sr-only">asterisco</span> são obrigatórios.
+          </>
+        }
+      />
 
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
         {formError || (submitted && !validation.ok) ? (
@@ -374,19 +374,19 @@ export default function CadastrarClubePage() {
           description="O plano do clube com a ANNETEC. O clube começa em teste. Clube cadastrado por aqui não recebe faturas automáticas da ANNETEC: elas só existem para quem contrata pelo site."
         >
           {plansLoading && plans.length === 0 ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              Carregando planos…
-            </p>
+            <SectionSkeleton rows={2} label="Carregando planos…" />
           ) : noPlans ? (
-            <div className="flex flex-col items-start gap-3 rounded-xl border border-border bg-[#F9FAFB] p-5">
-              <strong className="text-base text-foreground">Cadastre um plano antes de criar o clube</strong>
-              <span className="text-sm leading-relaxed text-muted-foreground">
-                Todo clube precisa de um plano. Crie o primeiro em Planos e preços e volte aqui.
-              </span>
-              <Link href="/admin/configuracoes" className={secondaryButton}>
-                Ir para Planos e preços
-              </Link>
-            </div>
+            <EmptyState
+              size="sm"
+              icon={Tags}
+              title="Cadastre um plano antes de criar o clube"
+              description="Todo clube precisa de um plano. Crie o primeiro em Planos e preços e volte aqui."
+              action={
+                <Button asChild variant="outline" className={secondaryButton}>
+                  <Link href="/admin/configuracoes">Ir para Planos e preços</Link>
+                </Button>
+              }
+            />
           ) : (
             <div className="max-w-xl">
               <SelectField
@@ -434,12 +434,12 @@ export default function CadastrarClubePage() {
         </StepSection>
 
         <div className="flex flex-wrap justify-end gap-3">
-          <button type="button" className={secondaryButton} onClick={() => router.push('/admin/inquilinos')}>
+          <Button type="button" variant="outline" className={secondaryButton} onClick={() => router.push('/admin/inquilinos')}>
             Cancelar
-          </button>
-          <button type="submit" className={primaryButton} disabled={isSubmitting || noPlans}>
+          </Button>
+          <Button type="submit" className={primaryButton} disabled={isSubmitting || noPlans}>
             {isSubmitting ? 'Cadastrando…' : 'Cadastrar clube'}
-          </button>
+          </Button>
         </div>
       </form>
 
@@ -462,14 +462,14 @@ export default function CadastrarClubePage() {
           </DialogHeader>
           <div className="flex items-center gap-2 rounded-xl border border-border bg-[#F9FAFB] p-3">
             <code className="flex-1 break-all font-mono text-base text-foreground">{created?.ownerPassword}</code>
-            <button type="button" onClick={copyPassword} className={cn(secondaryButton, 'min-h-10 px-3')}>
+            <Button type="button" variant="outline" onClick={copyPassword} className={cn(secondaryButton, 'min-h-10 px-3')}>
               {copyState === 'copied' ? (
                 <Check className="size-4" aria-hidden="true" />
               ) : (
                 <Copy className="size-4" aria-hidden="true" />
               )}
               {copyState === 'copied' ? 'Senha copiada' : 'Copiar senha'}
-            </button>
+            </Button>
           </div>
           {copyState === 'failed' ? (
             <p role="alert" className="text-sm text-[#B42318]">
@@ -477,16 +477,16 @@ export default function CadastrarClubePage() {
             </p>
           ) : null}
           <DialogFooter>
-            <button
+            <Button
               type="button"
               className={primaryButton}
               onClick={() => created && router.push(`/admin/inquilinos/${created.id}`)}
             >
               Já guardei a senha, abrir o clube
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }

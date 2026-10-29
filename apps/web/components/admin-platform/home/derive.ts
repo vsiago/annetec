@@ -166,7 +166,7 @@ export function buildMonthKpis(data: HomeData, extras: HomeExtras | null, todayI
       revenueHint = `recebido até hoje, contra ${previousName} inteiro`
     }
   } else {
-    revenueHint = received > 0 ? 'recebido no mês' : 'nada recebido ainda no mês'
+    revenueHint = received > 0 ? 'recebido no mês' : 'Ainda sem recebimentos neste mês'
   }
   kpisList.push({
     key: 'revenue',
@@ -183,8 +183,10 @@ export function buildMonthKpis(data: HomeData, extras: HomeExtras | null, todayI
   let receivableHint: string | undefined
   if (monthEnd) {
     if (pendingCount === undefined) receivableHint = `a vencer até ${monthEnd}`
-    else if (pendingCount === 0) receivableHint = `nenhuma fatura vence até ${monthEnd}`
-    else receivableHint = `${pendingCount === 1 ? '1 fatura vence' : `${formatCount(pendingCount)} faturas vencem`} até ${monthEnd}`
+    else if (pendingCount === 0) {
+      receivableHint =
+        data.billing.pendingThisMonth === 0 ? 'Ainda sem faturas neste mês' : `nenhuma fatura vence até ${monthEnd}`
+    } else receivableHint = `${pendingCount === 1 ? '1 fatura vence' : `${formatCount(pendingCount)} faturas vencem`} até ${monthEnd}`
   } else {
     receivableHint = 'a vencer até o fim do mês'
   }
@@ -204,7 +206,12 @@ export function buildMonthKpis(data: HomeData, extras: HomeExtras | null, todayI
     label: 'Clubes ativos',
     value: formatCount(activeCount),
     delta: fresh > 0 ? { text: `+${formatCount(fresh)}`, tone: 'up' } : undefined,
-    hint: fresh > 0 ? `${fresh === 1 ? 'novo' : 'novos'} em ${monthName}` : `nenhum clube novo em ${monthName}`,
+    hint:
+      activeCount === 0
+        ? 'Cadastre o primeiro clube'
+        : fresh > 0
+          ? `${fresh === 1 ? 'novo' : 'novos'} em ${monthName}`
+          : `nenhum clube novo em ${monthName}`,
     href: '/admin/inquilinos',
   })
 
@@ -215,7 +222,12 @@ export function buildMonthKpis(data: HomeData, extras: HomeExtras | null, todayI
     label: 'Vidas nos clubes',
     value: formatCount(kpis.totalLives),
     delta: added > 0 ? { text: `+${formatCount(added)}`, tone: 'up' } : undefined,
-    hint: added > 0 ? `entraram em ${monthName}, titulares e dependentes` : 'titulares e dependentes',
+    hint:
+      kpis.totalLives === 0
+        ? 'Aparecem quando os clubes tiverem associados'
+        : added > 0
+          ? `entraram em ${monthName}, titulares e dependentes`
+          : 'titulares e dependentes',
   })
 
   return kpisList

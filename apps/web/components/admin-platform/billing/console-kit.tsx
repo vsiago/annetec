@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { CircleAlert, Loader2, RefreshCw, ShieldAlert } from 'lucide-react'
+import { Loader2, RefreshCw, ShieldAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { usePlatformAuth } from '@/contexts/platform-auth-context'
 import {
@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/admin-platform/ui/button'
+import { ErrorState } from '@/components/admin-platform/ui/empty-state'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -136,34 +137,38 @@ export function Pill({ meta, className, title }: { meta: StatusMeta; className?:
   )
 }
 
-export function LoadError({ message, onRetry, className }: { message: string; onRetry?: () => void; className?: string }) {
-  return (
-    <div
-      className={cn(
-        'flex flex-col items-start gap-3 rounded-xl border border-[#B42318]/30 bg-[#B42318]/5 p-4 text-sm sm:flex-row sm:items-center',
-        className,
-      )}
-      role="alert"
-    >
-      <CircleAlert className="h-5 w-5 shrink-0 text-[#B42318]" />
-      <p className="flex-1 text-[#B42318]">{message}</p>
-      {onRetry && (
-        <Button variant="outline" size="sm" onClick={onRetry} className="gap-2">
-          <RefreshCw className="h-4 w-4" />
-          Tentar novamente
-        </Button>
-      )}
-    </div>
-  )
+/**
+ * Erro ao carregar. É um invólucro fino sobre o `ErrorState` do console: a
+ * frase vinda da API é o título e o botão "Tentar de novo" aparece quando a
+ * tela sabe recarregar. Passe `framed={false}` quando já estiver dentro de um
+ * cartão (o padrão desenha o próprio cartão).
+ */
+export function LoadError({
+  message,
+  onRetry,
+  className,
+  framed = true,
+}: {
+  message: string
+  onRetry?: () => void
+  className?: string
+  framed?: boolean
+}) {
+  return <ErrorState title={message} description={null} onRetry={onRetry} size="sm" framed={framed} className={className} />
 }
 
+/** Esqueleto de lista/tabela (carregando) para dentro de um cartão: linhas separadas por filete, sem moldura própria. */
 export function TableSkeleton({ rows = 6, className }: { rows?: number; className?: string }) {
   return (
-    <div className={cn('space-y-3 p-4', className)} aria-busy="true" aria-label="Carregando">
+    <div role="status" aria-live="polite" aria-busy="true" className={cn('flex flex-col', className)}>
+      <span className="sr-only">Carregando…</span>
       {Array.from({ length: rows }, (_, index) => (
-        <div key={index} className="flex items-center gap-4">
-          <Skeleton className="h-9 w-9 rounded-full" />
-          <Skeleton className="h-4 flex-1" />
+        <div key={index} className="flex items-center gap-4 border-b border-[#EEF0F3] px-5 py-4 last:border-b-0">
+          <Skeleton className="size-9 shrink-0 rounded-full" />
+          <div className="flex flex-1 flex-col gap-2">
+            <Skeleton className="h-4 w-44 max-w-full" />
+            <Skeleton className="h-3 w-28 max-w-full" />
+          </div>
           <Skeleton className="hidden h-4 w-24 md:block" />
           <Skeleton className="hidden h-4 w-20 md:block" />
           <Skeleton className="h-6 w-20 rounded-full" />
@@ -173,11 +178,17 @@ export function TableSkeleton({ rows = 6, className }: { rows?: number; classNam
   )
 }
 
+/** Esqueleto de uma linha de KpiCard (carregando), no mesmo formato do cartão. */
 export function KpiSkeleton({ count = 4, className }: { count?: number; className?: string }) {
   return (
-    <div className={cn('grid gap-4 sm:grid-cols-2 xl:grid-cols-4', className)}>
+    <div role="status" aria-live="polite" aria-busy="true" className={cn('grid gap-4 sm:grid-cols-2 xl:grid-cols-4', className)}>
+      <span className="sr-only">Carregando…</span>
       {Array.from({ length: count }, (_, index) => (
-        <Skeleton key={index} className="h-28 rounded-xl" />
+        <div key={index} className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-6 py-5.5 shadow-sm">
+          <Skeleton className="h-3.5 w-28" />
+          <Skeleton className="h-8 w-36 max-w-full" />
+          <Skeleton className="h-3.5 w-40 max-w-full" />
+        </div>
       ))}
     </div>
   )
@@ -217,7 +228,7 @@ export function SuperadminOnly({
           </span>
         </TooltipTrigger>
         <TooltipContent className="flex items-center gap-1.5">
-          <ShieldAlert className="h-3.5 w-3.5" />
+          <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
           {reason}
         </TooltipContent>
       </Tooltip>
@@ -310,7 +321,7 @@ export function ConfirmDialog({
             disabled={invalid || busy}
             className="gap-2"
           >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             {confirmLabel}
           </Button>
         </AlertDialogFooter>
@@ -319,11 +330,11 @@ export function ConfirmDialog({
   )
 }
 
-/** Barra de "atualizado há X" + botão de recarregar, no canto das seções. */
+/** Botão de recarregar, no cabeçalho das telas e no canto das seções (alvo de toque de 40px). */
 export function RefreshButton({ loading, onClick, label = 'Atualizar' }: { loading: boolean; onClick: () => void; label?: string }) {
   return (
-    <Button variant="outline" size="sm" onClick={onClick} disabled={loading} className="gap-2">
-      <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+    <Button variant="outline" onClick={onClick} disabled={loading} className="min-h-10 gap-2 rounded-[10px] px-4 font-semibold">
+      <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} aria-hidden="true" />
       {label}
     </Button>
   )

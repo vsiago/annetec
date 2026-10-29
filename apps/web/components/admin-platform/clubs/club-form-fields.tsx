@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { cn } from '@/lib/utils'
 
 /**
@@ -196,7 +197,7 @@ export function ColorField({
   )
 }
 
-/** Cabeçalho numerado de cada passo. */
+/** Cartão de cada passo, com o número no cabeçalho. */
 export function StepSection({
   step,
   title,
@@ -208,25 +209,26 @@ export function StepSection({
   description?: ReactNode
   children: ReactNode
 }) {
-  const headingId = `passo-${step}`
   return (
-    <section aria-labelledby={headingId} className="rounded-2xl border border-border bg-white p-6">
-      <div className="mb-5 flex items-start gap-3">
-        <span
-          aria-hidden="true"
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-secondary"
-        >
-          {step}
-        </span>
-        <div className="flex flex-col gap-0.5">
-          <h2 id={headingId} className="text-lg font-semibold text-foreground">
+    <SectionCard
+      id={`passo-${step}`}
+      title={
+        <span className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-secondary"
+          >
+            {step}
+          </span>
+          <span>
             <span className="sr-only">Passo {step}: </span>
             {title}
-          </h2>
-          {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
-        </div>
-      </div>
+          </span>
+        </span>
+      }
+    >
+      {description ? <p className="m-0 mb-5 text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
       {children}
-    </section>
+    </SectionCard>
   )
 }

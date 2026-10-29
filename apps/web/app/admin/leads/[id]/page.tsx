@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
 import type { Interaction, Lead, LeadStatus, TenantUser } from '@annetec/contracts'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/admin-platform/ui/button'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { BackLink, PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { StatusPill, type StatusPillTone } from '@/components/admin-platform/ui/status-pill'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
@@ -28,7 +30,6 @@ import {
   createOperatorSaleAction,
 } from '@/lib/actions/operator-crm-api'
 import {
-  ArrowLeft,
   Loader2,
   Phone,
   Mail,
@@ -38,6 +39,9 @@ import {
   Plus,
   CheckCircle2,
   Trophy,
+  Target,
+  Contact,
+  History,
 } from 'lucide-react'
 
 const STATUS_LABEL: Record<LeadStatus, string> = {
@@ -50,14 +54,14 @@ const STATUS_LABEL: Record<LeadStatus, string> = {
   lost: 'Perdido',
 }
 
-const STATUS_VARIANT: Record<LeadStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  new: 'outline',
-  contacted: 'outline',
-  qualified: 'secondary',
-  proposal: 'secondary',
-  negotiation: 'secondary',
-  closed: 'default',
-  lost: 'destructive',
+const STATUS_TONE: Record<LeadStatus, StatusPillTone> = {
+  new: 'neutral',
+  contacted: 'neutral',
+  qualified: 'info',
+  proposal: 'info',
+  negotiation: 'warning',
+  closed: 'success',
+  lost: 'danger',
 }
 
 const INTERACTION_ICON: Record<Interaction['type'], typeof Phone> = {
@@ -130,22 +134,25 @@ export default function LeadDetailPage() {
     if (result.success) setLead(result.data)
   }
 
+  const backLink = <BackLink href="/admin/leads">Voltar para Leads</BackLink>
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24 text-muted-foreground">
-        <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
-      </div>
+      <PageContainer>
+        <PageHeader icon={Target} breadcrumb={backLink} title="Lead" />
+        <SectionCard>
+          <SectionSkeleton rows={4} label="Carregando lead…" />
+        </SectionCard>
+      </PageContainer>
     )
   }
 
   if (error || !lead) {
     return (
-      <div className="space-y-4">
-        <BackLink />
-        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
-          <CardContent className="py-4 text-sm text-[#B42318]">{error || 'Lead não encontrado.'}</CardContent>
-        </Card>
-      </div>
+      <PageContainer>
+        <PageHeader icon={Target} breadcrumb={backLink} title="Lead" />
+        <ErrorState description={error || 'Lead não encontrado.'} />
+      </PageContainer>
     )
   }
 
@@ -154,120 +161,111 @@ export default function LeadDetailPage() {
   )
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <BackLink />
+    <PageContainer>
+      <PageHeader
+        icon={Target}
+        breadcrumb={backLink}
+        title={lead.name}
+        badge={<StatusPill tone={STATUS_TONE[lead.status]}>{STATUS_LABEL[lead.status]}</StatusPill>}
+        description={`${lead.source ?? 'Origem não informada'} · ${money(lead.estimatedValue)}`}
+        actions={
+          <>
+            <Select value={lead.status} onValueChange={v => handleStatusChange(v as LeadStatus)}>
+              <SelectTrigger aria-label="Situação do lead" className="w-44 rounded-[10px] data-[size=default]:h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(STATUS_LABEL).map(([status, label]) => (
+                  <SelectItem key={status} value={status}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {lead.status !== 'closed' && tenantSlug && (
+              <ConvertToSaleDialog
+                open={saleOpen}
+                onOpenChange={setSaleOpen}
+                tenantSlug={tenantSlug}
+                lead={lead}
+                sellers={sellers}
+                onConverted={() => {
+                  setSaleOpen(false)
+                  router.push('/admin/leads')
+                }}
+              />
+            )}
+          </>
+        }
+      />
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-foreground">{lead.name}</h1>
-            <Badge variant={STATUS_VARIANT[lead.status]}>{STATUS_LABEL[lead.status]}</Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {lead.source ?? 'Origem não informada'} · {money(lead.estimatedValue)}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={lead.status} onValueChange={v => handleStatusChange(v as LeadStatus)}>
-            <SelectTrigger className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(STATUS_LABEL).map(([status, label]) => (
-                <SelectItem key={status} value={status}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {lead.status !== 'closed' && tenantSlug && (
-            <ConvertToSaleDialog
-              open={saleOpen}
-              onOpenChange={setSaleOpen}
-              tenantSlug={tenantSlug}
-              lead={lead}
-              sellers={sellers}
-              onConverted={() => {
-                setSaleOpen(false)
-                router.push('/admin/leads')
-              }}
-            />
-          )}
-        </div>
-      </div>
-
-      <Card className="border border-border/80 shadow-xs bg-card">
-        <CardHeader>
-          <CardTitle className="text-base">Contato</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground">E-mail</p>
-            <p className="text-sm text-foreground">{lead.email ?? '—'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Telefone</p>
-            <p className="text-sm text-foreground">{lead.phone ?? '—'}</p>
-          </div>
-          {lead.notes && (
-            <div className="col-span-2">
-              <p className="text-xs text-muted-foreground">Observações</p>
-              <p className="text-sm text-foreground">{lead.notes}</p>
+      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+        <SectionCard title="Contato" icon={Contact} className="lg:col-span-1">
+          <dl className="m-0 grid gap-4">
+            <div>
+              <dt className="text-[13px] text-muted-foreground">E-mail</dt>
+              <dd className="m-0 wrap-break-word text-sm text-foreground">{lead.email ?? '—'}</dd>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div>
+              <dt className="text-[13px] text-muted-foreground">Telefone</dt>
+              <dd className="m-0 text-sm text-foreground">{lead.phone ?? '—'}</dd>
+            </div>
+            {lead.notes && (
+              <div>
+                <dt className="text-[13px] text-muted-foreground">Observações</dt>
+                <dd className="m-0 wrap-break-word text-sm text-foreground">{lead.notes}</dd>
+              </div>
+            )}
+          </dl>
+        </SectionCard>
 
-      <Card className="border border-border/80 shadow-xs bg-card">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Interações</CardTitle>
-          {tenantSlug && (
-            <AddInteractionDialog
-              open={interactionOpen}
-              onOpenChange={setInteractionOpen}
-              tenantSlug={tenantSlug}
-              leadId={lead.id}
-              onAdded={updated => setLead(updated)}
-            />
-          )}
-        </CardHeader>
-        <CardContent>
+        <SectionCard
+          title="Interações"
+          icon={MessageSquare}
+          className="lg:col-span-2"
+          actions={
+            tenantSlug ? (
+              <AddInteractionDialog
+                open={interactionOpen}
+                onOpenChange={setInteractionOpen}
+                tenantSlug={tenantSlug}
+                leadId={lead.id}
+                onAdded={updated => setLead(updated)}
+              />
+            ) : undefined
+          }
+        >
           {timeline.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma interação registrada ainda.</p>
+            <EmptyState size="sm" icon={History} title="Nenhuma interação registrada ainda" />
           ) : (
-            <div className="space-y-4">
+            <ol className="m-0 flex list-none flex-col gap-3 p-0">
               {timeline.map(interaction => {
                 const Icon = INTERACTION_ICON[interaction.type]
                 return (
-                  <div key={interaction.id} className="flex gap-3">
-                    <div className="mt-0.5 rounded-full bg-muted p-1.5 h-fit">
-                      <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-foreground">
-                        <span className="font-medium">{INTERACTION_LABEL[interaction.type]}</span>{' '}
-                        <span className="text-xs text-muted-foreground">
+                  <li key={interaction.id} className="flex gap-3 rounded-xl border border-border p-4">
+                    <span
+                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-secondary"
+                      aria-hidden="true"
+                    >
+                      <Icon className="size-4" />
+                    </span>
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <p className="m-0 flex flex-wrap items-baseline gap-x-2 text-sm text-foreground">
+                        <span className="font-semibold">{INTERACTION_LABEL[interaction.type]}</span>
+                        <time dateTime={interaction.occurredAt} className="text-[13px] text-muted-foreground">
                           {new Date(interaction.occurredAt).toLocaleString('pt-BR')}
-                        </span>
+                        </time>
                       </p>
-                      <p className="text-sm text-muted-foreground">{interaction.description}</p>
+                      <p className="m-0 wrap-break-word text-sm text-muted-foreground">{interaction.description}</p>
                     </div>
-                  </div>
+                  </li>
                 )
               })}
-            </div>
+            </ol>
           )}
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function BackLink() {
-  return (
-    <Link href="/admin/leads" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeft className="h-4 w-4" /> Voltar para Leads
-    </Link>
+        </SectionCard>
+      </div>
+    </PageContainer>
   )
 }
 
@@ -315,8 +313,8 @@ function AddInteractionDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          <Plus className="h-4 w-4 mr-1.5" /> Registrar
+        <Button variant="outline" className="h-10 rounded-[10px] px-4 font-semibold">
+          <Plus aria-hidden="true" /> Registrar
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -409,8 +407,8 @@ function ConvertToSaleDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm">
-          <Trophy className="h-4 w-4 mr-1.5" /> Converter em venda
+        <Button className="h-11 rounded-[10px] px-4 font-semibold">
+          <Trophy aria-hidden="true" /> Converter em venda
         </Button>
       </DialogTrigger>
       <DialogContent>

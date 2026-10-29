@@ -2,15 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import Link from 'next/link'
 import type { Contract, ContractStatus, Invoice, InvoiceStatus } from '@annetec/contracts'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   Select,
   SelectContent,
@@ -27,7 +23,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { getInitials } from '@/lib/utils'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { BackLink, PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
+import { DataTable, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { StatusPill, type StatusPillTone } from '@/components/admin-platform/ui/status-pill'
 import {
   getOperatorAction,
   getOperatorContractAction,
@@ -40,7 +41,7 @@ import {
   registerOperatorPendencyAction,
 } from '@/lib/actions/operator-api'
 import {
-  ArrowLeft,
+  ClipboardCheck,
   Loader2,
   RefreshCw,
   Mail,
@@ -50,6 +51,10 @@ import {
   AlertTriangle,
   CreditCard,
   ExternalLink,
+  FileText,
+  Receipt,
+  UserRound,
+  Users,
 } from 'lucide-react'
 
 const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = {
@@ -61,13 +66,13 @@ const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = {
   desconhecido: 'Desconhecido',
 }
 
-const CONTRACT_STATUS_VARIANT: Record<ContractStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  ativo: 'default',
-  produzido: 'secondary',
-  pendente: 'outline',
-  suspenso: 'destructive',
-  cancelado: 'destructive',
-  desconhecido: 'outline',
+const CONTRACT_STATUS_TONE: Record<ContractStatus, StatusPillTone> = {
+  ativo: 'success',
+  produzido: 'info',
+  pendente: 'warning',
+  suspenso: 'warning',
+  cancelado: 'danger',
+  desconhecido: 'neutral',
 }
 
 const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
@@ -78,13 +83,16 @@ const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
   desconhecido: 'Desconhecido',
 }
 
-const INVOICE_STATUS_VARIANT: Record<InvoiceStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  aberta: 'outline',
-  paga: 'secondary',
-  vencida: 'destructive',
-  cancelada: 'outline',
-  desconhecido: 'outline',
+const INVOICE_STATUS_TONE: Record<InvoiceStatus, StatusPillTone> = {
+  aberta: 'info',
+  paga: 'success',
+  vencida: 'danger',
+  cancelada: 'neutral',
+  desconhecido: 'neutral',
 }
+
+const LINK_CLASS =
+  'inline-flex min-h-10 items-center gap-1.5 rounded-md text-sm font-medium text-secondary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2'
 
 function money(value: number | null) {
   if (value === null) return '—'
@@ -182,79 +190,70 @@ export default function OperatorClienteDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24 text-muted-foreground">
-        <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
-      </div>
+      <PageContainer>
+        <div>
+          <BackLink href="/admin/clientes">Voltar para Clientes</BackLink>
+        </div>
+        <SectionCard>
+          <SectionSkeleton rows={5} label="Carregando contrato…" />
+        </SectionCard>
+      </PageContainer>
     )
   }
 
   if (error || !contract) {
     return (
-      <div className="space-y-4">
-        <BackLink />
-        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
-          <CardContent className="py-4 text-sm text-[#B42318]">
-            {error || 'Contrato não encontrado.'}
-          </CardContent>
-        </Card>
-      </div>
+      <PageContainer>
+        <div>
+          <BackLink href="/admin/clientes">Voltar para Clientes</BackLink>
+        </div>
+        <ErrorState description={error || 'Contrato não encontrado.'} />
+      </PageContainer>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <BackLink />
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Avatar className="size-12 bg-secondary">
-            <AvatarFallback className="bg-secondary text-secondary-foreground text-base font-medium">
-              {getInitials(contract.holderName ?? '?')}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-foreground">{contract.holderName ?? '—'}</h1>
-              <Badge variant={CONTRACT_STATUS_VARIANT[contract.status]}>
-                {CONTRACT_STATUS_LABEL[contract.status]}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {contract.upstreamCodigo} · Proposta {contract.proposalNumber ?? '—'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
-            {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Atualizar do ERP
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleSendCard} disabled={sendingCard}>
-            {sendingCard ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
-            Enviar carteirinha
-          </Button>
-          {contract.status === 'pendente' && (
-            <Button size="sm" onClick={handleMarkProduced} disabled={marking}>
-              {marking ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-              Marcar como Produzido
+    <PageContainer>
+      <PageHeader
+        breadcrumb={<BackLink href="/admin/clientes">Voltar para Clientes</BackLink>}
+        icon={UserRound}
+        title={contract.holderName ?? '—'}
+        badge={
+          <StatusPill tone={CONTRACT_STATUS_TONE[contract.status]}>{CONTRACT_STATUS_LABEL[contract.status]}</StatusPill>
+        }
+        description={`${contract.upstreamCodigo} · Proposta ${contract.proposalNumber ?? '—'}`}
+        actions={
+          <>
+            <Button variant="outline" className="h-10" onClick={handleSync} disabled={syncing}>
+              {syncing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+              Atualizar do ERP
             </Button>
-          )}
-        </div>
-      </div>
+            <Button variant="outline" className="h-10" onClick={handleSendCard} disabled={sendingCard}>
+              {sendingCard ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Mail aria-hidden="true" />}
+              Enviar carteirinha
+            </Button>
+            {contract.status === 'pendente' && (
+              <Button className="h-10" onClick={handleMarkProduced} disabled={marking}>
+                {marking ? <Loader2 className="animate-spin" aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+                Marcar como Produzido
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {actionMessage && (
-        <p className="flex items-center gap-2 text-sm text-emerald-600">
-          <CheckCircle2 className="h-4 w-4" /> {actionMessage}
+        <p
+          role="status"
+          className="m-0 flex items-center gap-2 rounded-xl bg-[#ECFDF3] px-4 py-3 text-sm font-medium text-[#067647]"
+        >
+          <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" /> {actionMessage}
         </p>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="border border-border/80 shadow-xs bg-card lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">Dados do contrato</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <SectionCard icon={FileText} title="Dados do contrato" className="lg:col-span-2">
+          <dl className="m-0 grid grid-cols-2 gap-4 sm:grid-cols-3">
             <Field label="Plano" value={contract.planName} />
             <Field label="Convênio" value={contract.convenioName} />
             <Field label="Mensalidade" value={money(contract.monthlyValue)} />
@@ -267,15 +266,11 @@ export default function OperatorClienteDetailPage() {
               label="Última sincronização"
               value={contract.syncedAt ? new Date(contract.syncedAt).toLocaleString('pt-BR') : null}
             />
-          </CardContent>
-        </Card>
+          </dl>
+        </SectionCard>
 
-        <Card className="border border-border/80 shadow-xs bg-card">
-          <CardHeader>
-            <CardTitle className="text-base">Ações administrativas</CardTitle>
-            <CardDescription>Registradas direto na Digital Saúde.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
+        <SectionCard icon={ClipboardCheck} title="Ações administrativas" description="Registradas direto na Digital Saúde.">
+          <div className="flex flex-col gap-3">
             <AttachDocumentDialog
               open={attachOpen}
               onOpenChange={setAttachOpen}
@@ -343,130 +338,103 @@ export default function OperatorClienteDetailPage() {
                 setActionMessage('Pendência registrada.')
               }}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </SectionCard>
       </div>
 
-      <Card className="border border-border/80 shadow-xs bg-card">
-        <CardHeader>
-          <CardTitle className="text-base">Beneficiários</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Nome</th>
-                  <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Parentesco</th>
-                  <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">CPF</th>
-                  <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Nascimento</th>
-                  <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Status</th>
-                  <th className="text-right py-3 px-6 text-sm font-medium text-muted-foreground">Carteirinha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contract.beneficiaries.map(beneficiary => (
-                  <tr key={beneficiary.id} className="border-b border-border last:border-0">
-                    <td className="py-3 px-6">
-                      <p className="text-sm font-medium text-foreground">{beneficiary.name}</p>
-                      <p className="text-xs text-muted-foreground">{beneficiary.upstreamCodigo}</p>
-                    </td>
-                    <td className="py-3 px-6 text-sm text-foreground">{beneficiary.relationship ?? '—'}</td>
-                    <td className="py-3 px-6 text-sm text-foreground">{beneficiary.cpf ?? '—'}</td>
-                    <td className="py-3 px-6 text-sm text-foreground">{beneficiary.birthDate ?? '—'}</td>
-                    <td className="py-3 px-6 text-sm text-foreground">{beneficiary.status ?? '—'}</td>
-                    <td className="py-3 px-6 text-right">
-                      {beneficiary.provisionalCardUrl && (
-                        <a
-                          href={beneficiary.provisionalCardUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-sm text-secondary hover:underline"
-                        >
-                          <CreditCard className="h-3.5 w-3.5" /> Ver
-                        </a>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <SectionCard icon={Users} title="Beneficiários" padded={false}>
+        {contract.beneficiaries.length === 0 ? (
+          <EmptyState icon={Users} title="Nenhum beneficiário neste contrato" />
+        ) : (
+          <DataTable caption="Beneficiários do contrato" framed={false} minWidth="min-w-[760px]">
+            <thead>
+              <tr>
+                <Th>Nome</Th>
+                <Th>Parentesco</Th>
+                <Th>CPF</Th>
+                <Th>Nascimento</Th>
+                <Th>Status</Th>
+                <Th align="right">Carteirinha</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {contract.beneficiaries.map(beneficiary => (
+                <Tr key={beneficiary.id}>
+                  <Td>
+                    <p className="m-0 font-semibold text-foreground">{beneficiary.name}</p>
+                    <p className="m-0 text-[13px] text-muted-foreground">{beneficiary.upstreamCodigo}</p>
+                  </Td>
+                  <Td className="text-foreground">{beneficiary.relationship ?? '—'}</Td>
+                  <Td className="text-foreground">{beneficiary.cpf ?? '—'}</Td>
+                  <Td className="text-foreground">{beneficiary.birthDate ?? '—'}</Td>
+                  <Td className="text-foreground">{beneficiary.status ?? '—'}</Td>
+                  <Td align="right">
+                    {beneficiary.provisionalCardUrl && (
+                      <a href={beneficiary.provisionalCardUrl} target="_blank" rel="noreferrer" className={LINK_CLASS}>
+                        <CreditCard className="size-4" aria-hidden="true" /> Ver
+                        <span className="sr-only"> carteirinha de {beneficiary.name}</span>
+                      </a>
+                    )}
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </SectionCard>
+
+      <SectionCard icon={Receipt} title="Faturas deste contrato" padded={false}>
+        {loadingInvoices ? (
+          <div className="p-6">
+            <SectionSkeleton rows={3} label="Carregando faturas…" />
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border border-border/80 shadow-xs bg-card">
-        <CardHeader>
-          <CardTitle className="text-base">Faturas deste contrato</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loadingInvoices ? (
-            <div className="flex items-center justify-center py-10 text-muted-foreground">
-              <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
-            </div>
-          ) : !invoices || invoices.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">Nenhuma fatura encontrada.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Vencimento</th>
-                    <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Valor</th>
-                    <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Status</th>
-                    <th className="text-right py-3 px-6 text-sm font-medium text-muted-foreground">Boleto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map(invoice => (
-                    <tr key={invoice.upstreamCodigo} className="border-b border-border last:border-0">
-                      <td className="py-3 px-6 text-sm text-foreground">{invoice.dueAt ?? '—'}</td>
-                      <td className="py-3 px-6 text-sm font-medium text-foreground">{money(invoice.amount)}</td>
-                      <td className="py-3 px-6">
-                        <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]}>
-                          {INVOICE_STATUS_LABEL[invoice.status]}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-6 text-right">
-                        {invoice.invoiceUrl && (
-                          <a
-                            href={invoice.invoiceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-sm text-secondary hover:underline"
-                          >
-                            Ver <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/admin/clientes"
-      className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="h-4 w-4" /> Voltar para Clientes
-    </Link>
+        ) : !invoices || invoices.length === 0 ? (
+          <EmptyState icon={Receipt} title="Nenhuma fatura encontrada" />
+        ) : (
+          <DataTable caption="Faturas do contrato" framed={false} minWidth="min-w-[560px]">
+            <thead>
+              <tr>
+                <Th>Vencimento</Th>
+                <Th align="right">Valor</Th>
+                <Th>Status</Th>
+                <Th align="right">Boleto</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map(invoice => (
+                <Tr key={invoice.upstreamCodigo}>
+                  <Td className="text-foreground">{invoice.dueAt ?? '—'}</Td>
+                  <Td align="right" className="font-semibold tabular-nums text-foreground">
+                    {money(invoice.amount)}
+                  </Td>
+                  <Td>
+                    <StatusPill tone={INVOICE_STATUS_TONE[invoice.status]}>
+                      {INVOICE_STATUS_LABEL[invoice.status]}
+                    </StatusPill>
+                  </Td>
+                  <Td align="right">
+                    {invoice.invoiceUrl && (
+                      <a href={invoice.invoiceUrl} target="_blank" rel="noreferrer" className={LINK_CLASS}>
+                        Ver <ExternalLink className="size-4" aria-hidden="true" />
+                        <span className="sr-only"> boleto com vencimento {invoice.dueAt ?? 'sem data'}</span>
+                      </a>
+                    )}
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </SectionCard>
+    </PageContainer>
   )
 }
 
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium text-foreground">{value ?? '—'}</p>
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <dt className="text-[13px] text-muted-foreground">{label}</dt>
+      <dd className="m-0 wrap-break-word text-sm font-semibold text-foreground">{value ?? '—'}</dd>
     </div>
   )
 }
@@ -490,8 +458,8 @@ function AttachDocumentDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="justify-start">
-          <Paperclip className="h-4 w-4 mr-2" /> Anexar documento
+        <Button variant="outline" className="h-10 justify-start">
+          <Paperclip aria-hidden="true" /> Anexar documento
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -502,20 +470,25 @@ function AttachDocumentDialog({
         <div className="grid gap-3">
           <div className="grid gap-1.5">
             <Label>Nome do arquivo</Label>
-            <Input value={fileName} onChange={e => setFileName(e.target.value)} placeholder="RG.pdf" />
+            <Input className="h-10" value={fileName} onChange={e => setFileName(e.target.value)} placeholder="RG.pdf" />
           </div>
           <div className="grid gap-1.5">
             <Label>URL do arquivo</Label>
-            <Input value={fileUrl} onChange={e => setFileUrl(e.target.value)} placeholder="https://..." />
+            <Input className="h-10" value={fileUrl} onChange={e => setFileUrl(e.target.value)} placeholder="https://..." />
           </div>
-          {error && <p className="text-sm text-[#B42318]">{error}</p>}
+          {error && (
+            <p role="alert" className="m-0 text-sm font-medium text-[#B42318]">
+              {error}
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button
+            className="h-10"
             onClick={() => onSubmit(fileName, fileUrl)}
             disabled={submitting || !fileName || !fileUrl}
           >
-            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {submitting && <Loader2 className="animate-spin" aria-hidden="true" />}
             Anexar
           </Button>
         </DialogFooter>
@@ -546,8 +519,8 @@ function DeclarePathologyDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="justify-start">
-          <Stethoscope className="h-4 w-4 mr-2" /> Declarar patologia
+        <Button variant="outline" className="h-10 justify-start">
+          <Stethoscope aria-hidden="true" /> Declarar patologia
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -559,7 +532,7 @@ function DeclarePathologyDialog({
           <div className="grid gap-1.5">
             <Label>Beneficiário</Label>
             <Select value={beneficiaryCodigo} onValueChange={setBeneficiaryCodigo}>
-              <SelectTrigger>
+              <SelectTrigger className="h-10 w-full">
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
               <SelectContent>
@@ -575,22 +548,27 @@ function DeclarePathologyDialog({
           </div>
           <div className="grid gap-1.5">
             <Label>Nome da patologia</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Hipertensão" />
+            <Input className="h-10" value={name} onChange={e => setName(e.target.value)} placeholder="Hipertensão" />
           </div>
           <div className="grid gap-1.5">
             <Label>Descrição (opcional)</Label>
             <Textarea value={description} onChange={e => setDescription(e.target.value)} />
           </div>
-          {error && <p className="text-sm text-[#B42318]">{error}</p>}
+          {error && (
+            <p role="alert" className="m-0 text-sm font-medium text-[#B42318]">
+              {error}
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button
+            className="h-10"
             onClick={() =>
               onSubmit({ beneficiaryUpstreamCodigo: beneficiaryCodigo, name, description: description || undefined })
             }
             disabled={submitting || !beneficiaryCodigo || !name}
           >
-            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {submitting && <Loader2 className="animate-spin" aria-hidden="true" />}
             Declarar
           </Button>
         </DialogFooter>
@@ -617,8 +595,8 @@ function RegisterPendencyDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="justify-start">
-          <AlertTriangle className="h-4 w-4 mr-2" /> Registrar pendência
+        <Button variant="outline" className="h-10 justify-start">
+          <AlertTriangle aria-hidden="true" /> Registrar pendência
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -629,13 +607,17 @@ function RegisterPendencyDialog({
         <div className="grid gap-3">
           <div className="grid gap-1.5">
             <Label>Código da pendência</Label>
-            <Input value={pendencyCode} onChange={e => setPendencyCode(e.target.value)} />
+            <Input className="h-10" value={pendencyCode} onChange={e => setPendencyCode(e.target.value)} />
           </div>
-          {error && <p className="text-sm text-[#B42318]">{error}</p>}
+          {error && (
+            <p role="alert" className="m-0 text-sm font-medium text-[#B42318]">
+              {error}
+            </p>
+          )}
         </div>
         <DialogFooter>
-          <Button onClick={() => onSubmit(pendencyCode)} disabled={submitting || !pendencyCode}>
-            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          <Button className="h-10" onClick={() => onSubmit(pendencyCode)} disabled={submitting || !pendencyCode}>
+            {submitting && <Loader2 className="animate-spin" aria-hidden="true" />}
             Registrar
           </Button>
         </DialogFooter>

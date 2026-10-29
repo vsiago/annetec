@@ -24,6 +24,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { SectionSkeleton } from '@/components/admin-platform/ui/section-card'
 import { StatusPill, type StatusPillTone } from '@/components/admin-platform/ui/status-pill'
 import { applyTenantLifecycleAction } from '@/lib/actions/holding-api'
 import {
@@ -158,10 +160,15 @@ export function PanelAccessControl({
   const [selected, setSelected] = useState<TenantLifecycleAction | null>(null)
 
   if (!detail) {
-    return (
-      <p className="m-0 text-sm text-muted-foreground">
-        {loading ? 'Carregando o acesso atual…' : 'Não foi possível ler o acesso atual do painel. Feche e abra de novo.'}
-      </p>
+    return loading ? (
+      <SectionSkeleton rows={3} label="Carregando o acesso atual…" />
+    ) : (
+      <ErrorState
+        size="sm"
+        framed={false}
+        title="Não foi possível ler o acesso atual do painel."
+        description="Feche e abra de novo."
+      />
     )
   }
 

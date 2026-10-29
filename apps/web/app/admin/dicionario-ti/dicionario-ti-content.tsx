@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Search, Server, Waypoints } from 'lucide-react'
+import { BookOpen, Search, Server, Waypoints } from 'lucide-react'
 import {
   Accordion,
   AccordionContent,
@@ -9,8 +9,11 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   annetecModules,
@@ -78,30 +81,30 @@ export function ApiDictionaryContent() {
   const openDigitalSaude = isSearching ? filteredDigitalSaude.map((m) => m.title) : undefined
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Dicionário de APIs</h1>
-        <p className="text-muted-foreground">
-          Toda rota que a API Annetec expõe — o que é consumido direto da Digital Saúde (o ERP das
-          administradoras) e o que a Annetec construiu como regra de negócio própria.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        icon={BookOpen}
+        title="Dicionário de APIs"
+        description="Toda rota que a API Annetec expõe — o que é consumido direto da Digital Saúde (o ERP das administradoras) e o que a Annetec construiu como regra de negócio própria."
+      />
 
-      <Card className="border-0 shadow-sm">
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar rota, descrição ou papel de acesso..."
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <SectionCard>
+        <div className="relative">
+          <Search
+            className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar rota, descrição ou papel de acesso..."
+            aria-label="Buscar rota, descrição ou papel de acesso"
+            className="h-11 rounded-[10px] pl-10"
+          />
+        </div>
+      </SectionCard>
 
-      <Tabs defaultValue="annetec" className="w-full">
+      <Tabs defaultValue="annetec" className="w-full gap-4">
         <TabsList>
           <TabsTrigger value="annetec" className="gap-1.5">
             <Waypoints className="h-4 w-4" />
@@ -139,7 +142,7 @@ export function ApiDictionaryContent() {
           <ModuleList modules={filteredDigitalSaude} openValues={openDigitalSaude} emptyLabel="Nenhuma rota encontrada." />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageContainer>
   )
 }
 
@@ -161,19 +164,13 @@ function ModuleList({
   emptyLabel: string
 }) {
   if (modules.length === 0) {
-    return (
-      <Card className="border-0 shadow-sm">
-        <CardContent className="py-10">
-          <p className="text-sm text-muted-foreground text-center">{emptyLabel}</p>
-        </CardContent>
-      </Card>
-    )
+    return <EmptyState framed icon={Search} title={emptyLabel} />
   }
 
   return (
-    <Accordion type="multiple" value={openValues} className="space-y-3">
+    <Accordion type="multiple" value={openValues} className="flex flex-col gap-4">
       {modules.map((module) => (
-        <Card key={module.title} className="border-0 shadow-sm py-0 gap-0 overflow-hidden">
+        <SectionCard key={module.title} padded={false} className="overflow-hidden">
           <AccordionItem value={module.title} className="border-0">
             <AccordionTrigger className="hover:no-underline px-6 py-4 [&>svg]:text-muted-foreground">
               <div className="flex items-center gap-3 text-left">
@@ -205,7 +202,7 @@ function ModuleList({
                         {section.items.map((item) => (
                           <div
                             key={`${item.method}-${item.route}`}
-                            className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 p-3 rounded-lg bg-muted/60"
+                            className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 p-3 rounded-xl bg-muted/60"
                           >
                             <div className="flex items-center gap-2 shrink-0">
                               <span
@@ -234,7 +231,7 @@ function ModuleList({
               </div>
             </AccordionContent>
           </AccordionItem>
-        </Card>
+        </SectionCard>
       ))}
     </Accordion>
   )

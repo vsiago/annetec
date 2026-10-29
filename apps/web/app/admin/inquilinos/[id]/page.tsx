@@ -2,13 +2,16 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useParams, usePathname, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
-import { AlertCircle, ArrowLeft, Info, Loader2, Lock, Save } from 'lucide-react'
+import { AlertCircle, Building2, Info, Loader2, Lock, Save, ShieldAlert } from 'lucide-react'
 import type { UF } from '@annetec/contracts'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/admin-platform/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePlatformRole } from '@/components/admin-platform/billing/console-kit'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { BackLink } from '@/components/admin-platform/ui/page-header'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
 import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { TenantSubscriptionPanel } from '@/components/admin-platform/billing/tenant-subscription-panel'
 import { TenantOnboardingPanel } from '@/components/admin-platform/compliance/tenant-onboarding-panel'
@@ -74,9 +77,21 @@ function formValues(tenant: Tenant): FormValues {
 export default function ClubDetailPage() {
   // `useSearchParams` pede Suspense para não segurar a página inteira.
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<ClubDetailLoading />}>
       <ClubDetailLoader />
     </Suspense>
+  )
+}
+
+/** Carregando o clube: voltar para a lista e um cartão de esqueleto (nunca área em branco). */
+function ClubDetailLoading() {
+  return (
+    <PageContainer>
+      <BackLink href="/admin/inquilinos">Voltar para Clubes</BackLink>
+      <SectionCard>
+        <SectionSkeleton rows={4} label="Carregando o clube…" />
+      </SectionCard>
+    </PageContainer>
   )
 }
 
@@ -88,15 +103,17 @@ function ClubDetailLoader() {
   // Só espera quando ainda não tem o clube: ao salvar, a lista recarrega e a
   // tela segue montada (senão a aba aberta e o que foi digitado se perdiam).
   if (!tenant) {
-    if (isLoading) return null
+    if (isLoading) return <ClubDetailLoading />
     return (
-      <div className="flex flex-col gap-4">
-        <Link href="/admin/inquilinos" className="inline-flex items-center gap-1 text-sm font-medium text-secondary hover:underline">
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          Voltar para Clubes
-        </Link>
-        <p className="m-0 text-sm text-muted-foreground">Não encontramos este clube. Volte para a lista e escolha outro.</p>
-      </div>
+      <PageContainer>
+        <BackLink href="/admin/inquilinos">Voltar para Clubes</BackLink>
+        <EmptyState
+          framed
+          icon={Building2}
+          title="Não encontramos este clube."
+          description="Volte para a lista e escolha outro."
+        />
+      </PageContainer>
     )
   }
 
@@ -180,7 +197,7 @@ function ClubDetail({ tenant }: { tenant: Tenant }) {
   const detail = summary.health.data
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer>
       <ClubHeader
         tenant={tenant}
         panelAccess={detail?.tenant.access}
@@ -188,7 +205,7 @@ function ClubDetail({ tenant }: { tenant: Tenant }) {
       />
 
       {tenant.status === 'cancelled' ? (
-        <Alert>
+        <Alert className="rounded-2xl px-5 py-4 shadow-sm">
           <Info className="size-4" aria-hidden="true" />
           <AlertDescription>
             Este clube está encerrado: o site, o login e o painel não abrem. Alguns números do Resumo podem não
@@ -224,23 +241,23 @@ function ClubDetail({ tenant }: { tenant: Tenant }) {
           />
         </TabsContent>
 
-        <TabsContent value="dados" className="flex flex-col gap-4">
+        <TabsContent value="dados" className="flex flex-col gap-6">
           <ClubDataForm
             draft={{ ...tenant, ...form }}
             onChange={next => setEdits(formValues(next))}
             plans={plans}
           />
 
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white p-6">
-            <div className="min-w-0">
-              <h2 className="m-0 flex flex-wrap items-center gap-2 text-base font-bold text-foreground">
+          <SectionCard
+            title={
+              <span className="flex flex-wrap items-center gap-2">
                 Situação do clube
                 <StatusPill tone={CLUB_STATUS_TONE[tenant.status]}>{CLUB_STATUS_LABEL[tenant.status]}</StatusPill>
-              </h2>
-              <p className="m-0 mt-1 text-[13px] text-muted-foreground">
-                Para bloquear o painel, suspender, encerrar ou liberar o acesso do clube.
-              </p>
-            </div>
+              </span>
+            }
+            description="Para bloquear o painel, suspender, encerrar ou liberar o acesso do clube."
+            icon={ShieldAlert}
+          >
             <Button
               type="button"
               variant="outline"
@@ -249,16 +266,16 @@ function ClubDetail({ tenant }: { tenant: Tenant }) {
             >
               Mudar situação do clube
             </Button>
-          </section>
+          </SectionCard>
 
           {error ? (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="rounded-2xl px-5 py-4">
               <AlertCircle className="size-4" aria-hidden="true" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           ) : null}
 
-          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-border bg-white p-3 shadow-sm">
+          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm">
             {salvo ? (
               <span role="status" className="mr-auto text-sm font-medium text-[#067647]">
                 Alterações salvas
@@ -305,7 +322,13 @@ function ClubDetail({ tenant }: { tenant: Tenant }) {
         </TabsContent>
 
         <TabsContent value="avancado">
-          {authLoading ? null : <AdvancedTab tenant={tenant} isSuperadmin={isSuperadmin} />}
+          {authLoading ? (
+            <SectionCard>
+              <SectionSkeleton rows={3} label="Carregando…" />
+            </SectionCard>
+          ) : (
+            <AdvancedTab tenant={tenant} isSuperadmin={isSuperadmin} />
+          )}
         </TabsContent>
       </Tabs>
 
@@ -319,6 +342,6 @@ function ClubDetail({ tenant }: { tenant: Tenant }) {
         onChangeStatus={changeStatus}
         onAccessChanged={summary.reloadAll}
       />
-    </div>
+    </PageContainer>
   )
 }

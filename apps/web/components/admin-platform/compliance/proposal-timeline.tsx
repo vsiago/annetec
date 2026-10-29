@@ -12,6 +12,7 @@ import {
   FilePlus2,
   FileX2,
   Hand,
+  History,
   Loader2,
   Mail,
   MessageSquareText,
@@ -25,9 +26,10 @@ import {
 } from 'lucide-react'
 import type { OnboardingProposalDetail } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Pill, runCommand } from '@/components/admin-platform/billing/console-kit'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { addOnboardingNoteAction } from '@/lib/actions/platform-onboarding-api'
 import {
   emailStatusMeta,
@@ -116,27 +118,34 @@ export function ProposalTimeline({
   }
 
   return (
-    <Card className="gap-4 shadow-none">
-      <CardHeader>
-        <CardTitle className="text-base">Histórico</CardTitle>
-        <CardDescription>
+    <SectionCard
+      title="Histórico"
+      icon={History}
+      description={
+        <>
           {events.length} {events.length === 1 ? 'registro' : 'registros'} · “Interno”: só a equipe ANNETEC vê. “Público”: o clube
           também vê no acompanhamento.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
+        </>
+      }
+    >
+      <div className="flex flex-col gap-6">
         {canNote && (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-3">
             <Textarea
               value={text}
               onChange={event => setText(event.target.value)}
               placeholder="Nota interna (ex.: o tesoureiro confirmou a diretoria por telefone)"
+              aria-label="Nota interna"
               rows={2}
               maxLength={4000}
             />
             <div className="flex justify-end">
-              <Button size="sm" className="gap-2" onClick={addNote} disabled={saving || text.trim().length < 2}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquareText className="h-4 w-4" />}
+              <Button className="h-10 gap-2" onClick={addNote} disabled={saving || text.trim().length < 2}>
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <MessageSquareText className="h-4 w-4" aria-hidden="true" />
+                )}
                 Adicionar nota
               </Button>
             </div>
@@ -144,9 +153,9 @@ export function ProposalTimeline({
         )}
 
         {events.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Nenhum registro ainda.</p>
+          <EmptyState icon={History} size="sm" title="Nenhum registro ainda." />
         ) : (
-          <ol className="relative space-y-4">
+          <ol className="relative m-0 flex list-none flex-col gap-5 p-0">
             {events.map((event, index) => {
               const Icon = EVENT_ICON[event.type] ?? Activity
               const originalTitle = onboardingEventLabel(event.type)
@@ -155,13 +164,14 @@ export function ProposalTimeline({
               return (
                 <li key={event.id} className="relative flex gap-3">
                   {index < events.length - 1 && (
-                    <span className="absolute left-4 top-9 -bottom-4 w-px bg-border" aria-hidden />
+                    <span className="absolute -bottom-5 left-4 top-9 w-px bg-border" aria-hidden="true" />
                   )}
                   <span
                     className={cn(
                       'relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
                       toneClass(onboardingEventTone(event.type)),
                     )}
+                    aria-hidden="true"
                   >
                     <Icon className="h-4 w-4" />
                   </span>
@@ -170,10 +180,8 @@ export function ProposalTimeline({
                       <span className="text-sm font-semibold text-foreground">{title}</span>
                       <span
                         className={cn(
-                          'rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
-                          event.visibility === 'internal'
-                            ? 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300'
-                            : 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+                          'rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+                          event.visibility === 'internal' ? 'bg-[#F2F4F7] text-[#344054]' : 'bg-[#EFF8FF] text-[#175CD3]',
                         )}
                       >
                         {event.visibility === 'internal' ? 'Interno' : 'Público'}
@@ -182,14 +190,14 @@ export function ProposalTimeline({
                     {event.message && event.message !== title && event.message !== originalTitle && (
                       <p
                         className={cn(
-                          'mt-0.5 text-sm',
-                          isNote ? 'rounded-md bg-violet-50/60 px-2 py-1 text-foreground dark:bg-violet-500/10' : 'text-muted-foreground',
+                          'm-0 mt-0.5 text-sm',
+                          isNote ? 'rounded-lg bg-accent/60 px-3 py-2 text-foreground' : 'text-muted-foreground',
                         )}
                       >
                         {event.message}
                       </p>
                     )}
-                    <p className="mt-0.5 text-xs text-muted-foreground" title={formatDateTimeBR(event.createdAt)}>
+                    <p className="m-0 mt-0.5 text-xs text-muted-foreground" title={formatDateTimeBR(event.createdAt)}>
                       {formatRelative(event.createdAt)} · {formatDateTimeBR(event.createdAt)}
                       {event.actorName ? ` · ${event.actorName}` : ''}
                     </p>
@@ -199,8 +207,8 @@ export function ProposalTimeline({
             })}
           </ol>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   )
 }
 
@@ -213,39 +221,36 @@ export function ProposalEmails({
 }) {
   const emails = [...(proposal.emails ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   return (
-    <Card className="gap-4 shadow-none">
-      <CardHeader>
-        <CardTitle className="text-base">E-mails enviados ao clube</CardTitle>
-        <CardDescription>
-          {emails.length} {emails.length === 1 ? 'mensagem ligada' : 'mensagens ligadas'} a este clube.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-0">
-        {emails.length === 0 ? (
-          <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhum e-mail enviado ainda.</p>
-        ) : (
-          <ul className="divide-y divide-border border-t border-border">
-            {emails.map(email => (
-              <li key={email.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpenEmail(email.id)}
-                  className="flex w-full items-start gap-3 px-6 py-3 text-left hover:bg-muted/40"
-                >
-                  <Mail className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{email.subject}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {emailTemplateLabel(email.template)} · {email.toEmail} · {formatRelative(email.createdAt)}
-                    </p>
-                  </div>
-                  <Pill meta={emailStatusMeta(email.status)} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+    <SectionCard
+      padded={false}
+      title="E-mails enviados ao clube"
+      icon={Mail}
+      description={`${emails.length} ${emails.length === 1 ? 'mensagem ligada' : 'mensagens ligadas'} a este clube.`}
+    >
+      {emails.length === 0 ? (
+        <EmptyState icon={Mail} size="sm" title="Nenhum e-mail enviado ainda." />
+      ) : (
+        <ul className="m-0 flex list-none flex-col p-0">
+          {emails.map(email => (
+            <li key={email.id} className="border-b border-[#EEF0F3] last:border-b-0">
+              <button
+                type="button"
+                onClick={() => onOpenEmail(email.id)}
+                className="flex min-h-14 w-full items-start gap-3 px-6 py-4 text-left transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-secondary"
+              >
+                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="m-0 truncate text-sm font-medium text-foreground">{email.subject}</p>
+                  <p className="m-0 truncate text-xs text-muted-foreground">
+                    {emailTemplateLabel(email.template)} · {email.toEmail} · {formatRelative(email.createdAt)}
+                  </p>
+                </div>
+                <Pill meta={emailStatusMeta(email.status)} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
   )
 }

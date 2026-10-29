@@ -1,6 +1,6 @@
 'use client'
 
-import { Link2, Link2Off, TriangleAlert, UserRound } from 'lucide-react'
+import { Landmark, Link2, Link2Off, TriangleAlert, UserRound, Users } from 'lucide-react'
 import {
   PEP_RELATIONSHIP_LABELS,
   PERSON_POSITION_LABELS,
@@ -11,8 +11,10 @@ import {
   type OnboardingPerson,
   type OnboardingProposalDetail,
 } from '@annetec/contracts'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Pill } from '@/components/admin-platform/billing/console-kit'
+import { DataTable, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { qsaMatchMeta, type StatusMeta } from '@/lib/adapters/platform-console'
 import { cn } from '@/lib/utils'
 
@@ -60,134 +62,151 @@ export function PeoplePanel({ proposal }: { proposal: OnboardingProposalDetail }
   const notFound = people.filter(person => person.qsaMatch === 'not_found')
 
   return (
-    <div className="space-y-4">
-      <Card className="gap-4 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-base">Pessoas informadas pelo clube</CardTitle>
-          <CardDescription>
+    <div className="flex flex-col gap-6">
+      <SectionCard
+        padded={false}
+        title="Pessoas informadas pelo clube"
+        icon={Users}
+        description={
+          <>
             {people.length} {people.length === 1 ? 'pessoa' : 'pessoas'}
             {totalOwnership > 0 ? ` · participações somam ${totalOwnership.toLocaleString('pt-BR')}%` : ''}
             {proposal.hasPep ? ' · há pessoa politicamente exposta' : ''}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          {people.length === 0 ? (
-            <p className="px-6 pb-6 text-sm text-muted-foreground">O clube ainda não informou os sócios e representantes.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-y border-border bg-muted/40 text-left text-xs text-muted-foreground">
-                    <th className="px-6 py-2.5 font-medium">Pessoa</th>
-                    <th className="px-4 py-2.5 font-medium">Cargo e papéis</th>
-                    <th className="hidden px-4 py-2.5 font-medium md:table-cell">Contato</th>
-                    <th className="px-4 py-2.5 font-medium">Sócios na Receita</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {people.map(person => (
-                    <tr key={person.id} className="border-b border-border/60 align-top last:border-0">
-                      <td className="px-6 py-3">
-                        <div className="flex items-start gap-3">
-                          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                            <UserRound className="h-4 w-4 text-muted-foreground" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="font-medium text-foreground">{person.name}</p>
-                            <p className="font-mono text-xs text-muted-foreground">{formatCpf(person.cpf)}</p>
-                            {person.birthDate && (
-                              <p className="text-xs text-muted-foreground">Nasc. {formatDateBR(person.birthDate)}</p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-foreground">{positionOf(person)}</p>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {roleChips(person).map(chip => (
-                            <span key={chip} className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                              {chip}
-                            </span>
-                          ))}
-                        </div>
-                        {person.isPep && (
-                          <p className="mt-1.5 inline-flex items-start gap-1 rounded-md bg-amber-50 px-1.5 py-1 text-[11px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-                            <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
-                            <span>
-                              Politicamente exposta{person.pepRole ? ` — ${person.pepRole}` : ''}
-                              {person.pepRelationship ? ` (${PEP_RELATIONSHIP_LABELS[person.pepRelationship]})` : ''}
-                            </span>
-                          </p>
+          </>
+        }
+      >
+        {people.length === 0 ? (
+          <EmptyState icon={Users} size="sm" title="O clube ainda não informou os sócios e representantes." />
+        ) : (
+          <DataTable
+            caption="Pessoas informadas pelo clube: cargo, contato e conferência com a Receita Federal"
+            minWidth="min-w-[760px]"
+            framed={false}
+          >
+            <thead>
+              <tr>
+                <Th>Pessoa</Th>
+                <Th>Cargo e papéis</Th>
+                <Th className="hidden md:table-cell">Contato</Th>
+                <Th>Sócios na Receita</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {people.map(person => (
+                <Tr key={person.id}>
+                  <Td className="align-top">
+                    <div className="flex items-start gap-3">
+                      <span
+                        className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-secondary"
+                        aria-hidden="true"
+                      >
+                        <UserRound className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="m-0 font-medium text-foreground">{person.name}</p>
+                        <p className="m-0 font-mono text-xs text-muted-foreground">{formatCpf(person.cpf)}</p>
+                        {person.birthDate && (
+                          <p className="m-0 text-xs text-muted-foreground">Nasc. {formatDateBR(person.birthDate)}</p>
                         )}
-                      </td>
-                      <td className="hidden px-4 py-3 text-xs text-muted-foreground md:table-cell">
-                        <p>{person.email ?? '—'}</p>
-                        <p>{person.phone ?? ''}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Pill meta={partnerMatchMeta(person.qsaMatch)} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="gap-4 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-base">Sócios na Receita Federal</CardTitle>
-          <CardDescription>
-            {proposal.receita
-              ? partners.length > 0
-                ? `${partners.length} ${partners.length === 1 ? 'sócio ou administrador registrado' : 'sócios e administradores registrados'} · comparados com as pessoas informadas pelo clube`
-                : 'A Receita não lista sócios para este CNPJ (comum em entidades sem capital).'
-              : 'A consulta à Receita Federal não está disponível para este clube.'}
-          </CardDescription>
-        </CardHeader>
-        {partners.length > 0 && (
-          <CardContent className="p-0">
-            <ul className="divide-y divide-border border-t border-border">
-              {partners.map((partner, index) => {
-                const match = partnerMatches(partner, people)
-                return (
-                  <li key={`${partner.name}-${index}`} className="flex flex-wrap items-center gap-3 px-6 py-3">
-                    <span
-                      className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
-                        match ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10' : 'bg-muted text-muted-foreground',
-                      )}
-                    >
-                      {match ? <Link2 className="h-4 w-4" /> : <Link2Off className="h-4 w-4" />}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground">{partner.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {[partner.qualification, partner.document, partner.entryDate ? `desde ${formatDateBR(partner.entryDate)}` : null]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </p>
+                      </div>
                     </div>
-                    <p className={cn('text-xs', match ? 'text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground')}>
-                      {match ? `Informado pelo clube: ${match.name} (${positionOf(match)})` : 'Não informado pelo clube'}
+                  </Td>
+                  <Td className="align-top">
+                    <p className="m-0 text-foreground">{positionOf(person)}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {roleChips(person).map(chip => (
+                        <span key={chip} className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                          {chip}
+                        </span>
+                      ))}
+                    </div>
+                    {person.isPep && (
+                      <p className="m-0 mt-1.5 inline-flex items-start gap-1 rounded-lg bg-[#FFFAEB] px-2 py-1 text-[11px] text-[#B54708]">
+                        <TriangleAlert className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
+                        <span>
+                          Politicamente exposta{person.pepRole ? ` — ${person.pepRole}` : ''}
+                          {person.pepRelationship ? ` (${PEP_RELATIONSHIP_LABELS[person.pepRelationship]})` : ''}
+                        </span>
+                      </p>
+                    )}
+                  </Td>
+                  <Td className="hidden align-top text-xs text-muted-foreground md:table-cell">
+                    <p className="m-0">{person.email ?? '—'}</p>
+                    <p className="m-0">{person.phone ?? ''}</p>
+                  </Td>
+                  <Td className="align-top">
+                    <Pill meta={partnerMatchMeta(person.qsaMatch)} />
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        padded={false}
+        title="Sócios na Receita Federal"
+        icon={Landmark}
+        description={
+          partners.length > 0
+            ? `${partners.length} ${partners.length === 1 ? 'sócio ou administrador registrado' : 'sócios e administradores registrados'} · comparados com as pessoas informadas pelo clube`
+            : undefined
+        }
+      >
+        {partners.length > 0 ? (
+          <ul className="m-0 flex list-none flex-col p-0">
+            {partners.map((partner, index) => {
+              const match = partnerMatches(partner, people)
+              return (
+                <li
+                  key={`${partner.name}-${index}`}
+                  className="flex flex-wrap items-center gap-3 border-b border-[#EEF0F3] px-6 py-4 last:border-b-0"
+                >
+                  <span
+                    className={cn(
+                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+                      match ? 'bg-[#ECFDF3] text-[#067647]' : 'bg-muted text-muted-foreground',
+                    )}
+                    aria-hidden="true"
+                  >
+                    {match ? <Link2 className="h-4 w-4" /> : <Link2Off className="h-4 w-4" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-sm font-medium text-foreground">{partner.name}</p>
+                    <p className="m-0 text-xs text-muted-foreground">
+                      {[partner.qualification, partner.document, partner.entryDate ? `desde ${formatDateBR(partner.entryDate)}` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </p>
-                  </li>
-                )
-              })}
-            </ul>
-          </CardContent>
+                  </div>
+                  <p className={cn('m-0 text-xs', match ? 'text-[#067647]' : 'text-muted-foreground')}>
+                    {match ? `Informado pelo clube: ${match.name} (${positionOf(match)})` : 'Não informado pelo clube'}
+                  </p>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <EmptyState
+            icon={Landmark}
+            size="sm"
+            title={
+              proposal.receita
+                ? 'A Receita não lista sócios para este CNPJ (comum em entidades sem capital).'
+                : 'A consulta à Receita Federal não está disponível para este clube.'
+            }
+          />
         )}
         {notFound.length > 0 && (
-          <CardContent>
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+          <div className={cn('p-6', partners.length > 0 && 'border-t border-border')}>
+            <p className="m-0 rounded-xl border border-[#FEDF89] bg-[#FFFAEB] px-4 py-3 text-xs text-[#B54708]">
               {notFound.map(person => person.name).join(', ')} não {notFound.length === 1 ? 'aparece' : 'aparecem'} entre os sócios
               da Receita Federal. Confira os poderes de representação no ato constitutivo, na ata de eleição ou na procuração.
             </p>
-          </CardContent>
+          </div>
         )}
-      </Card>
+      </SectionCard>
     </div>
   )
 }

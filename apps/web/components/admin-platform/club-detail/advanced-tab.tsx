@@ -1,8 +1,10 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Lock } from 'lucide-react'
+import { ArrowRight, BookOpen, Lock } from 'lucide-react'
 import { Button } from '@/components/admin-platform/ui/button'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { IntegrationPanel } from '@/components/admin-platform/integration-panel'
 import { useAdminScope } from '@/contexts/admin-scope-context'
 import type { Tenant } from '@/lib/types'
@@ -18,10 +20,11 @@ export function AdvancedTab({ tenant, isSuperadmin }: { tenant: Pick<Tenant, 'id
 
   if (!isSuperadmin) {
     return (
-      <div className="flex items-start gap-3 rounded-2xl border border-border bg-white p-6 text-sm text-muted-foreground">
-        <Lock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <p className="m-0">Somente o superadmin vê e muda as configurações avançadas do clube.</p>
-      </div>
+      <EmptyState
+        framed
+        icon={Lock}
+        title="Somente o superadmin vê e muda as configurações avançadas do clube."
+      />
     )
   }
 
@@ -32,16 +35,14 @@ export function AdvancedTab({ tenant, isSuperadmin }: { tenant: Pick<Tenant, 'id
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <IntegrationPanel tenantId={tenant.id} />
 
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white p-6">
-        <div className="min-w-0">
-          <h2 className="m-0 text-base font-bold text-foreground">Catálogo da Digital Saúde</h2>
-          <p className="m-0 mt-1 text-[13px] text-muted-foreground">
-            Veja os planos e produtos que a Digital Saúde libera para o {tenant.name}. Só consulta.
-          </p>
-        </div>
+      <SectionCard
+        title="Catálogo da Digital Saúde"
+        description={`Veja os planos e produtos que a Digital Saúde libera para o ${tenant.name}. Só consulta.`}
+        icon={BookOpen}
+      >
         <Button
           type="button"
           variant="outline"
@@ -51,7 +52,7 @@ export function AdvancedTab({ tenant, isSuperadmin }: { tenant: Pick<Tenant, 'id
           Abrir catálogo
           <ArrowRight aria-hidden="true" />
         </Button>
-      </section>
+      </SectionCard>
     </div>
   )
 }

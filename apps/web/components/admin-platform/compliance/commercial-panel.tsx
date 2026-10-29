@@ -9,8 +9,9 @@ import {
   formatPhone,
   type OnboardingProposalDetail,
 } from '@annetec/contracts'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field } from '@/components/admin-platform/billing/console-kit'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { formatDateTimeBR, formatPercent } from '@/lib/adapters/platform-console'
 import { cn } from '@/lib/utils'
 
@@ -25,19 +26,18 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
   const quote = plan.quote
 
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      <Card className="gap-4 shadow-none">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Receipt className="h-4 w-4 text-muted-foreground" />
-            Plano e pagamento
-          </CardTitle>
-          <CardDescription>
+    <div className="grid gap-6 xl:grid-cols-2">
+      <SectionCard
+        title="Plano e pagamento"
+        icon={Receipt}
+        description={
+          <>
             {plan.offer ? `Plano ${plan.offer.name}` : 'Plano não escolhido'} · {plan.expectedLives.toLocaleString('pt-BR')} vidas
             previstas
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Mensalidade do plano">{plan.offer ? formatBRL(plan.offer.priceMonthly) : '—'}</Field>
             <Field label="Limite de vidas">{plan.offer ? plan.offer.memberLimit.toLocaleString('pt-BR') : '—'}</Field>
@@ -47,13 +47,13 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
             <Field label="Uso previsto">{quote ? formatPercent(quote.usagePct) : '—'}</Field>
           </div>
           {quote && (
-            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-              <div className="flex justify-between py-0.5">
+            <div className="rounded-xl border border-border bg-[#F9FAFB] p-4 text-sm">
+              <div className="flex justify-between gap-3 py-0.5">
                 <span className="text-muted-foreground">Mensalidade estimada</span>
                 <span className="font-medium text-foreground">{formatBRL(quote.monthlyTotal)}</span>
               </div>
               {quote.extraLives > 0 && (
-                <div className="flex justify-between py-0.5 text-xs">
+                <div className="flex justify-between gap-3 py-0.5 text-xs">
                   <span className="text-muted-foreground">
                     inclui {quote.extraLives.toLocaleString('pt-BR')} {quote.extraLives === 1 ? 'vida acima do limite' : 'vidas acima do limite'} ×{' '}
                     {formatBRL(quote.pricePerExtraLife)}
@@ -61,30 +61,26 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
                   <span className="text-muted-foreground">{formatBRL(quote.overageTotal)}</span>
                 </div>
               )}
-              <div className="flex justify-between py-0.5">
+              <div className="flex justify-between gap-3 py-0.5">
                 <span className="text-muted-foreground">Adesão</span>
                 <span className="text-foreground">{formatBRL(quote.setupFee)}</span>
               </div>
-              <div className="mt-1 flex justify-between border-t border-border pt-1.5 font-semibold">
+              <div className="mt-1 flex justify-between gap-3 border-t border-border pt-2 font-semibold">
                 <span className="text-foreground">Cobrança de ativação</span>
                 <span className="text-foreground">{formatBRL(quote.activationTotal)}</span>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">Adesão mais a 1ª mensalidade. O clube recebe essa cobrança quando você aprova.</p>
+              <p className="m-0 mt-1 text-xs text-muted-foreground">
+                Adesão mais a 1ª mensalidade. O clube recebe essa cobrança quando você aprova.
+              </p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      <Card className="gap-4 shadow-none">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Palette className="h-4 w-4 text-muted-foreground" />
-            Marca e site
-          </CardTitle>
-          <CardDescription>{brand ? brand.clubName : 'O clube ainda não preencheu esta parte'}</CardDescription>
-        </CardHeader>
-        {brand && (
-          <CardContent className="space-y-4">
+      <SectionCard title="Marca e site" icon={Palette} description={brand ? brand.clubName : undefined}>
+        {brand ? (
+          <div className="flex flex-col gap-4">
+            {/* Prévia com as cores que o próprio clube escolheu (dado do cadastro, não decoração do console). */}
             <div
               className="flex items-center gap-3 rounded-xl p-4 text-white"
               style={{ background: `linear-gradient(135deg, ${brand.primaryColor}, ${brand.secondaryColor})` }}
@@ -94,27 +90,36 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={brand.logoUrl} alt="" className="h-10 w-10 rounded-lg bg-white/90 object-contain p-1" />
               ) : (
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20 text-sm font-bold">
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20 text-sm font-bold" aria-hidden="true">
                   {brand.clubName.slice(0, 2).toUpperCase()}
                 </span>
               )}
               <div className="min-w-0">
-                <p className="truncate font-semibold">{brand.clubName}</p>
-                {brand.tagline && <p className="truncate text-xs text-white/80">{brand.tagline}</p>}
+                <p className="m-0 truncate font-semibold">{brand.clubName}</p>
+                {brand.tagline && <p className="m-0 truncate text-xs text-white/80">{brand.tagline}</p>}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Endereço do site">
-                <a href={brand.siteUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-secondary hover:underline">
+                <a
+                  href={brand.siteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded text-secondary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2"
+                >
                   /{brand.slug}
-                  <ExternalLink className="h-3 w-3" />
+                  <ExternalLink className="h-3 w-3" aria-hidden="true" />
                 </a>
               </Field>
               <Field label="Cores">
-                <span className="inline-flex items-center gap-1.5">
+                <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
                   {[brand.primaryColor, brand.secondaryColor].map(color => (
                     <span key={color} className="inline-flex items-center gap-1 font-mono text-xs">
-                      <span className="h-4 w-4 rounded border border-border" style={{ backgroundColor: color }} />
+                      <span
+                        className="h-4 w-4 rounded border border-border"
+                        style={{ backgroundColor: color }}
+                        aria-hidden="true"
+                      />
                       {color}
                     </span>
                   ))}
@@ -125,22 +130,20 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
                 {brand.admin.phone ? ` · ${formatPhone(brand.admin.phone)}` : ''}
               </Field>
             </div>
-          </CardContent>
+          </div>
+        ) : (
+          <EmptyState icon={Palette} size="sm" title="O clube ainda não preencheu esta parte" />
         )}
-      </Card>
+      </SectionCard>
 
-      <Card className="gap-4 shadow-none xl:col-span-2">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <FileSignature className="h-4 w-4 text-muted-foreground" />
-            Aceite do contrato
-          </CardTitle>
-          <CardDescription>
-            {contract ? `Aceito em ${formatDateTimeBR(contract.acceptedAt)}` : 'O clube ainda não aceitou os termos.'}
-          </CardDescription>
-        </CardHeader>
-        {contract && (
-          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <SectionCard
+        title="Aceite do contrato"
+        icon={FileSignature}
+        description={contract ? `Aceito em ${formatDateTimeBR(contract.acceptedAt)}` : undefined}
+        className="xl:col-span-2"
+      >
+        {contract ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Signatário">
               {contract.signerName}
               <br />
@@ -150,7 +153,7 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
               Termos de uso {contract.termsVersion} · Tratamento de dados {contract.dpaVersion}
             </Field>
             <details className="min-w-0 sm:col-span-2">
-              <summary className="cursor-pointer select-none text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground">
+              <summary className="min-h-10 cursor-pointer select-none rounded text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2">
                 Detalhes técnicos
               </summary>
               <div className="mt-3 grid gap-4 sm:grid-cols-2">
@@ -167,9 +170,11 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
                 </Field>
               </div>
             </details>
-          </CardContent>
+          </div>
+        ) : (
+          <EmptyState icon={FileSignature} size="sm" title="O clube ainda não aceitou os termos." />
         )}
-      </Card>
+      </SectionCard>
     </div>
   )
 }
@@ -181,21 +186,19 @@ export function DecisionNotes({ proposal }: { proposal: OnboardingProposalDetail
   if (!pending && !decision && !proposal.rejectionReason) return null
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-4">
       {pending && (
         <div
           className={cn(
             'rounded-xl border p-4',
-            pending.resolvedAt
-              ? 'border-border bg-muted/30'
-              : 'border-amber-200 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/10',
+            pending.resolvedAt ? 'border-border bg-muted/30' : 'border-[#FEDF89] bg-[#FFFAEB]',
           )}
         >
-          <p className="text-sm font-semibold text-foreground">
+          <p className="m-0 text-sm font-semibold text-foreground">
             {pending.resolvedAt ? 'Correção reenviada pelo clube' : 'Correção pedida ao clube'}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">{pending.message}</p>
-          <ul className="mt-2 space-y-1 text-sm">
+          <p className="m-0 mt-1 text-sm text-muted-foreground">{pending.message}</p>
+          <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0 text-sm">
             {pending.items.map((item, index) => (
               <li key={index} className="flex gap-2">
                 <span className="shrink-0 rounded bg-background px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -205,7 +208,7 @@ export function DecisionNotes({ proposal }: { proposal: OnboardingProposalDetail
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="m-0 mt-2 text-xs text-muted-foreground">
             Pedida em {formatDateTimeBR(pending.requestedAt)}
             {pending.requestedBy ? ` por ${pending.requestedBy}` : ''}
             {pending.resolvedAt ? ` · reenviada em ${formatDateTimeBR(pending.resolvedAt)}` : ''}
@@ -213,20 +216,20 @@ export function DecisionNotes({ proposal }: { proposal: OnboardingProposalDetail
         </div>
       )}
       {proposal.rejectionReason && (
-        <div className="rounded-xl border border-red-200 bg-red-50/70 p-4 dark:border-red-500/30 dark:bg-red-500/10">
-          <p className="text-sm font-semibold text-[#B42318] dark:text-red-300">Motivo da recusa</p>
-          <p className="mt-1 text-sm text-red-700/90 dark:text-red-300/90">{proposal.rejectionReason}</p>
+        <div className="rounded-xl border border-[#FDA29B] bg-[#FEF3F2] p-4">
+          <p className="m-0 text-sm font-semibold text-[#B42318]">Motivo da recusa</p>
+          <p className="m-0 mt-1 text-sm text-[#B42318]">{proposal.rejectionReason}</p>
         </div>
       )}
       {decision && (decision.note || decision.overrideReason) && (
         <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm">
-          <p className="font-semibold text-foreground">
+          <p className="m-0 font-semibold text-foreground">
             Decisão{decision.decidedBy ? ` tomada por ${decision.decidedBy}` : ''}
             {decision.decidedAt ? ` · ${formatDateTimeBR(decision.decidedAt)}` : ''}
           </p>
-          {decision.note && <p className="mt-1 text-muted-foreground">{decision.note}</p>}
+          {decision.note && <p className="m-0 mt-1 text-muted-foreground">{decision.note}</p>}
           {decision.overrideReason && (
-            <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+            <p className="m-0 mt-2 rounded-lg bg-[#FFFAEB] px-3 py-2 text-[#B54708]">
               Aprovado com ressalva: {decision.overrideReason}
             </p>
           )}

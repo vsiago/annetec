@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, FileSearch } from 'lucide-react'
+import { ArrowRight, FileSearch, FileStack } from 'lucide-react'
 import {
   CONTRACTOR_TYPE_LABELS,
   LEGAL_FORM_LABELS,
@@ -10,10 +10,10 @@ import {
   type OnboardingProposalDetail,
 } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { EmptyState } from '@/components/dashboard/empty-state'
-import { Field, LoadError, Pill, useConsoleData } from '@/components/admin-platform/billing/console-kit'
+import { Field, Pill, useConsoleData } from '@/components/admin-platform/billing/console-kit'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { ProposalStatusPill } from '@/components/admin-platform/compliance/compliance-ui'
 import { DocumentViewer } from '@/components/admin-platform/compliance/document-viewer'
 import { DocumentsPanel, orderedDocuments } from '@/components/admin-platform/compliance/documents-panel'
@@ -70,52 +70,56 @@ export function TenantOnboardingPanel({
 
   if (loading && !data) {
     return (
-      <div className="space-y-4" aria-busy="true">
-        <Skeleton className="h-36 w-full rounded-xl" />
-        <Skeleton className="h-72 w-full rounded-xl" />
+      <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-6">
+        <span className="sr-only">Carregando documentos da empresa…</span>
+        <Skeleton className="h-36 w-full rounded-2xl" />
+        <Skeleton className="h-72 w-full rounded-2xl" />
       </div>
     )
   }
-  if (error && !data) return <LoadError message={error} onRetry={() => reload()} />
+  if (error && !data) {
+    return <ErrorState description={error} onRetry={() => reload()} />
+  }
   if (!data) {
     return (
-      <Card className="shadow-none">
-        <CardContent>
-          <EmptyState
-            icon={FileSearch}
-            title="Sem documentos da empresa"
-            description="Este clube foi cadastrado direto pela equipe da ANNETEC, sem contratação pelo site. Por isso não há análise do cadastro nem documentos guardados aqui."
-          />
-        </CardContent>
-      </Card>
+      <EmptyState
+        framed
+        icon={FileSearch}
+        title="Sem documentos da empresa"
+        description="Este clube foi cadastrado direto pela equipe da ANNETEC, sem contratação pelo site. Por isso não há análise do cadastro nem documentos guardados aqui."
+      />
     )
   }
 
   return (
-    <div className="space-y-4">
-      <Card className="gap-4 shadow-none">
-        <CardHeader>
-          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+    <div className="flex flex-col gap-6">
+      <SectionCard
+        icon={FileStack}
+        title={
+          <span className="flex flex-wrap items-center gap-2">
             Documentos da empresa
             <ProposalStatusPill status={data.status} short={false} />
             <Pill meta={precheckSummaryMeta(data.precheckSummary)} />
-          </CardTitle>
-          <CardDescription>
+          </span>
+        }
+        description={
+          <>
             {formatCnpj(data.cnpj)} · {CONTRACTOR_TYPE_LABELS[data.contractorType]} · {LEGAL_FORM_LABELS[data.legalForm]}
             <span className="block text-xs">
               Código do cadastro: <span className="font-mono">{data.code}</span>
             </span>
-          </CardDescription>
-          <CardAction>
-            <Button size="sm" className="gap-1.5" asChild>
-              <Link href={`/admin/compliance/${data.id}`}>
-                Abrir em Aprovações
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          </>
+        }
+        actions={
+          <Button className="h-10 gap-1.5" asChild>
+            <Link href={`/admin/compliance/${data.id}`}>
+              Abrir em Aprovações
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </Button>
+        }
+      >
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           <Field label="Cadastro enviado em">{data.submittedAt ? formatDateTimeBR(data.submittedAt) : '—'}</Field>
           <Field label="Aprovado em">{data.decision?.decidedAt ? formatDateTimeBR(data.decision.decidedAt) : '—'}</Field>
           <Field label="Clube no ar desde">
@@ -133,8 +137,8 @@ export function TenantOnboardingPanel({
               {data.decision.overrideReason}
             </Field>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
       <DocumentsPanel proposal={data} onOpenDocument={setViewerDoc} />
 

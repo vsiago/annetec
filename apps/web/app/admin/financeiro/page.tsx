@@ -3,12 +3,13 @@
 import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Building2, LayoutDashboard, ReceiptText, SlidersHorizontal } from 'lucide-react'
+import { Building2, LayoutDashboard, ReceiptText, SlidersHorizontal, Wallet } from 'lucide-react'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
-import { PageHeader } from '@/components/dashboard/page-header'
-import { SectionTab, SectionTabsList } from '@/components/dashboard/section-tabs'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
+import { SectionTab, SectionTabsList } from '@/components/admin-platform/ui/section-tabs'
 import { RefreshButton, useConsoleData } from '@/components/admin-platform/billing/console-kit'
 import { ChargesTab } from '@/components/admin-platform/billing/charges-tab'
 import { SubscriptionsTab } from '@/components/admin-platform/billing/subscriptions-tab'
@@ -38,6 +39,8 @@ const MOVED: Record<string, string> = {
   regua: '/admin/financeiro/regras',
   precos: '/admin/configuracoes',
 }
+
+const DESCRIPTION = 'O que os clubes pagam à ANNETEC pelo uso da plataforma.'
 
 function FinanceiroPlataforma() {
   const router = useRouter()
@@ -73,29 +76,36 @@ function FinanceiroPlataforma() {
   const overdue = summary.data?.overdueCharges ?? 0
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Financeiro" description="O que os clubes pagam à ANNETEC pelo uso da plataforma.">
-        <RefreshButton loading={summary.loading} onClick={() => setVersion(value => value + 1)} />
-        <Button variant="outline" asChild className="gap-2">
-          <Link href="/admin/financeiro/regras">
-            <SlidersHorizontal className="h-4 w-4" />
-            Regras de cobrança
-          </Link>
-        </Button>
-      </PageHeader>
+    <PageContainer>
+      <PageHeader
+        title="Financeiro"
+        icon={Wallet}
+        description={DESCRIPTION}
+        actions={
+          <>
+            <RefreshButton loading={summary.loading} onClick={() => setVersion(value => value + 1)} />
+            <Button variant="outline" asChild className="min-h-10 gap-2 rounded-[10px] px-4 font-semibold">
+              <Link href="/admin/financeiro/regras">
+                <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                Regras de cobrança
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
-      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+      <Tabs value={tab} onValueChange={setTab} className="gap-6">
         <SectionTabsList>
           <SectionTab value="resumo">
-            <LayoutDashboard className="h-4 w-4" />
+            <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
             Resumo
           </SectionTab>
           <SectionTab value="faturas" badge={overdue > 0 ? `${overdue} em atraso` : undefined}>
-            <ReceiptText className="h-4 w-4" />
+            <ReceiptText className="h-4 w-4" aria-hidden="true" />
             Faturas
           </SectionTab>
           <SectionTab value="assinaturas">
-            <Building2 className="h-4 w-4" />
+            <Building2 className="h-4 w-4" aria-hidden="true" />
             Clubes pagantes
           </SectionTab>
         </SectionTabsList>
@@ -114,33 +124,38 @@ function FinanceiroPlataforma() {
         </TabsContent>
 
         <TabsContent value="faturas">
-          <Card className="gap-0 py-0 shadow-none">
-            <CardContent className="p-0">
-              <ChargesTab
-                canSimulate={canSimulate}
-                defaultDueDays={settings.data?.boletoDueDays}
-                version={version}
-                onChanged={() => void summary.reload({ silent: true })}
-              />
-            </CardContent>
-          </Card>
+          <SectionCard padded={false} className="overflow-hidden">
+            <ChargesTab
+              canSimulate={canSimulate}
+              defaultDueDays={settings.data?.boletoDueDays}
+              version={version}
+              onChanged={() => void summary.reload({ silent: true })}
+            />
+          </SectionCard>
         </TabsContent>
 
         <TabsContent value="assinaturas">
-          <Card className="gap-0 py-0 shadow-none">
-            <CardContent className="p-0">
-              <SubscriptionsTab plans={plans.data ?? []} version={version} />
-            </CardContent>
-          </Card>
+          <SectionCard padded={false} className="overflow-hidden">
+            <SubscriptionsTab plans={plans.data ?? []} version={version} />
+          </SectionCard>
         </TabsContent>
       </Tabs>
-    </div>
+    </PageContainer>
   )
 }
 
 export default function FinanceiroPlataformaPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <PageContainer>
+          <PageHeader title="Financeiro" icon={Wallet} description={DESCRIPTION} />
+          <SectionCard>
+            <SectionSkeleton rows={4} label="Carregando o financeiro…" />
+          </SectionCard>
+        </PageContainer>
+      }
+    >
       <FinanceiroPlataforma />
     </Suspense>
   )

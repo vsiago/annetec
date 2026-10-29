@@ -6,7 +6,7 @@ import { Building2, Copy, ExternalLink, FlaskConical, Loader2, LogIn, Rocket, Wa
 import { toast } from 'sonner'
 import type { OnboardingProposalDetail } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import {
   ConfirmDialog,
   Pill,
@@ -83,120 +83,117 @@ export function ActivationCard({
     return true
   }
 
+  const description =
+    status === 'active'
+      ? 'Clube liberado.'
+      : status === 'provisioning'
+        ? 'Pagamento confirmado. Estamos criando o clube.'
+        : charge
+          ? 'Esperando o clube pagar a cobrança de ativação.'
+          : 'Clube aprovado, mas a cobrança de ativação ainda não foi emitida.'
+
   return (
-    <Card className="gap-4 border-secondary/20 shadow-none">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Wallet className="h-4 w-4 text-muted-foreground" />
-          Ativação do clube
-        </CardTitle>
-        <CardDescription>
-          {status === 'active'
-            ? 'Clube liberado.'
-            : status === 'provisioning'
-              ? 'Pagamento confirmado. Estamos criando o clube.'
-              : charge
-                ? 'Esperando o clube pagar a cobrança de ativação.'
-                : 'Clube aprovado, mas a cobrança de ativação ainda não foi emitida.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {charge ? (
-          <div className="rounded-lg border border-border p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-lg font-semibold text-foreground">{formatBRL(charge.amount)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {paymentMethodLabel(charge.method)} · vence {formatDateBR(charge.dueDate)}
-                  {charge.paidAt ? ` · paga ${formatDateTimeBR(charge.paidAt)}` : ''}
-                </p>
+    <>
+      <SectionCard title="Ativação do clube" description={description} icon={Wallet} className="border-secondary/20">
+        <div className="flex flex-col gap-4">
+          {charge ? (
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="m-0 text-lg font-semibold text-foreground">{formatBRL(charge.amount)}</p>
+                  <p className="m-0 text-xs text-muted-foreground">
+                    {paymentMethodLabel(charge.method)} · vence {formatDateBR(charge.dueDate)}
+                    {charge.paidAt ? ` · paga ${formatDateTimeBR(charge.paidAt)}` : ''}
+                  </p>
+                </div>
+                <Pill meta={chargeStatusMeta(charge.status)} />
               </div>
-              <Pill meta={chargeStatusMeta(charge.status)} />
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" className="gap-1.5" asChild>
-                <a href={charge.publicUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Abrir fatura
-                </a>
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={copy}>
-                <Copy className="h-3.5 w-3.5" />
-                Copiar link da fatura
-              </Button>
-              {proposal.canSimulatePayment && isChargeOpen(charge.status) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-500/30 dark:text-amber-300"
-                  onClick={() => setConfirmPay(true)}
-                >
-                  <FlaskConical className="h-3.5 w-3.5" />
-                  Simular pagamento (demonstração)
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button variant="outline" className="h-10 gap-1.5" asChild>
+                  <a href={charge.publicUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                    Abrir fatura
+                  </a>
                 </Button>
+                <Button variant="outline" className="h-10 gap-1.5" onClick={copy}>
+                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                  Copiar link da fatura
+                </Button>
+                {proposal.canSimulatePayment && isChargeOpen(charge.status) && (
+                  <Button
+                    variant="outline"
+                    className="h-10 gap-1.5 border-[#FEDF89] text-[#B54708] hover:bg-[#FFFAEB] hover:text-[#B54708]"
+                    onClick={() => setConfirmPay(true)}
+                  >
+                    <FlaskConical className="h-3.5 w-3.5" aria-hidden="true" />
+                    Simular pagamento (demonstração)
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {canIssue && (
+            <Button onClick={issue} disabled={busy !== null} className="h-11 w-full gap-2">
+              {busy === 'issue' ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Wallet className="h-4 w-4" aria-hidden="true" />
+              )}
+              Emitir cobrança de ativação
+            </Button>
+          )}
+
+          {(proposal.provisioning.attempts > 0 || proposal.provisioning.provisionedAt) && (
+            <div className="flex flex-col gap-1 text-sm">
+              <p className="m-0 text-muted-foreground">
+                Tentativas de liberar o clube: {proposal.provisioning.attempts}
+                {proposal.provisioning.activationWaived ? ' · liberado sem cobrança de ativação' : ''}
+              </p>
+              {proposal.provisioning.provisionedAt && (
+                <p className="m-0 text-foreground">No ar desde {formatDateTimeBR(proposal.provisioning.provisionedAt)}</p>
+              )}
+              {proposal.provisioning.error && (
+                <p className="m-0 rounded-lg bg-[#FEF3F2] px-3 py-2 text-xs text-[#B42318]">{proposal.provisioning.error}</p>
               )}
             </div>
-          </div>
-        ) : null}
+          )}
 
-        {canIssue && (
-          <Button onClick={issue} disabled={busy !== null} className="w-full gap-2">
-            {busy === 'issue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-            Emitir cobrança de ativação
-          </Button>
-        )}
-
-        {(proposal.provisioning.attempts > 0 || proposal.provisioning.provisionedAt) && (
-          <div className="space-y-1 text-sm">
-            <p className="text-muted-foreground">
-              Tentativas de liberar o clube: {proposal.provisioning.attempts}
-              {proposal.provisioning.activationWaived ? ' · liberado sem cobrança de ativação' : ''}
-            </p>
-            {proposal.provisioning.provisionedAt && (
-              <p className="text-foreground">No ar desde {formatDateTimeBR(proposal.provisioning.provisionedAt)}</p>
-            )}
-            {proposal.provisioning.error && (
-              <p className="rounded-md bg-red-50 px-2 py-1 text-xs text-[#B42318] dark:bg-red-500/10 dark:text-red-300">
-                {proposal.provisioning.error}
-              </p>
-            )}
-          </div>
-        )}
-
-        {(canWaive || canRetry) && (
-          <SuperadminOnly isSuperadmin={isSuperadmin}>
-            <Button variant="outline" size="sm" className="w-full gap-2" onClick={onProvision}>
-              <Rocket className="h-4 w-4" />
-              {canRetry ? 'Tentar liberar o clube de novo' : 'Liberar o clube sem cobrança'}
-            </Button>
-          </SuperadminOnly>
-        )}
-
-        {proposal.tenant && (
-          <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">{proposal.tenant.name}</p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" className="gap-1.5 bg-background" asChild>
-                <a href={proposal.tenant.siteUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5" />/{proposal.tenant.slug}
-                </a>
+          {(canWaive || canRetry) && (
+            <SuperadminOnly isSuperadmin={isSuperadmin}>
+              <Button variant="outline" className="h-10 w-full gap-2" onClick={onProvision}>
+                <Rocket className="h-4 w-4" aria-hidden="true" />
+                {canRetry ? 'Tentar liberar o clube de novo' : 'Liberar o clube sem cobrança'}
               </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 bg-background" asChild>
-                <a href={proposal.tenant.loginUrl} target="_blank" rel="noreferrer">
-                  <LogIn className="h-3.5 w-3.5" />
-                  Acesso ao painel
-                </a>
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 bg-background" asChild>
-                <Link href={`/admin/inquilinos/${proposal.tenant.organizationId}`}>
-                  <Building2 className="h-3.5 w-3.5" />
-                  Ver o clube
-                </Link>
-              </Button>
+            </SuperadminOnly>
+          )}
+
+          {proposal.tenant && (
+            <div className="flex flex-col gap-3 rounded-xl border border-[#ABEFC6] bg-[#ECFDF3] p-4">
+              <p className="m-0 text-sm font-semibold text-[#067647]">{proposal.tenant.name}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" className="h-10 gap-1.5 bg-background" asChild>
+                  <a href={proposal.tenant.siteUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />/{proposal.tenant.slug}
+                  </a>
+                </Button>
+                <Button variant="outline" className="h-10 gap-1.5 bg-background" asChild>
+                  <a href={proposal.tenant.loginUrl} target="_blank" rel="noreferrer">
+                    <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
+                    Acesso ao painel
+                  </a>
+                </Button>
+                <Button variant="outline" className="h-10 gap-1.5 bg-background" asChild>
+                  <Link href={`/admin/inquilinos/${proposal.tenant.organizationId}`}>
+                    <Building2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    Ver o clube
+                  </Link>
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-      </CardContent>
+          )}
+        </div>
+      </SectionCard>
 
       <ConfirmDialog
         open={confirmPay}
@@ -206,6 +203,6 @@ export function ActivationCard({
         confirmLabel="Simular pagamento"
         onConfirm={simulate}
       />
-    </Card>
+    </>
   )
 }

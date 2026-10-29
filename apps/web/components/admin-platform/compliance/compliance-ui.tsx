@@ -124,7 +124,7 @@ export function SlaBadge({
       )}
       title={`Prazo para responder: ${REVIEW_DEADLINE_DAYS} dias a partir do envio`}
     >
-      <Clock className="h-3 w-3" />
+      <Clock className="h-3 w-3" aria-hidden="true" />
       {withPrefix ? `Esperando há ${text}` : text}
     </span>
   )
@@ -142,8 +142,8 @@ const OUTCOME_ICON: Record<PrecheckOutcome, LucideIcon> = {
 }
 
 const OUTCOME_COLOR: Record<PrecheckOutcome, string> = {
-  pass: 'text-emerald-600',
-  warn: 'text-amber-500',
+  pass: 'text-[#067647]',
+  warn: 'text-[#B54708]',
   fail: 'text-[#B42318]',
   skipped: 'text-muted-foreground',
 }

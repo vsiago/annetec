@@ -2,9 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Search } from 'lucide-react'
+import { Building2, Plus, Search } from 'lucide-react'
 import { listClubsOverviewAction } from '@/lib/actions/tenants-api'
-import { ClubsTable, ClubsTableSkeleton } from '@/components/admin-platform/clubs/clubs-table'
+import { ClubsTable } from '@/components/admin-platform/clubs/clubs-table'
+import { Button } from '@/components/admin-platform/ui/button'
+import { TableLoading } from '@/components/admin-platform/ui/data-table'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
 import {
   CLUBS_PAGE_SIZE,
   CLUB_FILTERS,
@@ -34,13 +39,7 @@ type LoadState =
   | { phase: 'error' }
   | { phase: 'ready'; rows: ClubListRow[] }
 
-const buttonBase =
-  'inline-flex items-center justify-center gap-2 rounded-[10px] text-sm font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-secondary/40 focus-visible:ring-offset-2'
-const primaryButton = cn(buttonBase, 'min-h-11 border border-secondary bg-secondary px-4 text-white hover:bg-secondary/90')
-const secondaryButton = cn(
-  buttonBase,
-  'min-h-10 border border-[#D0D5DD] bg-white px-3.5 text-[#344054] hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#98A2B3] disabled:hover:bg-white',
-)
+const outlineButton = 'min-h-10 rounded-[10px] border-[#D0D5DD] px-3.5 text-sm font-semibold text-[#344054]'
 const field =
   'min-h-11 rounded-[10px] border border-[#D0D5DD] bg-white px-3.5 text-sm text-foreground outline-none placeholder:text-[#667085] focus-visible:border-secondary focus-visible:ring-[3px] focus-visible:ring-secondary/25'
 
@@ -96,42 +95,41 @@ export default function ClubesPage() {
       : `Mostrando ${firstIndex + 1} a ${firstIndex + pageRows.length} de ${visible.length} clubes`
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1.5">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Clubes</h1>
-          <p className="text-[15px] text-muted-foreground" aria-live="polite">
-            {state.phase === 'ready' ? clubsSummary(rows.length, attentionTotal) : 'Carregando clubes…'}
-          </p>
-        </div>
-        <Link href="/admin/inquilinos/novo" className={primaryButton}>
-          <Plus className="size-[18px]" aria-hidden="true" />
-          Cadastrar clube
-        </Link>
-      </header>
+    <PageContainer>
+      <PageHeader
+        title="Clubes"
+        icon={Building2}
+        description={state.phase === 'ready' ? clubsSummary(rows.length, attentionTotal) : 'Carregando clubes…'}
+        live
+        actions={
+          <Button asChild className="min-h-11 rounded-[10px] px-4 text-sm font-semibold">
+            <Link href="/admin/inquilinos/novo">
+              <Plus aria-hidden="true" />
+              Cadastrar clube
+            </Link>
+          </Button>
+        }
+      />
 
       {state.phase === 'error' ? (
-        <div role="alert" className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-white p-7">
-          <strong className="text-lg text-foreground">Não foi possível carregar esta página</strong>
-          <span className="text-[15px] leading-relaxed text-muted-foreground">
-            Verifique sua internet e tente de novo.
-          </span>
-          <button type="button" onClick={() => void load()} className={secondaryButton}>
-            Tentar de novo
-          </button>
-        </div>
+        <ErrorState onRetry={() => void load()} />
       ) : state.phase === 'loading' ? (
-        <ClubsTableSkeleton />
+        <TableLoading label="Carregando clubes…" />
       ) : rows.length === 0 ? (
-        <div className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-white p-7">
-          <strong className="text-lg text-foreground">Nenhum clube por aqui ainda</strong>
-          <span className="text-[15px] leading-relaxed text-muted-foreground">
-            Cadastre o primeiro clube para começar a vender planos.
-          </span>
-          <Link href="/admin/inquilinos/novo" className={primaryButton}>
-            Cadastrar clube
-          </Link>
-        </div>
+        <EmptyState
+          framed
+          icon={Building2}
+          title="Nenhum clube por aqui ainda"
+          description="Cadastre o primeiro clube para começar a vender planos."
+          action={
+            <Button asChild className="min-h-11 rounded-[10px] px-4 text-sm font-semibold">
+              <Link href="/admin/inquilinos/novo">
+                <Plus aria-hidden="true" />
+                Cadastrar clube
+              </Link>
+            </Button>
+          }
+        />
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -209,14 +207,18 @@ export default function ClubesPage() {
           </div>
 
           {visible.length === 0 ? (
-            <div className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-white p-7">
-              <strong className="text-lg text-foreground">Nenhum clube encontrado com esse filtro.</strong>
-              {hasFilter ? (
-                <button type="button" onClick={clearFilters} className={secondaryButton}>
-                  Limpar filtros
-                </button>
-              ) : null}
-            </div>
+            <EmptyState
+              framed
+              icon={Search}
+              title="Nenhum clube encontrado com esse filtro."
+              action={
+                hasFilter ? (
+                  <Button type="button" variant="outline" onClick={clearFilters} className={outlineButton}>
+                    Limpar filtros
+                  </Button>
+                ) : undefined
+              }
+            />
           ) : (
             <>
               <ClubsTable rows={pageRows} />
@@ -226,22 +228,24 @@ export default function ClubesPage() {
                 </span>
                 {totalPages > 1 ? (
                   <nav aria-label="Páginas da lista de clubes" className="flex gap-2">
-                    <button
+                    <Button
                       type="button"
-                      className={secondaryButton}
+                      variant="outline"
+                      className={outlineButton}
                       disabled={currentPage <= 1}
                       onClick={() => setPage(currentPage - 1)}
                     >
                       Anterior
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
-                      className={secondaryButton}
+                      variant="outline"
+                      className={outlineButton}
                       disabled={currentPage >= totalPages}
                       onClick={() => setPage(currentPage + 1)}
                     >
                       Próxima
-                    </button>
+                    </Button>
                   </nav>
                 ) : null}
               </div>
@@ -249,6 +253,6 @@ export default function ClubesPage() {
           )}
         </>
       )}
-    </div>
+    </PageContainer>
   )
 }

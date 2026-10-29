@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
+  Activity,
   ArrowDownRight,
   ArrowUpRight,
   Ban,
@@ -11,9 +12,12 @@ import {
   ExternalLink,
   FastForward,
   FileSearch,
+  Gauge,
+  History,
+  Landmark,
   Loader2,
   Play,
-  RefreshCw,
+  Receipt,
   Repeat,
   Wallet,
   Zap,
@@ -28,7 +32,9 @@ import {
   type PlatformSubscriptionDetail,
 } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { KpiCard } from '@/components/admin-platform/ui/kpi-card'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
 import {
   Dialog,
   DialogContent,
@@ -38,11 +44,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { StatCard } from '@/components/dashboard/stat-card'
 import {
   ConfirmDialog,
   Field,
   LoadError,
+  RefreshButton,
   SuperadminOnly,
   runCommand,
   useConsoleData,
@@ -86,6 +92,9 @@ import { cn } from '@/lib/utils'
  * automação; só quando o servidor diz que é demonstração), troca de plano,
  * cancelar/reativar, faturas e o histórico do clube.
  */
+
+/** Botões do cabeçalho e das seções: alvo de toque de 40px e o mesmo canto do console. */
+const ACTION_BUTTON = 'min-h-10 gap-2 rounded-[10px] px-4 font-semibold'
 
 const STATUS_FLOW = platformSubscriptionStatus.options
 
@@ -203,9 +212,9 @@ function ChangePlanDialog({
           </DialogDescription>
         </DialogHeader>
         {plans.error && !plans.data ? (
-          <LoadError message={plans.error} onRetry={() => plans.reload()} />
+          <LoadError message={plans.error} onRetry={() => plans.reload()} framed={false} />
         ) : !plans.data ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Carregando planos…</p>
+          <SectionSkeleton rows={3} label="Carregando planos…" />
         ) : (
           <ul className="space-y-2">
             {options.map(({ offer, quote }) => {
@@ -247,7 +256,7 @@ function ChangePlanDialog({
                             : 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
                         )}
                       >
-                        {upgrade ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                        {upgrade ? <ArrowUpRight className="h-3 w-3" aria-hidden="true" /> : <ArrowDownRight className="h-3 w-3" aria-hidden="true" />}
                         {upgrade ? 'Plano maior' : 'Plano menor'}
                       </span>
                     )}
@@ -262,7 +271,7 @@ function ChangePlanDialog({
             Voltar
           </Button>
           <Button onClick={submit} disabled={!choice || busy} className="gap-2">
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             {choice ? (isUpgrade ? 'Trocar agora' : 'Agendar a troca') : 'Escolha um plano'}
           </Button>
         </DialogFooter>
@@ -319,7 +328,7 @@ function DemoTimeTravel({
     <div className="space-y-3 rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-4 dark:border-violet-500/40 dark:bg-violet-500/5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <FastForward className="h-4 w-4 text-violet-600" />
+          <FastForward className="h-4 w-4 text-violet-600" aria-hidden="true" />
           Avançar o tempo (demonstração)
         </p>
         <span className="text-xs text-muted-foreground">Recua as datas desta assinatura e roda a automação</span>
@@ -330,12 +339,11 @@ function DemoTimeTravel({
             <Button
               key={days}
               variant="outline"
-              size="sm"
-              className="gap-1.5 bg-background"
+              className="h-10 gap-1.5 rounded-[10px] bg-background px-3.5 font-semibold"
               onClick={() => travel(days)}
               disabled={busy !== null}
             >
-              {busy === days ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}+{days} dia{days > 1 ? 's' : ''}
+              {busy === days ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}+{days} dia{days > 1 ? 's' : ''}
             </Button>
           ))}
           <div className="flex items-center gap-1.5">
@@ -343,11 +351,11 @@ function DemoTimeTravel({
               value={custom}
               onChange={event => setCustom(event.target.value.replace(/\D/g, '').slice(0, 3))}
               inputMode="numeric"
-              className="h-8 w-16 bg-background"
+              className="h-10 w-16 bg-background"
               aria-label="Dias para avançar"
             />
-            <Button size="sm" className="gap-1.5" onClick={() => travel(customDays)} disabled={!customValid || busy !== null}>
-              {busy === customDays ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FastForward className="h-3.5 w-3.5" />}
+            <Button className="h-10 gap-1.5 rounded-[10px] px-3.5 font-semibold" onClick={() => travel(customDays)} disabled={!customValid || busy !== null}>
+              {busy === customDays ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <FastForward className="h-3.5 w-3.5" aria-hidden="true" />}
               Avançar
             </Button>
           </div>
@@ -364,6 +372,7 @@ export function SubscriptionDetailView({
   onChanged,
   onReload,
   reloading,
+  breadcrumb,
 }: {
   sub: PlatformSubscriptionDetail
   settings: PlatformBillingSettings | null
@@ -371,6 +380,8 @@ export function SubscriptionDetailView({
   onChanged: (detail: PlatformSubscriptionDetail) => void
   onReload: () => void
   reloading: boolean
+  /** O que vem acima do título (normalmente o link "Voltar para ..."). */
+  breadcrumb?: ReactNode
 }) {
   const [planOpen, setPlanOpen] = useState(false)
   const [confirm, setConfirm] = useState<'cancel' | 'reactivate' | null>(null)
@@ -414,102 +425,112 @@ export function SubscriptionDetailView({
   }
 
   return (
-    <div className="space-y-6">
+    <>
       {/* ------------------------------------------------------ cabeçalho */}
-      <Card className="gap-0 py-0 shadow-none">
-        <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <SubscriptionStatusPill status={sub.status} />
-              <AccessPill access={sub.access} />
-              {sub.source === 'seed' && demo && (
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
-                  Demonstração
-                </span>
-              )}
-            </div>
-            <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{sub.tenantName}</h1>
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-              <a href={`/${sub.tenantSlug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-secondary hover:underline">
-                /{sub.tenantSlug}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-              <span aria-hidden>·</span>
-              <span>
-                Plano {sub.planName} · {formatBRL(sub.planPriceMonthly)}/mês
+      <PageHeader
+        breadcrumb={breadcrumb}
+        title={sub.tenantName}
+        badge={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <SubscriptionStatusPill status={sub.status} />
+            <AccessPill access={sub.access} />
+            {sub.source === 'seed' && demo && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
+                Demonstração
               </span>
-              {sub.scheduledPlanName && (
-                <>
-                  <span aria-hidden>·</span>
-                  <span className="text-violet-700 dark:text-violet-300">→ {sub.scheduledPlanName} no próximo mês</span>
-                </>
-              )}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={onReload} disabled={reloading}>
-              <RefreshCw className={cn('h-4 w-4', reloading && 'animate-spin')} />
-              Atualizar
-            </Button>
+            )}
+          </span>
+        }
+        description={
+          <>
+            <a
+              href={`/${sub.tenantSlug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-secondary hover:underline"
+            >
+              /{sub.tenantSlug}
+              <ExternalLink className="h-3 w-3" aria-hidden="true" />
+            </a>
+            <span aria-hidden> · </span>
+            <span>
+              Plano {sub.planName} · {formatBRL(sub.planPriceMonthly)}/mês
+            </span>
+            {sub.scheduledPlanName && (
+              <>
+                <span aria-hidden> · </span>
+                <span className="text-violet-700 dark:text-violet-300">→ {sub.scheduledPlanName} no próximo mês</span>
+              </>
+            )}
+          </>
+        }
+        actions={
+          <>
+            <RefreshButton loading={reloading} onClick={onReload} />
             {sub.status !== 'canceled' && (
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setPlanOpen(true)}>
-                <Repeat className="h-4 w-4" />
+              <Button variant="outline" className={ACTION_BUTTON} onClick={() => setPlanOpen(true)}>
+                <Repeat className="h-4 w-4" aria-hidden="true" />
                 Trocar plano
               </Button>
             )}
             {sub.status === 'canceled' ? (
-              <Button size="sm" className="gap-1.5" onClick={() => setConfirm('reactivate')}>
-                <Zap className="h-4 w-4" />
+              <Button className={ACTION_BUTTON} onClick={() => setConfirm('reactivate')}>
+                <Zap className="h-4 w-4" aria-hidden="true" />
                 Reativar assinatura
               </Button>
             ) : (
               <SuperadminOnly isSuperadmin={isSuperadmin}>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="gap-1.5 border-red-200 text-[#B42318] hover:bg-red-50 hover:text-[#B42318] dark:border-red-500/30"
+                  className={cn(ACTION_BUTTON, 'border-red-200 text-[#B42318] hover:bg-red-50 hover:text-[#B42318] dark:border-red-500/30')}
                   onClick={() => setConfirm('cancel')}
                 >
-                  <Ban className="h-4 w-4" />
+                  <Ban className="h-4 w-4" aria-hidden="true" />
                   Cancelar assinatura
                 </Button>
               </SuperadminOnly>
             )}
-            <Button variant="ghost" size="sm" className="gap-1.5" asChild>
+            <Button variant="ghost" className={ACTION_BUTTON} asChild>
               <Link href={`/admin/inquilinos/${sub.organizationId}`}>
-                <Building2 className="h-4 w-4" />
+                <Building2 className="h-4 w-4" aria-hidden="true" />
                 Abrir o clube
               </Link>
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </>
+        }
+      />
 
       {/* ------------------------------------------------------ números */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          icon={Wallet}
-          accent="primary"
-          value={formatBRL(sub.estimatedMonthly)}
+        <KpiCard
+          icon={<Wallet />}
           label="Mensalidade estimada"
+          value={formatBRL(sub.estimatedMonthly)}
           hint={overage > 0 ? `Inclui ${formatBRL(overage)} de vidas acima do limite` : 'Só a mensalidade do plano, sem vidas acima do limite'}
         />
-        <Card className="gap-0 py-0 shadow-none">
-          <CardContent className="space-y-2 p-5">
-            <p className="text-sm text-muted-foreground">
+        {/* Mesmo cartão do KpiCard, com a barra de uso no lugar do número grande. */}
+        <div className="flex min-w-0 flex-col gap-2.5 rounded-2xl border border-border bg-card px-6 py-5.5 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <p className="m-0 pt-0.5 text-[13px] font-medium text-muted-foreground">
               Uso do plano (<LivesTerm />)
             </p>
-            <UsageBar lives={sub.lives} limit={sub.memberLimit} pct={sub.usagePct} />
-            <p className="text-xs text-muted-foreground">
-              {formatPercent(sub.usagePct)} do limite · {formatBRL(sub.pricePerExtraLife)} por vida adicional, por mês
-            </p>
-          </CardContent>
-        </Card>
-        <StatCard
-          icon={CalendarClock}
-          accent={sub.daysLate > 0 ? 'warning' : 'info'}
-          value={formatBRL(sub.openAmount)}
+            <span
+              className="-mt-1 inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-secondary [&>svg]:size-5"
+              aria-hidden="true"
+            >
+              <Gauge />
+            </span>
+          </div>
+          <UsageBar lives={sub.lives} limit={sub.memberLimit} pct={sub.usagePct} />
+          <p className="m-0 text-[13px] text-muted-foreground">
+            {formatPercent(sub.usagePct)} do limite · {formatBRL(sub.pricePerExtraLife)} por vida adicional, por mês
+          </p>
+        </div>
+        <KpiCard
+          icon={<Receipt />}
           label="Em aberto"
+          value={formatBRL(sub.openAmount)}
+          tone={sub.daysLate > 0 ? 'danger' : 'default'}
           hint={
             sub.daysLate > 0
               ? `${pluralize(sub.overdueCount, 'fatura vencida', 'faturas vencidas')} · ${pluralize(sub.daysLate, 'dia', 'dias')} de atraso`
@@ -517,13 +538,11 @@ export function SubscriptionDetailView({
                 ? 'Dentro do prazo'
                 : 'Nada em aberto'
           }
-          tone={sub.daysLate > 0 ? 'down' : 'neutral'}
         />
-        <StatCard
-          icon={CalendarClock}
-          accent="success"
-          value={sub.nextDueDate ? formatDateBR(sub.nextDueDate) : '—'}
+        <KpiCard
+          icon={<CalendarClock />}
           label="Próximo vencimento"
+          value={sub.nextDueDate ? formatDateBR(sub.nextDueDate) : '—'}
           hint={
             sub.currentPeriodStart && sub.currentPeriodEnd
               ? `Período de ${formatDateBR(sub.currentPeriodStart)} a ${formatDateBR(sub.currentPeriodEnd)} · vence todo dia ${sub.dueDay}`
@@ -533,65 +552,62 @@ export function SubscriptionDetailView({
       </div>
 
       {/* ------------------------------------------------------ régua ao vivo */}
-      <Card className="shadow-none">
-        <CardHeader>
-          <CardTitle className="text-base">Situação da cobrança</CardTitle>
-          <CardDescription>
+      <SectionCard
+        title="Situação da cobrança"
+        icon={Activity}
+        description={
+          <>
             {sub.oldestOpenDueDate
               ? `A fatura em aberto mais antiga ${sub.daysLate > 0 ? 'venceu' : 'vence'} em ${formatDateBR(sub.oldestOpenDueDate)}${
                   sub.daysLate > 0 ? ` (${pluralize(sub.daysLate, 'dia', 'dias')} de atraso)` : ''
                 }.`
               : 'Nenhuma fatura em aberto: não há nada a cobrar agora.'}
             {sub.access.source === 'override' ? ' O acesso foi definido manualmente pela equipe e vale mais que as regras de cobrança.' : ''}
-          </CardDescription>
-          <CardAction>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={runAutomation}
-              disabled={running}
-              title="Roda agora as regras de cobrança para todos os clubes"
-            >
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              Executar automação
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </>
+        }
+        actions={
+          <Button
+            variant="outline"
+            className={ACTION_BUTTON}
+            onClick={runAutomation}
+            disabled={running}
+            title="Roda agora as regras de cobrança para todos os clubes"
+          >
+            {running ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
+            Executar automação
+          </Button>
+        }
+      >
+        <div className="flex flex-col gap-4">
           <StatusFlow sub={sub} />
           {settings && <DunningLadder settings={settings} highlightDay={highlightDay} />}
           {demoTools && <DemoTimeTravel sub={sub} isSuperadmin={isSuperadmin} onChanged={update} />}
           {sub.cancelReason && (
-            <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">Motivo do cancelamento: {sub.cancelReason}</p>
+            <p className="m-0 rounded-xl bg-muted/60 px-3 py-2 text-sm text-muted-foreground">Motivo do cancelamento: {sub.cancelReason}</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Card className="gap-0 shadow-none">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Faturas</CardTitle>
-            <CardDescription>Ativação e mensalidades deste clube.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ChargesTab
-              canSimulate={canSimulate}
-              defaultDueDays={settings?.boletoDueDays}
-              subscriptionId={sub.id}
-              version={chargesVersion}
-              onChanged={onReload}
-            />
-          </CardContent>
-        </Card>
+        <SectionCard
+          title="Faturas"
+          icon={Receipt}
+          description="Ativação e mensalidades deste clube."
+          padded={false}
+          className="overflow-hidden"
+        >
+          <ChargesTab
+            canSimulate={canSimulate}
+            defaultDueDays={settings?.boletoDueDays}
+            subscriptionId={sub.id}
+            version={chargesVersion}
+            onChanged={onReload}
+          />
+        </SectionCard>
 
-        <div className="space-y-6">
-          <Card className="gap-4 shadow-none">
-            <CardHeader>
-              <CardTitle className="text-base">Cobrança</CardTitle>
-              <CardDescription>Dados de cobrança do clube.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
+        <div className="flex min-w-0 flex-col gap-6">
+          <SectionCard title="Cobrança" icon={Landmark} description="Dados de cobrança do clube.">
+            <div className="grid grid-cols-2 gap-4">
               <Field label="Razão social" className="col-span-2">
                 {sub.billingName}
               </Field>
@@ -609,25 +625,21 @@ export function SubscriptionDetailView({
               {sub.proposalId && (
                 <Field label="Contratação" className="col-span-2">
                   <Link href={`/admin/compliance/${sub.proposalId}`} className="inline-flex items-center gap-1 text-secondary hover:underline">
-                    <FileSearch className="h-3.5 w-3.5" />
+                    <FileSearch className="h-3.5 w-3.5" aria-hidden="true" />
                     Ver a aprovação do clube
                   </Link>
                 </Field>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
 
-          <Card className="gap-4 shadow-none">
-            <CardHeader>
-              <CardTitle className="text-base">Histórico do clube</CardTitle>
-              <CardDescription>
-                {pluralize(sub.events.length, 'evento', 'eventos')}, do mais recente para o mais antigo.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <PlatformEventsTimeline events={[...sub.events].sort((a, b) => b.createdAt.localeCompare(a.createdAt))} />
-            </CardContent>
-          </Card>
+          <SectionCard
+            title="Histórico do clube"
+            icon={History}
+            description={`${pluralize(sub.events.length, 'evento', 'eventos')}, do mais recente para o mais antigo.`}
+          >
+            <PlatformEventsTimeline events={[...sub.events].sort((a, b) => b.createdAt.localeCompare(a.createdAt))} />
+          </SectionCard>
         </div>
       </div>
 
@@ -650,6 +662,6 @@ export function SubscriptionDetailView({
         confirmLabel="Reativar assinatura"
         onConfirm={reactivate}
       />
-    </div>
+    </>
   )
 }

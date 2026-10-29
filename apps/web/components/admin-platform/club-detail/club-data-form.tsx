@@ -1,6 +1,8 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { Building2, MapPin, Palette, type LucideIcon } from 'lucide-react'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -16,20 +18,20 @@ import type { Tenant, TenantPlan } from '@/lib/types'
 function Section({
   title,
   description,
+  icon,
   children,
   columns = 'sm:grid-cols-2',
 }: {
   title: string
   description?: string
+  icon?: LucideIcon
   children: ReactNode
   columns?: string
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-white p-6">
-      <h2 className="m-0 text-base font-bold text-foreground">{title}</h2>
-      {description ? <p className="m-0 mt-1 text-[13px] text-muted-foreground">{description}</p> : null}
-      <div className={`mt-5 grid gap-4 ${columns}`}>{children}</div>
-    </section>
+    <SectionCard title={title} description={description} icon={icon}>
+      <div className={`grid gap-4 ${columns}`}>{children}</div>
+    </SectionCard>
   )
 }
 
@@ -73,7 +75,7 @@ function ColorField({
           aria-label={`${label} (escolher cor)`}
           value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000'}
           onChange={event => onChange(event.target.value)}
-          className="h-10 w-14 shrink-0 cursor-pointer rounded border border-input"
+          className="h-10 w-14 shrink-0 cursor-pointer rounded-lg border border-input"
         />
         <Input id={id} value={value} onChange={event => onChange(event.target.value)} />
       </div>
@@ -95,8 +97,8 @@ export function ClubDataForm({
     onChange({ ...draft, branding: { ...draft.branding, ...patch } })
 
   return (
-    <div className="flex flex-col gap-4">
-      <Section title="Dados principais">
+    <div className="flex flex-col gap-6">
+      <Section title="Dados principais" icon={Building2}>
         <FormField id="club-name" label="Nome do clube">
           <Input id="club-name" value={draft.name} onChange={event => onChange({ ...draft, name: event.target.value })} />
         </FormField>
@@ -147,7 +149,7 @@ export function ClubDataForm({
         </FormField>
       </Section>
 
-      <Section title="Endereço" columns="sm:grid-cols-3">
+      <Section title="Endereço" icon={MapPin} columns="sm:grid-cols-3">
         <FormField id="club-cep" label="CEP">
           <Input
             id="club-cep"
@@ -184,6 +186,7 @@ export function ClubDataForm({
 
       <Section
         title="Aparência"
+        icon={Palette}
         description="Pinta o site do clube, a tela de login e o painel da equipe."
       >
         <ColorField

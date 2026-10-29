@@ -66,7 +66,8 @@ export function ChargeDetailSheet({
 
         <div className="space-y-6 p-4">
           {!charge && loading ? (
-            <div className="space-y-3">
+            <div className="space-y-3" role="status" aria-busy="true">
+              <span className="sr-only">Carregando a fatura…</span>
               <Skeleton className="h-20 w-full rounded-xl" />
               <Skeleton className="h-40 w-full rounded-xl" />
               <Skeleton className="h-32 w-full rounded-xl" />
@@ -89,7 +90,7 @@ export function ChargeDetailSheet({
               {can && (can.reissue || can.manual || can.simulate || can.cancel) && (
                 <div className="flex flex-wrap gap-2">
                   {can.reissue && (
-                    <Button variant="outline" size="sm" onClick={() => onAction('reissue', charge)}>
+                    <Button variant="outline" size="sm" className="h-10" onClick={() => onAction('reissue', charge)}>
                       Emitir segunda via
                     </Button>
                   )}
@@ -97,6 +98,7 @@ export function ChargeDetailSheet({
                     <Button
                       variant="outline"
                       size="sm"
+                      className="h-10"
                       onClick={() => onAction('manual', charge)}
                       disabled={!isSuperadmin}
                       title={isSuperadmin ? undefined : 'Somente o superadmin pode marcar uma fatura como paga.'}
@@ -108,7 +110,7 @@ export function ChargeDetailSheet({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-500/30 dark:text-amber-300"
+                      className="h-10 border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-500/30 dark:text-amber-300"
                       onClick={() => onAction('simulate', charge)}
                       disabled={!isSuperadmin}
                       title={isSuperadmin ? undefined : 'Somente o superadmin pode simular um pagamento.'}
@@ -120,7 +122,7 @@ export function ChargeDetailSheet({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-red-200 text-[#B42318] hover:bg-red-50 hover:text-[#B42318] dark:border-red-500/30"
+                      className="h-10 border-red-200 text-[#B42318] hover:bg-red-50 hover:text-[#B42318] dark:border-red-500/30"
                       onClick={() => onAction('cancel', charge)}
                       disabled={!isSuperadmin}
                       title={isSuperadmin ? undefined : 'Somente o superadmin pode cancelar uma fatura.'}
@@ -162,14 +164,14 @@ export function ChargeDetailSheet({
                 </Field>
               </div>
               {charge.failureReason && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-[#B42318] dark:bg-red-500/10 dark:text-red-300">
+                <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-[#B42318] dark:bg-red-500/10 dark:text-red-300">
                   {charge.failureReason}
                 </p>
               )}
 
               <section className="space-y-2">
                 <h3 className="text-sm font-semibold text-foreground">Itens</h3>
-                <div className="overflow-hidden rounded-lg border border-border">
+                <div className="overflow-hidden rounded-xl border border-border">
                   <table className="w-full text-sm">
                     <tbody>
                       {charge.items.map((item, index) => (
@@ -197,7 +199,7 @@ export function ChargeDetailSheet({
                 <section className="space-y-3">
                   <h3 className="text-sm font-semibold text-foreground">Dados de pagamento</h3>
                   {charge.pix && (
-                    <div className="flex gap-3 rounded-lg border border-border p-3">
+                    <div className="flex gap-3 rounded-xl border border-border p-3">
                       {pixQrDataUrl(charge.pix.qrCodeBase64) && (
                         // QR em base64 vindo do gateway; next/image não se aplica.
                         // eslint-disable-next-line @next/next/no-img-element
@@ -206,15 +208,15 @@ export function ChargeDetailSheet({
                       <div className="min-w-0 flex-1 space-y-2">
                         <p className="text-xs text-muted-foreground">Pix copia e cola</p>
                         <p className="line-clamp-3 break-all font-mono text-[11px] text-foreground">{charge.pix.payload}</p>
-                        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => copy(charge.pix!.payload, 'Pix copia e cola')}>
-                          <Copy className="h-3.5 w-3.5" />
+                        <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={() => copy(charge.pix!.payload, 'Pix copia e cola')}>
+                          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
                           Copiar
                         </Button>
                       </div>
                     </div>
                   )}
                   {charge.boleto && (
-                    <div className="space-y-2 rounded-lg border border-border p-3">
+                    <div className="space-y-2 rounded-xl border border-border p-3">
                       <p className="text-xs text-muted-foreground">Linha digitável</p>
                       <p className="break-all font-mono text-xs text-foreground">{formatBoletoLine(charge.boleto.identificationField)}</p>
                       <div className="flex flex-wrap gap-2">
@@ -224,13 +226,13 @@ export function ChargeDetailSheet({
                           className="gap-1.5"
                           onClick={() => copy(charge.boleto!.identificationField, 'Linha digitável')}
                         >
-                          <Copy className="h-3.5 w-3.5" />
+                          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
                           Copiar
                         </Button>
                         {charge.boleto.url && (
-                          <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                          <Button variant="outline" size="sm" className="h-10 gap-1.5" asChild>
                             <a href={charge.boleto.url} target="_blank" rel="noreferrer">
-                              <ExternalLink className="h-3.5 w-3.5" />
+                              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                               Abrir boleto
                             </a>
                           </Button>
@@ -242,21 +244,21 @@ export function ChargeDetailSheet({
               )}
 
               <section className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                <Button variant="outline" size="sm" className="h-10 gap-1.5" asChild>
                   <a href={charge.publicUrl} target="_blank" rel="noreferrer">
-                    <ExternalLink className="h-3.5 w-3.5" />
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                     Abrir página da fatura
                   </a>
                 </Button>
                 {charge.subscriptionId && (
-                  <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                  <Button variant="outline" size="sm" className="h-10 gap-1.5" asChild>
                     <Link href={`/admin/financeiro/assinaturas/${charge.subscriptionId}`}>Ver clube pagante</Link>
                   </Button>
                 )}
                 {charge.proposalId && (
-                  <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                  <Button variant="outline" size="sm" className="h-10 gap-1.5" asChild>
                     <Link href={`/admin/compliance/${charge.proposalId}`}>
-                      <FileSearch className="h-3.5 w-3.5" />
+                      <FileSearch className="h-3.5 w-3.5" aria-hidden="true" />
                       Ver aprovação do clube
                     </Link>
                   </Button>

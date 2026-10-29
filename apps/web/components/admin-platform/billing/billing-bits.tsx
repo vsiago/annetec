@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   Activity,
@@ -17,6 +17,7 @@ import {
   FlaskConical,
   Hand,
   HandCoins,
+  History,
   Hourglass,
   Lock,
   QrCode,
@@ -48,6 +49,7 @@ import {
   type PlatformSubscriptionAccess,
 } from '@annetec/contracts'
 import { Pill } from '@/components/admin-platform/billing/console-kit'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
 import {
   accessLevelMeta,
   chargeKindMeta,
@@ -98,10 +100,31 @@ export function ReceivingBadge({
         className,
       )}
     >
-      {simulated ? <FlaskConical className="h-3.5 w-3.5" /> : <Wallet className="h-3.5 w-3.5" />}
+      {simulated ? <FlaskConical className="h-3.5 w-3.5" aria-hidden="true" /> : <Wallet className="h-3.5 w-3.5" aria-hidden="true" />}
       Forma de recebimento: {gatewayLabel(provider, sandbox)}
     </span>
   )
+}
+
+/**
+ * Propriedades de uma linha de tabela que abre o detalhe ao clicar. Além do
+ * clique, a linha ganha foco por teclado (Enter ou espaço abrem) sem roubar
+ * a tecla dos botões e menus de dentro dela.
+ */
+export function openableRowProps(onOpen: () => void) {
+  return {
+    onClick: onOpen,
+    onKeyDown: (event: KeyboardEvent<HTMLTableRowElement>) => {
+      if (event.target !== event.currentTarget) return
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        onOpen()
+      }
+    },
+    tabIndex: 0,
+    className:
+      'cursor-pointer focus-visible:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-secondary',
+  }
 }
 
 /** "1 dia", "3 dias" — o número sempre acompanha a unidade. */
@@ -142,7 +165,7 @@ export function MethodLabel({
   const Icon = METHOD_ICON[method] ?? Wallet
   return (
     <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground', className)}>
-      <Icon className="h-4 w-4 shrink-0" />
+      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
       <span>
         {method === 'credit_card' && card
           ? `${CARD_BRAND_LABELS[card.brand] ?? 'Cartão'} •••• ${card.last4}`
@@ -182,7 +205,7 @@ export function AccessPill({
       title={title}
       className={cn('inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium', meta.className, className)}
     >
-      <Icon className="h-3 w-3" />
+      <Icon className="h-3 w-3" aria-hidden="true" />
       {meta.label}
       {access.source === 'override' && <span className="font-semibold">· manual</span>}
     </span>
@@ -269,7 +292,7 @@ export function EventSourceBadge({ source }: { source: PlatformEventSource }) {
   const Icon = SOURCE_ICON[source] ?? Activity
   return (
     <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium', meta.className)}>
-      <Icon className="h-3 w-3" />
+      <Icon className="h-3 w-3" aria-hidden="true" />
       {SOURCE_LABEL[source] ?? meta.label}
     </span>
   )
@@ -311,7 +334,7 @@ export function PlatformEventsTimeline({
   className?: string
 }) {
   if (events.length === 0) {
-    return <p className={cn('py-8 text-center text-sm text-muted-foreground', className)}>{emptyText}</p>
+    return <EmptyState icon={History} size="sm" title={emptyText} className={className} />
   }
 
   return (
@@ -329,7 +352,7 @@ export function PlatformEventsTimeline({
                 toneClass(platformEventTone(event.type)),
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1 pb-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

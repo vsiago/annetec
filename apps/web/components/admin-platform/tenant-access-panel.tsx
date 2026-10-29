@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/admin-platform/ui/button'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -324,6 +325,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             <Button
               variant="outline"
               size="sm"
+              className="min-h-10 rounded-[10px]"
               onClick={() => {
                 setAlvoEntrar(membro)
                 setErroEntrar('')
@@ -334,14 +336,14 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             </Button>
           </SuperadminOnly>
           <SuperadminOnly isSuperadmin={isSuperadmin}>
-            <Button variant="outline" size="sm" onClick={() => abrir(membro)}>
+            <Button variant="outline" size="sm" className="min-h-10 rounded-[10px]" onClick={() => abrir(membro)}>
               <KeyRound className="mr-2 h-3.5 w-3.5" />
               Redefinir senha
             </Button>
           </SuperadminOnly>
           <SuperadminOnly isSuperadmin={isSuperadmin}>
             {membro.active ? (
-              <Button variant="outline" size="sm" onClick={() => pedirConfirmacao('desativar', membro)}>
+              <Button variant="outline" size="sm" className="min-h-10 rounded-[10px]" onClick={() => pedirConfirmacao('desativar', membro)}>
                 <PowerOff className="mr-2 h-3.5 w-3.5" />
                 Desativar acesso
               </Button>
@@ -349,6 +351,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-10 rounded-[10px]"
                 onClick={() => reativar(membro)}
                 disabled={reativando === membro.id}
               >
@@ -365,7 +368,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
             <Button
               variant="outline"
               size="sm"
-              className="text-[#B42318] hover:text-[#B42318]"
+              className="min-h-10 rounded-[10px] text-[#B42318] hover:text-[#B42318]"
               onClick={() => pedirConfirmacao('remover', membro)}
             >
               <Trash2 className="mr-2 h-3.5 w-3.5" />
@@ -409,79 +412,60 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
     membro.role === 'admin' && membro.active && !membro.platformStaff && adminsAtivos <= 1
 
   return (
-    <div className="space-y-4">
-      {erro && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{erro}</AlertDescription>
-        </Alert>
-      )}
+    <div className="flex flex-col gap-6">
+      {erro && <ErrorState title="Não foi possível carregar as pessoas." description={erro} onRetry={() => void carregar()} />}
 
       {carregando && (
-        <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando as pessoas…
-        </div>
+        <SectionCard>
+          <SectionSkeleton rows={4} label="Carregando as pessoas…" />
+        </SectionCard>
       )}
 
       {!carregando && !erro && (
         <>
-          <Card>
-            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
-              <div className="space-y-1.5">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <ShieldCheck className="h-4 w-4 text-primary" />
-                  Responsáveis pelo clube
-                </CardTitle>
-                <CardDescription>
-                  {adminsAtivos} de {admins.length} com acesso ativo. O clube precisa de pelo menos um responsável
-                  ativo.
-                </CardDescription>
-              </div>
+          <SectionCard
+            title="Responsáveis pelo clube"
+            icon={ShieldCheck}
+            description={`${adminsAtivos} de ${admins.length} com acesso ativo. O clube precisa de pelo menos um responsável ativo.`}
+            actions={
               <SuperadminOnly isSuperadmin={isSuperadmin}>
-                <Button size="sm" onClick={abrirNovo}>
+                <Button size="sm" className="min-h-10 rounded-[10px] px-4" onClick={abrirNovo}>
                   <UserPlus className="mr-2 h-3.5 w-3.5" />
                   Adicionar responsável
                 </Button>
               </SuperadminOnly>
-            </CardHeader>
-            <CardContent className="p-0">
-              {adminsAtivos === 0 && (
-                <div className="px-6 pb-4">
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Este clube está sem nenhum responsável ativo. Adicione ou reative um.
-                    </AlertDescription>
-                  </Alert>
-                </div>
-              )}
-              {admins.length === 0 ? (
-                <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhum responsável cadastrado.</p>
-              ) : (
-                <div className="divide-y divide-border border-t border-border">{admins.map(linha)}</div>
-              )}
-            </CardContent>
-          </Card>
+            }
+            padded={false}
+          >
+            {adminsAtivos === 0 && (
+              <div className="px-6 pt-4">
+                <Alert variant="destructive" className="rounded-xl">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Este clube está sem nenhum responsável ativo. Adicione ou reative um.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
+            {admins.length === 0 ? (
+              <EmptyState size="sm" icon={ShieldCheck} title="Nenhum responsável cadastrado." />
+            ) : (
+              <div className="divide-y divide-border">{admins.map(linha)}</div>
+            )}
+          </SectionCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users className="h-4 w-4 text-primary" />
-                Vendedores e associados
-              </CardTitle>
-              <CardDescription>
-                {demais.length} pessoa(s) entre vendedores e associados · {membros.length} no total
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              {demais.length === 0 ? (
-                <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhuma outra pessoa neste clube.</p>
-              ) : (
-                <div className="divide-y divide-border border-t border-border">{demais.map(linha)}</div>
-              )}
-            </CardContent>
-          </Card>
+          <SectionCard
+            title="Vendedores e associados"
+            icon={Users}
+            description={`${demais.length} pessoa(s) entre vendedores e associados · ${membros.length} no total`}
+            padded={false}
+          >
+            {demais.length === 0 ? (
+              <EmptyState size="sm" icon={Users} title="Nenhuma outra pessoa neste clube." />
+            ) : (
+              <div className="divide-y divide-border">{demais.map(linha)}</div>
+            )}
+          </SectionCard>
         </>
       )}
 

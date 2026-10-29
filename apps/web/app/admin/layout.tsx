@@ -93,6 +93,11 @@ function PlatformLayoutContent({ children }: { children: React.ReactNode }) {
               <ScopeSwitcher />
             </div>
           )}
+          {/*
+            Largura e margem de TODAS as telas do console: p-4 (celular) / p-6 (desktop),
+            sem largura máxima. Cada página começa com <PageContainer> (ui/page-container)
+            e não define largura própria.
+          */}
           <div className="p-4 lg:p-6">{children}</div>
         </main>
       </div>

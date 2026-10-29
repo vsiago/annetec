@@ -20,6 +20,13 @@ const VALUE_TONES = {
 /**
  * Cartão de número do console: rótulo, valor grande e uma linha de contexto
  * (variação em chip + dica). Com `href`, o cartão inteiro é um link.
+ *
+ * `icon` (opcional): ícone do lucide num chip suave de 40px no canto do cartão
+ * (fundo `bg-accent`, ícone marinho). É decorativo — o rótulo já diz tudo. Para
+ * um destaque pontual em coral, passe a cor no próprio ícone
+ * (`<Wallet className="text-primary" />`).
+ * Quando o valor é zero porque ainda não há dados, mantenha o valor e troque a
+ * `hint` por uma frase útil ("Cadastre o primeiro clube").
  */
 export function KpiCard({
   label,
@@ -28,6 +35,8 @@ export function KpiCard({
   delta,
   tone = 'default',
   href,
+  icon,
+  children,
 }: {
   label: string
   value: ReactNode
@@ -35,10 +44,23 @@ export function KpiCard({
   delta?: KpiDelta
   tone?: 'default' | 'danger' | 'success'
   href?: string
+  icon?: ReactNode
+  /** Conteúdo extra abaixo da dica (ex.: uma barra de uso). */
+  children?: ReactNode
 }) {
   const body = (
     <>
-      <p className="m-0 text-[13px] font-medium text-muted-foreground">{label}</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="m-0 pt-0.5 text-[13px] font-medium text-muted-foreground">{label}</p>
+        {icon ? (
+          <span
+            className="-mt-1 inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-secondary [&>svg]:size-5"
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
+        ) : null}
+      </div>
       <p
         className={cn(
           'm-0 text-[28px] font-bold leading-tight tracking-tight tabular-nums sm:text-[32px]',
@@ -64,11 +86,11 @@ export function KpiCard({
           {hint ? <span className="text-[13px] text-muted-foreground">{hint}</span> : null}
         </div>
       ) : null}
+      {children}
     </>
   )
 
-  const base =
-    'flex flex-col gap-2.5 rounded-2xl border border-border bg-white px-6 py-[22px]'
+  const base = 'flex min-w-0 flex-col gap-2.5 rounded-2xl border border-border bg-card px-6 py-[22px] shadow-sm'
 
   if (href) {
     return (

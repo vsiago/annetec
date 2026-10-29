@@ -329,7 +329,7 @@ export function PlanDialog({
                 />
                 <FieldHint error={show('description')}>Texto mais longo da contratação pública. Opcional.</FieldHint>
               </div>
-              <label className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm sm:col-span-3">
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm sm:col-span-3">
                 <span>
                   <span className="font-medium text-foreground">Mostrar na contratação pública</span>
                   <span className="block text-xs text-muted-foreground">
@@ -338,7 +338,7 @@ export function PlanDialog({
                 </span>
                 <Switch checked={publicVisible} onCheckedChange={setPublicVisible} />
               </label>
-              <label className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm sm:col-span-3">
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm sm:col-span-3">
                 <span>
                   <span className="font-medium text-foreground">Destacar como “Mais escolhido”</span>
                   <span className="block text-xs text-muted-foreground">Coloca um selo no plano na vitrine de contratação.</span>
@@ -349,7 +349,7 @@ export function PlanDialog({
           </fieldset>
 
           {error && (
-            <p className="rounded-lg border border-[#B42318]/30 bg-[#B42318]/5 px-3 py-2 text-sm text-[#B42318]" role="alert">
+            <p className="rounded-xl border border-[#B42318]/30 bg-[#B42318]/5 px-3 py-2 text-sm text-[#B42318]" role="alert">
               {error}
             </p>
           )}
@@ -359,7 +359,7 @@ export function PlanDialog({
               Voltar
             </Button>
             <Button type="submit" disabled={busy} className="gap-2">
-              {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+              {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               {offer ? 'Salvar alterações' : 'Criar plano'}
             </Button>
           </DialogFooter>

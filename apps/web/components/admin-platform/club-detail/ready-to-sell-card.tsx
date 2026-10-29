@@ -2,10 +2,11 @@
 
 import { useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { Check, Loader2, Minus } from 'lucide-react'
+import { Check, ListChecks, Loader2, Minus } from 'lucide-react'
 import { toast } from 'sonner'
 import { HOLDING_RECEIVING_ISSUE_LABELS, type OnboardingProposalDetail } from '@annetec/contracts'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { copyToClipboard } from '@/components/admin-platform/billing/console-kit'
 import { proposalStatusLabel } from '@/components/admin-platform/compliance/compliance-ui'
 import {
@@ -48,7 +49,7 @@ function LinkButton({
       type="button"
       onClick={onClick}
       disabled={busy}
-      className="inline-flex min-h-8 items-center gap-1.5 rounded-md text-sm font-semibold text-secondary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 disabled:opacity-60"
+      className="inline-flex min-h-10 items-center gap-1.5 rounded-md text-sm font-semibold text-secondary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 disabled:opacity-60"
     >
       {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : null}
       {children}
@@ -136,7 +137,7 @@ export function ReadyToSellCard({
         action: (
           <Link
             href={`/admin/compliance/${detail.id}`}
-            className="inline-flex min-h-8 items-center text-sm font-semibold text-secondary hover:underline"
+            className="inline-flex min-h-10 items-center text-sm font-semibold text-secondary hover:underline"
           >
             Abrir em Aprovações
           </Link>
@@ -237,25 +238,23 @@ export function ReadyToSellCard({
   const done = counted.filter(item => item.state === 'done').length
 
   return (
-    <section
-      aria-labelledby="club-ready"
-      className="flex min-w-0 flex-col gap-2 rounded-2xl border border-border bg-white p-6"
-    >
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id="club-ready" className="m-0 text-base font-bold text-foreground">
-          Pronto para vender
-        </h2>
-        {!loading ? (
+    <SectionCard
+      id="club-ready"
+      title="Pronto para vender"
+      icon={ListChecks}
+      actions={
+        !loading ? (
           <span className="text-[13px] font-semibold text-muted-foreground">
             {done} de {counted.length}
           </span>
-        ) : null}
-      </div>
-
+        ) : undefined
+      }
+    >
       {loading ? (
-        <div className="space-y-3 pt-2" aria-busy="true" aria-label="Carregando">
+        <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-3">
+          <span className="sr-only">Carregando…</span>
           {Array.from({ length: 4 }, (_, index) => (
-            <Skeleton key={index} className="h-12 w-full rounded-lg" />
+            <Skeleton key={index} className="h-12 w-full rounded-xl" />
           ))}
         </div>
       ) : (
@@ -263,7 +262,7 @@ export function ReadyToSellCard({
           <div
             role="img"
             aria-label={`${done} de ${counted.length} itens concluídos`}
-            className="my-1 mb-2 grid gap-1"
+            className="mb-3 grid gap-1"
             style={{ gridTemplateColumns: `repeat(${Math.max(counted.length, 1)}, minmax(0, 1fr))` }}
           >
             {counted.map((item, index) => (
@@ -275,7 +274,10 @@ export function ReadyToSellCard({
           </div>
           <ul className="m-0 list-none p-0">
             {items.map(item => (
-              <li key={item.id} className="flex items-start gap-3.5 border-b border-[#EEF0F3] py-3.5 last:border-b-0">
+              <li
+                key={item.id}
+                className="flex items-start gap-3.5 border-b border-[#EEF0F3] py-3.5 first:pt-1 last:border-b-0 last:pb-0"
+              >
                 <span
                   className={cn(
                     'flex size-7 shrink-0 items-center justify-center rounded-full',
@@ -307,6 +309,6 @@ export function ReadyToSellCard({
           </ul>
         </>
       )}
-    </section>
+    </SectionCard>
   )
 }

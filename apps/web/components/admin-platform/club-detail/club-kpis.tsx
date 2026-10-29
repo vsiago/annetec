@@ -2,6 +2,7 @@
 
 import type { HoldingTenantDetail, HoldingTenantRow } from '@annetec/contracts'
 import { HOLDING_THRESHOLDS } from '@annetec/contracts'
+import { CalendarClock, Receipt, Users, Wallet } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { KpiCard, type KpiDelta } from '@/components/admin-platform/ui/kpi-card'
 import { formatBRL, formatCount, formatDateBR, formatPercent } from '@/lib/adapters/platform-console'
@@ -60,10 +61,11 @@ export function ClubKpis({
   tenantId: string
 }) {
   if (!detail) {
-    // Falhou ao ler: a tela mostra o erro com "Tentar novamente"; aqui não sobra o que desenhar.
+    // Falhou ao ler: a tela mostra o erro com "Tentar de novo"; aqui não sobra o que desenhar.
     if (!loading) return null
     return (
-      <div className="grid gap-4 sm:grid-cols-2" aria-busy={loading} aria-label={loading ? 'Carregando' : undefined}>
+      <div role="status" aria-live="polite" aria-busy="true" className="grid gap-4 sm:grid-cols-2">
+        <span className="sr-only">Carregando os números do clube…</span>
         {Array.from({ length: 4 }, (_, index) => (
           <Skeleton key={index} className="h-[132px] rounded-2xl" />
         ))}
@@ -79,24 +81,33 @@ export function ClubKpis({
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <KpiCard label="Vidas ativas" value={formatCount(row.activeLives)} delta={lives.delta} hint={lives.hint} />
+      <KpiCard
+        label="Vidas ativas"
+        value={formatCount(row.activeLives)}
+        delta={lives.delta}
+        hint={lives.hint}
+        icon={<Users />}
+      />
       <KpiCard
         label="Recebido pelo clube nos últimos 30 dias"
         value={formatBRL(row.gmvLast30)}
         delta={received.delta}
         hint={received.hint}
+        icon={<Wallet />}
       />
       <KpiCard
         label="Em atraso"
         value={formatPercent(row.memberDelinquencyRate)}
         tone={delinquencyHigh ? 'danger' : 'default'}
         hint={`do valor cobrado dos associados nos últimos 90 dias · há 30 dias: ${formatPercent(row.memberDelinquencyRatePrev)}`}
+        icon={<CalendarClock />}
       />
       <KpiCard
         label="Mensalidade da ANNETEC"
         value={fee.value}
         tone={fee.tone}
         hint={fee.hint}
+        icon={<Receipt />}
         href={row.managed ? `/admin/inquilinos/${encodeURIComponent(tenantId)}?tab=plano` : undefined}
       />
     </div>

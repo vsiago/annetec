@@ -46,18 +46,18 @@ function ReadinessLine({ ok, children }: { ok: boolean; children: ReactNode }) {
   return (
     <li className="flex items-start gap-2 text-sm">
       {ok ? (
-        <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+        <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#067647]" aria-hidden="true" />
       ) : (
-        <CircleX className="mt-0.5 h-4 w-4 shrink-0 text-[#B42318]" />
+        <CircleX className="mt-0.5 h-4 w-4 shrink-0 text-[#B42318]" aria-hidden="true" />
       )}
-      <span className={ok ? 'text-foreground' : 'text-[#B42318] dark:text-red-300'}>{children}</span>
+      <span className={ok ? 'text-foreground' : 'text-[#B42318]'}>{children}</span>
     </li>
   )
 }
 
 export function ReadinessList({ readiness }: { readiness: ApprovalReadiness }) {
   return (
-    <ul className="space-y-1.5">
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
       <ReadinessLine ok={readiness.prechecksRan && readiness.blocking.length === 0}>
         {!readiness.prechecksRan
           ? 'A verificação automática ainda não foi feita'
@@ -144,24 +144,24 @@ export function ApproveDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="rounded-lg border border-border p-3">
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl border border-border p-4">
             <ReadinessList readiness={readiness} />
           </div>
 
           {needsOverride && (
-            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+            <div className="flex flex-col gap-3 rounded-xl border border-[#FEDF89] bg-[#FFFAEB] p-4">
               <label className="flex cursor-pointer items-start gap-2 text-sm">
                 <Checkbox checked={override} onCheckedChange={value => setOverride(value === true)} className="mt-0.5" />
                 <span>
-                  <span className="font-medium text-amber-900 dark:text-amber-200">Aprovar com ressalva</span>
-                  <span className="block text-xs text-amber-800/80 dark:text-amber-300/80">
+                  <span className="font-medium text-[#93370D]">Aprovar com ressalva</span>
+                  <span className="block text-xs text-[#B54708]">
                     A justificativa fica gravada no cadastro do clube e no histórico.
                   </span>
                 </span>
               </label>
               {override && (
-                <div className="space-y-1.5">
+                <div className="flex flex-col gap-2">
                   <Label htmlFor="override-reason">Justificativa</Label>
                   <Textarea
                     id="override-reason"
@@ -171,7 +171,7 @@ export function ApproveDialog({
                     maxLength={2000}
                     placeholder="Ex.: atividade compatível confirmada no estatuto; diretoria conferida por telefone."
                   />
-                  <p className={cn('text-xs', reasonOk ? 'text-muted-foreground' : 'text-amber-800 dark:text-amber-300')}>
+                  <p className={cn('m-0 text-xs', reasonOk ? 'text-muted-foreground' : 'text-[#B54708]')}>
                     Mínimo de 10 caracteres ({overrideReason.trim().length}/10).
                   </p>
                 </div>
@@ -179,7 +179,7 @@ export function ApproveDialog({
             </div>
           )}
 
-          <div className="space-y-1.5">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="approve-note">Observação para o histórico (opcional)</Label>
             <Textarea
               id="approve-note"
@@ -193,15 +193,19 @@ export function ApproveDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button variant="outline" className="h-10" onClick={() => onOpenChange(false)} disabled={busy}>
             Voltar
           </Button>
           <Button
             onClick={submit}
             disabled={!canSubmit}
-            className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+            className="h-10 gap-2 bg-[#067647] text-white hover:bg-[#05603B]"
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CircleCheck className="h-4 w-4" />}
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <CircleCheck className="h-4 w-4" aria-hidden="true" />
+            )}
             {needsOverride ? 'Aprovar com ressalva' : 'Aprovar clube'}
           </Button>
         </DialogFooter>
@@ -347,8 +351,8 @@ export function PendingInfoDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-1.5">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="pending-message">Mensagem para o clube</Label>
             <Textarea
               id="pending-message"
@@ -360,26 +364,25 @@ export function PendingInfoDialog({
             {!messageOk && <p className="text-xs text-[#B42318]">Explique o que falta (mínimo de 10 caracteres).</p>}
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
               <Label>O que corrigir ({items.length})</Label>
               <Button
                 variant="ghost"
-                size="sm"
-                className="gap-1.5"
+                className="h-10 gap-1.5"
                 onClick={() =>
                   setItems(current => [...current, { key: newKey(), section: 'documents', documentKind: '', personId: '', note: '' }])
                 }
                 disabled={items.length >= 30}
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4" aria-hidden="true" />
                 Adicionar item
               </Button>
             </div>
 
-            <ul className="space-y-3">
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {items.map(item => (
-                <li key={item.key} className="space-y-2 rounded-lg border border-border p-3">
+                <li key={item.key} className="flex flex-col gap-3 rounded-xl border border-border p-4">
                   <div className="grid gap-2 sm:grid-cols-3">
                     <Select value={item.section} onValueChange={value => update(item.key, { section: value as OnboardingSection })}>
                       <SelectTrigger className="w-full">
@@ -437,12 +440,12 @@ export function PendingInfoDialog({
                     />
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="icon-lg"
                       onClick={() => setItems(current => current.filter(other => other.key !== item.key))}
                       disabled={items.length <= 1}
                       aria-label="Remover item"
                     >
-                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      <Trash2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     </Button>
                   </div>
                 </li>
@@ -452,20 +455,20 @@ export function PendingInfoDialog({
           </div>
 
           {remaining.length > 0 && (
-            <div className="space-y-2 rounded-lg bg-muted/50 p-3">
-              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <ShieldAlert className="h-3.5 w-3.5" />
+            <div className="flex flex-col gap-2 rounded-xl bg-muted/50 p-4">
+              <p className="m-0 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
                 Sugestões da análise
               </p>
-              <ul className="space-y-1.5">
+              <ul className="m-0 flex list-none flex-col gap-1 p-0">
                 {remaining.map((suggestion, index) => (
                   <li key={`${suggestion.section}-${suggestion.documentKind ?? ''}-${suggestion.personId ?? ''}-${index}`}>
                     <button
                       type="button"
                       onClick={() => setItems(current => [...current.filter(item => item.note.trim().length > 0), toDraft(suggestion)])}
-                      className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-background"
+                      className="flex min-h-10 w-full items-start gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
                     >
-                      <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                      <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-secondary" aria-hidden="true" />
                       <span className="text-foreground">{suggestion.note}</span>
                     </button>
                   </li>
@@ -476,11 +479,11 @@ export function PendingInfoDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button variant="outline" className="h-10" onClick={() => onOpenChange(false)} disabled={busy}>
             Voltar
           </Button>
-          <Button onClick={submit} disabled={!canSubmit} className="gap-2">
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+          <Button onClick={submit} disabled={!canSubmit} className="h-10 gap-2">
+            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             Enviar pedido de correção
           </Button>
         </DialogFooter>
@@ -543,13 +546,13 @@ export function ProvisionDialog({
           </DialogDescription>
         </DialogHeader>
         {proposal.provisioning.error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-[#B42318] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          <p className="m-0 rounded-xl border border-[#FDA29B] bg-[#FEF3F2] p-4 text-xs text-[#B42318]">
             Última tentativa falhou ({proposal.provisioning.attempts} {proposal.provisioning.attempts === 1 ? 'tentativa' : 'tentativas'}):{' '}
             {proposal.provisioning.error}
           </p>
         )}
         {waive && (
-          <div className="space-y-1.5">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="waive-reason">Motivo para liberar sem cobrança</Label>
             <Textarea
               id="waive-reason"
@@ -559,17 +562,17 @@ export function ProvisionDialog({
               maxLength={500}
               placeholder="Ex.: contrato comercial assinado com ativação cortesia"
             />
-            <p className={cn('text-xs', reasonOk ? 'text-muted-foreground' : 'text-[#B42318]')}>
+            <p className={cn('m-0 text-xs', reasonOk ? 'text-muted-foreground' : 'text-[#B42318]')}>
               Mínimo de 10 caracteres ({reason.trim().length}/10).
             </p>
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button variant="outline" className="h-10" onClick={() => onOpenChange(false)} disabled={busy}>
             Voltar
           </Button>
-          <Button onClick={submit} disabled={!reasonOk || busy} className="gap-2">
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+          <Button onClick={submit} disabled={!reasonOk || busy} className="h-10 gap-2">
+            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             {waive ? 'Liberar o clube' : 'Tentar de novo'}
           </Button>
         </DialogFooter>

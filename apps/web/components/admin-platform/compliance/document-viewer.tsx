@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/admin-platform/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ConfirmDialog, Field, Pill, runCommand } from '@/components/admin-platform/billing/console-kit'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
 import { reviewKybDocumentAction } from '@/lib/actions/platform-onboarding-api'
 import {
   formatBytes,
@@ -49,14 +50,18 @@ function Preview({ proposalId, doc }: { proposalId: string; doc: KybDocument }) 
 
   if (!isImage && !isPdf) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
-        <FileQuestion className="h-10 w-10" />
-        <p>Prévia indisponível para este tipo de arquivo ({doc.mimeType}).</p>
-        <Button variant="outline" size="sm" asChild>
-          <a href={url} target="_blank" rel="noreferrer">
-            Baixar arquivo
-          </a>
-        </Button>
+      <div className="flex h-full items-center justify-center">
+        <EmptyState
+          icon={FileQuestion}
+          title={`Prévia indisponível para este tipo de arquivo (${doc.mimeType}).`}
+          action={
+            <Button variant="outline" className="h-10" asChild>
+              <a href={url} target="_blank" rel="noreferrer">
+                Baixar arquivo
+              </a>
+            </Button>
+          }
+        />
       </div>
     )
   }
@@ -65,7 +70,7 @@ function Preview({ proposalId, doc }: { proposalId: string; doc: KybDocument }) 
     <div className="relative h-full w-full">
       {!loaded && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
+          <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           Carregando documento…
         </div>
       )}
@@ -207,58 +212,62 @@ export function DocumentViewer({
                   </div>
 
                   {doc.reviewNote && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-[#B42318] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-                      <p className="text-xs font-medium uppercase tracking-wide">Motivo da recusa</p>
-                      <p className="mt-1">{doc.reviewNote}</p>
-                      {doc.reviewedAt && <p className="mt-1 text-xs opacity-80">{formatDateTimeBR(doc.reviewedAt)}</p>}
+                    <div className="rounded-xl border border-[#FDA29B] bg-[#FEF3F2] p-4 text-sm text-[#B42318]">
+                      <p className="m-0 text-xs font-medium uppercase tracking-wide">Motivo da recusa</p>
+                      <p className="m-0 mt-1">{doc.reviewNote}</p>
+                      {doc.reviewedAt && <p className="m-0 mt-1 text-xs">{formatDateTimeBR(doc.reviewedAt)}</p>}
                     </div>
                   )}
 
                   {canReview ? (
-                    <div className="space-y-2">
+                    <div className="flex flex-col gap-3">
                       <Button
-                        className="w-full gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+                        className="h-11 w-full gap-2 bg-[#067647] text-white hover:bg-[#05603B]"
                         onClick={approve}
                         disabled={busy !== null || doc.status === 'approved'}
                       >
-                        {busy === 'approve' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CircleCheck className="h-4 w-4" />}
+                        {busy === 'approve' ? (
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <CircleCheck className="h-4 w-4" aria-hidden="true" />
+                        )}
                         {doc.status === 'approved' ? 'Aprovado' : 'Aprovar documento'}
                       </Button>
                       <div className="grid grid-cols-2 gap-2">
                         <Button
                           variant="outline"
-                          className="gap-1.5 border-red-200 text-[#B42318] hover:bg-red-50 hover:text-[#B42318] dark:border-red-500/30"
+                          className="h-10 gap-1.5 border-[#FDA29B] text-[#B42318] hover:bg-[#FEF3F2] hover:text-[#B42318]"
                           onClick={() => setConfirm('reject')}
                           disabled={busy !== null || doc.status === 'rejected'}
                         >
-                          <CircleX className="h-4 w-4" />
+                          <CircleX className="h-4 w-4" aria-hidden="true" />
                           Recusar
                         </Button>
                         <Button
                           variant="outline"
-                          className="gap-1.5"
+                          className="h-10 gap-1.5"
                           onClick={() => setConfirm('resend')}
                           disabled={busy !== null}
                         >
-                          <RotateCcw className="h-4 w-4" />
+                          <RotateCcw className="h-4 w-4" aria-hidden="true" />
                           Pedir reenvio
                         </Button>
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="m-0 text-xs text-muted-foreground">
                         “Pedir reenvio” recusa o arquivo e já abre o pedido de correção com este item para o clube.
                       </p>
                     </div>
                   ) : (
-                    <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
+                    <p className="m-0 rounded-xl bg-muted/60 p-4 text-xs text-muted-foreground">
                       {doc.status === 'replaced'
                         ? 'Versão substituída por um envio mais recente.'
                         : 'Os documentos só podem ser revisados enquanto o clube está em análise.'}
                     </p>
                   )}
 
-                  <Button variant="ghost" size="sm" className="justify-start gap-2 px-0 text-secondary" asChild>
+                  <Button variant="ghost" className="h-10 justify-start gap-2 px-0 text-secondary" asChild>
                     <a href={documentFileUrl(proposal.id, doc.id)} target="_blank" rel="noreferrer">
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="h-4 w-4" aria-hidden="true" />
                       Abrir em nova aba
                     </a>
                   </Button>
@@ -266,8 +275,8 @@ export function DocumentViewer({
               )}
 
               <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-3">
-                <Button variant="outline" size="sm" onClick={() => goTo(-1)} disabled={index <= 0} className="gap-1">
-                  <ChevronLeft className="h-4 w-4" />
+                <Button variant="outline" onClick={() => goTo(-1)} disabled={index <= 0} className="h-10 gap-1">
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                   Anterior
                 </Button>
                 <span className="text-xs text-muted-foreground">
@@ -275,13 +284,12 @@ export function DocumentViewer({
                 </span>
                 <Button
                   variant="outline"
-                  size="sm"
                   onClick={() => goTo(1)}
                   disabled={index < 0 || index >= documents.length - 1}
-                  className="gap-1"
+                  className="h-10 gap-1"
                 >
                   Próximo
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </div>
             </aside>

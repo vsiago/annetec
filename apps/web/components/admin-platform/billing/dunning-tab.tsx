@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Bot, Loader2, Play, Save, ShieldAlert, Undo2 } from 'lucide-react'
+import { Bot, CalendarClock, Loader2, Play, Save, Settings2, ShieldAlert, Undo2 } from 'lucide-react'
 import {
   CLUB_PAYMENT_METHOD_LABELS,
   validatePlatformDunningOrder,
@@ -12,12 +12,11 @@ import {
   type UpdatePlatformBillingSettingsInput,
 } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
 import { LoadError, SuperadminOnly, runCommand } from '@/components/admin-platform/billing/console-kit'
 import { updatePlatformBillingSettingsAction } from '@/lib/actions/platform-billing-api'
 import {
@@ -182,7 +181,7 @@ export function AutomationReportView({ report }: { report: PlatformBillingAutoma
         {items.map(([label, value]) => (
           <div
             key={label}
-            className={cn('rounded-lg border px-3 py-2', value > 0 ? 'border-secondary/30 bg-accent' : 'border-border')}
+            className={cn('rounded-xl border px-3 py-2', value > 0 ? 'border-secondary/30 bg-accent' : 'border-border')}
           >
             <dt className="text-[11px] text-muted-foreground">{label}</dt>
             <dd className={cn('text-lg font-semibold tabular-nums', value > 0 ? 'text-foreground' : 'text-muted-foreground')}>{value}</dd>
@@ -190,7 +189,7 @@ export function AutomationReportView({ report }: { report: PlatformBillingAutoma
         ))}
       </dl>
       {report.errors.length > 0 && (
-        <ul className="space-y-1 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-[#B42318] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+        <ul className="space-y-1 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-[#B42318] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
           {report.errors.map((error, index) => (
             <li key={index}>{error}</li>
           ))}
@@ -245,9 +244,13 @@ export function DunningTab({
   if (error && !settings) return <LoadError message={error} onRetry={onRetry} />
   if (!settings || !form) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-28 w-full rounded-xl" />
-        <Skeleton className="h-96 w-full rounded-xl" />
+      <div className="flex flex-col gap-6">
+        <SectionCard>
+          <SectionSkeleton rows={3} label="Carregando as regras de cobrança…" />
+        </SectionCard>
+        <SectionCard>
+          <SectionSkeleton rows={8} label="Carregando as regras de cobrança…" />
+        </SectionCard>
       </div>
     )
   }
@@ -305,39 +308,39 @@ export function DunningTab({
     )
 
   return (
-    <div className="space-y-6">
-      <Card className="shadow-none">
-        <CardHeader>
-          <CardTitle className="text-base">O que acontece quando um clube atrasa</CardTitle>
-          <CardDescription>
-            Os dias contam a partir do vencimento da fatura em aberto mais antiga. Os associados, a vitrine e o portal do clube nunca são
-            afetados.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <DunningLadder settings={preview} />
-        </CardContent>
-      </Card>
+    <div className="flex flex-col gap-6">
+      <SectionCard
+        title="O que acontece quando um clube atrasa"
+        icon={CalendarClock}
+        description="Os dias contam a partir do vencimento da fatura em aberto mais antiga. Os associados, a vitrine e o portal do clube nunca são afetados."
+      >
+        <DunningLadder settings={preview} />
+      </SectionCard>
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <Card className="shadow-none">
-          <CardHeader>
-            <CardTitle className="text-base">Prazos, multa e formas de pagamento</CardTitle>
-            <CardDescription>
-              {isSuperadmin
-                ? 'Vale para todos os clubes a partir da próxima rodada da automação.'
-                : 'Somente o superadmin altera estas regras.'}
-            </CardDescription>
-            {dirty && isSuperadmin && (
-              <CardAction>
-                <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setForm(toForm(settings))} disabled={saving}>
-                  <Undo2 className="h-4 w-4" />
-                  Descartar alterações
-                </Button>
-              </CardAction>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-6">
+        <SectionCard
+          title="Prazos, multa e formas de pagamento"
+          icon={Settings2}
+          description={
+            isSuperadmin
+              ? 'Vale para todos os clubes a partir da próxima rodada da automação.'
+              : 'Somente o superadmin altera estas regras.'
+          }
+          actions={
+            dirty && isSuperadmin ? (
+              <Button
+                variant="ghost"
+                className="min-h-10 gap-1.5 rounded-[10px] px-3.5 font-semibold"
+                onClick={() => setForm(toForm(settings))}
+                disabled={saving}
+              >
+                <Undo2 className="h-4 w-4" aria-hidden="true" />
+                Descartar alterações
+              </Button>
+            ) : undefined
+          }
+        >
+          <div className="flex flex-col gap-6">
             {GROUPS.map(group => (
               <fieldset key={group.title} className="space-y-3" disabled={!isSuperadmin}>
                 <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.title}</legend>
@@ -361,7 +364,7 @@ export function DunningTab({
                             {field.suffix}
                           </span>
                         </div>
-                        <p className={cn('text-[11px]', invalid ? 'text-[#B42318]' : 'text-muted-foreground')}>
+                        <p className={cn('m-0 text-[11px]', invalid ? 'text-[#B42318]' : 'text-muted-foreground')}>
                           {invalid ? `Use um valor entre ${field.min} e ${field.max}${field.step ? '' : ' (número inteiro)'}.` : field.hint}
                         </p>
                       </div>
@@ -375,7 +378,7 @@ export function DunningTab({
               <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Formas de pagamento e recebimento</legend>
               <div className="flex flex-wrap gap-4">
                 {(Object.keys(CLUB_PAYMENT_METHOD_LABELS) as ClubPaymentMethod[]).map(method => (
-                  <label key={method} className="flex cursor-pointer items-center gap-2 text-sm">
+                  <label key={method} className="flex min-h-10 cursor-pointer items-center gap-2 text-sm">
                     <Checkbox
                       checked={form.enabledMethods.includes(method)}
                       onCheckedChange={value => toggleMethod(method, value === true)}
@@ -408,36 +411,37 @@ export function DunningTab({
             </fieldset>
 
             {(orderError || methodsError) && (
-              <p className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-[#B42318] dark:bg-red-500/10 dark:text-red-300">
-                <ShieldAlert className="h-4 w-4 shrink-0" />
+              <p className="m-0 flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-[#B42318] dark:bg-red-500/10 dark:text-red-300">
+                <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
                 {orderError ?? methodsError}
               </p>
             )}
 
             <div className="flex justify-end border-t border-border pt-4">
               <SuperadminOnly isSuperadmin={isSuperadmin}>
-                <Button onClick={save} disabled={!canSave} className="gap-2">
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                <Button onClick={save} disabled={!canSave} className="min-h-10 gap-2 rounded-[10px] px-4 font-semibold">
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Save className="h-4 w-4" aria-hidden="true" />
+                  )}
                   Salvar alterações
                 </Button>
               </SuperadminOnly>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </SectionCard>
 
-        <Card className="shadow-none">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Bot className="h-4 w-4 text-muted-foreground" />
-              Automação
-            </CardTitle>
-            <CardDescription>
-              {settings.automation.enabled
-                ? `Roda sozinha a cada ${formatInterval(settings.automation.intervalSeconds)}: confere os pagamentos, gera faturas, envia lembretes e aplica o que acontece com o clube em atraso.`
-                : 'A automação não está ligada neste servidor. Use o botão abaixo para rodar quando precisar.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <SectionCard
+          title="Automação"
+          icon={Bot}
+          description={
+            settings.automation.enabled
+              ? `Roda sozinha a cada ${formatInterval(settings.automation.intervalSeconds)}: confere os pagamentos, gera faturas, envia lembretes e aplica o que acontece com o clube em atraso.`
+              : 'A automação não está ligada neste servidor. Use o botão abaixo para rodar quando precisar.'
+          }
+        >
+          <div className="flex flex-col gap-4">
             {settings.demoToolsEnabled && demo && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300">
@@ -445,7 +449,7 @@ export function DunningTab({
                 </span>
               </div>
             )}
-            <p className="text-sm text-muted-foreground">
+            <p className="m-0 text-sm text-muted-foreground">
               Última execução:{' '}
               {settings.automation.lastRunAt ? (
                 <span className="text-foreground" title={formatDateTimeBR(settings.automation.lastRunAt)}>
@@ -455,18 +459,22 @@ export function DunningTab({
                 'nunca'
               )}
             </p>
-            <Button onClick={onRunAutomation} disabled={running} className="w-full gap-2">
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            <Button onClick={onRunAutomation} disabled={running} className="min-h-10 w-full gap-2 rounded-[10px] px-4 font-semibold">
+              {running ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Play className="h-4 w-4" aria-hidden="true" />
+              )}
               Executar automação
             </Button>
-            <p className="text-xs text-muted-foreground">Ação de suporte: faz agora o que a automação faria sozinha.</p>
+            <p className="m-0 text-xs text-muted-foreground">Ação de suporte: faz agora o que a automação faria sozinha.</p>
             {lastReport && (
               <div className="border-t border-border pt-4">
                 <AutomationReportView report={lastReport} />
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </SectionCard>
       </div>
     </div>
   )

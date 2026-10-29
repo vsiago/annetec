@@ -1,20 +1,20 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ReceiptText } from 'lucide-react'
+import { Receipt, Search } from 'lucide-react'
 import {
   CLUB_PAYMENT_METHOD_LABELS,
   PLATFORM_CHARGE_STATUS_LABELS,
   daysBetweenDates,
   type ClubPaymentMethod,
-  type PlatformCharge,
   type PlatformChargeKind,
   type PlatformChargeStatus,
 } from '@annetec/contracts'
-import { EmptyState } from '@/components/dashboard/empty-state'
-import { DataTable, FilterSelect, SearchInput, TableFooter, type Column } from '@/components/dashboard/table-controls'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { DataTable, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { FilterSelect, SearchInput, TableFooter } from '@/components/admin-platform/ui/table-controls'
 import { LoadError, Pill, TableSkeleton, useConsoleData } from '@/components/admin-platform/billing/console-kit'
-import { ChargeKindPill, MethodLabel, pluralize } from '@/components/admin-platform/billing/billing-bits'
+import { ChargeKindPill, MethodLabel, openableRowProps, pluralize } from '@/components/admin-platform/billing/billing-bits'
 import { ChargeActionsMenu, useChargeActions } from '@/components/admin-platform/billing/charge-actions'
 import { ChargeDetailSheet } from '@/components/admin-platform/billing/charge-detail-sheet'
 import { listPlatformChargesAction } from '@/lib/actions/platform-billing-api'
@@ -117,83 +117,6 @@ export function ChargesTab({
   const total = list.data?.meta.total ?? 0
   const filtered = !!q || status !== 'all' || kind !== 'all' || method !== 'all' || period !== 'all'
 
-  const columns: Column<PlatformCharge>[] = [
-    ...(embedded
-      ? []
-      : [
-          {
-            key: 'clube',
-            header: 'Clube',
-            render: (charge: PlatformCharge) => (
-              <div className="min-w-0 max-w-56">
-                <p className="truncate font-medium text-foreground">{charge.tenantName ?? 'Nova contratação'}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {charge.tenantSlug ? `/${charge.tenantSlug}` : 'clube ainda não liberado'}
-                </p>
-              </div>
-            ),
-          } satisfies Column<PlatformCharge>,
-        ]),
-    {
-      key: 'descricao',
-      header: 'Descrição',
-      render: charge => (
-        <div className="min-w-0 max-w-64">
-          <p className="truncate text-foreground">{charge.description}</p>
-          <div className="mt-0.5 flex items-center gap-1.5">
-            <ChargeKindPill kind={charge.kind} />
-            {charge.periodStart && <span className="text-xs text-muted-foreground">{formatMonthShort(charge.periodStart)}</span>}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'vencimento',
-      header: 'Vencimento',
-      render: charge => {
-        const late = (charge.status === 'overdue' || charge.status === 'failed') && charge.dueDate < today
-        return (
-          <div className="whitespace-nowrap text-sm">
-            <p className="text-foreground">{formatDateBR(charge.dueDate)}</p>
-            {late && (
-              <p className="text-xs text-[#B42318]">
-                atrasada há {pluralize(daysBetweenDates(charge.dueDate, today), 'dia', 'dias')}
-              </p>
-            )}
-            {charge.status === 'paid' && charge.paidAt && (
-              <p className="text-xs text-muted-foreground">paga em {formatDateBR(charge.paidAt)}</p>
-            )}
-          </div>
-        )
-      },
-    },
-    {
-      key: 'valor',
-      header: 'Valor',
-      align: 'right',
-      render: charge => <span className="whitespace-nowrap font-medium tabular-nums text-foreground">{formatBRL(charge.amount)}</span>,
-    },
-    {
-      key: 'forma',
-      header: 'Forma de pagamento',
-      hideOnMobile: true,
-      render: charge => <MethodLabel method={charge.method} card={charge.card} className="text-xs" />,
-    },
-    {
-      key: 'status',
-      header: 'Situação',
-      render: charge => <Pill meta={chargeStatusMeta(charge.status)} />,
-    },
-    {
-      key: 'acoes',
-      header: '',
-      align: 'right',
-      render: charge => (
-        <ChargeActionsMenu charge={charge} canSimulate={canSimulate} onAction={actions.open} onDetail={item => setDetailId(item.id)} />
-      ),
-    },
-  ]
-
   return (
     <div>
       {!embedded && (
@@ -231,14 +154,12 @@ export function ChargesTab({
       )}
 
       {list.error && !list.data ? (
-        <div className="p-4 pt-0">
-          <LoadError message={list.error} onRetry={() => list.reload()} />
-        </div>
+        <LoadError message={list.error} onRetry={() => list.reload()} framed={false} />
       ) : list.loading && !list.data ? (
         <TableSkeleton rows={embedded ? 3 : 6} />
       ) : rows.length === 0 ? (
         <EmptyState
-          icon={ReceiptText}
+          icon={filtered ? Search : Receipt}
           title={filtered ? 'Nenhuma fatura com esses filtros' : 'Nenhuma fatura por aqui ainda'}
           description={
             filtered
@@ -248,7 +169,85 @@ export function ChargesTab({
         />
       ) : (
         <div className={list.loading ? 'opacity-60 transition-opacity' : undefined}>
-          <DataTable columns={columns} rows={rows} rowKey={charge => charge.id} onRowClick={charge => setDetailId(charge.id)} />
+          <DataTable
+            caption={embedded ? 'Faturas deste clube' : 'Faturas dos clubes'}
+            minWidth={embedded ? 'min-w-[640px]' : 'min-w-[860px]'}
+            framed={false}
+          >
+            <thead>
+              <tr>
+                {!embedded && <Th>Clube</Th>}
+                <Th>Descrição</Th>
+                <Th>Vencimento</Th>
+                <Th align="right">Valor</Th>
+                <Th className="hidden md:table-cell">Forma de pagamento</Th>
+                <Th>Situação</Th>
+                <Th align="right">
+                  <span className="sr-only">Ações</span>
+                </Th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(charge => {
+                const late = (charge.status === 'overdue' || charge.status === 'failed') && charge.dueDate < today
+                return (
+                  <Tr key={charge.id} {...openableRowProps(() => setDetailId(charge.id))}>
+                    {!embedded && (
+                      <Td>
+                        <div className="min-w-0 max-w-56">
+                          <p className="m-0 truncate font-medium text-foreground">{charge.tenantName ?? 'Nova contratação'}</p>
+                          <p className="m-0 truncate text-xs text-muted-foreground">
+                            {charge.tenantSlug ? `/${charge.tenantSlug}` : 'clube ainda não liberado'}
+                          </p>
+                        </div>
+                      </Td>
+                    )}
+                    <Td>
+                      <div className="min-w-0 max-w-64">
+                        <p className="m-0 truncate text-foreground">{charge.description}</p>
+                        <div className="mt-0.5 flex items-center gap-1.5">
+                          <ChargeKindPill kind={charge.kind} />
+                          {charge.periodStart && (
+                            <span className="text-xs text-muted-foreground">{formatMonthShort(charge.periodStart)}</span>
+                          )}
+                        </div>
+                      </div>
+                    </Td>
+                    <Td>
+                      <div className="whitespace-nowrap text-sm">
+                        <p className="m-0 text-foreground">{formatDateBR(charge.dueDate)}</p>
+                        {late && (
+                          <p className="m-0 text-xs text-[#B42318]">
+                            atrasada há {pluralize(daysBetweenDates(charge.dueDate, today), 'dia', 'dias')}
+                          </p>
+                        )}
+                        {charge.status === 'paid' && charge.paidAt && (
+                          <p className="m-0 text-xs text-muted-foreground">paga em {formatDateBR(charge.paidAt)}</p>
+                        )}
+                      </div>
+                    </Td>
+                    <Td align="right">
+                      <span className="whitespace-nowrap font-medium tabular-nums text-foreground">{formatBRL(charge.amount)}</span>
+                    </Td>
+                    <Td className="hidden md:table-cell">
+                      <MethodLabel method={charge.method} card={charge.card} className="text-xs" />
+                    </Td>
+                    <Td>
+                      <Pill meta={chargeStatusMeta(charge.status)} />
+                    </Td>
+                    <Td align="right">
+                      <ChargeActionsMenu
+                        charge={charge}
+                        canSimulate={canSimulate}
+                        onAction={actions.open}
+                        onDetail={item => setDetailId(item.id)}
+                      />
+                    </Td>
+                  </Tr>
+                )
+              })}
+            </tbody>
+          </DataTable>
         </div>
       )}
 

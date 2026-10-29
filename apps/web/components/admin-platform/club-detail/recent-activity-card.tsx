@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ClipboardList, CreditCard, Shield, Tag, User, Building2, type LucideIcon } from 'lucide-react'
+import { Activity, Building2, ClipboardList, CreditCard, History, Shield, Tag, User, type LucideIcon } from 'lucide-react'
 import type { AuditEntry } from '@annetec/contracts'
 import {
   activityActor,
@@ -9,6 +9,8 @@ import {
   activityWhen,
   type ActivityKind,
 } from '@/components/admin-platform/club-detail/club-model'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { auditActionLabel, auditReason } from '@/lib/adapters/holding'
 
 const ICONS: Record<ActivityKind, LucideIcon> = {
@@ -37,24 +39,25 @@ export function RecentActivityCard({ entries, organizationId }: { entries: Audit
   const recent = [...entries].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, MAX_ITEMS)
 
   return (
-    <section
-      aria-labelledby="club-activity"
-      className="flex min-w-0 flex-col gap-1 rounded-2xl border border-border bg-white p-6"
-    >
-      <div className="mb-1 flex items-baseline justify-between gap-3">
-        <h2 id="club-activity" className="m-0 text-base font-bold text-foreground">
-          Atividade recente
-        </h2>
+    <SectionCard
+      id="club-activity"
+      title="Atividade recente"
+      icon={Activity}
+      actions={
         <Link
           href={`/admin/holding/auditoria?organizationId=${encodeURIComponent(organizationId)}`}
-          className="text-[13px] font-semibold text-secondary hover:underline"
+          className="inline-flex min-h-10 items-center rounded-md text-[13px] font-semibold text-secondary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2"
         >
           Ver histórico completo
         </Link>
-      </div>
-
+      }
+    >
       {recent.length === 0 ? (
-        <p className="m-0 py-3 text-sm text-muted-foreground">Ainda não há atividade registrada para este clube.</p>
+        <EmptyState
+          size="sm"
+          icon={History}
+          title="Ainda não há atividade registrada para este clube."
+        />
       ) : (
         <ul className="m-0 list-none p-0">
           {recent.map(entry => {
@@ -64,7 +67,7 @@ export function RecentActivityCard({ entries, organizationId }: { entries: Audit
             const actor = activityActor(entry)
             const reason = auditReason(entry)
             return (
-              <li key={entry.id} className="flex items-start gap-3.5 border-b border-[#EEF0F3] py-3.5 last:border-b-0">
+              <li key={entry.id} className="flex items-start gap-3.5 border-b border-[#EEF0F3] py-3.5 first:pt-0 last:border-b-0 last:pb-0">
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-secondary">
                   <Icon className="size-[15px]" aria-hidden="true" />
                 </span>
@@ -83,6 +86,6 @@ export function RecentActivityCard({ entries, organizationId }: { entries: Audit
           })}
         </ul>
       )}
-    </section>
+    </SectionCard>
   )
 }

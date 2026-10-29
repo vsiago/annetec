@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { SlidersHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 import type { PlatformBillingAutomationReport } from '@annetec/contracts'
-import { PageHeader } from '@/components/dashboard/page-header'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { BackLink, PageHeader } from '@/components/admin-platform/ui/page-header'
 import { RefreshButton, runCommand, useConsoleData, usePlatformRole } from '@/components/admin-platform/billing/console-kit'
 import { ReceivingBadge, pluralize } from '@/components/admin-platform/billing/billing-bits'
 import { DunningTab } from '@/components/admin-platform/billing/dunning-tab'
@@ -54,22 +54,19 @@ export default function RegrasDeCobrancaPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/admin/financeiro"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Voltar ao Financeiro
-      </Link>
-
+    <PageContainer>
       <PageHeader
+        breadcrumb={<BackLink href="/admin/financeiro">Voltar ao Financeiro</BackLink>}
         title="Regras de cobrança"
+        icon={SlidersHorizontal}
         description="Quando o clube é lembrado, o que acontece se ele atrasar e como a ANNETEC recebe."
-      >
-        {settings.data && <ReceivingBadge provider={settings.data.gateway} sandbox={settings.data.sandbox} />}
-        <RefreshButton loading={settings.loading} onClick={() => setVersion(value => value + 1)} />
-      </PageHeader>
+        actions={
+          <>
+            {settings.data && <ReceivingBadge provider={settings.data.gateway} sandbox={settings.data.sandbox} />}
+            <RefreshButton loading={settings.loading} onClick={() => setVersion(value => value + 1)} />
+          </>
+        }
+      />
 
       <DunningTab
         settings={settings.data}
@@ -81,6 +78,6 @@ export default function RegrasDeCobrancaPage() {
         running={running}
         onRunAutomation={runAutomation}
       />
-    </div>
+    </PageContainer>
   )
 }

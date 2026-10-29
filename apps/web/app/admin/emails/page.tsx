@@ -2,14 +2,16 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Inbox, MailOpen, X } from 'lucide-react'
+import { Inbox, Mail, MailOpen, RefreshCw, Search, X } from 'lucide-react'
 import type { EmailStatus, EmailTemplate, PlatformEmailListItem } from '@annetec/contracts'
-import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { PageHeader } from '@/components/dashboard/page-header'
-import { EmptyState } from '@/components/dashboard/empty-state'
-import { FilterSelect, SearchInput, TableFooter } from '@/components/dashboard/table-controls'
-import { LoadError, Pill, RefreshButton, TableSkeleton, useConsoleData } from '@/components/admin-platform/billing/console-kit'
+import { Button } from '@/components/admin-platform/ui/button'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { FilterSelect, SearchInput, TableFooter } from '@/components/admin-platform/ui/table-controls'
+import { Pill, useConsoleData } from '@/components/admin-platform/billing/console-kit'
 import {
   EmailPreview,
   EmailPreviewDialog,
@@ -31,6 +33,9 @@ import { cn } from '@/lib/utils'
  * ANNETEC — contratação, boas-vindas com a senha provisória, faturas e lembretes
  * de cobrança. Responde, no suporte, se o e-mail chegou para o clube.
  */
+
+const CHIP_FILTRO =
+  'inline-flex min-h-10 items-center gap-1.5 rounded-full bg-accent px-4 text-sm font-medium text-secondary hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2'
 
 function useDebounced<T>(value: T, delay = 350): T {
   const [debounced, setDebounced] = useState(value)
@@ -67,9 +72,10 @@ function EmailRow({
       <button
         type="button"
         onClick={onSelect}
+        aria-current={active ? 'true' : undefined}
         className={cn(
-          'flex w-full flex-col gap-1 border-l-2 px-4 py-3 text-left transition-colors',
-          active ? 'border-secondary bg-accent' : 'border-transparent hover:bg-muted/40',
+          'flex w-full flex-col gap-1 px-5 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-secondary',
+          active ? 'bg-accent ring-1 ring-inset ring-secondary/30' : 'hover:bg-accent/30',
         )}
       >
         <div className="flex items-center justify-between gap-2">
@@ -81,10 +87,10 @@ function EmailRow({
             {formatRelative(email.createdAt)}
           </span>
         </div>
-        <p className={cn('truncate text-sm', active ? 'font-semibold text-foreground' : 'font-medium text-foreground')}>{email.subject}</p>
-        <p className="line-clamp-1 text-xs text-muted-foreground">{email.preview}</p>
+        <p className={cn('m-0 truncate text-sm', active ? 'font-semibold text-foreground' : 'font-medium text-foreground')}>{email.subject}</p>
+        <p className="m-0 line-clamp-1 text-xs text-muted-foreground">{email.preview}</p>
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{emailTemplateLabel(email.template)}</span>
+          <span className="rounded-lg bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{emailTemplateLabel(email.template)}</span>
           <Pill meta={emailStatusMeta(email.status)} className="px-2 py-0 text-[11px]" />
         </div>
       </button>
@@ -101,11 +107,21 @@ function PreviewPane({ emailId }: { emailId: string | null }) {
         icon={MailOpen}
         title="Selecione um e-mail"
         description="A prévia mostra o e-mail como o destinatário recebe, em HTML e em texto."
-        className="h-full py-20"
+        className="py-16"
       />
     )
   }
-  if (error && !data) return <LoadError message={error} onRetry={() => reload()} />
+  if (error && !data) {
+    return (
+      <ErrorState
+        size="sm"
+        framed={false}
+        title="Não foi possível abrir o e-mail"
+        description={error}
+        onRetry={() => reload()}
+      />
+    )
+  }
   if (loading || !data || data.id !== emailId) return <EmailPreviewSkeleton />
   return <EmailPreview key={data.id} email={data} />
 }
@@ -163,120 +179,135 @@ function EmailsEnviados() {
   const filtered = !!q || template !== 'all' || status !== 'all' || !!proposalId || !!organizationId
 
   return (
-    <div className="space-y-6">
+    <PageContainer>
       <PageHeader
+        icon={Mail}
         title="E-mails enviados"
         description="Os e-mails que a ANNETEC mandou aos clubes: contratação, acesso ao painel, faturas e lembretes de cobrança."
-      >
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Switch checked={live} onCheckedChange={setLive} />
-          Ao vivo
-        </label>
-        <RefreshButton loading={list.loading} onClick={() => void list.reload({ silent: true })} />
-      </PageHeader>
+        actions={
+          <>
+            <label className="inline-flex min-h-11 items-center gap-2.5 rounded-[10px] border border-border bg-card px-3.5 text-sm font-medium text-foreground">
+              <Switch checked={live} onCheckedChange={setLive} />
+              Ao vivo
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-[10px] px-4 font-semibold"
+              onClick={() => void list.reload({ silent: true })}
+              disabled={list.loading}
+            >
+              <RefreshCw className={cn(list.loading && 'animate-spin')} aria-hidden="true" />
+              Atualizar
+            </Button>
+          </>
+        }
+      />
 
       {(proposalId || organizationId) && (
         <div className="flex flex-wrap gap-2">
           {proposalId && (
-            <button
-              type="button"
-              onClick={() => setParam('proposalId', null)}
-              className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-medium text-secondary hover:bg-accent/70"
-            >
+            <button type="button" onClick={() => setParam('proposalId', null)} className={CHIP_FILTRO}>
               Só desta proposta
-              <X className="h-3.5 w-3.5" />
+              <X className="size-4" aria-hidden="true" />
             </button>
           )}
           {organizationId && (
-            <button
-              type="button"
-              onClick={() => setParam('organizationId', null)}
-              className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-medium text-secondary hover:bg-accent/70"
-            >
+            <button type="button" onClick={() => setParam('organizationId', null)} className={CHIP_FILTRO}>
               Só deste clube
-              <X className="h-3.5 w-3.5" />
+              <X className="size-4" aria-hidden="true" />
             </button>
           )}
         </div>
       )}
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
-        <Card className="gap-0 py-0 shadow-none">
-          <CardContent className="p-0">
-            <div className="space-y-3 border-b border-border p-4">
-              <SearchInput value={search} onChange={setSearch} placeholder="Buscar por destinatário ou assunto" className="sm:min-w-0" />
-              <div className="grid grid-cols-2 gap-2 [&_button]:sm:w-full">
-                <FilterSelect
-                  label="Modelo"
-                  value={template}
-                  onChange={value => setTemplate(value as 'all' | EmailTemplate)}
-                  allLabel="Todos"
-                  options={EMAIL_TEMPLATE_OPTIONS}
-                />
-                <FilterSelect
-                  label="Situação"
-                  value={status}
-                  onChange={value => setStatus(value as 'all' | EmailStatus)}
-                  allLabel="Todas"
-                  options={EMAIL_STATUS_OPTIONS}
-                />
-              </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+        <SectionCard padded={false} className="overflow-hidden">
+          <div className="flex flex-col gap-3 border-b border-border p-4">
+            <SearchInput value={search} onChange={setSearch} placeholder="Buscar por destinatário ou assunto" className="sm:min-w-0" />
+            <div className="grid grid-cols-2 gap-2 [&_button]:sm:w-full">
+              <FilterSelect
+                label="Modelo"
+                value={template}
+                onChange={value => setTemplate(value as 'all' | EmailTemplate)}
+                allLabel="Todos"
+                options={EMAIL_TEMPLATE_OPTIONS}
+              />
+              <FilterSelect
+                label="Situação"
+                value={status}
+                onChange={value => setStatus(value as 'all' | EmailStatus)}
+                allLabel="Todas"
+                options={EMAIL_STATUS_OPTIONS}
+              />
             </div>
+          </div>
 
-            {list.error && !list.data ? (
-              <div className="p-4">
-                <LoadError message={list.error} onRetry={() => list.reload()} />
-              </div>
-            ) : list.loading && !list.data ? (
-              <TableSkeleton rows={6} />
-            ) : rows.length === 0 ? (
-              <EmptyState
-                icon={Inbox}
-                title={filtered ? 'Nenhum e-mail com esses filtros' : 'Nenhum e-mail enviado ainda'}
-                description={
-                  filtered
-                    ? 'Ajuste a busca ou limpe os filtros.'
-                    : 'Quando a plataforma mandar o primeiro e-mail, ele aparece aqui. Isso acontece, por exemplo, no início de uma contratação.'
-                }
-              />
-            ) : (
-              <ul className={cn('max-h-[70vh] divide-y divide-border overflow-y-auto', list.loading && 'opacity-60')}>
-                {rows.map(email => (
-                  <EmailRow key={email.id} email={email} active={email.id === selected} onSelect={() => setParam('email', email.id)} />
-                ))}
-              </ul>
-            )}
+          {list.error && !list.data ? (
+            <ErrorState
+              size="sm"
+              framed={false}
+              title="Não foi possível carregar os e-mails"
+              description={list.error}
+              onRetry={() => list.reload()}
+            />
+          ) : list.loading && !list.data ? (
+            <div className="p-6">
+              <SectionSkeleton rows={6} label="Carregando e-mails…" />
+            </div>
+          ) : rows.length === 0 ? (
+            <EmptyState
+              icon={filtered ? Search : Inbox}
+              title={filtered ? 'Nenhum e-mail com esses filtros' : 'Nenhum e-mail enviado ainda'}
+              description={
+                filtered
+                  ? 'Ajuste a busca ou limpe os filtros.'
+                  : 'Quando a plataforma mandar o primeiro e-mail, ele aparece aqui. Isso acontece, por exemplo, no início de uma contratação.'
+              }
+            />
+          ) : (
+            <ul className={cn('m-0 max-h-[70vh] list-none divide-y divide-border overflow-y-auto p-0', list.loading && 'opacity-60')}>
+              {rows.map(email => (
+                <EmailRow key={email.id} email={email} active={email.id === selected} onSelect={() => setParam('email', email.id)} />
+              ))}
+            </ul>
+          )}
 
-            {list.data && total > 0 && (
-              <TableFooter
-                page={page}
-                perPage={perPage}
-                total={total}
-                noun="e-mails"
-                onPageChange={setPage}
-                onPerPageChange={setPerPage}
-              />
-            )}
-          </CardContent>
-        </Card>
+          {list.data && total > 0 && (
+            <TableFooter
+              page={page}
+              perPage={perPage}
+              total={total}
+              noun="e-mails"
+              onPageChange={setPage}
+              onPerPageChange={setPerPage}
+            />
+          )}
+        </SectionCard>
 
         {wide && (
-          <Card className="sticky top-4 gap-0 py-0 shadow-none">
-            <CardContent className="p-5">
-              <PreviewPane emailId={selected} />
-            </CardContent>
-          </Card>
+          <SectionCard className="sticky top-4">
+            <PreviewPane emailId={selected} />
+          </SectionCard>
         )}
       </div>
 
       {!wide && <EmailPreviewDialog emailId={selected} onOpenChange={open => !open && setParam('email', null)} />}
-    </div>
+    </PageContainer>
   )
 }
 
 export default function EmailsEnviadosPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <PageContainer>
+          <SectionCard>
+            <SectionSkeleton rows={6} label="Carregando e-mails…" />
+          </SectionCard>
+        </PageContainer>
+      }
+    >
       <EmailsEnviados />
     </Suspense>
   )

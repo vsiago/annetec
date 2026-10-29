@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, Loader2, RefreshCw, ShieldAlert } from 'lucide-react'
+import { ChevronDown, ClipboardCheck, Loader2, RefreshCw, ShieldAlert, ShieldCheck } from 'lucide-react'
 import {
   PRECHECK_BLOCKING,
   PRECHECK_LABELS,
@@ -10,8 +10,9 @@ import {
   type PrecheckResult,
 } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Pill, runCommand } from '@/components/admin-platform/billing/console-kit'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { rerunOnboardingPrechecksAction } from '@/lib/actions/platform-onboarding-api'
 import { formatDateTimeBR, formatRelative, precheckOutcomeMeta, type StatusMeta } from '@/lib/adapters/platform-console'
 import { cn } from '@/lib/utils'
@@ -71,87 +72,96 @@ export function PrecheckPanel({
   }
 
   return (
-    <Card className="gap-4 shadow-none">
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+    <SectionCard
+      padded={false}
+      icon={ShieldCheck}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
           Verificação automática
           <Pill meta={verificationMeta(proposal.precheckSummary, precheckPoints(proposal.prechecks))} />
-        </CardTitle>
-        <CardDescription>
-          {proposal.precheckRanAt ? (
-            <span title={formatDateTimeBR(proposal.precheckRanAt)}>
-              Feita {formatRelative(proposal.precheckRanAt)} · {counts.pass ?? 0} tudo certo · {counts.warn ?? 0} para conferir ·{' '}
-              {counts.fail ?? 0} com problema
-            </span>
-          ) : (
-            'Ainda não foi feita. Ela roda sozinha quando o clube envia o cadastro.'
-          )}
-        </CardDescription>
-        {canRerun && (
-          <CardAction>
-            <Button variant="outline" size="sm" className="gap-2" onClick={rerun} disabled={running}>
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Refazer verificação
-            </Button>
-          </CardAction>
-        )}
-      </CardHeader>
-      <CardContent className="p-0">
-        {rows.length === 0 ? (
-          <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhum resultado ainda.</p>
+        </span>
+      }
+      description={
+        proposal.precheckRanAt ? (
+          <span title={formatDateTimeBR(proposal.precheckRanAt)}>
+            Feita {formatRelative(proposal.precheckRanAt)} · {counts.pass ?? 0} tudo certo · {counts.warn ?? 0} para conferir ·{' '}
+            {counts.fail ?? 0} com problema
+          </span>
         ) : (
-          <ul className="divide-y divide-border border-t border-border">
-            {rows.map(row => {
-              const blocking = row.outcome === 'fail' && PRECHECK_BLOCKING[row.code]
-              const details = detailsText(row.details)
-              const expanded = open === row.code
-              return (
-                <li key={row.code} className={cn('px-6 py-3', blocking && 'bg-red-50/60 dark:bg-red-500/5')}>
-                  <div className="flex items-start gap-3">
-                    <PrecheckIcon outcome={row.outcome} className="mt-0.5" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium text-foreground">{PRECHECK_LABELS[row.code] ?? row.code}</p>
-                        <Pill meta={outcomeMeta(row.outcome)} className="px-2 text-[11px]" />
-                        {blocking && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#B42318] px-2 py-0.5 text-[11px] font-semibold text-white">
-                            <ShieldAlert className="h-3 w-3" />
-                            Impede a aprovação
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-sm text-muted-foreground">{row.message}</p>
-                      {expanded && details.length > 0 && (
-                        <div className="mt-2 space-y-1.5 rounded-lg bg-muted/50 p-3">
-                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Detalhes técnicos</p>
-                          <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
-                            {details.map(([key, value]) => (
-                              <div key={key} className="min-w-0">
-                                <dt className="font-medium text-muted-foreground">{key}</dt>
-                                <dd className="break-words font-mono text-foreground">{value}</dd>
-                              </div>
-                            ))}
-                          </dl>
-                        </div>
+          'Ainda não foi feita. Ela roda sozinha quando o clube envia o cadastro.'
+        )
+      }
+      actions={
+        canRerun ? (
+          <Button variant="outline" className="h-10 gap-2" onClick={rerun} disabled={running}>
+            {running ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            )}
+            Refazer verificação
+          </Button>
+        ) : undefined
+      }
+    >
+      {rows.length === 0 ? (
+        <EmptyState icon={ClipboardCheck} size="sm" title="Nenhum resultado ainda." />
+      ) : (
+        <ul className="m-0 flex list-none flex-col p-0">
+          {rows.map(row => {
+            const blocking = row.outcome === 'fail' && PRECHECK_BLOCKING[row.code]
+            const details = detailsText(row.details)
+            const expanded = open === row.code
+            return (
+              <li
+                key={row.code}
+                className={cn('border-b border-[#EEF0F3] px-6 py-4 last:border-b-0', blocking && 'bg-[#FEF3F2]/60')}
+              >
+                <div className="flex items-start gap-3">
+                  <PrecheckIcon outcome={row.outcome} className="mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="m-0 text-sm font-medium text-foreground">{PRECHECK_LABELS[row.code] ?? row.code}</p>
+                      <Pill meta={outcomeMeta(row.outcome)} className="px-2 text-[11px]" />
+                      {blocking && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#B42318] px-2 py-0.5 text-[11px] font-semibold text-white">
+                          <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+                          Impede a aprovação
+                        </span>
                       )}
                     </div>
-                    {details.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => setOpen(expanded ? null : row.code)}
-                        aria-label={expanded ? 'Esconder detalhes técnicos' : 'Ver detalhes técnicos'}
-                      >
-                        <ChevronDown className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180')} />
-                      </Button>
+                    <p className="m-0 mt-0.5 text-sm text-muted-foreground">{row.message}</p>
+                    {expanded && details.length > 0 && (
+                      <div className="mt-3 flex flex-col gap-2 rounded-xl bg-muted/50 p-4">
+                        <p className="m-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Detalhes técnicos</p>
+                        <dl className="m-0 grid gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
+                          {details.map(([key, value]) => (
+                            <div key={key} className="min-w-0">
+                              <dt className="font-medium text-muted-foreground">{key}</dt>
+                              <dd className="m-0 break-words font-mono text-foreground">{value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
                     )}
                   </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+                  {details.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="icon-lg"
+                      onClick={() => setOpen(expanded ? null : row.code)}
+                      aria-expanded={expanded}
+                      aria-label={expanded ? 'Esconder detalhes técnicos' : 'Ver detalhes técnicos'}
+                    >
+                      <ChevronDown className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180')} aria-hidden="true" />
+                    </Button>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </SectionCard>
   )
 }

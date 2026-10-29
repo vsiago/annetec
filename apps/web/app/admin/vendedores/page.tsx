@@ -4,11 +4,14 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { TenantUser } from '@annetec/contracts'
 import { useAdminScope } from '@/contexts/admin-scope-context'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/admin-platform/ui/button'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { DataTable, TableLoading, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -21,7 +24,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { EmptyStateCard } from '@/components/dashboard/empty-state'
 import {
   discoverTenantIntegrationAction,
   getTenantIntegrationAction,
@@ -70,123 +72,108 @@ export default function OperatorVendedoresPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Vendedores</h1>
-          <p className="text-muted-foreground">
-            Vendedores do clube selecionado acima, vinculados a um produtor na Digital Saúde.
-          </p>
-        </div>
-        {tenantSlug && (
-          <AddSellerDialog
-            open={addOpen}
-            onOpenChange={setAddOpen}
-            onCreated={() => refresh(tenantSlug)}
-            tenantSlug={tenantSlug}
-          />
-        )}
-      </div>
+    <PageContainer>
+      <PageHeader
+        icon={UserCog}
+        title="Vendedores"
+        description="Vendedores do clube selecionado acima, vinculados a um produtor na Digital Saúde."
+        actions={
+          tenantSlug ? (
+            <AddSellerDialog
+              open={addOpen}
+              onOpenChange={setAddOpen}
+              onCreated={() => refresh(tenantSlug)}
+              tenantSlug={tenantSlug}
+            />
+          ) : undefined
+        }
+      />
 
-      {operatorError && (
-        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
-          <CardContent className="py-4 text-sm text-[#B42318]">{operatorError}</CardContent>
-        </Card>
-      )}
-
-      {!operatorError && (
-        <Card className="border border-border/80 shadow-xs bg-card">
-          <CardContent className="p-0">
-            {loadingSellers || loadingOperator ? (
-              <div className="flex items-center justify-center py-16 text-muted-foreground">
-                <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
-              </div>
-            ) : sellers.length === 0 ? (
-              <EmptyStateCard
-                icon={UserCog}
-                title="Nenhum vendedor cadastrado"
-                description='Clique em "Novo vendedor" para começar.'
-              />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50">
-                      <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Vendedor</th>
-                      <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Contato</th>
-                      <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Produtor (Digital Saúde)</th>
-                      <th className="text-right py-4 px-6 text-sm font-medium text-muted-foreground">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sellers.map(seller => (
-                      <tr key={seller.id} className="border-b border-border last:border-0">
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="size-9 bg-secondary">
-                              <AvatarFallback className="bg-secondary text-secondary-foreground text-xs font-medium">
-                                {getInitials(seller.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="text-sm font-medium text-foreground">{seller.name}</p>
-                              {!seller.active && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Inativo</Badge>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <p className="flex items-center gap-1.5 text-sm text-foreground">
-                            <Mail className="h-3.5 w-3.5 text-muted-foreground" /> {seller.email}
-                          </p>
-                          {seller.phone && (
-                            <p className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                              <Phone className="h-3 w-3" /> {seller.phone}
-                            </p>
-                          )}
-                        </td>
-                        <td className="py-4 px-6">
-                          {seller.upstreamProdutorCodigo ? (
-                            <Badge variant="secondary" className="font-mono text-xs">
-                              {seller.upstreamProdutorCodigo}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-xs">Não vinculado</Badge>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-right">
-                          <div className="flex justify-end gap-1">
-                            {seller.upstreamProdutorCodigo && (
-                              <Button variant="ghost" size="sm" asChild>
-                                <Link href={`/admin/vendedores/${seller.id}/comissoes`}>
-                                  <Receipt className="h-4 w-4 mr-1.5" />
-                                  Comissões
-                                </Link>
-                              </Button>
-                            )}
-                            <Button variant="ghost" size="sm" onClick={() => setLinkOpen(seller)}>
-                              <Link2 className="h-4 w-4 mr-1.5" />
-                              {seller.upstreamProdutorCodigo ? 'Trocar' : 'Vincular'}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-[#B42318] hover:text-[#B42318]"
-                              onClick={() => handleDeactivate(seller.id)}
-                            >
-                              <UserX className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {operatorError ? (
+        <ErrorState description={operatorError} />
+      ) : loadingSellers || loadingOperator ? (
+        <TableLoading label="Carregando vendedores…" />
+      ) : sellers.length === 0 ? (
+        <EmptyState
+          framed
+          icon={UserCog}
+          title="Nenhum vendedor cadastrado"
+          description='Clique em "Novo vendedor" para começar.'
+        />
+      ) : (
+        <DataTable caption="Vendedores do clube selecionado" minWidth="min-w-[820px]">
+          <thead>
+            <tr>
+              <Th>Vendedor</Th>
+              <Th>Contato</Th>
+              <Th>Produtor (Digital Saúde)</Th>
+              <Th align="right">Ações</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {sellers.map(seller => (
+              <Tr key={seller.id}>
+                <Td>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="size-10 bg-secondary">
+                      <AvatarFallback className="bg-secondary text-secondary-foreground text-xs font-medium">
+                        {getInitials(seller.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col items-start gap-1">
+                      <p className="m-0 text-sm font-semibold text-foreground">{seller.name}</p>
+                      {!seller.active && <StatusPill tone="neutral">Inativo</StatusPill>}
+                    </div>
+                  </div>
+                </Td>
+                <Td>
+                  <p className="m-0 flex items-center gap-1.5 text-sm text-foreground">
+                    <Mail className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> {seller.email}
+                  </p>
+                  {seller.phone && (
+                    <p className="m-0 mt-1 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                      <Phone className="size-3.5 shrink-0" aria-hidden="true" /> {seller.phone}
+                    </p>
+                  )}
+                </Td>
+                <Td>
+                  {seller.upstreamProdutorCodigo ? (
+                    <StatusPill tone="info">
+                      <span className="font-mono">{seller.upstreamProdutorCodigo}</span>
+                    </StatusPill>
+                  ) : (
+                    <StatusPill tone="warning">Não vinculado</StatusPill>
+                  )}
+                </Td>
+                <Td align="right">
+                  <div className="flex justify-end gap-1">
+                    {seller.upstreamProdutorCodigo && (
+                      <Button variant="ghost" size="sm" className="h-10 px-3" asChild>
+                        <Link href={`/admin/vendedores/${seller.id}/comissoes`}>
+                          <Receipt aria-hidden="true" />
+                          Comissões
+                        </Link>
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="sm" className="h-10 px-3" onClick={() => setLinkOpen(seller)}>
+                      <Link2 aria-hidden="true" />
+                      {seller.upstreamProdutorCodigo ? 'Trocar' : 'Vincular'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-10 text-[#B42318] hover:bg-[#FEF3F2] hover:text-[#B42318]"
+                      onClick={() => handleDeactivate(seller.id)}
+                    >
+                      <UserX aria-hidden="true" />
+                      <span className="sr-only">Desativar {seller.name}</span>
+                    </Button>
+                  </div>
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </DataTable>
       )}
 
       {linkOpen && tenantSlug && (
@@ -201,7 +188,7 @@ export default function OperatorVendedoresPage() {
           }}
         />
       )}
-    </div>
+    </PageContainer>
   )
 }
 
@@ -252,8 +239,8 @@ function AddSellerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" /> Novo vendedor
+        <Button className="h-11 rounded-[10px] px-4 font-semibold">
+          <Plus aria-hidden="true" /> Novo vendedor
         </Button>
       </DialogTrigger>
       <DialogContent>

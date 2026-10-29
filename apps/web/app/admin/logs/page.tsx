@@ -1,20 +1,24 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { DataTable, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { KpiCard } from '@/components/admin-platform/ui/kpi-card'
+import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { getActivityOverviewAction, listVisitorsAction } from '@/lib/actions/activity-api'
-import { getInitials } from '@/lib/utils'
+import { cn, getInitials } from '@/lib/utils'
 import type { ActivityEvent, ActivityOverview, OnlineVisitor, Visitor } from '@annetec/contracts'
 import {
   Activity,
-  AlertCircle,
   Eye,
   FileText,
+  History,
   LogIn,
   LogOut,
   RefreshCw,
@@ -68,267 +72,259 @@ export default function LogsPage() {
   }, [load])
 
   const maxPageCount = Math.max(1, ...(overview?.topPages.map(p => p.count) ?? [1]))
+  // Esqueleto só na primeira carga: nas seguintes (busca, "Atualizar") a tela
+  // mantém os números anteriores em vez de piscar.
+  const firstLoad = isLoading && !overview
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Activity className="h-6 w-6 text-primary" />
-            Acessos ao sistema
-          </h1>
-          <p className="text-muted-foreground">Quem está usando o sistema agora, o que visitou e o que fez.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {lastUpdated && (
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              Atualizado {timeAgo(lastUpdated.toISOString())}
-            </span>
-          )}
-          <Button variant="outline" size="sm" onClick={() => load()} disabled={isLoading || isRefreshing}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Atualizar
-          </Button>
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        icon={Activity}
+        title="Acessos ao sistema"
+        description="Quem está usando o sistema agora, o que visitou e o que fez."
+        actions={
+          <>
+            {lastUpdated && (
+              <span className="hidden text-sm text-muted-foreground sm:inline">
+                Atualizado {timeAgo(lastUpdated.toISOString())}
+              </span>
+            )}
+            <Button
+              variant="outline"
+              className="h-11 rounded-[10px] px-4 font-semibold"
+              onClick={() => load()}
+              disabled={isLoading || isRefreshing}
+            >
+              <RefreshCw className={cn(isRefreshing && 'animate-spin')} aria-hidden="true" />
+              Atualizar
+            </Button>
+          </>
+        }
+      />
 
       {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <ErrorState
+          size="sm"
+          title={overview ? 'Não foi possível atualizar' : 'Não foi possível carregar os acessos'}
+          description={error}
+          onRetry={() => load()}
+        />
       )}
 
-      {/* Stat cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Visitantes hoje"
-          value={overview?.visitorsToday}
-          hint="Pessoas distintas, logadas ou não"
-          icon={Users}
-          colorClass="bg-blue-100 text-blue-600"
-        />
-        <StatCard
-          label="Online agora"
-          value={overview?.onlineCount}
-          hint="Atividade nos últimos 5 min"
-          icon={Radio}
-          colorClass="bg-emerald-100 text-emerald-600"
-          pulse
-        />
-        <StatCard
-          label="Eventos hoje"
-          value={overview?.eventsToday}
-          hint="Páginas vistas + ações"
-          icon={Activity}
-          colorClass="bg-purple-100 text-purple-600"
-        />
-        <StatCard
-          label="Páginas diferentes hoje"
-          value={overview?.topPages.length}
-          hint="Páginas diferentes visitadas"
-          icon={FileText}
-          colorClass="bg-amber-100 text-amber-600"
-        />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Online agora */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-              </span>
-              Online agora
-            </CardTitle>
-            <CardDescription>Atualiza sozinho a cada 20s</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {isLoading ? (
-              <SkeletonRows />
-            ) : !overview?.online.length ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">Ninguém online agora.</p>
-            ) : (
-              overview.online.map(person => <OnlineRow key={person.key} person={person} />)
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Páginas mais visitadas */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle>Páginas mais visitadas hoje</CardTitle>
-            <CardDescription>Por número de visualizações</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {isLoading ? (
-              <SkeletonRows />
-            ) : !overview?.topPages.length ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma página visitada hoje ainda.</p>
-            ) : (
-              overview.topPages.map(page => (
-                <div key={page.path} className="space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-mono text-xs truncate max-w-[70%]" title={page.path}>
-                      {page.path}
-                    </span>
-                    <span className="text-muted-foreground font-medium">{page.count}</span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-secondary"
-                      style={{ width: `${Math.max(4, (page.count / maxPageCount) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Atividade recente */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader>
-          <CardTitle>Atividade recente</CardTitle>
-          <CardDescription>Últimos 50 eventos — navegação e ações do sistema</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <SkeletonRows rows={6} />
-          ) : !overview?.recentActivity.length ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma atividade registrada ainda.</p>
-          ) : (
-            <ol className="relative border-l border-border ml-2 space-y-5 py-1">
-              {overview.recentActivity.map(event => (
-                <ActivityRow key={event.id} event={event} />
-              ))}
-            </ol>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Visto por último */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <CardTitle>Visto por último</CardTitle>
-            <CardDescription>Todo mundo que já apareceu — logado ou anônimo</CardDescription>
-          </div>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-10"
+      {(overview || !error) && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard
+              label="Visitantes hoje"
+              value={<StatValue value={overview?.visitorsToday} loading={firstLoad} />}
+              hint="Pessoas distintas, logadas ou não"
+              icon={<Users />}
+            />
+            <KpiCard
+              label="Online agora"
+              value={<StatValue value={overview?.onlineCount} loading={firstLoad} />}
+              hint="Atividade nos últimos 5 min"
+              icon={<Radio className="text-[#067647] motion-safe:animate-pulse" />}
+            />
+            <KpiCard
+              label="Eventos hoje"
+              value={<StatValue value={overview?.eventsToday} loading={firstLoad} />}
+              hint="Páginas vistas + ações"
+              icon={<Activity />}
+            />
+            <KpiCard
+              label="Páginas diferentes hoje"
+              value={<StatValue value={overview?.topPages.length} loading={firstLoad} />}
+              hint="Páginas diferentes visitadas"
+              icon={<FileText />}
             />
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Pessoa</th>
-                  <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Última página</th>
-                  <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Primeira vez</th>
-                  <th className="text-left py-3 px-6 text-sm font-medium text-muted-foreground">Visto por último</th>
-                  <th className="text-right py-3 px-6 text-sm font-medium text-muted-foreground">Eventos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visitors.map(visitor => (
-                  <tr key={visitor.key} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                    <td className="py-3 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <Avatar className="h-9 w-9 bg-secondary">
-                            <AvatarFallback className="bg-secondary text-white text-xs">
-                              {visitor.actorName ? getInitials(visitor.actorName) : <UserRound className="h-4 w-4" />}
-                            </AvatarFallback>
-                          </Avatar>
-                          {visitor.isOnline && (
-                            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-background" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">{visitor.actorName ?? 'Visitante anônimo'}</p>
-                          <ActorBadge visitor={visitor} />
-                        </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <SectionCard icon={Radio} title="Online agora" description="Atualiza sozinho a cada 20s">
+              {firstLoad ? (
+                <SectionSkeleton rows={4} label="Carregando quem está online…" />
+              ) : !overview?.online.length ? (
+                <EmptyState size="sm" icon={Users} title="Ninguém online agora." />
+              ) : (
+                <div className="flex flex-col">
+                  {overview.online.map(person => (
+                    <OnlineRow key={person.key} person={person} />
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+
+            <SectionCard icon={FileText} title="Páginas mais visitadas hoje" description="Por número de visualizações">
+              {firstLoad ? (
+                <SectionSkeleton rows={4} label="Carregando as páginas mais visitadas…" />
+              ) : !overview?.topPages.length ? (
+                <EmptyState size="sm" icon={FileText} title="Nenhuma página visitada hoje ainda." />
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {overview.topPages.map(page => (
+                    <div key={page.path} className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span className="max-w-[70%] truncate font-mono text-xs text-foreground" title={page.path}>
+                          {page.path}
+                        </span>
+                        <span className="font-semibold tabular-nums text-foreground">{page.count}</span>
                       </div>
-                    </td>
-                    <td className="py-3 px-6 text-sm font-mono text-xs text-muted-foreground max-w-[220px] truncate">
-                      {visitor.lastPath}
-                    </td>
-                    <td className="py-3 px-6 text-sm text-muted-foreground">{timeAgo(visitor.firstSeenAt)}</td>
-                    <td className="py-3 px-6 text-sm text-muted-foreground">{timeAgo(visitor.lastSeenAt)}</td>
-                    <td className="py-3 px-6 text-sm text-right font-medium">{visitor.totalEvents}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                        <div
+                          className="h-full rounded-full bg-secondary"
+                          style={{ width: `${Math.max(4, (page.count / maxPageCount) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
           </div>
-          {!isLoading && visitors.length === 0 && (
-            <p className="text-sm text-muted-foreground py-12 text-center">Nenhum visitante encontrado.</p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+
+          <SectionCard icon={History} title="Atividade recente" description="Últimos 50 eventos — navegação e ações do sistema">
+            {firstLoad ? (
+              <SectionSkeleton rows={6} label="Carregando a atividade recente…" />
+            ) : !overview?.recentActivity.length ? (
+              <EmptyState size="sm" icon={History} title="Nenhuma atividade registrada ainda." />
+            ) : (
+              <ol className="relative m-0 ml-2 list-none space-y-5 border-l border-border p-0 py-1">
+                {overview.recentActivity.map(event => (
+                  <ActivityRow key={event.id} event={event} />
+                ))}
+              </ol>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            padded={false}
+            icon={UserRound}
+            title="Visto por último"
+            description="Todo mundo que já apareceu — logado ou anônimo"
+            actions={
+              <div className="relative w-full sm:w-64">
+                <Search
+                  className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  placeholder="Buscar por nome"
+                  aria-label="Buscar visitante por nome"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="h-11 rounded-[10px] pl-10"
+                />
+              </div>
+            }
+          >
+            {isLoading && visitors.length === 0 ? (
+              <div className="p-6">
+                <SectionSkeleton rows={5} label="Carregando visitantes…" />
+              </div>
+            ) : visitors.length === 0 ? (
+              <EmptyState
+                icon={search ? Search : Users}
+                title="Nenhum visitante encontrado."
+                description={search ? 'Confira o nome digitado ou limpe a busca.' : undefined}
+              />
+            ) : (
+              <div className={cn('transition-opacity', isLoading && 'opacity-60')}>
+                <DataTable
+                  framed={false}
+                  caption="Visitantes do sistema, do visto mais recentemente ao mais antigo"
+                  minWidth="min-w-[760px]"
+                >
+                  <thead>
+                    <tr>
+                      <Th>Pessoa</Th>
+                      <Th>Última página</Th>
+                      <Th>Primeira vez</Th>
+                      <Th>Visto por último</Th>
+                      <Th align="right">Eventos</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visitors.map(visitor => (
+                      <Tr key={visitor.key}>
+                        <Td>
+                          <div className="flex items-center gap-3">
+                            <div className="relative">
+                              <Avatar className="h-9 w-9 bg-secondary">
+                                <AvatarFallback className="bg-secondary text-xs text-white">
+                                  {visitor.actorName ? (
+                                    getInitials(visitor.actorName)
+                                  ) : (
+                                    <UserRound className="size-4" aria-hidden="true" />
+                                  )}
+                                </AvatarFallback>
+                              </Avatar>
+                              {visitor.isOnline && (
+                                <span
+                                  className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-card bg-emerald-500"
+                                  role="img"
+                                  aria-label="Online agora"
+                                />
+                              )}
+                            </div>
+                            <div className="flex flex-col items-start gap-1">
+                              <p className="m-0 text-sm font-medium text-foreground">{visitor.actorName ?? 'Visitante anônimo'}</p>
+                              <ActorBadge visitor={visitor} />
+                            </div>
+                          </div>
+                        </Td>
+                        <Td className="max-w-[220px] truncate font-mono text-xs text-muted-foreground" title={visitor.lastPath}>
+                          {visitor.lastPath}
+                        </Td>
+                        <Td className="text-sm text-muted-foreground">{timeAgo(visitor.firstSeenAt)}</Td>
+                        <Td className="text-sm text-muted-foreground">{timeAgo(visitor.lastSeenAt)}</Td>
+                        <Td align="right" className="text-sm font-medium tabular-nums">
+                          {visitor.totalEvents}
+                        </Td>
+                      </Tr>
+                    ))}
+                  </tbody>
+                </DataTable>
+              </div>
+            )}
+          </SectionCard>
+        </>
+      )}
+    </PageContainer>
   )
 }
 
-function StatCard({
-  label,
-  value,
-  hint,
-  icon: Icon,
-  colorClass,
-  pulse,
-}: {
-  label: string
-  value: number | undefined
-  hint: string
-  icon: typeof Activity
-  colorClass: string
-  pulse?: boolean
-}) {
-  return (
-    <Card className="border-0 shadow-sm">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold mt-1">{value ?? '—'}</p>
-            <p className="text-sm text-muted-foreground mt-1">{hint}</p>
-          </div>
-          <div className={`p-3 rounded-lg ${colorClass} ${pulse ? 'animate-pulse' : ''}`}>
-            <Icon className="h-5 w-5" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
+/** Número do KpiCard: esqueleto na primeira carga, traço quando não há dado. */
+function StatValue({ value, loading }: { value: number | undefined; loading: boolean }) {
+  if (loading) {
+    return (
+      <span role="status" className="inline-block h-8 w-16 animate-pulse rounded-lg bg-muted align-middle">
+        <span className="sr-only">Carregando…</span>
+      </span>
+    )
+  }
+  return <>{value ?? '—'}</>
 }
 
 function OnlineRow({ person }: { person: OnlineVisitor }) {
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
+    <div className="flex items-center gap-3 border-b border-border py-3 first:pt-0 last:border-0 last:pb-0">
       <div className="relative">
         <Avatar className="h-9 w-9 bg-secondary">
-          <AvatarFallback className="bg-secondary text-white text-xs">
-            {person.actorName ? getInitials(person.actorName) : <UserRound className="h-4 w-4" />}
+          <AvatarFallback className="bg-secondary text-xs text-white">
+            {person.actorName ? getInitials(person.actorName) : <UserRound className="size-4" aria-hidden="true" />}
           </AvatarFallback>
         </Avatar>
-        <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-background" />
+        <span
+          className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-card bg-emerald-500"
+          aria-hidden="true"
+        />
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{person.actorName ?? 'Visitante anônimo'}</p>
-        <p className="text-xs text-muted-foreground truncate font-mono">{person.path}</p>
+      <div className="min-w-0 flex-1">
+        <p className="m-0 truncate text-sm font-medium text-foreground">{person.actorName ?? 'Visitante anônimo'}</p>
+        <p className="m-0 truncate font-mono text-xs text-muted-foreground">{person.path}</p>
       </div>
-      <div className="flex flex-col items-end gap-1 shrink-0">
+      <div className="flex shrink-0 flex-col items-end gap-1">
         <ActorBadge visitor={person} />
         <span className="text-[11px] text-muted-foreground">{timeAgo(person.lastSeenAt)}</span>
       </div>
@@ -343,33 +339,33 @@ function ActivityRow({ event }: { event: ActivityEvent }) {
   return (
     <li className="ml-4">
       <span
-        className={`absolute -left-[7px] mt-1 flex h-3.5 w-3.5 items-center justify-center rounded-full ring-4 ring-background ${
-          isLogin ? 'bg-emerald-500' : isLogout ? 'bg-muted-foreground' : 'bg-blue-500'
-        }`}
+        className={cn(
+          'absolute -left-[7px] mt-1 flex size-3.5 items-center justify-center rounded-full ring-4 ring-card',
+          isLogin ? 'bg-emerald-500' : isLogout ? 'bg-muted-foreground' : 'bg-blue-500',
+        )}
+        aria-hidden="true"
       />
       <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-2 min-w-0">
+        <div className="flex min-w-0 items-start gap-2">
           {isLogin ? (
-            <LogIn className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+            <LogIn className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
           ) : isLogout ? (
-            <LogOut className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+            <LogOut className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           ) : (
-            <Eye className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+            <Eye className="mt-0.5 size-4 shrink-0 text-blue-600" aria-hidden="true" />
           )}
           <div className="min-w-0">
-            <p className="text-sm">
-              <span className="font-medium">{event.actorName ?? 'Visitante anônimo'}</span>{' '}
+            <p className="m-0 text-sm">
+              <span className="font-medium text-foreground">{event.actorName ?? 'Visitante anônimo'}</span>{' '}
               <span className="text-muted-foreground">
                 {isLogin ? 'entrou no sistema' : isLogout ? 'saiu do sistema' : 'visitou'}
               </span>{' '}
-              {!isLogin && !isLogout && (
-                <span className="font-mono text-xs text-muted-foreground">{event.path}</span>
-              )}
+              {!isLogin && !isLogout && <span className="break-all font-mono text-xs text-muted-foreground">{event.path}</span>}
             </p>
-            {event.tenantSlug && <p className="text-xs text-muted-foreground">Clube: {event.tenantSlug}</p>}
+            {event.tenantSlug && <p className="m-0 text-xs text-muted-foreground">Clube: {event.tenantSlug}</p>}
           </div>
         </div>
-        <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">{timeAgo(event.createdAt)}</span>
+        <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">{timeAgo(event.createdAt)}</span>
       </div>
     </li>
   )
@@ -384,47 +380,32 @@ function ActorBadge({
 
   if (!actorScope) {
     return (
-      <Badge variant="outline" className="text-muted-foreground text-[11px]">
-        <UserRound className="w-3 h-3 mr-1" /> Visitante
-      </Badge>
+      <StatusPill tone="neutral" icon={<UserRound />}>
+        Visitante
+      </StatusPill>
     )
   }
 
   if (actorScope === 'platform') {
     return actorRole === 'superadmin' ? (
-      <Badge className="bg-red-100 text-[#B42318] text-[11px]">
-        <ShieldCheck className="w-3 h-3 mr-1" /> Superadmin
-      </Badge>
+      <StatusPill tone="danger" icon={<ShieldCheck />}>
+        Superadmin
+      </StatusPill>
     ) : (
-      <Badge className="bg-red-100 text-[#B42318] text-[11px]">
-        <Shield className="w-3 h-3 mr-1" /> Plataforma
-      </Badge>
+      <StatusPill tone="danger" icon={<Shield />}>
+        Plataforma
+      </StatusPill>
     )
   }
 
   const label = actorRole === 'admin' ? 'Admin' : actorRole === 'seller' ? 'Vendedor' : 'Associado'
-  const colorClass =
-    actorRole === 'admin'
-      ? 'bg-blue-100 text-blue-700'
-      : actorRole === 'seller'
-        ? 'bg-purple-100 text-purple-700'
-        : 'bg-green-100 text-green-700'
+  const tone = actorRole === 'admin' ? 'info' : actorRole === 'seller' ? 'neutral' : 'success'
 
   return (
-    <Badge className={`${colorClass} text-[11px]`}>
+    <StatusPill tone={tone}>
       {label}
       {tenantSlug ? ` · ${tenantSlug}` : ''}
-    </Badge>
-  )
-}
-
-function SkeletonRows({ rows = 4 }: { rows?: number }) {
-  return (
-    <div className="space-y-3 py-1">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-9 rounded-md bg-muted animate-pulse" />
-      ))}
-    </div>
+    </StatusPill>
   )
 }
 

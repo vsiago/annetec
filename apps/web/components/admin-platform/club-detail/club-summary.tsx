@@ -1,7 +1,7 @@
 'use client'
 
-import { LoadError } from '@/components/admin-platform/billing/console-kit'
-import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
 import { ClubHealthCard } from '@/components/admin-platform/club-detail/club-health-card'
 import { ClubKpis } from '@/components/admin-platform/club-detail/club-kpis'
 import { ReadyToSellCard } from '@/components/admin-platform/club-detail/ready-to-sell-card'
@@ -28,20 +28,21 @@ export function ClubSummary({
   const detail = health.data
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       {health.error && !detail ? (
-        <LoadError
-          message={`Não foi possível carregar os números do clube. ${health.error}`}
+        <ErrorState
+          title="Não foi possível carregar os números do clube."
+          description={health.error}
           onRetry={() => void health.reload()}
         />
       ) : null}
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <ReadyToSellCard tenant={tenant} summary={summary} isSuperadmin={isSuperadmin} onOpenAdvanced={onOpenAdvanced} />
         <ClubKpis detail={detail} loading={health.loading} tenantId={tenant.id} />
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         {detail ? (
           <>
             <ClubHealthCard row={detail.tenant} />
@@ -49,8 +50,12 @@ export function ClubSummary({
           </>
         ) : health.loading ? (
           <>
-            <Skeleton className="h-72 rounded-2xl" />
-            <Skeleton className="h-72 rounded-2xl" />
+            <SectionCard>
+              <SectionSkeleton rows={5} label="Carregando a saúde do clube…" />
+            </SectionCard>
+            <SectionCard>
+              <SectionSkeleton rows={5} label="Carregando a atividade recente…" />
+            </SectionCard>
           </>
         ) : null}
       </div>

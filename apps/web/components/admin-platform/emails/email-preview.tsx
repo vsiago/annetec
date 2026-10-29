@@ -6,7 +6,8 @@ import { Building2, ExternalLink, FileSearch, Mail } from 'lucide-react'
 import type { PlatformEmail } from '@annetec/contracts'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { LoadError, Pill, useConsoleData } from '@/components/admin-platform/billing/console-kit'
+import { Pill, useConsoleData } from '@/components/admin-platform/billing/console-kit'
+import { ErrorState } from '@/components/admin-platform/ui/empty-state'
 import { getPlatformEmailAction } from '@/lib/actions/platform-emails-api'
 import { emailStatusMeta, emailTemplateLabel, formatDateTimeBR } from '@/lib/adapters/platform-console'
 import { cn } from '@/lib/utils'
@@ -24,26 +25,29 @@ function htmlDocument(html: string): string {
   return `<!doctype html><html><head><meta charset="utf-8">${base}</head><body>${html}</body></html>`
 }
 
+const LINK_CLASS =
+  'inline-flex min-h-10 items-center gap-1.5 rounded-md text-sm font-medium text-secondary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2'
+
 export function EmailPreview({ email, className }: { email: PlatformEmail; className?: string }) {
   const [view, setView] = useState<'html' | 'text'>(email.bodyHtml ? 'html' : 'text')
   const status = emailStatusMeta(email.status)
 
   return (
     <div className={cn('flex min-h-0 flex-col', className)}>
-      <div className="space-y-3 border-b border-border pb-4">
+      <div className="flex flex-col gap-4 border-b border-border pb-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <h2 className="text-lg font-semibold leading-snug text-foreground">{email.subject}</h2>
+          <h2 className="m-0 text-lg font-semibold leading-snug text-foreground">{email.subject}</h2>
           <Pill meta={status} />
         </div>
-        <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
+        <dl className="m-0 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-[auto_1fr]">
           <dt className="text-muted-foreground">Para</dt>
-          <dd className="min-w-0 break-words text-foreground">
+          <dd className="m-0 min-w-0 break-words text-foreground">
             {email.toName ? `${email.toName} <${email.toEmail}>` : email.toEmail}
           </dd>
           <dt className="text-muted-foreground">Modelo</dt>
-          <dd className="text-foreground">{emailTemplateLabel(email.template)}</dd>
+          <dd className="m-0 text-foreground">{emailTemplateLabel(email.template)}</dd>
           <dt className="text-muted-foreground">Registrado em</dt>
-          <dd className="text-foreground">
+          <dd className="m-0 text-foreground">
             {formatDateTimeBR(email.createdAt)}
             {email.sentAt ? ` · enviado ${formatDateTimeBR(email.sentAt)}` : ''}
             {' · '}
@@ -51,39 +55,37 @@ export function EmailPreview({ email, className }: { email: PlatformEmail; class
           </dd>
         </dl>
         {email.error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-[#B42318] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          <p className="m-0 rounded-xl border border-[#B42318]/20 bg-[#FEF3F2] px-4 py-3 text-sm text-[#B42318]">
             Falha no envio: {email.error}
           </p>
         )}
         {(email.proposalId || email.organizationId) && (
-          <div className="flex flex-wrap gap-3 text-xs">
+          <div className="flex flex-wrap gap-x-5 gap-y-1">
             {email.proposalId && (
-              <Link href={`/admin/compliance/${email.proposalId}`} className="inline-flex items-center gap-1 text-secondary hover:underline">
-                <FileSearch className="h-3.5 w-3.5" />
+              <Link href={`/admin/compliance/${email.proposalId}`} className={LINK_CLASS}>
+                <FileSearch className="size-4" aria-hidden="true" />
                 Ver proposta
               </Link>
             )}
             {email.organizationId && (
-              <Link
-                href={`/admin/inquilinos/${email.organizationId}`}
-                className="inline-flex items-center gap-1 text-secondary hover:underline"
-              >
-                <Building2 className="h-3.5 w-3.5" />
+              <Link href={`/admin/inquilinos/${email.organizationId}`} className={LINK_CLASS}>
+                <Building2 className="size-4" aria-hidden="true" />
                 Ver clube
               </Link>
             )}
           </div>
         )}
-        <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-medium">
+        <div className="inline-flex w-fit rounded-xl bg-muted p-1 text-sm font-medium">
           {(['html', 'text'] as const).map(option => (
             <button
               key={option}
               type="button"
               onClick={() => setView(option)}
               disabled={option === 'html' && !email.bodyHtml}
+              aria-pressed={view === option}
               className={cn(
-                'rounded-md px-3 py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                view === option ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                'min-h-10 rounded-lg px-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary disabled:cursor-not-allowed disabled:opacity-40',
+                view === option ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               {option === 'html' ? 'Visualização' : 'Texto puro'}
@@ -98,10 +100,10 @@ export function EmailPreview({ email, className }: { email: PlatformEmail; class
             title={`E-mail: ${email.subject}`}
             srcDoc={htmlDocument(email.bodyHtml)}
             sandbox="allow-popups allow-popups-to-escape-sandbox"
-            className="h-[60vh] w-full rounded-lg border border-border bg-white"
+            className="h-[60vh] w-full rounded-xl border border-border bg-white"
           />
         ) : (
-          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-muted/30 p-4 font-sans text-sm leading-relaxed text-foreground">
+          <pre className="m-0 max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-muted/30 p-4 font-sans text-sm leading-relaxed text-foreground">
             {email.bodyText}
           </pre>
         )}
@@ -112,11 +114,12 @@ export function EmailPreview({ email, className }: { email: PlatformEmail; class
 
 export function EmailPreviewSkeleton() {
   return (
-    <div className="space-y-3" aria-busy="true">
+    <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-3">
+      <span className="sr-only">Carregando o e-mail…</span>
       <Skeleton className="h-6 w-3/4" />
       <Skeleton className="h-4 w-1/2" />
       <Skeleton className="h-4 w-1/3" />
-      <Skeleton className="h-[40vh] w-full rounded-lg" />
+      <Skeleton className="h-[40vh] w-full rounded-xl" />
     </div>
   )
 }
@@ -136,7 +139,7 @@ export function EmailPreviewDialog({
 
   return (
     <Dialog open={!!emailId} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-2xl sm:max-w-3xl">
         <DialogHeader className="sr-only">
           <DialogTitle>E-mail enviado</DialogTitle>
           <DialogDescription>Prévia do e-mail como o destinatário recebe</DialogDescription>
@@ -144,18 +147,21 @@ export function EmailPreviewDialog({
         {loading && !data ? (
           <EmailPreviewSkeleton />
         ) : error ? (
-          <LoadError message={error} onRetry={() => reload()} />
+          <ErrorState
+            size="sm"
+            framed={false}
+            title="Não foi possível abrir o e-mail"
+            description={error}
+            onRetry={() => reload()}
+          />
         ) : data ? (
           <EmailPreview key={data.id} email={data} />
         ) : null}
         {data && (
-          <Link
-            href={`/admin/emails?email=${data.id}`}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <Mail className="h-3.5 w-3.5" />
+          <Link href={`/admin/emails?email=${data.id}`} className={cn(LINK_CLASS, 'text-muted-foreground hover:text-foreground')}>
+            <Mail className="size-4" aria-hidden="true" />
             Abrir em E-mails enviados
-            <ExternalLink className="h-3 w-3" />
+            <ExternalLink className="size-3.5" aria-hidden="true" />
           </Link>
         )}
       </DialogContent>

@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import Link from 'next/link'
 import type { CommissionReceipt, TenantUser } from '@annetec/contracts'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { EmptyStateCard } from '@/components/dashboard/empty-state'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { BackLink, PageHeader } from '@/components/admin-platform/ui/page-header'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { DataTable, TableLoading, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { StatusPill, type StatusPillTone } from '@/components/admin-platform/ui/status-pill'
 import { getOperatorAction, listOperatorSellersAction, listOperatorCommissionReceiptsAction } from '@/lib/actions/operator-api'
-import { ArrowLeft, Loader2, Receipt, ExternalLink } from 'lucide-react'
+import { Receipt, ExternalLink } from 'lucide-react'
 
 const STATUS_LABEL: Record<string, string> = {
   emitido: 'Emitido',
@@ -18,11 +19,11 @@ const STATUS_LABEL: Record<string, string> = {
   desconhecido: 'Desconhecido',
 }
 
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  emitido: 'outline',
-  pago: 'default',
-  cancelado: 'destructive',
-  desconhecido: 'outline',
+const STATUS_TONE: Record<string, StatusPillTone> = {
+  emitido: 'info',
+  pago: 'success',
+  cancelado: 'danger',
+  desconhecido: 'neutral',
 }
 
 function money(value: number | null) {
@@ -82,102 +83,91 @@ export default function SellerCommissionsPage() {
   }, [tenantSlug, tab])
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <Link
-        href="/admin/vendedores"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> Voltar para Vendedores
-      </Link>
+    <PageContainer>
+      <PageHeader
+        icon={Receipt}
+        breadcrumb={<BackLink href="/admin/vendedores">Voltar para Vendedores</BackLink>}
+        title={seller ? `Comissões — ${seller.name}` : 'Comissões'}
+        description="Recibos direto da Digital Saúde, pelo produtor vinculado."
+      />
 
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          Comissões {seller ? `— ${seller.name}` : ''}
-        </h1>
-        <p className="text-muted-foreground">Recibos direto da Digital Saúde, pelo produtor vinculado.</p>
-      </div>
-
-      {(baseError && !loadingBase) && (
-        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
-          <CardContent className="py-4 text-sm text-[#B42318]">{baseError}</CardContent>
-        </Card>
-      )}
-
-      {!baseError && (
+      {baseError && !loadingBase ? (
+        <ErrorState description={baseError} />
+      ) : !baseError ? (
         <>
           <Tabs value={tab} onValueChange={v => setTab(v as 'emitido' | 'pago')}>
-            <TabsList>
-              <TabsTrigger value="emitido">Emitidos</TabsTrigger>
-              <TabsTrigger value="pago">Pagos</TabsTrigger>
+            <TabsList className="h-12 rounded-xl">
+              <TabsTrigger value="emitido" className="rounded-lg px-5">
+                Emitidos
+              </TabsTrigger>
+              <TabsTrigger value="pago" className="rounded-lg px-5">
+                Pagos
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
-          <Card className="border border-border/80 shadow-xs bg-card">
-            <CardContent className="p-0">
-              {loadingReceipts || loadingBase ? (
-                <div className="flex items-center justify-center py-16 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
-                </div>
-              ) : receiptsError ? (
-                <p className="p-4 text-sm text-[#B42318]">{receiptsError}</p>
-              ) : !receipts || receipts.length === 0 ? (
-                <EmptyStateCard
-                  icon={Receipt}
-                  title="Nenhum recibo encontrado"
-                  description={
-                    seller?.upstreamProdutorCodigo
-                      ? 'Confira se o produtor tem login e senha vinculados na tela de Vendedores.'
-                      : 'Vincule um produtor a este vendedor primeiro.'
-                  }
-                />
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Recibo</th>
-                        <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Emitido em</th>
-                        <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Valor</th>
-                        <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Status</th>
-                        <th className="text-right py-4 px-6 text-sm font-medium text-muted-foreground">Documento</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {receipts.map(receipt => (
-                        <tr key={receipt.upstreamCodigo} className="border-b border-border last:border-0">
-                          <td className="py-4 px-6">
-                            <p className="text-sm font-medium text-foreground">{receipt.upstreamCodigo}</p>
-                            <p className="text-xs text-muted-foreground">{receipt.entries.length} lançamento(s)</p>
-                          </td>
-                          <td className="py-4 px-6 text-sm text-foreground">{receipt.issuedAt ?? '—'}</td>
-                          <td className="py-4 px-6 text-sm font-medium text-foreground">{money(receipt.amount)}</td>
-                          <td className="py-4 px-6">
-                            <Badge variant={STATUS_VARIANT[receipt.status] ?? 'outline'}>
-                              {STATUS_LABEL[receipt.status] ?? receipt.status}
-                            </Badge>
-                          </td>
-                          <td className="py-4 px-6 text-right">
-                            {receipt.documentUrl && (
-                              <a
-                                href={receipt.documentUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-sm text-secondary hover:underline"
-                              >
-                                Ver <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {loadingReceipts || loadingBase ? (
+            <TableLoading label="Carregando recibos…" />
+          ) : receiptsError ? (
+            <ErrorState description={receiptsError} />
+          ) : !receipts || receipts.length === 0 ? (
+            <EmptyState
+              framed
+              icon={Receipt}
+              title="Nenhum recibo encontrado"
+              description={
+                seller?.upstreamProdutorCodigo
+                  ? 'Confira se o produtor tem login e senha vinculados na tela de Vendedores.'
+                  : 'Vincule um produtor a este vendedor primeiro.'
+              }
+            />
+          ) : (
+            <DataTable caption="Recibos de comissão do vendedor" minWidth="min-w-[720px]">
+              <thead>
+                <tr>
+                  <Th>Recibo</Th>
+                  <Th>Emitido em</Th>
+                  <Th>Valor</Th>
+                  <Th>Status</Th>
+                  <Th align="right">Documento</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {receipts.map(receipt => (
+                  <Tr key={receipt.upstreamCodigo}>
+                    <Td>
+                      <p className="m-0 text-sm font-semibold text-foreground">{receipt.upstreamCodigo}</p>
+                      <p className="m-0 mt-0.5 text-[13px] text-muted-foreground">
+                        {receipt.entries.length} lançamento(s)
+                      </p>
+                    </Td>
+                    <Td className="text-foreground">{receipt.issuedAt ?? '—'}</Td>
+                    <Td className="font-medium text-foreground">{money(receipt.amount)}</Td>
+                    <Td>
+                      <StatusPill tone={STATUS_TONE[receipt.status] ?? 'neutral'}>
+                        {STATUS_LABEL[receipt.status] ?? receipt.status}
+                      </StatusPill>
+                    </Td>
+                    <Td align="right">
+                      {receipt.documentUrl && (
+                        <a
+                          href={receipt.documentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex min-h-10 items-center gap-1 rounded-md text-sm font-medium text-secondary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2"
+                        >
+                          Ver<span className="sr-only"> documento do recibo {receipt.upstreamCodigo}</span>
+                          <ExternalLink className="size-3.5" aria-hidden="true" />
+                        </a>
+                      )}
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </DataTable>
+          )}
         </>
-      )}
-    </div>
+      ) : null}
+    </PageContainer>
   )
 }

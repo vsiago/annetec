@@ -4,12 +4,15 @@ import { useEffect, useState } from 'react'
 import type { Benefit, BenefitCategory, Partner, PartnerCategory, UF } from '@annetec/contracts'
 import { UFS } from '@annetec/contracts'
 import { useAdminScope } from '@/contexts/admin-scope-context'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/admin-platform/ui/button'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -20,7 +23,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { EmptyStateCard } from '@/components/dashboard/empty-state'
 import {
   listOperatorPartnersAction,
   createOperatorPartnerAction,
@@ -53,37 +55,41 @@ const BENEFIT_CATEGORY_LABEL: Record<BenefitCategory, string> = {
 
 export default function OperatorRedePage() {
   // De qual inquilino são os dados desta tela — ver AdminScopeProvider.
-  const { slug: tenantSlug, isLoading: loadingOperator, error: operatorError } = useAdminScope()
-
+  const { slug: tenantSlug, error: operatorError } = useAdminScope()
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Rede de Parceiros</h1>
-        <p className="text-muted-foreground">Clube de benefícios oferecido pela Annetec — conteúdo próprio.</p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        icon={Handshake}
+        title="Rede de Parceiros"
+        description="Clube de benefícios oferecido pela Annetec — conteúdo próprio."
+      />
 
-      {operatorError && (
-        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
-          <CardContent className="py-4 text-sm text-[#B42318]">{operatorError}</CardContent>
-        </Card>
-      )}
-
-      {!operatorError && tenantSlug && (
-        <Tabs defaultValue="parceiros">
-          <TabsList>
-            <TabsTrigger value="parceiros">Parceiros</TabsTrigger>
-            <TabsTrigger value="beneficios">Benefícios</TabsTrigger>
+      {operatorError ? (
+        <ErrorState description={operatorError} />
+      ) : !tenantSlug ? (
+        <SectionCard>
+          <SectionSkeleton rows={4} label="Carregando…" />
+        </SectionCard>
+      ) : (
+        <Tabs defaultValue="parceiros" className="gap-0">
+          <TabsList className="h-12 rounded-xl">
+            <TabsTrigger value="parceiros" className="rounded-lg px-5">
+              Parceiros
+            </TabsTrigger>
+            <TabsTrigger value="beneficios" className="rounded-lg px-5">
+              Benefícios
+            </TabsTrigger>
           </TabsList>
-          <TabsContent value="parceiros" className="pt-4">
+          <TabsContent value="parceiros" className="pt-6">
             <PartnersTab tenantSlug={tenantSlug} />
           </TabsContent>
-          <TabsContent value="beneficios" className="pt-4">
+          <TabsContent value="beneficios" className="pt-6">
             <BenefitsTab tenantSlug={tenantSlug} />
           </TabsContent>
         </Tabs>
       )}
-    </div>
+    </PageContainer>
   )
 }
 
@@ -111,7 +117,7 @@ function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="flex justify-end">
         <AddPartnerDialog
           open={addOpen}
@@ -126,65 +132,67 @@ function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground">
-          <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
-        </div>
+        <SectionCard>
+          <SectionSkeleton rows={4} label="Carregando parceiros…" />
+        </SectionCard>
       ) : partners.length === 0 ? (
-        <EmptyStateCard
+        <EmptyState
+          framed
           icon={Handshake}
           title="Nenhum parceiro neste clube"
           description="A rede credenciada é conteúdo próprio da Annetec — a Digital Saúde não tem equivalente, então cada clube monta a sua. Troque de clube no seletor acima para ver outra."
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {partners.map(partner => (
-            <Card key={partner.id} className="border border-border/80 shadow-xs bg-card">
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-foreground">{partner.name}</p>
-                  <div className="flex shrink-0 gap-0.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      onClick={() => {
-                        setEditing(partner)
-                        setAddOpen(true)
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      <span className="sr-only">Editar {partner.name}</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 text-[#B42318] hover:text-[#B42318]"
-                      onClick={() => handleDelete(partner.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span className="sr-only">Remover {partner.name}</span>
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">{PARTNER_CATEGORY_LABEL[partner.category]}</Badge>
-                  <Badge variant="secondary" className="text-xs">{partner.discountPercent}% off</Badge>
-                  {partner.status === 'inactive' && (
-                    <Badge variant="destructive" className="text-xs">Inativo</Badge>
-                  )}
+            <SectionCard
+              key={partner.id}
+              title={partner.name}
+              actions={
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-10"
+                    onClick={() => {
+                      setEditing(partner)
+                      setAddOpen(true)
+                    }}
+                  >
+                    <Pencil aria-hidden="true" />
+                    <span className="sr-only">Editar {partner.name}</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-10 text-[#B42318] hover:bg-[#FEF3F2] hover:text-[#B42318]"
+                    onClick={() => handleDelete(partner.id)}
+                  >
+                    <Trash2 aria-hidden="true" />
+                    <span className="sr-only">Remover {partner.name}</span>
+                  </Button>
+                </>
+              }
+            >
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill tone="neutral">{PARTNER_CATEGORY_LABEL[partner.category]}</StatusPill>
+                  <StatusPill tone="info">{partner.discountPercent}% off</StatusPill>
+                  {partner.status === 'inactive' && <StatusPill tone="danger">Inativo</StatusPill>}
                 </div>
                 {(partner.city || partner.state) && (
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <MapPin className="h-3 w-3" /> {[partner.city, partner.state].filter(Boolean).join(' / ')}
+                  <p className="m-0 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                    <MapPin className="size-3.5 shrink-0" aria-hidden="true" />{' '}
+                    {[partner.city, partner.state].filter(Boolean).join(' / ')}
                   </p>
                 )}
                 {partner.phone && (
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Phone className="h-3 w-3" /> {partner.phone}
+                  <p className="m-0 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                    <Phone className="size-3.5 shrink-0" aria-hidden="true" /> {partner.phone}
                   </p>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </SectionCard>
           ))}
         </div>
       )}
@@ -279,8 +287,8 @@ function AddPartnerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" /> Novo parceiro
+        <Button className="h-11 rounded-[10px] px-4 font-semibold">
+          <Plus aria-hidden="true" /> Novo parceiro
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -378,7 +386,7 @@ function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="flex justify-end">
         <AddBenefitDialog
           open={addOpen}
@@ -393,56 +401,61 @@ function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground">
-          <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
-        </div>
+        <SectionCard>
+          <SectionSkeleton rows={4} label="Carregando benefícios…" />
+        </SectionCard>
       ) : benefits.length === 0 ? (
-        <EmptyStateCard
+        <EmptyState
+          framed
           icon={Gift}
           title="Nenhum benefício neste clube"
           description="O clube de benefícios é conteúdo próprio da Annetec, cadastrado por clube."
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {benefits.map(benefit => (
-            <Card key={benefit.id} className="border border-border/80 shadow-xs bg-card">
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-foreground">{benefit.name}</p>
-                  <div className="flex shrink-0 gap-0.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      onClick={() => {
-                        setEditing(benefit)
-                        setAddOpen(true)
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      <span className="sr-only">Editar {benefit.name}</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 text-[#B42318] hover:text-[#B42318]"
-                      onClick={() => handleDelete(benefit.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span className="sr-only">Remover {benefit.name}</span>
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">{BENEFIT_CATEGORY_LABEL[benefit.category]}</Badge>
+            <SectionCard
+              key={benefit.id}
+              title={benefit.name}
+              actions={
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-10"
+                    onClick={() => {
+                      setEditing(benefit)
+                      setAddOpen(true)
+                    }}
+                  >
+                    <Pencil aria-hidden="true" />
+                    <span className="sr-only">Editar {benefit.name}</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-10 text-[#B42318] hover:bg-[#FEF3F2] hover:text-[#B42318]"
+                    onClick={() => handleDelete(benefit.id)}
+                  >
+                    <Trash2 aria-hidden="true" />
+                    <span className="sr-only">Remover {benefit.name}</span>
+                  </Button>
+                </>
+              }
+            >
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill tone="neutral">{BENEFIT_CATEGORY_LABEL[benefit.category]}</StatusPill>
                   {benefit.discountPercent !== null && (
-                    <Badge variant="secondary" className="text-xs">{benefit.discountPercent}% off</Badge>
+                    <StatusPill tone="info">{benefit.discountPercent}% off</StatusPill>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">{benefit.description}</p>
-                {benefit.provider && <p className="text-xs text-muted-foreground">Fornecedor: {benefit.provider}</p>}
-              </CardContent>
-            </Card>
+                <p className="m-0 text-sm text-muted-foreground">{benefit.description}</p>
+                {benefit.provider && (
+                  <p className="m-0 text-[13px] text-muted-foreground">Fornecedor: {benefit.provider}</p>
+                )}
+              </div>
+            </SectionCard>
           ))}
         </div>
       )}
@@ -518,8 +531,8 @@ function AddBenefitDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" /> Novo benefício
+        <Button className="h-11 rounded-[10px] px-4 font-semibold">
+          <Plus aria-hidden="true" /> Novo benefício
         </Button>
       </DialogTrigger>
       <DialogContent>

@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import type { IntegrationDiscovery, TenantIntegrationPublic } from '@annetec/contracts'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/admin-platform/ui/button'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
+import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -16,7 +17,7 @@ import {
   saveTenantIntegrationAction,
   testTenantIntegrationAction,
 } from '@/lib/actions/tenants-api'
-import { AlertCircle, CheckCircle2, Loader2, Plug, RefreshCw, Search, XCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, Plug, RefreshCw, Search, ShieldCheck, XCircle } from 'lucide-react'
 
 /**
  * Ligação do clube com a Digital Saúde (aba Avançado, só superadmin).
@@ -169,12 +170,9 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando a integração…
-        </CardContent>
-      </Card>
+      <SectionCard title="Integração com a Digital Saúde" icon={Plug}>
+        <SectionSkeleton rows={4} label="Carregando a integração…" />
+      </SectionCard>
     )
   }
 
@@ -184,33 +182,26 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
     : []
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Plug className="h-5 w-5 text-primary" />
-          Integração com a Digital Saúde
-        </CardTitle>
-        <CardDescription>
-          Usado pela equipe técnica para conectar o clube ao sistema da operadora.{' '}
-          {integration
-            ? `Configurada. Última verificação: ${
-                integration.lastCheckedAt
-                  ? new Date(integration.lastCheckedAt).toLocaleString('pt-BR')
-                  : 'nunca'
-              }.`
-            : 'Ainda não configurada: o clube não consegue ler o catálogo nem a carteira.'}
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="space-y-6">
+    <SectionCard
+      title="Integração com a Digital Saúde"
+      icon={Plug}
+      description={`Usado pela equipe técnica para conectar o clube ao sistema da operadora. ${
+        integration
+          ? `Configurada. Última verificação: ${
+              integration.lastCheckedAt ? new Date(integration.lastCheckedAt).toLocaleString('pt-BR') : 'nunca'
+            }.`
+          : 'Ainda não configurada: o clube não consegue ler o catálogo nem a carteira.'
+      }`}
+    >
+      <div className="flex flex-col gap-6">
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="rounded-xl">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
         {aviso && (
-          <Alert>
+          <Alert className="rounded-xl">
             <CheckCircle2 className="h-4 w-4" />
             <AlertDescription>{aviso}</AlertDescription>
           </Alert>
@@ -218,11 +209,11 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
 
         {integration && (
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={integration.lastCheckOk ? 'default' : 'destructive'}>
+            <StatusPill tone={integration.lastCheckOk ? 'success' : 'danger'}>
               {integration.lastCheckOk ? 'Credenciais aceitas' : 'Credenciais recusadas'}
-            </Badge>
-            {!integration.enabled && <Badge variant="outline">Integração desativada</Badge>}
-            <Button size="sm" variant="outline" onClick={testar} disabled={testando}>
+            </StatusPill>
+            {!integration.enabled && <StatusPill tone="neutral">Integração desativada</StatusPill>}
+            <Button size="sm" variant="outline" className="min-h-10 rounded-[10px]" onClick={testar} disabled={testando}>
               {testando ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
               Testar conexão
             </Button>
@@ -230,9 +221,9 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
         )}
 
         {/* ---------------------------------------------------- credenciais */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Credenciais</h3>
-          <p className="text-sm text-muted-foreground">
+        <div className="flex flex-col gap-4">
+          <h3 className="m-0 text-sm font-semibold">Credenciais</h3>
+          <p className="m-0 text-sm text-muted-foreground">
             A chave de acesso (<code className="text-xs">token</code>) e a senha da API (
             <code className="text-xs">senhaApi</code>) são geradas no painel da Digital Saúde; não dá para criá-las
             por aqui. A senha nunca é mostrada de volta.
@@ -265,22 +256,28 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
         </div>
 
         {/* ----------------------------------------------------- descoberta */}
-        <div className="space-y-3 border-t pt-6">
+        <div className="flex flex-col gap-4 border-t border-border pt-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Códigos na Digital Saúde</h3>
-            <Button size="sm" variant="outline" onClick={descobrir} disabled={descobrindo || !integration}>
+            <h3 className="m-0 text-sm font-semibold">Códigos na Digital Saúde</h3>
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-10 rounded-[10px]"
+              onClick={descobrir}
+              disabled={descobrindo || !integration}
+            >
               {descobrindo ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-2 h-3.5 w-3.5" />}
               Descobrir códigos
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="m-0 text-sm text-muted-foreground">
             A Digital Saúde não oferece uma lista de grupos, filiais e grupos de produtor, mas esses códigos
             aparecem dentro de outras respostas. Use “Descobrir códigos” para escolher da lista em vez de
             digitar.
           </p>
 
           {discovery?.avisos.map(texto => (
-            <Alert key={texto}>
+            <Alert key={texto} className="rounded-xl">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{texto}</AlertDescription>
             </Alert>
@@ -329,33 +326,41 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
         </div>
 
         {/* ----------------------------------------------------- permissões */}
-        <div className="space-y-3 border-t pt-6">
+        <div className="flex flex-col gap-4 border-t border-border pt-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">O que esta chave de acesso pode fazer</h3>
-            <Button size="sm" variant="outline" onClick={apurarPermissoes} disabled={apurando || !integration}>
+            <h3 className="m-0 text-sm font-semibold">O que esta chave de acesso pode fazer</h3>
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-10 rounded-[10px]"
+              onClick={apurarPermissoes}
+              disabled={apurando || !integration}
+            >
               {apurando ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
               Verificar permissões
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="m-0 text-sm text-muted-foreground">
             A Digital Saúde libera cada operação separadamente: a mesma chave que lê todo o catálogo pode ter a
             cotação bloqueada. Verificar aqui evita descobrir isso na frente do cliente.
           </p>
 
           {!capabilities && (
-            <p className="text-sm text-muted-foreground">
-              Ainda não verificado
-              {integration ? '.' : '. Configure as credenciais primeiro.'}
-            </p>
+            <EmptyState
+              size="sm"
+              icon={ShieldCheck}
+              title="Ainda não verificado."
+              description={integration ? undefined : 'Configure as credenciais primeiro.'}
+            />
           )}
 
           {capabilities && (
             <>
-              <ul className="divide-y rounded-md border">
+              <ul className="m-0 list-none divide-y divide-border rounded-xl border border-border p-0">
                 {Object.entries(capabilities).map(([operacao, permitido]) => {
                   const meta = OPERACOES[operacao]
                   return (
-                    <li key={operacao} className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
+                    <li key={operacao} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
                       <span className="min-w-0">
                         <span className="font-medium">{meta?.label ?? operacao}</span>
                         {meta && (
@@ -364,10 +369,14 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
                       </span>
                       <span
                         className={`inline-flex shrink-0 items-center gap-1.5 text-xs font-medium ${
-                          permitido ? 'text-emerald-700' : 'text-[#B42318]'
+                          permitido ? 'text-[#067647]' : 'text-[#B42318]'
                         }`}
                       >
-                        {permitido ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                        {permitido ? (
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        ) : (
+                          <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
                         {permitido ? 'Liberado' : 'Bloqueado'}
                       </span>
                     </li>
@@ -375,7 +384,7 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
                 })}
               </ul>
               {bloqueadas.length > 0 && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="rounded-xl">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
                     {bloqueadas.length === 1 ? 'Uma operação está bloqueada' : `${bloqueadas.length} operações estão bloqueadas`}{' '}
@@ -385,7 +394,7 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
                 </Alert>
               )}
               {integration?.capabilitiesCheckedAt && (
-                <p className="text-xs text-muted-foreground">
+                <p className="m-0 text-xs text-muted-foreground">
                   Verificado em {new Date(integration.capabilitiesCheckedAt).toLocaleString('pt-BR')}.
                 </p>
               )}
@@ -393,13 +402,13 @@ export function IntegrationPanel({ tenantId }: { tenantId: string }) {
           )}
         </div>
 
-        <div className="flex justify-end border-t pt-6">
-          <Button onClick={salvar} disabled={salvando}>
+        <div className="flex justify-end border-t border-border pt-6">
+          <Button onClick={salvar} disabled={salvando} className="min-h-11 rounded-[10px] px-5 text-sm font-semibold">
             {salvando ? 'Confirmando na Digital Saúde…' : 'Salvar integração'}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </SectionCard>
   )
 }
 

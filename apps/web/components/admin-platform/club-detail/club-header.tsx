@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { ExternalLink, MoreHorizontal, ShieldAlert } from 'lucide-react'
 import type { PlatformAccessLevel } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
@@ -11,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { BackLink, PageHeader } from '@/components/admin-platform/ui/page-header'
 import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { OpenClubPanelButton } from '@/components/admin-platform/club-detail/open-club-panel-button'
 import { CLUB_STATUS_LABEL, CLUB_STATUS_TONE, clubSinceLabel } from '@/components/admin-platform/club-detail/club-model'
@@ -18,10 +18,10 @@ import type { Tenant } from '@/lib/types'
 import { useSiteAddress } from '@/lib/site-address'
 import { getInitials } from '@/lib/utils'
 
-
 /**
- * Cabeçalho do detalhe do clube: caminho, logo (ou iniciais na cor do clube),
- * nome, situação, endereço do site e "Cliente desde". Ações: "Ver site"
+ * Cabeçalho do detalhe do clube (PageHeader do console): "Voltar para Clubes",
+ * logo (ou iniciais na cor do clube), nome, situação, endereço do site e
+ * "Cliente desde". Ações: "Ver site"
  * (secundário), UM botão primário ("Abrir painel do clube") e o menu
  * "Mais ações".
  */
@@ -42,21 +42,12 @@ export function ClubHeader({
   const since = clubSinceLabel(tenant.createdAt)
 
   return (
-    <div className="flex flex-col gap-6">
-      <nav aria-label="Caminho" className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/admin/inquilinos" className="font-medium text-secondary hover:underline">
-          Clubes
-        </Link>
-        <span aria-hidden="true">/</span>
-        <span className="min-w-0 truncate" aria-current="page">
-          {tenant.name}
-        </span>
-      </nav>
-
-      <header className="flex flex-wrap items-center justify-between gap-5">
-        <div className="flex min-w-0 items-center gap-4">
+    <PageHeader
+      breadcrumb={<BackLink href="/admin/inquilinos">Voltar para Clubes</BackLink>}
+      title={
+        <span className="flex min-w-0 items-center gap-3.5">
           <span
-            className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[14px] text-xl font-bold text-white"
+            className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-base font-bold text-white"
             style={{ backgroundColor: showLogo ? '#FFFFFF' : tenant.branding.primaryColor }}
             aria-hidden="true"
           >
@@ -66,42 +57,45 @@ export function ClubHeader({
               <img
                 src={logoUrl}
                 alt=""
-                className="size-full border border-border object-contain p-1"
+                className="size-full rounded-xl border border-border object-contain p-1"
                 onError={() => setLogoFailed(true)}
               />
             ) : (
               getInitials(tenant.name)
             )}
           </span>
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <h1 className="m-0 truncate text-[28px] font-bold leading-tight tracking-tight text-foreground">
-              {tenant.name}
-            </h1>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
-              <StatusPill tone={CLUB_STATUS_TONE[tenant.status]}>{CLUB_STATUS_LABEL[tenant.status]}</StatusPill>
-              {panelAccess === 'read_only' ? <StatusPill tone="warning">Painel só para consulta</StatusPill> : null}
-              {panelAccess === 'blocked' ? <StatusPill tone="danger">Painel bloqueado</StatusPill> : null}
-              <a
-                href={`/${tenant.slug}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 font-medium text-secondary hover:underline"
-              >
-                {siteAddress(tenant.slug)}
-                <ExternalLink className="size-3" aria-hidden="true" />
-                <span className="sr-only"> (abre em nova aba)</span>
-              </a>
-              {since ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>Cliente desde {since}</span>
-                </>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 wrap-break-word">{tenant.name}</span>
+        </span>
+      }
+      badge={
+        <>
+          <StatusPill tone={CLUB_STATUS_TONE[tenant.status]}>{CLUB_STATUS_LABEL[tenant.status]}</StatusPill>
+          {panelAccess === 'read_only' ? <StatusPill tone="warning">Painel só para consulta</StatusPill> : null}
+          {panelAccess === 'blocked' ? <StatusPill tone="danger">Painel bloqueado</StatusPill> : null}
+        </>
+      }
+      description={
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <a
+            href={`/${tenant.slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-medium text-secondary hover:underline"
+          >
+            {siteAddress(tenant.slug)}
+            <ExternalLink className="size-3" aria-hidden="true" />
+            <span className="sr-only"> (abre em nova aba)</span>
+          </a>
+          {since ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>Cliente desde {since}</span>
+            </>
+          ) : null}
+        </span>
+      }
+      actions={
+        <>
           <Button
             asChild
             variant="outline"
@@ -133,8 +127,8 @@ export function ClubHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </header>
-    </div>
+        </>
+      }
+    />
   )
 }

@@ -1,14 +1,15 @@
 'use client'
 
-import { Eye, FileText, FileImage, ScanSearch } from 'lucide-react'
+import { Eye, FileImage, FileStack, FileText, Files, ScanSearch } from 'lucide-react'
 import {
   KYB_DOCUMENT_KIND_LABELS,
   type KybDocument,
   type OnboardingProposalDetail,
 } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Pill } from '@/components/admin-platform/billing/console-kit'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import {
   formatBytes,
   formatRelative,
@@ -40,7 +41,7 @@ export function orderedDocuments(proposal: OnboardingProposalDetail): KybDocumen
 
 function DocIcon({ mimeType }: { mimeType: string }) {
   const Icon = mimeType.startsWith('image/') ? FileImage : FileText
-  return <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+  return <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
 }
 
 export function DocumentsPanel({
@@ -60,113 +61,139 @@ export function DocumentsPanel({
   const extras = docs.filter(doc => !linked.has(doc.id))
 
   return (
-    <div className="space-y-4">
-      <Card className="gap-4 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-base">Documentos da empresa</CardTitle>
-          <CardDescription>
+    <div className="flex flex-col gap-6">
+      <SectionCard
+        padded={false}
+        title="Documentos da empresa"
+        icon={FileStack}
+        description={
+          <>
             {approved} de {required.length} obrigatórios aprovados
             {toReview.length > 0 ? ` · ${toReview.length} esperando sua revisão` : ''}
-          </CardDescription>
-          {toReview.length > 0 && (
-            <CardAction>
-              <Button size="sm" className="gap-2" onClick={() => onOpenDocument(toReview[0]!.id)}>
-                <ScanSearch className="h-4 w-4" />
-                Revisar documentos ({toReview.length})
-              </Button>
-            </CardAction>
-          )}
-        </CardHeader>
-        <CardContent className="p-0">
-          {requirements.length === 0 ? (
-            <p className="px-6 pb-6 text-sm text-muted-foreground">Nenhum documento exigido para este tipo de organização.</p>
-          ) : (
-            <ul className="divide-y divide-border border-t border-border">
-              {requirements.map(row => {
-                const doc = row.documentId ? byId.get(row.documentId) : undefined
-                const stateMeta = kybChecklistStateMeta(row.state, row.required)
-                return (
-                  <li
-                    key={row.key}
-                    className={cn(
-                      'flex flex-wrap items-center gap-3 px-6 py-3',
-                      doc && 'cursor-pointer hover:bg-muted/40',
-                      row.state === 'uploaded' && 'bg-sky-50/40 dark:bg-sky-500/5',
-                    )}
-                    onClick={doc ? () => onOpenDocument(doc.id) : undefined}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium text-foreground">{row.label}</p>
-                        {row.required ? (
-                          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Obrigatório</span>
-                        ) : (
-                          <span className="text-[11px] uppercase tracking-wide text-muted-foreground/70">Opcional</span>
-                        )}
-                      </div>
-                      {doc ? (
-                        <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <DocIcon mimeType={doc.mimeType} />
-                          <span className="truncate">{doc.fileName}</span>
-                          <span aria-hidden>·</span>
-                          <span>{formatBytes(doc.sizeBytes)}</span>
-                          <span aria-hidden>·</span>
-                          <span>{formatRelative(doc.uploadedAt)}</span>
-                        </p>
+          </>
+        }
+        actions={
+          toReview.length > 0 ? (
+            <Button className="h-10 gap-2" onClick={() => onOpenDocument(toReview[0]!.id)}>
+              <ScanSearch className="h-4 w-4" aria-hidden="true" />
+              Revisar documentos ({toReview.length})
+            </Button>
+          ) : undefined
+        }
+      >
+        {requirements.length === 0 ? (
+          <EmptyState
+            icon={FileStack}
+            size="sm"
+            title="Nenhum documento exigido para este tipo de organização."
+          />
+        ) : (
+          <ul className="m-0 flex list-none flex-col p-0">
+            {requirements.map(row => {
+              const doc = row.documentId ? byId.get(row.documentId) : undefined
+              const stateMeta = kybChecklistStateMeta(row.state, row.required)
+              return (
+                <li
+                  key={row.key}
+                  className={cn(
+                    'flex flex-wrap items-center gap-3 border-b border-[#EEF0F3] px-6 py-4 last:border-b-0',
+                    doc && 'cursor-pointer transition-colors hover:bg-accent/30',
+                    row.state === 'uploaded' && 'bg-[#EFF8FF]/50',
+                  )}
+                  onClick={doc ? () => onOpenDocument(doc.id) : undefined}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="m-0 text-sm font-medium text-foreground">{row.label}</p>
+                      {row.required ? (
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Obrigatório</span>
                       ) : (
-                        row.note && <p className="mt-0.5 text-xs text-muted-foreground">{row.note}</p>
-                      )}
-                      {doc?.reviewNote && row.state === 'rejected' && (
-                        <p className="mt-1 text-xs text-[#B42318] dark:text-red-300">Recusado: {doc.reviewNote}</p>
+                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Opcional</span>
                       )}
                     </div>
-                    <Pill meta={stateMeta} />
-                    {doc && (
-                      <Button variant="ghost" size="icon-sm" aria-label="Abrir documento" onClick={() => onOpenDocument(doc.id)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                    {doc ? (
+                      <p className="m-0 mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <DocIcon mimeType={doc.mimeType} />
+                        <span className="truncate">{doc.fileName}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{formatBytes(doc.sizeBytes)}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{formatRelative(doc.uploadedAt)}</span>
+                      </p>
+                    ) : (
+                      row.note && <p className="m-0 mt-0.5 text-xs text-muted-foreground">{row.note}</p>
                     )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+                    {doc?.reviewNote && row.state === 'rejected' && (
+                      <p className="m-0 mt-1 text-xs text-[#B42318]">Recusado: {doc.reviewNote}</p>
+                    )}
+                  </div>
+                  <Pill meta={stateMeta} />
+                  {doc && (
+                    <Button
+                      variant="ghost"
+                      size="icon-lg"
+                      aria-label={`Abrir documento: ${row.label}`}
+                      onClick={event => {
+                        event.stopPropagation()
+                        onOpenDocument(doc.id)
+                      }}
+                    >
+                      <Eye className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </SectionCard>
 
       {extras.length > 0 && (
-        <Card className="gap-4 shadow-none">
-          <CardHeader>
-            <CardTitle className="text-base">Outros envios</CardTitle>
-            <CardDescription>Documentos extras e versões anteriores substituídas pelo clube.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ul className="divide-y divide-border border-t border-border">
-              {extras.map(doc => {
-                const statusMeta = kybDocumentStatusMeta(doc.status)
-                return (
-                  <li
-                    key={doc.id}
-                    className={cn('flex cursor-pointer flex-wrap items-center gap-3 px-6 py-3 hover:bg-muted/40', doc.status === 'replaced' && 'opacity-70')}
-                    onClick={() => onOpenDocument(doc.id)}
+        <SectionCard
+          padded={false}
+          title="Outros envios"
+          icon={Files}
+          description="Documentos extras e versões anteriores substituídas pelo clube."
+        >
+          <ul className="m-0 flex list-none flex-col p-0">
+            {extras.map(doc => {
+              const statusMeta = kybDocumentStatusMeta(doc.status)
+              return (
+                <li
+                  key={doc.id}
+                  className={cn(
+                    'flex cursor-pointer flex-wrap items-center gap-3 border-b border-[#EEF0F3] px-6 py-4 transition-colors last:border-b-0 hover:bg-accent/30',
+                    doc.status === 'replaced' && 'opacity-70',
+                  )}
+                  onClick={() => onOpenDocument(doc.id)}
+                >
+                  <DocIcon mimeType={doc.mimeType} />
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-sm font-medium text-foreground">
+                      {KYB_DOCUMENT_KIND_LABELS[doc.kind]}
+                      {doc.personName ? <span className="font-normal text-muted-foreground"> — {doc.personName}</span> : null}
+                    </p>
+                    <p className="m-0 truncate text-xs text-muted-foreground">
+                      {doc.fileName} · {formatBytes(doc.sizeBytes)} · {formatRelative(doc.uploadedAt)}
+                    </p>
+                  </div>
+                  <Pill meta={statusMeta} title={statusMeta.title} />
+                  <Button
+                    variant="ghost"
+                    size="icon-lg"
+                    aria-label={`Abrir documento: ${KYB_DOCUMENT_KIND_LABELS[doc.kind]}`}
+                    onClick={event => {
+                      event.stopPropagation()
+                      onOpenDocument(doc.id)
+                    }}
                   >
-                    <DocIcon mimeType={doc.mimeType} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground">
-                        {KYB_DOCUMENT_KIND_LABELS[doc.kind]}
-                        {doc.personName ? <span className="font-normal text-muted-foreground"> — {doc.personName}</span> : null}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {doc.fileName} · {formatBytes(doc.sizeBytes)} · {formatRelative(doc.uploadedAt)}
-                      </p>
-                    </div>
-                    <Pill meta={statusMeta} title={statusMeta.title} />
-                  </li>
-                )
-              })}
-            </ul>
-          </CardContent>
-        </Card>
+                    <Eye className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </li>
+              )
+            })}
+          </ul>
+        </SectionCard>
       )}
     </div>
   )

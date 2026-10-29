@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { Plus } from 'lucide-react'
+import { Building2, LayoutDashboard, Plus, TrendingUp, Users, Wallet } from 'lucide-react'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionHeading } from '@/components/admin-platform/ui/section-card'
 import { usePlatformAuth } from '@/contexts/platform-auth-context'
 import { todaySaoPaulo } from '@/lib/adapters/holding'
 import { ActionSection } from '@/components/admin-platform/home/action-cards'
@@ -21,6 +23,14 @@ import { HomeError, HomeLoading } from '@/components/admin-platform/home/home-st
 import { RevenueChartCard } from '@/components/admin-platform/home/revenue-chart'
 import { useHomeData, type HomeData, type HomeExtras } from '@/components/admin-platform/home/use-home-data'
 import { KpiCard } from '@/components/admin-platform/ui/kpi-card'
+
+/** Ícone de cada número do mês (a chave vem de `buildMonthKpis`). */
+const KPI_ICONS: Record<string, ReactNode> = {
+  revenue: <TrendingUp />,
+  receivable: <Wallet />,
+  clubs: <Building2 />,
+  lives: <Users />,
+}
 
 /**
  * Início do console da plataforma. Responde a uma pergunta: "Como está o
@@ -45,36 +55,32 @@ export default function PlatformDashboard() {
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1.5">
-          {now ? (
-            <>
-              <h1 className="m-0 text-[26px] font-bold leading-tight tracking-tight text-foreground sm:text-3xl">
-                {greetingFor(now)}
-                {firstName ? `, ${firstName}` : ''}
-              </h1>
-              <p className="m-0 text-[15px] text-muted-foreground">
-                {longDate(now)}.{ready ? ` ${pendingSentence(items.length)}` : ''}
-              </p>
-            </>
+    <PageContainer>
+      <PageHeader
+        title={
+          now ? (
+            `${greetingFor(now)}${firstName ? `, ${firstName}` : ''}`
           ) : (
-            <>
-              <Skeleton className="h-9 w-56" />
-              <Skeleton className="h-5 w-72" />
-            </>
-          )}
-        </div>
-        <Button
-          asChild
-          className="h-11 rounded-[10px] bg-secondary px-4 text-sm font-semibold text-white hover:bg-secondary/90"
-        >
-          <Link href="/admin/inquilinos/novo">
-            <Plus aria-hidden="true" />
-            Cadastrar clube
-          </Link>
-        </Button>
-      </header>
+            <span className="block h-8 w-56 animate-pulse rounded-md bg-accent" aria-hidden="true" />
+          )
+        }
+        description={
+          now ? (
+            `${longDate(now)}.${ready ? ` ${pendingSentence(items.length)}` : ''}`
+          ) : (
+            <span className="block h-5 w-72 max-w-full animate-pulse rounded-md bg-accent" aria-hidden="true" />
+          )
+        }
+        icon={LayoutDashboard}
+        actions={
+          <Button asChild className="h-11 rounded-[10px] px-4 text-sm font-semibold">
+            <Link href="/admin/inquilinos/novo">
+              <Plus aria-hidden="true" />
+              Cadastrar clube
+            </Link>
+          </Button>
+        }
+      />
 
       {state.status === 'error' ? (
         <HomeError onRetry={reload} />
@@ -83,7 +89,7 @@ export default function PlatformDashboard() {
       ) : (
         <HomeContent data={state.data} extras={state.extras} items={items} now={now} />
       )}
-    </div>
+    </PageContainer>
   )
 }
 
@@ -108,9 +114,7 @@ function HomeContent({
       <ActionSection items={items} />
 
       <section aria-labelledby="home-mes" className="flex flex-col gap-4">
-        <h2 id="home-mes" className="m-0 text-lg font-bold text-foreground">
-          {capitalize(monthLongName(todayIso))} em números
-        </h2>
+        <SectionHeading id="home-mes" title={`${capitalize(monthLongName(todayIso))} em números`} />
         <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
           {monthKpis.map(kpi => (
             <KpiCard
@@ -120,13 +124,14 @@ function HomeContent({
               hint={kpi.hint}
               delta={kpi.delta}
               href={kpi.href}
+              icon={KPI_ICONS[kpi.key]}
             />
           ))}
         </div>
       </section>
 
-      <div className="flex flex-wrap gap-4">
-        <RevenueChartCard bars={bars} />
+      <div className="flex flex-wrap gap-6">
+        <RevenueChartCard bars={bars} hasClubs={data.rows.length > 0} />
         <ClubHealthCard counts={data.overview.healthDistribution} attention={attention} />
       </div>
     </>

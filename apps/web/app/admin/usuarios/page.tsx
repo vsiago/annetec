@@ -1,10 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/admin-platform/ui/button'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
+import { DataTable, TableLoading, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -20,10 +23,13 @@ import { usePlatformAuth } from '@/contexts/platform-auth-context'
 import { updatePlatformUserAction } from '@/lib/actions/platform-users-api'
 import { getInitials } from '@/lib/utils'
 import type { PlatformRole } from '@/lib/types'
-import { Plus, ShieldCheck, Shield, Mail, Phone, Pencil, UserX, UserCheck } from 'lucide-react'
+import { Plus, ShieldCheck, Shield, Mail, Phone, Pencil, UserX, UserCheck, Users } from 'lucide-react'
+
+const BOTAO = 'h-11 rounded-[10px] px-4 font-semibold'
+const CAMPO = 'h-11 rounded-[10px]'
 
 export default function PlatformUsuariosPage() {
-  const { platformUsers, createPlatformUser, refresh } = useTenants()
+  const { platformUsers, createPlatformUser, refresh, isLoading } = useTenants()
   const { user: contaAtual } = usePlatformAuth()
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [error, setError] = useState('')
@@ -112,101 +118,119 @@ export default function PlatformUsuariosPage() {
     await refresh()
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Equipe ANNETEC</h1>
-          <p className="text-muted-foreground">Quem da ANNETEC tem acesso ao console.</p>
-        </div>
-        <Button onClick={abrirNovo}>
-          <Plus className="h-4 w-4 mr-2" />
-          Adicionar pessoa
-        </Button>
-      </div>
+  const botaoAdicionar = (
+    <Button onClick={abrirNovo} className={BOTAO}>
+      <Plus aria-hidden="true" />
+      Adicionar pessoa
+    </Button>
+  )
 
-      <Card className="border border-border/80 shadow-xs bg-card">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Pessoa</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Contato</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Acesso</th>
-                  <th className="text-right py-4 px-6 text-sm font-medium text-muted-foreground">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {platformUsers.map(u => (
-                  <tr key={u.id} className="border-b border-border last:border-0">
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10 bg-secondary">
-                          <AvatarFallback className="bg-secondary text-white text-sm">{getInitials(u.name)}</AvatarFallback>
-                        </Avatar>
-                        <p className="font-medium">{u.name}</p>
+  return (
+    <PageContainer>
+      <PageHeader
+        icon={Users}
+        title="Equipe ANNETEC"
+        description="Quem da ANNETEC tem acesso ao console."
+        actions={botaoAdicionar}
+      />
+
+      {listError && (
+        <p
+          role="alert"
+          className="m-0 rounded-xl border border-[#B42318]/20 bg-[#FEF3F2] px-4 py-3 text-sm text-[#B42318]"
+        >
+          {listError}
+        </p>
+      )}
+
+      {isLoading && platformUsers.length === 0 ? (
+        <TableLoading rows={4} label="Carregando a equipe…" />
+      ) : platformUsers.length === 0 ? (
+        <EmptyState
+          framed
+          icon={Users}
+          title="Nenhuma pessoa na equipe ainda"
+          description="Adicione quem da ANNETEC precisa de acesso ao console."
+          action={botaoAdicionar}
+        />
+      ) : (
+        <DataTable caption="Pessoas da equipe ANNETEC com acesso ao console" minWidth="min-w-[720px]">
+          <thead>
+            <tr>
+              <Th>Pessoa</Th>
+              <Th>Contato</Th>
+              <Th>Acesso</Th>
+              <Th align="right">Ações</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {platformUsers.map(u => (
+              <Tr key={u.id}>
+                <Td>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10 bg-secondary">
+                      <AvatarFallback className="bg-secondary text-sm text-white">{getInitials(u.name)}</AvatarFallback>
+                    </Avatar>
+                    <p className="m-0 font-medium text-foreground">{u.name}</p>
+                  </div>
+                </Td>
+                <Td>
+                  <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Mail className="size-3.5 shrink-0" aria-hidden="true" />
+                      {u.email}
+                    </div>
+                    {u.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="size-3.5 shrink-0" aria-hidden="true" />
+                        {u.phone}
                       </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="space-y-1 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-3.5 w-3.5" />
-                          {u.email}
-                        </div>
-                        {u.phone && (
-                          <div className="flex items-center gap-2">
-                            <Phone className="h-3.5 w-3.5" />
-                            {u.phone}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {u.role === 'superadmin' ? (
-                          <Badge className="bg-red-100 text-[#B42318]">
-                            <ShieldCheck className="w-3 h-3 mr-1" /> Superadmin
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-blue-100 text-blue-700">
-                            <Shield className="w-3 h-3 mr-1" /> Padrão
-                          </Badge>
-                        )}
-                        {!u.active && <Badge variant="outline">Desativado</Badge>}
-                      </div>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => abrirEdicao(u)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                          <span className="sr-only">Editar {u.name}</span>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busyId === u.id || u.id === contaAtual?.id}
-                          title={u.id === contaAtual?.id ? 'Você não pode desativar a própria conta' : undefined}
-                          onClick={() => alternarAtivacao(u.id, u.active)}
-                          className={u.active ? 'text-[#B42318] hover:text-[#B42318]' : ''}
-                        >
-                          {u.active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
-                          <span className="sr-only">
-                            {u.active ? 'Desativar' : 'Reativar'} {u.name}
-                          </span>
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                    )}
+                  </div>
+                </Td>
+                <Td>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {u.role === 'superadmin' ? (
+                      <StatusPill tone="danger" icon={<ShieldCheck />}>
+                        Superadmin
+                      </StatusPill>
+                    ) : (
+                      <StatusPill tone="info" icon={<Shield />}>
+                        Padrão
+                      </StatusPill>
+                    )}
+                    {!u.active && <StatusPill tone="neutral">Desativado</StatusPill>}
+                  </div>
+                </Td>
+                <Td align="right">
+                  <div className="flex justify-end gap-1">
+                    <Button variant="ghost" size="icon-lg" onClick={() => abrirEdicao(u)}>
+                      <Pencil aria-hidden="true" />
+                      <span className="sr-only">Editar {u.name}</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-lg"
+                      disabled={busyId === u.id || u.id === contaAtual?.id}
+                      title={u.id === contaAtual?.id ? 'Você não pode desativar a própria conta' : undefined}
+                      onClick={() => alternarAtivacao(u.id, u.active)}
+                      className={u.active ? 'text-[#B42318] hover:text-[#B42318]' : ''}
+                    >
+                      {u.active ? <UserX aria-hidden="true" /> : <UserCheck aria-hidden="true" />}
+                      <span className="sr-only">
+                        {u.active ? 'Desativar' : 'Reativar'} {u.name}
+                      </span>
+                    </Button>
+                  </div>
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </DataTable>
+      )}
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="rounded-2xl sm:max-w-[425px]">
           <form onSubmit={handleAdd}>
             <DialogHeader>
               <DialogTitle>{editingId ? 'Editar pessoa' : 'Adicionar pessoa à equipe'}</DialogTitle>
@@ -217,14 +241,24 @@ export default function PlatformUsuariosPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              {error && <p className="text-sm text-[#B42318]">{error}</p>}
+              {error && (
+                <p role="alert" className="m-0 text-sm text-[#B42318]">
+                  {error}
+                </p>
+              )}
               <div className="grid gap-2">
-                <label className="text-sm font-medium">Nome *</label>
-                <Input value={name} onChange={e => setName(e.target.value)} required />
+                <label htmlFor="equipe-nome" className="text-sm font-medium">
+                  Nome *
+                </label>
+                <Input id="equipe-nome" className={CAMPO} value={name} onChange={e => setName(e.target.value)} required />
               </div>
               <div className="grid gap-2">
-                <label className="text-sm font-medium">E-mail {editingId ? '' : '*'}</label>
+                <label htmlFor="equipe-email" className="text-sm font-medium">
+                  E-mail {editingId ? '' : '*'}
+                </label>
                 <Input
+                  id="equipe-email"
+                  className={CAMPO}
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
@@ -233,13 +267,17 @@ export default function PlatformUsuariosPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <label className="text-sm font-medium">Telefone</label>
-                <Input value={phone} onChange={e => setPhone(e.target.value)} />
+                <label htmlFor="equipe-telefone" className="text-sm font-medium">
+                  Telefone
+                </label>
+                <Input id="equipe-telefone" className={CAMPO} value={phone} onChange={e => setPhone(e.target.value)} />
               </div>
               <div className="grid gap-2">
-                <label className="text-sm font-medium">Acesso *</label>
+                <label htmlFor="equipe-acesso" className="text-sm font-medium">
+                  Acesso *
+                </label>
                 <Select value={role} onValueChange={v => setRole(v as PlatformRole)}>
-                  <SelectTrigger>
+                  <SelectTrigger id="equipe-acesso" className={`${CAMPO} w-full data-[size=default]:h-11`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -250,22 +288,31 @@ export default function PlatformUsuariosPage() {
               </div>
               {!editingId && (
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">Senha inicial *</label>
-                  <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                  <label htmlFor="equipe-senha" className="text-sm font-medium">
+                    Senha inicial *
+                  </label>
+                  <Input
+                    id="equipe-senha"
+                    className={CAMPO}
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                  />
                 </div>
               )}
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
+              <Button type="button" variant="outline" className={BOTAO} onClick={() => setIsAddOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit">
+              <Button type="submit" className={BOTAO}>
                 {editingId ? 'Salvar alterações' : 'Adicionar pessoa'}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }

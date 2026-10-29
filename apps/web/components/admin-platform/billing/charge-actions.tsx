@@ -95,31 +95,37 @@ export function ChargeActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Mais ações para esta fatura" onClick={event => event.stopPropagation()}>
-          <MoreHorizontal className="h-4 w-4" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-10 rounded-[10px]"
+          aria-label="Mais ações para esta fatura"
+          onClick={event => event.stopPropagation()}
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60" onClick={event => event.stopPropagation()}>
         {onDetail && (
           <DropdownMenuItem onClick={() => onDetail(charge)}>
-            <PanelRightOpen className="mr-2 h-4 w-4" />
+            <PanelRightOpen className="mr-2 h-4 w-4" aria-hidden="true" />
             Ver histórico da fatura
           </DropdownMenuItem>
         )}
         <DropdownMenuItem asChild>
           <a href={charge.publicUrl} target="_blank" rel="noreferrer">
-            <ExternalLink className="mr-2 h-4 w-4" />
+            <ExternalLink className="mr-2 h-4 w-4" aria-hidden="true" />
             Abrir página da fatura
           </a>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={copyLink}>
-          <Copy className="mr-2 h-4 w-4" />
+          <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
           Copiar link de pagamento
         </DropdownMenuItem>
         {(can.reissue || can.manual || can.simulate || can.cancel) && <DropdownMenuSeparator />}
         {can.reissue && (
           <DropdownMenuItem onClick={() => onAction('reissue', charge)}>
-            <RotateCcw className="mr-2 h-4 w-4" />
+            <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
             Emitir segunda via
           </DropdownMenuItem>
         )}
@@ -129,7 +135,7 @@ export function ChargeActionsMenu({
             disabled={!isSuperadmin}
             title={isSuperadmin ? undefined : 'Somente o superadmin pode marcar uma fatura como paga.'}
           >
-            <HandCoins className="mr-2 h-4 w-4" />
+            <HandCoins className="mr-2 h-4 w-4" aria-hidden="true" />
             Marcar como pago
           </DropdownMenuItem>
         )}
@@ -139,7 +145,7 @@ export function ChargeActionsMenu({
             disabled={!isSuperadmin}
             title={isSuperadmin ? undefined : 'Somente o superadmin pode simular um pagamento.'}
           >
-            <FlaskConical className="mr-2 h-4 w-4" />
+            <FlaskConical className="mr-2 h-4 w-4" aria-hidden="true" />
             Simular pagamento
           </DropdownMenuItem>
         )}
@@ -152,7 +158,7 @@ export function ChargeActionsMenu({
               title={isSuperadmin ? undefined : 'Somente o superadmin pode cancelar uma fatura.'}
               className="text-[#B42318] focus:text-[#B42318]"
             >
-              <Ban className="mr-2 h-4 w-4" />
+              <Ban className="mr-2 h-4 w-4" aria-hidden="true" />
               Cancelar fatura
             </DropdownMenuItem>
           </>
@@ -238,7 +244,7 @@ function ReissueDialog({
             Voltar
           </Button>
           <Button onClick={submit} disabled={!valid || busy} className="gap-2">
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             Emitir segunda via
           </Button>
         </DialogFooter>
@@ -326,7 +332,7 @@ function ManualPaymentDialog({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Voltar</AlertDialogCancel>
           <Button onClick={submit} disabled={!valid || busy} className="gap-2">
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             Marcar como pago
           </Button>
         </AlertDialogFooter>

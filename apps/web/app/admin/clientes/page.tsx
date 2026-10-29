@@ -5,11 +5,14 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { Contract } from '@annetec/contracts'
 import { useAdminScope } from '@/contexts/admin-scope-context'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/admin-platform/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { EmptyStateCard } from '@/components/dashboard/empty-state'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionCard } from '@/components/admin-platform/ui/section-card'
+import { DataTable, TableLoading, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { StatusPill, type StatusPillTone } from '@/components/admin-platform/ui/status-pill'
 import {
   listOperatorContractsAction,
   searchOperatorContractByCpfAction,
@@ -26,13 +29,13 @@ const STATUS_LABEL: Record<string, string> = {
   desconhecido: 'Desconhecido',
 }
 
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  ativo: 'default',
-  produzido: 'secondary',
-  pendente: 'outline',
-  suspenso: 'destructive',
-  cancelado: 'destructive',
-  desconhecido: 'outline',
+const STATUS_TONE: Record<string, StatusPillTone> = {
+  ativo: 'success',
+  produzido: 'info',
+  pendente: 'warning',
+  suspenso: 'warning',
+  cancelado: 'danger',
+  desconhecido: 'neutral',
 }
 
 function money(value: number | null) {
@@ -122,133 +125,134 @@ export default function OperatorClientesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
-          <p className="text-muted-foreground">
-            Contratos do clube selecionado acima, direto da Digital Saúde — não misturado com os
-            outros clubes.
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/admin/clientes/nova-adesao">
-            <Plus className="h-4 w-4 mr-2" /> Nova adesão
-          </Link>
-        </Button>
-      </div>
+    <PageContainer>
+      <PageHeader
+        icon={Users}
+        title="Clientes"
+        description="Contratos do clube selecionado acima, direto da Digital Saúde — não misturado com os outros clubes."
+        actions={
+          <Button asChild className="h-10">
+            <Link href="/admin/clientes/nova-adesao">
+              <Plus aria-hidden="true" /> Nova adesão
+            </Link>
+          </Button>
+        }
+      />
 
-      {operatorError && (
-        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
-          <CardContent className="py-4 text-sm text-[#B42318]">{operatorError}</CardContent>
-        </Card>
-      )}
+      {operatorError && <ErrorState size="sm" description={operatorError} />}
 
-      <Card className="border border-border/80 shadow-xs bg-card">
-        <CardHeader>
-          <CardTitle className="text-base">Buscar no ERP por CPF</CardTitle>
-          <CardDescription>
-            Busca ao vivo na Digital Saúde — encontrou, já salva aqui na Annetec automaticamente.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form onSubmit={handleSearch} className="flex gap-2">
+      <SectionCard
+        icon={Search}
+        title="Buscar no ERP por CPF"
+        description="Busca ao vivo na Digital Saúde — encontrou, já salva aqui na Annetec automaticamente."
+      >
+        <div className="flex flex-col gap-4">
+          <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row">
             <Input
+              aria-label="CPF do titular"
               placeholder="CPF do titular"
               value={cpf}
               onChange={e => setCpf(e.target.value)}
               disabled={!tenantSlug || loadingOperator}
-              className="max-w-xs"
+              className="h-10 sm:max-w-xs"
             />
-            <Button type="submit" disabled={!tenantSlug || !cpf || searching}>
-              {searching ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+            <Button type="submit" className="h-10" disabled={!tenantSlug || !cpf || searching}>
+              {searching ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Search aria-hidden="true" />}
               Buscar e salvar
             </Button>
           </form>
 
-          {searchError && <p className="text-sm text-[#B42318]">{searchError}</p>}
-          {searchMessage && (
-            <p className="flex items-center gap-2 text-sm text-emerald-600">
-              <CheckCircle2 className="h-4 w-4" /> {searchMessage}
+          {searchError && (
+            <p role="alert" className="m-0 text-sm font-medium text-[#B42318]">
+              {searchError}
             </p>
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="border border-border/80 shadow-xs bg-card">
-        <CardContent className="p-0">
-          {loadingContracts || loadingOperator ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
-            </div>
-          ) : contracts.length === 0 ? (
-            <EmptyStateCard
-              icon={Users}
-              title="Nenhum cliente sincronizado ainda"
-              description="Use a busca por CPF acima para trazer um contrato do ERP — ele já entra salvo aqui."
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Titular</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Plano / Convênio</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Status</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Mensalidade</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Sincronizado</th>
-                    <th className="text-right py-4 px-6 text-sm font-medium text-muted-foreground">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contracts.map(contract => (
-                    <tr
-                      key={contract.id}
-                      onClick={() => router.push(`/admin/clientes/${encodeURIComponent(contract.upstreamCodigo)}`)}
-                      className="border-b border-border last:border-0 cursor-pointer hover:bg-muted/40 transition-colors"
-                    >
-                      <td className="py-4 px-6">
-                        <p className="text-sm font-medium text-foreground">{contract.holderName ?? '—'}</p>
-                        <p className="text-xs text-muted-foreground">{contract.upstreamCodigo}</p>
-                      </td>
-                      <td className="py-4 px-6 text-sm text-foreground">
-                        {contract.planName ?? '—'}
-                        <span className="text-muted-foreground"> / {contract.convenioName ?? '—'}</span>
-                      </td>
-                      <td className="py-4 px-6">
-                        <Badge variant={STATUS_VARIANT[contract.status] ?? 'outline'}>
-                          {STATUS_LABEL[contract.status] ?? contract.status}
-                        </Badge>
-                      </td>
-                      <td className="py-4 px-6 text-sm text-foreground">{money(contract.monthlyValue)}</td>
-                      <td className="py-4 px-6 text-xs text-muted-foreground">
-                        {contract.syncedAt ? new Date(contract.syncedAt).toLocaleString('pt-BR') : '—'}
-                      </td>
-                      <td className="py-4 px-6 text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={e => {
-                            e.stopPropagation()
-                            handleResync(contract.upstreamCodigo)
-                          }}
-                          disabled={syncingCodigo === contract.upstreamCodigo}
-                        >
-                          {syncingCodigo === contract.upstreamCodigo ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {searchMessage && (
+            <p role="status" className="m-0 flex items-center gap-2 text-sm font-medium text-[#067647]">
+              <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" /> {searchMessage}
+            </p>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </SectionCard>
+
+      {loadingContracts || loadingOperator ? (
+        <TableLoading rows={5} label="Carregando clientes…" />
+      ) : contracts.length === 0 ? (
+        <EmptyState
+          framed
+          icon={Users}
+          title="Nenhum cliente sincronizado ainda"
+          description="Use a busca por CPF acima para trazer um contrato do ERP — ele já entra salvo aqui."
+        />
+      ) : (
+        <DataTable caption="Contratos sincronizados com a Digital Saúde" minWidth="min-w-[880px]">
+          <thead>
+            <tr>
+              <Th>Titular</Th>
+              <Th>Plano / Convênio</Th>
+              <Th>Status</Th>
+              <Th align="right">Mensalidade</Th>
+              <Th>Sincronizado</Th>
+              <Th align="right">Ações</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {contracts.map(contract => (
+              <Tr
+                key={contract.id}
+                onClick={() => router.push(`/admin/clientes/${encodeURIComponent(contract.upstreamCodigo)}`)}
+                className="cursor-pointer"
+              >
+                <Td>
+                  <Link
+                    href={`/admin/clientes/${encodeURIComponent(contract.upstreamCodigo)}`}
+                    onClick={e => e.stopPropagation()}
+                    className="rounded-md font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2"
+                  >
+                    {contract.holderName ?? '—'}
+                  </Link>
+                  <p className="m-0 text-[13px] text-muted-foreground">{contract.upstreamCodigo}</p>
+                </Td>
+                <Td className="text-foreground">
+                  {contract.planName ?? '—'}
+                  <span className="text-muted-foreground"> / {contract.convenioName ?? '—'}</span>
+                </Td>
+                <Td>
+                  <StatusPill tone={STATUS_TONE[contract.status] ?? 'neutral'}>
+                    {STATUS_LABEL[contract.status] ?? contract.status}
+                  </StatusPill>
+                </Td>
+                <Td align="right" className="tabular-nums text-foreground">
+                  {money(contract.monthlyValue)}
+                </Td>
+                <Td className="text-[13px] text-muted-foreground">
+                  {contract.syncedAt ? new Date(contract.syncedAt).toLocaleString('pt-BR') : '—'}
+                </Td>
+                <Td align="right">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-10"
+                    aria-label={`Atualizar ${contract.holderName ?? contract.upstreamCodigo} do ERP`}
+                    title="Atualizar do ERP"
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleResync(contract.upstreamCodigo)
+                    }}
+                    disabled={syncingCodigo === contract.upstreamCodigo}
+                  >
+                    {syncingCodigo === contract.upstreamCodigo ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <RefreshCw aria-hidden="true" />
+                    )}
+                  </Button>
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </DataTable>
+      )}
+    </PageContainer>
   )
 }

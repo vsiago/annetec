@@ -18,10 +18,12 @@ const VARIANT_CLASS = {
   link: 'text-secondary',
 } as const
 
-function Button({ className, variant, ...props }: React.ComponentProps<typeof BaseButton>) {
+function Button({ className, variant, size, ...props }: React.ComponentProps<typeof BaseButton>) {
   const key = variant ?? 'default'
   const brand = key === 'default' || key === 'destructive' || key === 'link' ? VARIANT_CLASS[key] : undefined
-  return <BaseButton variant={variant} className={cn(brand, className)} {...props} />
+  // Alvo de toque mínimo de 40px nos tamanhos de texto (padrão e pequeno).
+  const touch = size === undefined || size === null || size === 'default' || size === 'sm' ? 'min-h-10' : undefined
+  return <BaseButton variant={variant} size={size} className={cn(brand, touch, className)} {...props} />
 }
 
 export { Button, buttonVariants }

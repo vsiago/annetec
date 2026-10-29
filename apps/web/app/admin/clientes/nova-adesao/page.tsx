@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import type { Convenio, HealthPlan, PriceTable, TenantUser, UF } from '@annetec/contracts'
 import { UFS } from '@annetec/contracts'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/admin-platform/ui/button'
+import { PageContainer } from '@/components/admin-platform/ui/page-container'
+import { BackLink, PageHeader } from '@/components/admin-platform/ui/page-header'
+import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
+import { DataTable, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -19,7 +22,21 @@ import {
   listOperatorSellersAction,
   createOperatorContractAction,
 } from '@/lib/actions/operator-api'
-import { ArrowLeft, Loader2, AlertTriangle, Plus, Trash2, CheckCircle2, Wallet } from 'lucide-react'
+import {
+  Calculator,
+  CheckCircle2,
+  ClipboardList,
+  FilePlus2,
+  Loader2,
+  MapPin,
+  Plus,
+  Table2,
+  Trash2,
+  TriangleAlert,
+  UserRound,
+  Users,
+  Wallet,
+} from 'lucide-react'
 
 interface DependentForm {
   name: string
@@ -263,77 +280,80 @@ export default function NovaAdesaoPage() {
 
   if (loadingBase) {
     return (
-      <div className="flex items-center justify-center py-24 text-muted-foreground">
-        <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Carregando...
-      </div>
+      <PageContainer size="form">
+        <div>
+          <BackLink href="/admin/clientes">Voltar para Clientes</BackLink>
+        </div>
+        <SectionCard>
+          <SectionSkeleton rows={5} label="Carregando…" />
+        </SectionCard>
+      </PageContainer>
     )
   }
 
   if (created) {
     return (
-      <div className="space-y-4 max-w-lg">
-        <Card className="border-emerald-500/40 bg-emerald-500/5">
-          <CardContent className="py-8 flex flex-col items-center text-center gap-3">
-            <CheckCircle2 className="h-10 w-10 text-emerald-600" />
-            <div>
-              <p className="font-semibold text-foreground">Adesão registrada na Digital Saúde</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {created.holderName} · contrato {created.upstreamCodigo}
-              </p>
-            </div>
-            <div className="flex gap-2 mt-2">
-              <Button variant="outline" onClick={() => router.push('/admin/clientes')}>
+      <PageContainer size="form">
+        <EmptyState
+          framed
+          size="lg"
+          tone="success"
+          icon={CheckCircle2}
+          title="Adesão registrada na Digital Saúde"
+          description={
+            <>
+              {created.holderName} · contrato {created.upstreamCodigo}
+            </>
+          }
+          role="status"
+          action={
+            <>
+              <Button variant="outline" className="h-10" onClick={() => router.push('/admin/clientes')}>
                 Ver lista de clientes
               </Button>
-              <Button onClick={() => router.push(`/admin/clientes/${encodeURIComponent(created.upstreamCodigo)}`)}>
+              <Button
+                className="h-10"
+                onClick={() => router.push(`/admin/clientes/${encodeURIComponent(created.upstreamCodigo)}`)}
+              >
                 Abrir contrato
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </>
+          }
+        />
+      </PageContainer>
     )
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <Link
-        href="/admin/clientes"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+    <PageContainer size="form">
+      <PageHeader
+        breadcrumb={<BackLink href="/admin/clientes">Voltar para Clientes</BackLink>}
+        icon={FilePlus2}
+        title="Nova adesão"
+        description="Registra o contrato direto na Digital Saúde."
+      />
+
+      <div
+        role="note"
+        className="flex items-start gap-3 rounded-2xl border border-[#FEDF89] bg-[#FFFAEB] p-4 text-sm leading-relaxed text-[#93370D]"
       >
-        <ArrowLeft className="h-4 w-4" /> Voltar para Clientes
-      </Link>
-
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Nova adesão</h1>
-        <p className="text-muted-foreground">Registra o contrato direto na Digital Saúde.</p>
-      </div>
-
-      <Card className="border-amber-500/40 bg-amber-500/5">
-        <CardContent className="py-3 flex items-start gap-2 text-sm text-amber-800 dark:text-amber-400">
-          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[#B54708]" aria-hidden="true" />
+        <p className="m-0">
           Isto grava um contrato real no ERP — não existe "desfazer" depois de enviado. Confira os dados antes de
           registrar.
-        </CardContent>
-      </Card>
+        </p>
+      </div>
 
-      {baseError && (
-        <Card className="border-[#B42318]/40 bg-[#B42318]/5">
-          <CardContent className="py-4 text-sm text-[#B42318]">{baseError}</CardContent>
-        </Card>
-      )}
+      {baseError && <ErrorState description={baseError} />}
 
       {!baseError && (
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <Card className="border border-border/80 shadow-xs bg-card">
-            <CardHeader>
-              <CardTitle className="text-base">Plano</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          <SectionCard icon={ClipboardList} title="Plano">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label>Convênio *</Label>
                 <Select value={convenioCodigo} onValueChange={setConvenioCodigo}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10 w-full">
                     <SelectValue placeholder="Selecione o convênio" />
                   </SelectTrigger>
                   <SelectContent>
@@ -348,7 +368,7 @@ export default function NovaAdesaoPage() {
               <div className="grid gap-1.5">
                 <Label>Plano *</Label>
                 <Select value={planCodigo} onValueChange={setPlanCodigo} disabled={!convenioCodigo || loadingPlans}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10 w-full">
                     <SelectValue placeholder={loadingPlans ? 'Carregando...' : 'Selecione o plano'} />
                   </SelectTrigger>
                   <SelectContent>
@@ -363,7 +383,7 @@ export default function NovaAdesaoPage() {
               <div className="grid gap-1.5">
                 <Label>Vendedor *</Label>
                 <Select value={sellerId} onValueChange={setSellerId}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10 w-full">
                     <SelectValue placeholder="Selecione o vendedor" />
                   </SelectTrigger>
                   <SelectContent>
@@ -378,15 +398,16 @@ export default function NovaAdesaoPage() {
               </div>
               <div className="grid gap-1.5">
                 <Label>Número da proposta *</Label>
-                <Input value={proposalNumber} onChange={e => setProposalNumber(e.target.value)} />
+                <Input className="h-10" value={proposalNumber} onChange={e => setProposalNumber(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Data de assinatura *</Label>
-                <Input type="date" value={signedAt} onChange={e => setSignedAt(e.target.value)} />
+                <Input className="h-10" type="date" value={signedAt} onChange={e => setSignedAt(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Dia de vencimento *</Label>
                 <Input
+                  className="h-10"
                   type="number"
                   min={1}
                   max={31}
@@ -398,41 +419,39 @@ export default function NovaAdesaoPage() {
                 <Label>Observações</Label>
                 <Textarea value={notes} onChange={e => setNotes(e.target.value)} />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
 
-          <Card className="border border-border/80 shadow-xs bg-card">
-            <CardHeader>
-              <CardTitle className="text-base">Titular</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SectionCard icon={UserRound} title="Titular">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label>Nome completo *</Label>
-                <Input value={holderName} onChange={e => setHolderName(e.target.value)} />
+                <Input className="h-10" value={holderName} onChange={e => setHolderName(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>CPF *</Label>
-                <Input value={holderCpf} onChange={e => setHolderCpf(e.target.value)} placeholder="Só números" />
+                <Input className="h-10" value={holderCpf} onChange={e => setHolderCpf(e.target.value)} placeholder="Só números" />
               </div>
               <div className="grid gap-1.5">
                 <Label>Nascimento *</Label>
-                <Input type="date" value={holderBirthDate} onChange={e => setHolderBirthDate(e.target.value)} />
+                <Input className="h-10" type="date" value={holderBirthDate} onChange={e => setHolderBirthDate(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>E-mail *</Label>
-                <Input type="email" value={holderEmail} onChange={e => setHolderEmail(e.target.value)} />
+                <Input className="h-10" type="email" value={holderEmail} onChange={e => setHolderEmail(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Celular (DDD + número) *</Label>
-                <Input value={holderPhone} onChange={e => setHolderPhone(e.target.value)} placeholder="21999998888" />
+                <Input className="h-10" value={holderPhone} onChange={e => setHolderPhone(e.target.value)} placeholder="21999998888" />
               </div>
               <div className="grid gap-1.5">
                 <Label>Nome da mãe</Label>
-                <Input value={holderMotherName} onChange={e => setHolderMotherName(e.target.value)} />
+                <Input className="h-10" value={holderMotherName} onChange={e => setHolderMotherName(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Sexo (código, opcional)</Label>
                 <Input
+                  className="h-10"
                   type="number"
                   value={holderGenderId}
                   onChange={e => setHolderGenderId(e.target.value)}
@@ -442,44 +461,42 @@ export default function NovaAdesaoPage() {
               <div className="grid gap-1.5">
                 <Label>Estado civil (código, opcional)</Label>
                 <Input
+                  className="h-10"
                   type="number"
                   value={holderMaritalStatusId}
                   onChange={e => setHolderMaritalStatusId(e.target.value)}
                   placeholder="Confira no cadastro da Digital Saúde"
                 />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
 
-          <Card className="border border-border/80 shadow-xs bg-card">
-            <CardHeader>
-              <CardTitle className="text-base">Endereço do titular</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SectionCard icon={MapPin} title="Endereço do titular">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label>Endereço *</Label>
-                <Input value={street} onChange={e => setStreet(e.target.value)} />
+                <Input className="h-10" value={street} onChange={e => setStreet(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Número *</Label>
-                <Input value={number} onChange={e => setNumber(e.target.value)} />
+                <Input className="h-10" value={number} onChange={e => setNumber(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Complemento</Label>
-                <Input value={complement} onChange={e => setComplement(e.target.value)} />
+                <Input className="h-10" value={complement} onChange={e => setComplement(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Bairro *</Label>
-                <Input value={neighborhood} onChange={e => setNeighborhood(e.target.value)} />
+                <Input className="h-10" value={neighborhood} onChange={e => setNeighborhood(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Município *</Label>
-                <Input value={city} onChange={e => setCity(e.target.value)} />
+                <Input className="h-10" value={city} onChange={e => setCity(e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>UF *</Label>
                 <Select value={state} onValueChange={v => setState(v as UF)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10 w-full">
                     <SelectValue placeholder="UF" />
                   </SelectTrigger>
                   <SelectContent>
@@ -493,47 +510,58 @@ export default function NovaAdesaoPage() {
               </div>
               <div className="grid gap-1.5">
                 <Label>CEP *</Label>
-                <Input value={zipCode} onChange={e => setZipCode(e.target.value)} placeholder="Só números" />
+                <Input className="h-10" value={zipCode} onChange={e => setZipCode(e.target.value)} placeholder="Só números" />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
 
-          <Card className="border border-border/80 shadow-xs bg-card">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Dependentes</CardTitle>
-                <CardDescription>Opcional.</CardDescription>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={addDependent}>
-                <Plus className="h-4 w-4 mr-1.5" /> Adicionar
+          <SectionCard
+            icon={Users}
+            title="Dependentes"
+            description="Opcional."
+            actions={
+              <Button type="button" variant="outline" className="h-10" onClick={addDependent}>
+                <Plus aria-hidden="true" /> Adicionar
               </Button>
-            </CardHeader>
-            {dependents.length > 0 && (
-              <CardContent className="space-y-4">
+            }
+          >
+            {dependents.length === 0 ? (
+              <EmptyState
+                size="sm"
+                icon={Users}
+                title="Nenhum dependente adicionado"
+                description="Use “Adicionar” se o contrato tiver dependentes ou agregados."
+                className="py-4"
+              />
+            ) : (
+              <div className="flex flex-col gap-4">
                 {dependents.map((dep, index) => (
-                  <div key={index} className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-border p-4">
-                    <div className="sm:col-span-2 flex justify-end">
+                  <div key={index} className="grid grid-cols-1 gap-3 rounded-xl border border-border p-4 sm:grid-cols-2">
+                    <div className="flex items-center justify-between sm:col-span-2">
+                      <p className="m-0 text-sm font-semibold text-foreground">Dependente {index + 1}</p>
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
-                        className="text-[#B42318] hover:text-[#B42318]"
+                        size="icon"
+                        className="size-10 text-[#B42318] hover:text-[#B42318]"
+                        aria-label={`Remover dependente ${index + 1}`}
                         onClick={() => removeDependent(index)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 aria-hidden="true" />
                       </Button>
                     </div>
                     <div className="grid gap-1.5">
                       <Label>Nome *</Label>
-                      <Input value={dep.name} onChange={e => updateDependent(index, { name: e.target.value })} />
+                      <Input className="h-10" value={dep.name} onChange={e => updateDependent(index, { name: e.target.value })} />
                     </div>
                     <div className="grid gap-1.5">
                       <Label>CPF</Label>
-                      <Input value={dep.cpf} onChange={e => updateDependent(index, { cpf: e.target.value })} />
+                      <Input className="h-10" value={dep.cpf} onChange={e => updateDependent(index, { cpf: e.target.value })} />
                     </div>
                     <div className="grid gap-1.5">
                       <Label>Nascimento *</Label>
                       <Input
+                        className="h-10"
                         type="date"
                         value={dep.birthDate}
                         onChange={e => updateDependent(index, { birthDate: e.target.value })}
@@ -556,7 +584,7 @@ export default function NovaAdesaoPage() {
                           })
                         }}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="h-10 w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -568,6 +596,7 @@ export default function NovaAdesaoPage() {
                     <div className="grid gap-1.5">
                       <Label>Parentesco (código) *</Label>
                       <Input
+                        className="h-10"
                         type="number"
                         value={dep.relationshipId}
                         onChange={e => updateDependent(index, { relationshipId: e.target.value })}
@@ -581,116 +610,118 @@ export default function NovaAdesaoPage() {
                     <div className="grid gap-1.5">
                       <Label>Nome da mãe</Label>
                       <Input
+                        className="h-10"
                         value={dep.motherName}
                         onChange={e => updateDependent(index, { motherName: e.target.value })}
                       />
                     </div>
                   </div>
                 ))}
-              </CardContent>
+              </div>
             )}
-          </Card>
+          </SectionCard>
 
           {/*
             Quanto a adesão vai custar. Antes disto a tela fechava contrato sem
             mostrar valor nenhum — nem mensalidade, nem taxa de cadastro.
           */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Wallet className="h-5 w-5 text-primary" />
-                Valor da adesão
-              </CardTitle>
-              <CardDescription>
-                Calculado pela tabela de preço do convênio, por faixa etária na data de assinatura.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingPrices && (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Buscando a tabela de preço no ERP…
-                </p>
-              )}
+          <SectionCard
+            icon={Wallet}
+            title="Valor da adesão"
+            description="Calculado pela tabela de preço do convênio, por faixa etária na data de assinatura."
+          >
+            {loadingPrices && <SectionSkeleton rows={3} label="Buscando a tabela de preço no ERP…" />}
 
-              {!loadingPrices && !convenioCodigo && (
-                <p className="text-sm text-muted-foreground">Escolha o convênio para ver os valores.</p>
-              )}
+            {!loadingPrices && !convenioCodigo && (
+              <EmptyState
+                size="sm"
+                icon={Calculator}
+                title="Escolha o convênio para ver os valores"
+                className="py-4"
+              />
+            )}
 
-              {!loadingPrices && convenioCodigo && faixas.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  Este convênio não tem tabela de preço vigente no ERP para o plano escolhido. Confira em
-                  Catálogo Digital Saúde antes de fechar a adesão.
-                </p>
-              )}
+            {!loadingPrices && convenioCodigo && faixas.length === 0 && (
+              <EmptyState
+                size="sm"
+                tone="warning"
+                icon={Table2}
+                title="Sem tabela de preço para este plano"
+                description="Este convênio não tem tabela de preço vigente no ERP para o plano escolhido. Confira em Catálogo Digital Saúde antes de fechar a adesão."
+                className="py-4"
+              />
+            )}
 
-              {!loadingPrices && faixas.length > 0 && (
-                <div className="space-y-4">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-left text-xs text-muted-foreground">
-                          <th className="py-2 pr-4">Vida</th>
-                          <th className="py-2 pr-4">Papel</th>
-                          <th className="py-2 pr-4">Idade</th>
-                          <th className="py-2 pr-4">Faixa etária</th>
-                          <th className="py-2 pr-4 text-right">Mensalidade</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {orcamento.linhas.map((linha, index) => (
-                          <tr key={`${linha.rotulo}-${index}`} className="border-b last:border-0">
-                            <td className="py-2 pr-4 font-medium">{linha.rotulo}</td>
-                            <td className="py-2 pr-4 text-muted-foreground">{linha.papel}</td>
-                            <td className="py-2 pr-4 tabular-nums">
-                              {linha.idade === null ? '—' : `${linha.idade} anos`}
-                            </td>
-                            <td className="py-2 pr-4 text-muted-foreground">
-                              {linha.faixa?.ageRangeName ?? (linha.idade === null ? 'Informe a data de nascimento' : 'Sem faixa para esta idade')}
-                            </td>
-                            <td className="py-2 pr-4 text-right font-medium tabular-nums">
-                              {moeda(linha.faixa?.chargeValue ?? null)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-4">
-                    <span className="text-sm text-muted-foreground">
-                      {orcamento.completo
-                        ? `${orcamento.linhas.length} vida(s)`
-                        : 'Total parcial — há vida sem faixa definida'}
-                      {selectedConvenio?.registrationFee
-                        ? ` · taxa de cadastro ${moeda(selectedConvenio.registrationFee)}${
-                            selectedConvenio.registrationFeeKind === 'por_vida' ? ' por vida' : ''
-                          }`
-                        : ''}
-                    </span>
-                    <span className="text-2xl font-bold tabular-nums text-primary">
-                      {moeda(orcamento.total)}
-                      <span className="ml-1 text-sm font-normal text-muted-foreground">/mês</span>
-                    </span>
-                  </div>
+            {!loadingPrices && faixas.length > 0 && (
+              <div className="flex flex-col gap-4">
+                <div className="overflow-hidden rounded-xl border border-border">
+                  <DataTable caption="Valor por vida, pela faixa etária" framed={false} minWidth="min-w-[640px]">
+                    <thead>
+                      <tr>
+                        <Th>Vida</Th>
+                        <Th>Papel</Th>
+                        <Th>Idade</Th>
+                        <Th>Faixa etária</Th>
+                        <Th align="right">Mensalidade</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orcamento.linhas.map((linha, index) => (
+                        <Tr key={`${linha.rotulo}-${index}`}>
+                          <Td className="font-semibold text-foreground">{linha.rotulo}</Td>
+                          <Td className="text-muted-foreground">{linha.papel}</Td>
+                          <Td className="tabular-nums text-foreground">
+                            {linha.idade === null ? '—' : `${linha.idade} anos`}
+                          </Td>
+                          <Td className="text-muted-foreground">
+                            {linha.faixa?.ageRangeName ?? (linha.idade === null ? 'Informe a data de nascimento' : 'Sem faixa para esta idade')}
+                          </Td>
+                          <Td align="right" className="font-semibold tabular-nums text-foreground">
+                            {moeda(linha.faixa?.chargeValue ?? null)}
+                          </Td>
+                        </Tr>
+                      ))}
+                    </tbody>
+                  </DataTable>
                 </div>
-              )}
-            </CardContent>
-          </Card>
 
-          {error && <p className="text-sm text-[#B42318]">{error}</p>}
+                <div className="flex flex-wrap items-baseline justify-between gap-2 border-t border-border pt-4">
+                  <span className="text-sm text-muted-foreground">
+                    {orcamento.completo
+                      ? `${orcamento.linhas.length} vida(s)`
+                      : 'Total parcial — há vida sem faixa definida'}
+                    {selectedConvenio?.registrationFee
+                      ? ` · taxa de cadastro ${moeda(selectedConvenio.registrationFee)}${
+                          selectedConvenio.registrationFeeKind === 'por_vida' ? ' por vida' : ''
+                        }`
+                      : ''}
+                  </span>
+                  <span className="text-2xl font-bold tabular-nums text-secondary">
+                    {moeda(orcamento.total)}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">/mês</span>
+                  </span>
+                </div>
+              </div>
+            )}
+          </SectionCard>
+
+          {error && (
+            <p role="alert" className="m-0 rounded-xl bg-[#FEF3F2] px-4 py-3 text-sm font-medium text-[#B42318]">
+              {error}
+            </p>
+          )}
 
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <p className="mr-auto text-sm text-muted-foreground">
+            <p className="m-0 mr-auto text-sm text-muted-foreground">
               Registrar cria o contrato e a cobrança na Digital Saúde. Não há desfazer.
             </p>
-            <Button type="submit" size="lg" disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            <Button type="submit" size="lg" className="h-11 px-6" disabled={submitting}>
+              {submitting && <Loader2 className="animate-spin" aria-hidden="true" />}
               Registrar adesão
             </Button>
           </div>
         </form>
       )}
-    </div>
+    </PageContainer>
   )
 }
