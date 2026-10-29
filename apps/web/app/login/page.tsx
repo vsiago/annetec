@@ -1,11 +1,9 @@
 "use client"
 
 import { Suspense, useEffect, useMemo, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import {
   ShieldCheck,
-  Building2,
-  Users,
   Eye,
   EyeOff,
   Loader2,
@@ -24,20 +22,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { loginAction, loginClientPortalAction } from "@/lib/actions/auth-api"
 import { maskCpfInput } from "@/lib/cpf"
 
-type LoginMode = "admin" | "tenant-admin" | "tenant"
-
-const loginModes: { key: LoginMode; icon: typeof ShieldCheck; label: string }[] = [
-  { key: "admin", icon: ShieldCheck, label: "Plataforma" },
-  { key: "tenant-admin", icon: Building2, label: "Inquilino" },
-  { key: "tenant", icon: Users, label: "Associado" },
-]
-
-const submitLabel: Record<LoginMode, string> = {
-  admin: "Acessar Painel",
-  "tenant-admin": "Entrar",
-  tenant: "Acessar Meus Benefícios",
-}
-
 const passwordSchema = loginInput.shape.password
 
 /** Só aceita um slug de verdade em `?tenant=` — nada de `//outro-site` virando redirect aberto. */
@@ -47,6 +31,25 @@ const TENANT_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*$/
 function tenantDestination(tenantSlug: string | null, tenantRole: string | null) {
   const area = tenantRole === "client" ? "cliente" : tenantRole === "seller" ? "vendedor" : "admin"
   return `/${tenantSlug}/${area}`
+}
+
+/**
+ * Um campo só para todos os perfis: a forma do valor decide o caminho.
+ * - tem "@" → e-mail (senha; o retorno do login diz plataforma/inquilino/papel);
+ * - só dígitos, ponto, traço e espaço, com 11 dígitos → CPF (portal do associado);
+ * - qualquer outra coisa → ainda não dá para saber.
+ */
+type IdentifierKind = "email" | "cpf" | "unknown"
+
+const IDENTIFIER_ERROR = "Informe um e-mail ou um CPF válido"
+/** Dígitos e pontuação de CPF — o que a pessoa digita enquanto monta um CPF. */
+const CPF_CHARS = /^[\d.\-\s]+$/
+
+function detectIdentifier(raw: string): IdentifierKind {
+  const value = raw.trim()
+  if (value.includes("@")) return "email"
+  if (CPF_CHARS.test(value) && value.replace(/\D/g, "").length === 11) return "cpf"
+  return "unknown"
 }
 
 function firstIssue(result: ReturnType<typeof emailSchema.safeParse>) {
@@ -66,15 +69,14 @@ function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   // `?tenant=<slug>`: quem chega aqui vindo de um site de inquilino vai para o
-  // login com a marca dele. `?perfil=associado` sem inquilino abre na aba Associado.
+  // login com a marca dele. `?perfil=associado` ainda é aceito (links antigos),
+  // mas não muda nada: o próprio valor digitado decide o caminho.
   const tenantParam = searchParams.get("tenant")?.toLowerCase() ?? null
   const redirectSlug = tenantParam && TENANT_SLUG_PATTERN.test(tenantParam) ? tenantParam : null
-  const [mode, setMode] = useState<LoginMode>(() =>
-    searchParams.get("perfil") === "associado" ? "tenant" : "admin",
-  )
+  // "E-mail ou CPF". `email` só é usado no caminho do associado (CPF + e-mail).
+  const [identifier, setIdentifier] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [cpf, setCpf] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [error, setError] = useState("")
@@ -84,80 +86,98 @@ function LoginContent() {
     if (redirectSlug) router.replace(`/${redirectSlug}/login`)
   }, [redirectSlug, router])
 
+  const kind = detectIdentifier(identifier)
+  // Enquanto só há dígitos/pontuação, a pessoa está montando um CPF: já pede o e-mail.
+  const portalFlow = CPF_CHARS.test(identifier)
+
   const validation = useMemo(() => {
+    const identifierKind = detectIdentifier(identifier)
+    const identifierResult =
+      identifierKind === "email"
+        ? emailSchema.safeParse(identifier)
+        : identifierKind === "cpf"
+          ? cpfSchema.safeParse(identifier)
+          : null
     const emailResult = emailSchema.safeParse(email)
     const passwordResult = passwordSchema.safeParse(password)
-    const cpfResult = cpfSchema.safeParse(cpf)
 
     return {
+      identifier: {
+        valid: !!identifierResult?.success,
+        error: !identifier.trim()
+          ? "Campo obrigatório"
+          : identifierResult
+            ? firstIssue(identifierResult)
+            : IDENTIFIER_ERROR,
+      },
       email: { valid: emailResult.success, error: email ? firstIssue(emailResult) : "Campo obrigatório" },
       password: { valid: passwordResult.success, error: password ? firstIssue(passwordResult) : "Campo obrigatório" },
-      cpf: { valid: cpfResult.success, error: cpf ? firstIssue(cpfResult) : "Campo obrigatório" },
     }
-  }, [email, password, cpf])
+  }, [identifier, email, password])
 
   const isFormValid =
-    mode === "tenant"
-      ? validation.cpf.valid && validation.email.valid
-      : validation.email.valid && validation.password.valid
+    kind === "cpf"
+      ? validation.identifier.valid && validation.email.valid
+      : kind === "email" && validation.identifier.valid && validation.password.valid
 
   const markTouched = (field: string) => setTouched((prev) => ({ ...prev, [field]: true }))
 
-  const switchMode = (next: LoginMode) => {
-    setMode(next)
+  const handleIdentifierChange = (raw: string) => {
     setError("")
-    setTouched({})
+    if (CPF_CHARS.test(raw)) {
+      // Máscara de CPF só até 11 dígitos; mais que isso não é CPF (p.ex. e-mail
+      // que começa com um telefone), então não corta nem formata.
+      const digits = raw.replace(/\D/g, "")
+      setIdentifier(digits.length <= 11 ? maskCpfInput(raw) : digits)
+      return
+    }
+    // Passou de dígitos para letras/"@" (e-mail que começa por números): devolve
+    // os dígitos sem a máscara que acabou de ser aplicada.
+    if (CPF_CHARS.test(identifier) && raw.startsWith(identifier)) {
+      setIdentifier(identifier.replace(/\D/g, "") + raw.slice(identifier.length))
+      return
+    }
+    setIdentifier(raw)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
 
-    if (mode === "tenant") {
-      setTouched({ cpf: true, email: true })
+    if (kind === "cpf") {
+      setTouched({ identifier: true, email: true })
+    } else if (portalFlow) {
+      setTouched({ identifier: true })
     } else {
-      setTouched({ email: true, password: true })
+      setTouched({ identifier: true, password: true })
     }
 
     if (!isFormValid) return
 
     setIsSubmitting(true)
     try {
-      if (mode === "admin") {
-        const result = await loginAction({ email, password })
+      if (kind === "cpf") {
+        // Associado: CPF + e-mail conferidos na operadora (sem senha).
+        const result = await loginClientPortalAction({ cpf: identifier, email })
         if (!result.success) {
           setError(result.error)
           return
         }
-        // Conta de inquilino digitada na aba errada: leva para a área dela.
-        router.push(
-          result.data.scope === "platform"
-            ? "/admin"
-            : tenantDestination(result.data.tenantSlug, result.data.tenantRole),
-        )
+        router.push(`/${result.data.tenantSlug}/cliente`)
         return
       }
 
-      if (mode === "tenant-admin") {
-        const result = await loginAction({ email, password })
-        if (!result.success) {
-          setError(result.error)
-          return
-        }
-        router.push(
-          result.data.scope === "platform"
-            ? "/admin"
-            : tenantDestination(result.data.tenantSlug, result.data.tenantRole),
-        )
-        return
-      }
-
-      const result = await loginClientPortalAction({ cpf, email })
+      // E-mail + senha: o retorno diz se é plataforma ou inquilino (e o papel).
+      const result = await loginAction({ email: identifier, password })
       if (!result.success) {
         setError(result.error)
         return
       }
-      router.push(`/${result.data.tenantSlug}/cliente`)
+      router.push(
+        result.data.scope === "platform"
+          ? "/admin"
+          : tenantDestination(result.data.tenantSlug, result.data.tenantRole),
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -250,43 +270,7 @@ function LoginContent() {
             <h2 className="text-3xl font-extrabold text-[#26365f] tracking-tight">Entrar</h2>
           </div>
 
-          {/* Segmented mode switcher */}
-          <div className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-gray-100 mb-8">
-            {loginModes.map((item) => {
-              const active = item.key === mode
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => switchMode(item.key)}
-                  className={`relative flex flex-col items-center gap-1.5 py-3 rounded-xl text-xs font-semibold transition-all ${
-                    active
-                      ? "text-[#26365f]"
-                      : "text-muted-foreground hover:text-[#26365f]"
-                  }`}
-                >
-                  {active && (
-                    <motion.div
-                      layoutId="login-mode-pill"
-                      className="absolute inset-0 bg-white rounded-xl shadow-sm"
-                      transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
-                    />
-                  )}
-                  <item.icon size={18} className="relative z-10" />
-                  <span className="relative z-10">{item.label}</span>
-                </button>
-              )
-            })}
-          </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={mode}
-              initial={{ opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -12 }}
-              transition={{ duration: 0.25 }}
-            >
+            <div>
               <form onSubmit={handleSubmit} className="space-y-5" noValidate>
                 {error && (
                   <Alert
@@ -298,38 +282,41 @@ function LoginContent() {
                   </Alert>
                 )}
 
-                {/* CPF (client portal login) */}
-                {mode === "tenant" && (
+                {/* E-mail ou CPF: a forma do valor decide o caminho */}
+                <ValidatedField
+                  id="login-identifier"
+                  label="E-mail ou CPF"
+                  placeholder="nome@exemplo.com ou 000.000.000-00"
+                  value={identifier}
+                  onChange={handleIdentifierChange}
+                  onBlur={() => markTouched("identifier")}
+                  touched={!!touched.identifier}
+                  validation={validation.identifier}
+                  disabled={isSubmitting}
+                  autoComplete="username"
+                  hint="Associados entram com o CPF; os demais, com o e-mail."
+                />
+
+                {/* E-mail do associado (junto com o CPF) */}
+                {portalFlow && (
                   <ValidatedField
-                    id="cpf"
-                    label="CPF"
-                    placeholder="000.000.000-00"
-                    value={cpf}
-                    onChange={(v) => setCpf(maskCpfInput(v))}
-                    onBlur={() => markTouched("cpf")}
-                    touched={!!touched.cpf}
-                    validation={validation.cpf}
+                    id="login-email"
+                    label="E-mail"
+                    type="email"
+                    placeholder="nome@exemplo.com"
+                    value={email}
+                    onChange={setEmail}
+                    onBlur={() => markTouched("email")}
+                    touched={!!touched.email}
+                    validation={validation.email}
                     disabled={isSubmitting}
-                    inputMode="numeric"
+                    autoComplete="email"
+                    hint="O e-mail cadastrado na sua assinatura."
                   />
                 )}
 
-                {/* Email */}
-                <ValidatedField
-                  id="login-email"
-                  label="E-mail"
-                  type="email"
-                  placeholder="nome@exemplo.com"
-                  value={email}
-                  onChange={setEmail}
-                  onBlur={() => markTouched("email")}
-                  touched={!!touched.email}
-                  validation={validation.email}
-                  disabled={isSubmitting}
-                />
-
                 {/* Password */}
-                {mode !== "tenant" && (
+                {!portalFlow && (
                   <div className="space-y-2">
                     <Label
                       htmlFor="login-password"
@@ -399,25 +386,23 @@ function LoginContent() {
                   ) : (
                     <>
                       <Lock size={18} className="mr-2" />
-                      {submitLabel[mode]}
+                      Entrar
                     </>
                   )}
                 </Button>
               </form>
 
-              {mode === "tenant" && (
-                <div className="mt-8 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    Ainda não tem cadastro?{" "}
-                    <Link
-                      href="/contratar"
-                      className="font-semibold text-[#e84364] hover:underline"
-                    >
-                      Cadastre-se
-                    </Link>
-                  </p>
-                </div>
-              )}
+              <div className="mt-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Ainda não tem cadastro?{" "}
+                  <Link
+                    href="/contratar"
+                    className="font-semibold text-[#e84364] hover:underline"
+                  >
+                    Cadastre-se
+                  </Link>
+                </p>
+              </div>
 
               <div className="mt-8 text-center">
                 <Link
@@ -427,8 +412,7 @@ function LoginContent() {
                   ← Voltar ao site
                 </Link>
               </div>
-            </motion.div>
-          </AnimatePresence>
+            </div>
         </main>
       </div>
     </div>
@@ -448,6 +432,7 @@ interface ValidatedFieldProps {
   placeholder?: string
   hint?: string
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"]
+  autoComplete?: string
 }
 
 function ValidatedField({
@@ -463,6 +448,7 @@ function ValidatedField({
   placeholder,
   hint,
   inputMode,
+  autoComplete,
 }: ValidatedFieldProps) {
   const showError = touched && !validation.valid
   const showValid = touched && validation.valid && value.length > 0
@@ -477,6 +463,7 @@ function ValidatedField({
           id={id}
           type={type}
           inputMode={inputMode}
+          autoComplete={autoComplete}
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
