@@ -163,6 +163,13 @@ const envSchema = z.object({
 
   /** Armazenamento de documentos (KYB) e logos. `local` = disco fora do repositório. */
   STORAGE_DRIVER: z.preprocess(emptyAsUndefined, z.enum(['local', 'supabase', 's3']).default('local')),
+  /**
+   * Aceite explícito de `STORAGE_DRIVER=local` em produção ESTRITA (sem
+   * `DEPLOY_STAGE=preview`). Os documentos ficam no disco do servidor (volume
+   * `api_storage`): sem backup diário e snapshot do EBS, perder a instância é
+   * perder os documentos. Ver `config/assert-production.ts` e `deploy/README.md`.
+   */
+  ALLOW_LOCAL_STORAGE_IN_PRODUCTION: z.preprocess(parseBooleanish, z.boolean().optional()),
   /** Pasta do driver `local`. Vazio = `<tmp do sistema>/annetec-storage`. */
   STORAGE_LOCAL_DIR: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),
   SUPABASE_URL: z.preprocess(emptyAsUndefined, z.string().url().optional()),

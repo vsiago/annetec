@@ -295,7 +295,7 @@ export async function holdingTenants(
   const total = items.length
   const start = (query.page - 1) * query.perPage
   return {
-    items: items.slice(start, start + query.perPage),
+    items: await withSellers(items.slice(start, start + query.perPage)),
     meta: { page: query.page, perPage: query.perPage, total, totalPages: Math.ceil(total / query.perPage) },
   }
 }
@@ -493,4 +493,21 @@ export async function applyTenantLifecycle(
     })
   }
   return { previous, level, changed: true }
+}
+
+/** Vendedor ANNETEC atribuído (proposta de origem do clube), só na página pedida — fora do cache. */
+async function withSellers(rows: HoldingTenantRow[]): Promise<HoldingTenantRow[]> {
+  const ids = rows.map(row => row.organizationId)
+  if (ids.length === 0) return rows
+  try {
+    const found = await db
+      .select({ organizationId: platformOnboardingProposals.organizationId, userId: user.id, name: user.name })
+      .from(platformOnboardingProposals)
+      .innerJoin(user, eq(user.id, platformOnboardingProposals.sellerUserId))
+      .where(and(inArray(platformOnboardingProposals.organizationId, ids), eq(platformOnboardingProposals.status, 'active')))
+    const byOrg = new Map(found.map(row => [row.organizationId, { userId: row.userId, name: row.name }]))
+    return rows.map(row => ({ ...row, seller: byOrg.get(row.organizationId) ?? null }))
+  } catch {
+    return rows
+  }
 }

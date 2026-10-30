@@ -18,6 +18,7 @@ import {
   Rocket,
   ShieldCheck,
   Sparkles,
+  UserCheck,
   WandSparkles,
   X,
 } from 'lucide-react'
@@ -74,6 +75,47 @@ const TYPE_ICONS: Record<ContractorType, typeof Building2> = {
   organizacao: HeartHandshake,
 }
 
+/**
+ * Código de indicação do vendedor ANNETEC (`/contratar?ref=joao-silva`;
+ * `?consultor=` é sinônimo). Fica guardado na sessão do navegador para não se
+ * perder se a pessoa navegar pelo site antes de contratar. Código desconhecido
+ * é ignorado pela API sem erro — a contratação nunca falha por causa dele.
+ */
+const REFERRAL_KEY = 'annetec.contratar.indicacao'
+
+function cleanReferral(value: string | null | undefined): string | null {
+  const code = (value ?? '').trim().toLowerCase()
+  return /^[a-z0-9][a-z0-9-]{1,58}[a-z0-9]$/.test(code) ? code : null
+}
+
+function readReferral(): string | null {
+  let fromUrl: string | null = null
+  try {
+    const params = new URLSearchParams(window.location.search)
+    fromUrl = cleanReferral(params.get('ref') ?? params.get('consultor'))
+  } catch {
+    fromUrl = null
+  }
+  try {
+    if (fromUrl) {
+      window.sessionStorage.setItem(REFERRAL_KEY, fromUrl)
+      return fromUrl
+    }
+    return cleanReferral(window.sessionStorage.getItem(REFERRAL_KEY))
+  } catch {
+    // Sem armazenamento (aba anônima bloqueada): vale só o que está na URL.
+    return fromUrl
+  }
+}
+
+function forgetReferral() {
+  try {
+    window.sessionStorage.removeItem(REFERRAL_KEY)
+  } catch {
+    /* sem armazenamento: nada a apagar */
+  }
+}
+
 /** Em qual etapa do início cada campo do `startOnboardingInput` aparece. */
 function stepOfField(field: string): number {
   if (field.startsWith('contractorType') || field.startsWith('legalForm')) return 0
@@ -103,6 +145,7 @@ export function StartFlow() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [resume, setResume] = useState<ResumeInfo | null>(null)
+  const [referral, setReferral] = useState<string | null>(null)
   const headingRef = useRef<HTMLHeadingElement | null>(null)
   const firstRender = useRef(true)
 
@@ -121,6 +164,7 @@ export function StartFlow() {
 
   useEffect(() => {
     setResume(readRememberedProposal())
+    setReferral(readReferral())
   }, [])
 
   useEffect(() => {
@@ -190,6 +234,7 @@ export function StartFlow() {
       expectedLives: lives,
       applicant,
       acceptPrivacy,
+      ...(referral ? { referralCode: referral } : {}),
     }
     const parsed = validate(startOnboardingInput, candidate)
     if (!parsed.ok) {
@@ -211,6 +256,8 @@ export function StartFlow() {
         return
       }
       rememberProposal({ id: result.data.proposalId, code: result.data.code, path: result.data.trackingPath })
+      // A indicação já foi para a proposta: não vale para uma próxima contratação neste navegador.
+      forgetReferral()
       toast.success(`Proposta ${result.data.code} criada`, {
         description: `Enviamos o link de acompanhamento para ${parsed.data.applicant.email}.`,
       })
@@ -593,6 +640,15 @@ export function StartFlow() {
                       error={errors['applicant.phone']}
                     />
                   </div>
+
+                  {referral ? (
+                    <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
+                      <UserCheck className="size-4 shrink-0 text-emerald-600" aria-hidden />
+                      <span>
+                        Indicação de um consultor ANNETEC registrada (código <span className="font-mono">{referral}</span>).
+                      </span>
+                    </p>
+                  ) : null}
 
                   <div
                     className={cn(

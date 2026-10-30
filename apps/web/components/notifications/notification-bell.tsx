@@ -15,9 +15,9 @@ import {
 } from 'lucide-react'
 import type { AppNotification } from '@annetec/contracts'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { amountLabel, initialsOf, isPayment, platformHeadline, relativeTime } from '@/lib/notifications/format'
+import { amountLabel, initialsOf, isPayment, isSalesNotification, platformHeadline, relativeTime } from '@/lib/notifications/format'
 import { cn } from '@/lib/utils'
-import { TenantMark } from './notification-toast'
+import { TenantMark, salesNotificationLook } from './notification-toast'
 import { useNotifications, type StreamStatus } from './notifications-provider'
 
 /**
@@ -49,6 +49,15 @@ function StatusDot({ status }: { status: StreamStatus }) {
 }
 
 function ItemIcon({ notification, platform }: { notification: AppNotification; platform: boolean }) {
+  if (isSalesNotification(notification)) {
+    const look = salesNotificationLook(notification)
+    const Icon = look.icon
+    return (
+      <span className={cn('mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full', look.className)}>
+        <Icon className="h-[18px] w-[18px]" aria-hidden />
+      </span>
+    )
+  }
   if (platform) {
     return (
       <span className="relative mt-0.5 h-8 w-8 shrink-0 self-start">
@@ -93,9 +102,11 @@ function NotificationItem({
   onOpen: () => void
 }) {
   const amount = amountLabel(notification)
-  const title = platform ? (notification.tenant?.name ?? 'Annetec') : notification.title
-  const subtitle = platform ? platformHeadline(notification) : notification.body
-  const detail = platform && notification.kind !== 'platform_invoice_paid' ? notification.body : null
+  // Vendas (pedido/decisão de desconto) não são de um clube: o título já diz quem e o quê.
+  const asPlatform = platform && !isSalesNotification(notification)
+  const title = asPlatform ? (notification.tenant?.name ?? 'Annetec') : notification.title
+  const subtitle = asPlatform ? platformHeadline(notification) : notification.body
+  const detail = asPlatform && notification.kind !== 'platform_invoice_paid' ? notification.body : null
 
   return (
     <li>
@@ -111,7 +122,7 @@ function NotificationItem({
         <div className="min-w-0 flex-1 pr-3">
           <div className="flex items-baseline justify-between gap-2">
             <p className={cn('truncate text-sm text-foreground', notification.read ? 'font-medium' : 'font-semibold')}>{title}</p>
-            {amount && !platform && (
+            {amount && !asPlatform && !isSalesNotification(notification) && (
               <span className="shrink-0 text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{amount}</span>
             )}
           </div>
@@ -119,7 +130,7 @@ function NotificationItem({
             <p
               className={cn(
                 'truncate text-xs',
-                platform && isPayment(notification) ? 'font-medium text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground',
+                asPlatform && isPayment(notification) ? 'font-medium text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground',
               )}
             >
               {subtitle}
@@ -194,6 +205,7 @@ function Panel() {
   const ctx = useNotifications()!
   const [now, setNow] = useState(() => ctx.serverNow())
   const platform = ctx.scope.kind === 'platform'
+  const seller = ctx.scope.kind === 'seller'
 
   useEffect(() => {
     setNow(ctx.serverNow())
@@ -246,9 +258,11 @@ function Panel() {
             </span>
             <p className="text-sm font-medium text-foreground">Nada por aqui ainda</p>
             <p className="mt-1 max-w-[260px] text-xs text-muted-foreground">
-              {platform
-                ? 'Pagamentos e cadastros de todos os clubes aparecem aqui na hora.'
-                : 'Pagamentos e cadastros novos do clube aparecem aqui na hora, com aviso sonoro.'}
+              {seller
+                ? 'A decisão dos seus pedidos de desconto aparece aqui na hora.'
+                : platform
+                  ? 'Pagamentos, cadastros e pedidos de desconto aparecem aqui na hora.'
+                  : 'Pagamentos e cadastros novos do clube aparecem aqui na hora, com aviso sonoro.'}
             </p>
           </div>
         ) : (

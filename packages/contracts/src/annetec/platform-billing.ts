@@ -151,6 +151,12 @@ export const platformChargeItem = z.object({
   quantity: z.number(),
   unitPrice: z.number(),
   amount: z.number(),
+  /**
+   * Só em `discount`: a parte que o desconto abate (`setup_fee` = adesão,
+   * `plan_fee` = mensalidade). É o que separa adesão de mensalidade na base
+   * da comissão do vendedor quando a ativação junta as duas.
+   */
+  appliesTo: z.enum(['setup_fee', 'plan_fee']).optional(),
 })
 export type PlatformChargeItem = z.infer<typeof platformChargeItem>
 
@@ -301,12 +307,42 @@ export const platformPlanQuote = z.object({
   /** Mensal recorrente = planFee + overageTotal + revenueShareTotal. */
   monthlyTotal: z.number(),
   setupFee: z.number(),
-  /** 1ª cobrança (ativação) = planFee + setupFee (sem excedente: o clube nasce com 0 vidas). */
+  /** 1ª cobrança (ativação) = planFee + setupFee − descontos (sem excedente: o clube nasce com 0 vidas). */
   activationTotal: z.number(),
   /** lives ÷ memberLimit × 100, 1 casa. */
   usagePct: z.number(),
+  /** Desconto aprovado na adesão (0–100; 100 = isenção). 0 sem desconto. */
+  setupFeeDiscountPercent: z.number(),
+  /** R$ abatidos da adesão. */
+  setupFeeDiscount: z.number(),
+  /** Desconto aprovado na mensalidade do plano (0–50). 0 sem desconto. */
+  planFeeDiscountPercent: z.number(),
+  /** R$ abatidos de cada mensalidade enquanto o desconto vale (já descontados de `monthlyTotal`). */
+  planFeeDiscount: z.number(),
 })
 export type PlatformPlanQuote = z.infer<typeof platformPlanQuote>
+
+/** Teto do desconto na mensalidade (regra comercial aprovada). */
+export const MAX_MONTHLY_DISCOUNT_PERCENT = 50
+
+/** Desconto de preço aplicado a uma cotação/cobrança (percentuais já aprovados). */
+export interface PlatformPriceDiscount {
+  /** 0–100 sobre a adesão (100 = isenção). */
+  setupFeePercent?: number | null
+  /** 0–50 sobre a mensalidade do plano. */
+  monthlyPercent?: number | null
+}
+
+function clampPercent(value: number | null | undefined, max: number): number {
+  const n = Number(value ?? 0)
+  if (!Number.isFinite(n) || n <= 0) return 0
+  return Math.min(max, n)
+}
+
+/** R$ de desconto de `percent`% (limitado a `max`) sobre `base`, arredondado a centavos. */
+export function discountAmount(base: number, percent: number | null | undefined, max = 100): number {
+  return roundCents((Math.max(0, base) * clampPercent(percent, max)) / 100)
+}
 
 /**
  * Cotação de um plano para N vidas. A API fatura com esta MESMA função: o valor
@@ -316,7 +352,7 @@ export function quotePlatformPlan(
   plan: Pick<TenantPlan, 'priceMonthly' | 'memberLimit'>,
   pricing: Pick<TenantPlanPricing, 'setupFee' | 'pricePerExtraLife' | 'revenueSharePercent'>,
   lives: number,
-  options: { clubRevenue?: number } = {},
+  options: { clubRevenue?: number; discount?: PlatformPriceDiscount | null } = {},
 ): PlatformPlanQuote {
   const count = Math.max(0, Math.trunc(lives))
   const limit = Math.max(1, Math.trunc(plan.memberLimit))
@@ -327,6 +363,10 @@ export function quotePlatformPlan(
   const revenueShareTotal = roundCents((base * percent) / 100)
   const planFee = roundCents(plan.priceMonthly)
   const setupFee = roundCents(pricing.setupFee)
+  const setupFeeDiscountPercent = clampPercent(options.discount?.setupFeePercent, 100)
+  const planFeeDiscountPercent = clampPercent(options.discount?.monthlyPercent, MAX_MONTHLY_DISCOUNT_PERCENT)
+  const setupFeeDiscount = discountAmount(setupFee, setupFeeDiscountPercent)
+  const planFeeDiscount = discountAmount(planFee, planFeeDiscountPercent, MAX_MONTHLY_DISCOUNT_PERCENT)
   return {
     planFee,
     memberLimit: limit,
@@ -337,11 +377,31 @@ export function quotePlatformPlan(
     revenueSharePercent: percent,
     revenueShareBase: base,
     revenueShareTotal,
-    monthlyTotal: roundCents(planFee + overageTotal + revenueShareTotal),
+    monthlyTotal: roundCents(planFee - planFeeDiscount + overageTotal + revenueShareTotal),
     setupFee,
-    activationTotal: roundCents(planFee + setupFee),
+    activationTotal: roundCents(planFee - planFeeDiscount + setupFee - setupFeeDiscount),
     usagePct: Math.round((count / limit) * 1000) / 10,
+    setupFeeDiscountPercent,
+    setupFeeDiscount,
+    planFeeDiscountPercent,
+    planFeeDiscount,
   }
+}
+
+/**
+ * Desconto da mensalidade guardado na assinatura: `percent` > 0 e `until`
+ * (data-só, inclusive) = último dia coberto; `until` nulo = permanente.
+ * Vale para o período que COMEÇA até `until`. Devolve o % do período (0 = sem).
+ */
+export function monthlyDiscountPercentFor(
+  discount: { percent: number; until: string | null } | null | undefined,
+  periodStart: string,
+): number {
+  if (!discount) return 0
+  const percent = clampPercent(discount.percent, MAX_MONTHLY_DISCOUNT_PERCENT)
+  if (percent <= 0) return 0
+  if (discount.until !== null && periodStart > discount.until) return 0
+  return percent
 }
 
 /**
@@ -364,10 +424,33 @@ export function sumChargeItems(items: Pick<PlatformChargeItem, 'amount'>[]): num
   return roundCents(items.reduce((acc, item) => acc + item.amount, 0))
 }
 
-/** Itens da cobrança de ativação: adesão (se houver) + 1ª mensalidade. */
+/** Linha de desconto (valor negativo) sobre a adesão ou a mensalidade. */
+export function discountChargeItem(appliesTo: 'setup_fee' | 'plan_fee', percent: number, amount: number): PlatformChargeItem {
+  const value = -roundCents(Math.abs(amount))
+  const label = Number.isInteger(percent) ? String(percent) : percent.toFixed(2).replace('.', ',')
+  return {
+    kind: 'discount',
+    description:
+      appliesTo === 'setup_fee'
+        ? percent >= 100
+          ? 'Isenção da adesão'
+          : `Desconto de ${label}% na adesão`
+        : `Desconto de ${label}% na mensalidade`,
+    quantity: 1,
+    unitPrice: value,
+    amount: value,
+    appliesTo,
+  }
+}
+
+/**
+ * Itens da cobrança de ativação: adesão (se houver) + 1ª mensalidade, cada uma
+ * seguida do seu desconto aprovado (linha `discount` negativa com `appliesTo`).
+ */
 export function activationChargeItems(
   plan: Pick<TenantPlan, 'name' | 'priceMonthly'>,
   pricing: Pick<TenantPlanPricing, 'setupFee'>,
+  discount: PlatformPriceDiscount | null = null,
 ): PlatformChargeItem[] {
   const items: PlatformChargeItem[] = []
   if (pricing.setupFee > 0) {
@@ -378,6 +461,9 @@ export function activationChargeItems(
       unitPrice: roundCents(pricing.setupFee),
       amount: roundCents(pricing.setupFee),
     })
+    const percent = clampPercent(discount?.setupFeePercent, 100)
+    const off = discountAmount(pricing.setupFee, percent)
+    if (off > 0) items.push(discountChargeItem('setup_fee', percent, off))
   }
   items.push({
     kind: 'plan_fee',
@@ -386,7 +472,22 @@ export function activationChargeItems(
     unitPrice: roundCents(plan.priceMonthly),
     amount: roundCents(plan.priceMonthly),
   })
+  const monthly = clampPercent(discount?.monthlyPercent, MAX_MONTHLY_DISCOUNT_PERCENT)
+  const monthlyOff = discountAmount(plan.priceMonthly, monthly, MAX_MONTHLY_DISCOUNT_PERCENT)
+  if (monthlyOff > 0) items.push(discountChargeItem('plan_fee', monthly, monthlyOff))
   return items
+}
+
+/**
+ * Parte de ADESÃO de uma fatura: `setup_fee` + descontos `appliesTo: 'setup_fee'`.
+ * O resto é a parte de mensalidade. Base da comissão do vendedor.
+ */
+export function chargeSetupFeeTotal(items: Pick<PlatformChargeItem, 'kind' | 'amount' | 'appliesTo'>[]): number {
+  return roundCents(
+    items
+      .filter(item => item.kind === 'setup_fee' || (item.kind === 'discount' && item.appliesTo === 'setup_fee'))
+      .reduce((acc, item) => acc + item.amount, 0),
+  )
 }
 
 /**
@@ -402,7 +503,14 @@ export function monthlyChargeItems(
     pricePerExtraLife: number
     revenueSharePercent: number
   },
-  input: { lives: number; clubRevenue: number; periodLabel: string; adjustments?: PlatformChargeItem[] },
+  input: {
+    lives: number
+    clubRevenue: number
+    periodLabel: string
+    adjustments?: PlatformChargeItem[]
+    /** % de desconto da mensalidade que vale NESTE período (`monthlyDiscountPercentFor`). */
+    monthlyDiscountPercent?: number
+  },
 ): PlatformChargeItem[] {
   const quote = quotePlatformPlan(
     { priceMonthly: sub.planPriceMonthly, memberLimit: sub.memberLimit },
@@ -419,6 +527,9 @@ export function monthlyChargeItems(
       amount: quote.planFee,
     },
   ]
+  const monthlyPercent = clampPercent(input.monthlyDiscountPercent, MAX_MONTHLY_DISCOUNT_PERCENT)
+  const monthlyOff = discountAmount(quote.planFee, monthlyPercent, MAX_MONTHLY_DISCOUNT_PERCENT)
+  if (monthlyOff > 0) items.push(discountChargeItem('plan_fee', monthlyPercent, monthlyOff))
   if (quote.extraLives > 0 && quote.pricePerExtraLife > 0) {
     items.push({
       kind: 'overage',
@@ -688,8 +799,13 @@ export const platformSubscription = z.object({
   /** Vidas ativas agora (ver blueprint §0.6 — titulares + dependentes de assinaturas `active`/`past_due`). */
   lives: z.number().int(),
   usagePct: z.number(),
-  /** Mensal estimado agora = quote(vidas atuais).monthlyTotal (sem split). */
+  /** Mensal estimado agora = quote(vidas atuais).monthlyTotal (sem split), já com o desconto vigente. */
   estimatedMonthly: z.number(),
+  /**
+   * Desconto da mensalidade aprovado na venda (vendedor + superadmin): `until`
+   * = último dia coberto (inclusive; `null` = permanente). `null` sem desconto.
+   */
+  monthlyDiscount: z.object({ percent: z.number(), until: dateOnly.nullable() }).nullable(),
   /** Soma das cobranças `pending`/`overdue`/`failed`. */
   openAmount: z.number(),
   overdueCount: z.number().int().nonnegative(),

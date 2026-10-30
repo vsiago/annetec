@@ -1,12 +1,14 @@
 import {
   CLUB_PAYMENT_METHOD_LABELS,
   activationChargeItems,
+  discountAmount,
   formatBRL,
   formatDateBR,
   onlyDigits,
   sumChargeItems,
   type ClubPaymentMethod,
   type PlatformCharge,
+  type ProposalDiscount,
 } from '@annetec/contracts'
 import { and, desc, eq, inArray, isNull, ne } from 'drizzle-orm'
 import { db } from '@/db/client'
@@ -19,6 +21,7 @@ import { invalidateHoldingCache } from '@/modules/holding/cache'
 import { cancelPlatformAtGateway, submitPlatformChargeToGateway, syncPlatformChargeIfStale } from './charges.service'
 import { recordPlatformEvent, takeActivationCard } from './events.service'
 import { OPEN_PLATFORM_CHARGE_STATUSES, toPlatformCharge, type PlatformChargeRow } from './presenter'
+import { monthlyDiscountUntilFor } from './automation.rules'
 import { getPlanOffer, planSnapshot } from './pricing.service'
 import { proposalBasics, proposalDisplayName, tenantRefOf } from './queries'
 import { currentPlatformProvider, loadPlatformSettings } from './settings.service'
@@ -87,7 +90,8 @@ export async function createActivationCharge(
   const settings = await loadPlatformSettings()
   const provider = currentPlatformProvider(settings)
   const method: ClubPaymentMethod = proposal.paymentMethod ?? 'pix'
-  const items = activationChargeItems(offer, offer.pricing)
+  // Desconto aprovado pelo superadmin entra como linhas `discount` (adesão e/ou 1ª mensalidade).
+  const items = activationChargeItems(offer, offer.pricing, proposal.discount)
   const amount = sumChargeItems(items)
   const dueDate = addDays(todaySP(), settings.boletoDueDays)
 
@@ -119,7 +123,11 @@ export async function createActivationCharge(
     source: 'onboarding',
     gatewayProvider: provider,
     message: `Cobrança de ativação de ${formatBRL(amount)} emitida para ${proposalDisplayName(proposal)} — ${CLUB_PAYMENT_METHOD_LABELS[method]}, vence em ${formatDateBR(dueDate)}`,
-    payload: { planId: offer.id, items: items.map(item => ({ kind: item.kind, amount: item.amount })) },
+    payload: {
+      planId: offer.id,
+      items: items.map(item => ({ kind: item.kind, amount: item.amount })),
+      ...(proposal.discount ? { discountRequestId: proposal.discount.requestId } : {}),
+    },
     actorUserId: opts.actorUserId ?? null,
   })
   invalidateHoldingCache()
@@ -186,11 +194,14 @@ export async function createPlatformSubscription(input: {
   billing: { name: string; document: string; email: string; phone?: string | null }
   startDate: string
   activationWaived: boolean
+  /** Desconto aprovado na venda: adesão líquida no retrato + desconto da mensalidade com data de fim. */
+  discount?: ProposalDiscount | null
 }): Promise<{ subscriptionId: string }> {
   const offer = await getPlanOffer(input.planId)
   const settings = await loadPlatformSettings()
   const dueDay = dueDayOf(input.startDate)
   const periodEnd = addMonthsOnDueDay(input.startDate, 1, dueDay)
+  const discount = discountColumns(offer.pricing.setupFee, input.discount ?? null, input.startDate, dueDay)
   const card = input.paymentMethod === 'credit_card' ? takeActivationCard(input.proposalId) : null
   const now = new Date()
 
@@ -201,6 +212,7 @@ export async function createPlatformSubscription(input: {
         organizationId: input.organizationId,
         proposalId: input.proposalId,
         ...planSnapshot(offer),
+        ...discount,
         status: 'active',
         paymentMethod: input.paymentMethod,
         dueDay,
@@ -234,7 +246,7 @@ export async function createPlatformSubscription(input: {
         proposalId: input.proposalId,
         type: 'SUBSCRIPTION_CREATED',
         source: 'onboarding',
-        message: `Assinatura da plataforma criada — plano ${offer.name} (${formatBRL(offer.priceMonthly)}/mês, até ${offer.memberLimit} vidas), vencimento todo dia ${dueDay}${input.activationWaived ? ' — ativação isentada' : ''}`,
+        message: `Assinatura da plataforma criada — plano ${offer.name} (${formatBRL(offer.priceMonthly)}/mês, até ${offer.memberLimit} vidas), vencimento todo dia ${dueDay}${input.activationWaived ? ' — ativação isentada' : ''}${discountNote(discount)}`,
       })
     }
 
@@ -274,4 +286,25 @@ export async function createPlatformSubscription(input: {
   invalidatePlatformAccessCache(input.organizationId)
   invalidateHoldingCache()
   return { subscriptionId }
+}
+
+/**
+ * Colunas do desconto da venda na assinatura: adesão do retrato JÁ líquida e
+ * o desconto da mensalidade com a data de fim (`monthlyDiscountUntilFor`).
+ * Sem desconto = colunas no padrão (retrato cheio, 0%).
+ */
+export function discountColumns(setupFee: number, discount: ProposalDiscount | null, startDate: string, dueDay: number) {
+  if (!discount) return {}
+  const netSetupFee = Math.max(0, setupFee - discountAmount(setupFee, discount.setupFeePercent))
+  const monthly = discount.monthlyPercent > 0
+  return {
+    setupFee: String(netSetupFee),
+    monthlyDiscountPercent: String(monthly ? discount.monthlyPercent : 0),
+    monthlyDiscountUntil: monthly ? monthlyDiscountUntilFor(startDate, discount.monthlyMonths, dueDay) : null,
+  }
+}
+
+function discountNote(columns: ReturnType<typeof discountColumns>): string {
+  if (!('monthlyDiscountPercent' in columns) || Number(columns.monthlyDiscountPercent) <= 0) return ''
+  return ` — desconto de ${columns.monthlyDiscountPercent}% na mensalidade ${columns.monthlyDiscountUntil ? `até ${formatDateBR(columns.monthlyDiscountUntil)}` : 'permanente'}`
 }

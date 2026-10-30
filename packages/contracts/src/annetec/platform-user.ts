@@ -3,10 +3,14 @@ import { email } from '../common/primitives'
 import { platformRole } from './enums'
 
 /**
- * Conta de equipe Annetec (opera `/admin`). Vive na mesma tabela `user` do
+ * Conta de plataforma Annetec (opera `/admin`). Vive na mesma tabela `user` do
  * Better Auth que os usuários de inquilino — o que diferencia é `role`:
- * 'superadmin' | 'platform_admin' aqui, 'user' para todo o resto (que então
- * se identifica por vínculo de `organization`, não por este papel).
+ * 'superadmin' | 'platform_admin' (equipe) | 'platform_seller' (vendedor
+ * ANNETEC, só a área de vendas) aqui, 'user' para todo o resto (que então se
+ * identifica por vínculo de `organization`, não por este papel).
+ *
+ * Criar conta `platform_seller` (só superadmin) também cria o perfil de
+ * vendedor com um código de indicação gerado do nome (ver `platform-sales.ts`).
  */
 export const platformUser = z.object({
   id: z.string(),

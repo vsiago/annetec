@@ -12,6 +12,7 @@ import {
   tenantProfiles,
   user,
 } from '@/db/schema'
+import { syncProspectsWithProposal } from '@/modules/platform-sales/prospect-sync'
 import { checkSlugFormat, OPEN_STATUSES } from './rules'
 
 /**
@@ -147,6 +148,9 @@ export async function insertEvent(
 /**
  * `UPDATE … SET patch WHERE id = ? AND status IN (from) RETURNING *`.
  * `null` = a proposta não está (mais) num dos estados de origem.
+ *
+ * Mudou o status de uma proposta com vendedor: o prospect vinculado acompanha
+ * (`syncProspectsWithProposal`, nunca derruba a transição).
  */
 export async function transitionProposal(
   executor: Executor,
@@ -159,6 +163,7 @@ export async function transitionProposal(
     .set({ ...patch, updatedAt: new Date() })
     .where(and(eq(platformOnboardingProposals.id, id), inArray(platformOnboardingProposals.status, [...from])))
     .returning()
+  if (row && patch.status !== undefined && row.sellerUserId) await syncProspectsWithProposal(executor, row)
   return row ?? null
 }
 

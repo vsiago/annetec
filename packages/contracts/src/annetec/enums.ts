@@ -6,9 +6,37 @@ import { z } from 'zod'
  * Saúde para estes valores.
  */
 
-/** Papéis de quem opera a plataforma Annetec (fora do escopo de inquilino). */
-export const platformRole = z.enum(['superadmin', 'platform_admin'])
+/**
+ * Papéis de quem opera a plataforma Annetec (fora do escopo de inquilino).
+ *
+ *  - `superadmin` e `platform_admin`: a EQUIPE (console `/admin`);
+ *  - `platform_seller`: vendedor ANNETEC — conta de plataforma que só enxerga
+ *    a própria área de vendas (`/api/v1/platform/vendas/*`). Nunca passa nas
+ *    rotas da equipe nem lê painel de clube.
+ */
+export const platformRole = z.enum(['superadmin', 'platform_admin', 'platform_seller'])
 export type PlatformRole = z.infer<typeof platformRole>
+
+/** Papéis da EQUIPE Annetec — o "qualquer papel de plataforma" das rotas do console. */
+export const PLATFORM_STAFF_ROLES = ['superadmin', 'platform_admin'] as const
+export const platformStaffRole = z.enum(PLATFORM_STAFF_ROLES)
+export type PlatformStaffRole = z.infer<typeof platformStaffRole>
+
+export const PLATFORM_ROLE_LABELS: Record<PlatformRole, string> = {
+  superadmin: 'Superadmin',
+  platform_admin: 'Administrador da plataforma',
+  platform_seller: 'Vendedor ANNETEC',
+}
+
+/** `user.role` de uma conta de plataforma (equipe OU vendedor). */
+export function isPlatformAccountRole(role: string | null | undefined): role is PlatformRole {
+  return role !== null && role !== undefined && (platformRole.options as readonly string[]).includes(role)
+}
+
+/** `user.role` da EQUIPE (superadmin/platform_admin) — vendedor fica de fora. */
+export function isPlatformStaffRole(role: string | null | undefined): role is PlatformStaffRole {
+  return role !== null && role !== undefined && (PLATFORM_STAFF_ROLES as readonly string[]).includes(role)
+}
 
 /** Papéis dentro de um inquilino. */
 export const tenantRole = z.enum(['admin', 'seller', 'client'])

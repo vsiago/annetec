@@ -41,6 +41,8 @@ export interface NotifyInput {
   payload?: NotificationPayload
   link?: string | null
   dedupeKey?: string | null
+  /** Público `seller`: o vendedor que recebe. Obrigatório nesse público. */
+  recipientUserId?: string | null
 }
 
 export interface NotifyDeps {
@@ -63,6 +65,7 @@ const dbNotifyDeps: NotifyDeps = {
           payload: row.payload ?? {},
           link: row.link ?? null,
           dedupeKey: row.dedupeKey ?? null,
+          recipientUserId: row.recipientUserId ?? null,
         })),
       )
       .onConflictDoNothing()
@@ -335,5 +338,56 @@ export async function notifyPlatformInvoicePaid(input: { chargeId: string }): Pr
     })
   } catch (error) {
     logger.error({ err: error instanceof Error ? error.message : String(error), chargeId: input.chargeId }, 'Falha ao notificar fatura paga')
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Vendas da plataforma (pedido de desconto)
+// ---------------------------------------------------------------------------
+
+export interface DiscountNoticeFacts {
+  requestId: string
+  proposalId: string
+  proposalCode: string
+  customerName: string
+  sellerUserId: string
+  sellerName: string
+  /** Frase pronta do desconto ("adesão 50% · mensalidade 20% por 3 meses"). */
+  summary: string
+}
+
+/** Vendedor pediu desconto: sino da equipe (decide o superadmin). Puro. */
+export function discountRequestedNotification(facts: DiscountNoticeFacts): NotifyInput {
+  return {
+    audience: 'platform',
+    kind: 'sales_discount_requested',
+    organizationId: null,
+    title: `${facts.sellerName} pediu desconto para ${facts.customerName}`,
+    body: joinParts([facts.summary, `proposta ${facts.proposalCode}`]),
+    payload: { proposalId: facts.proposalId, discountRequestId: facts.requestId, personName: facts.sellerName },
+    link: `/admin/comercial/descontos?pedido=${facts.requestId}`,
+    dedupeKey: `sales_discount_requested:${facts.requestId}`,
+  }
+}
+
+/** Decisão do superadmin: sino SÓ do vendedor do pedido. Puro. */
+export function discountDecidedNotification(
+  facts: DiscountNoticeFacts,
+  decision: { approved: boolean; reason?: string | null },
+): NotifyInput {
+  return {
+    audience: 'seller',
+    recipientUserId: facts.sellerUserId,
+    kind: decision.approved ? 'sales_discount_approved' : 'sales_discount_rejected',
+    organizationId: null,
+    title: decision.approved
+      ? `Desconto aprovado para ${facts.customerName}`
+      : `Desconto recusado para ${facts.customerName}`,
+    body: decision.approved
+      ? joinParts([facts.summary, 'o link de contratação foi enviado ao cliente'])
+      : joinParts([decision.reason ?? null, 'reenvie o link sem desconto ou faça um novo pedido']),
+    payload: { proposalId: facts.proposalId, discountRequestId: facts.requestId },
+    link: `/vendas/propostas/${facts.proposalId}`,
+    dedupeKey: `sales_discount_decided:${facts.requestId}`,
   }
 }

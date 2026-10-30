@@ -6,16 +6,30 @@ import { usePlatformAuth } from '@/contexts/platform-auth-context'
 import { stopImpersonatingAction } from '@/lib/actions/auth-api'
 import { Button } from '@/components/ui/button'
 import type { PlatformRole } from '@annetec/contracts'
+import { platformHomePath } from '@/lib/auth/redirect'
 import { Loader2, LogOut, UserRoundCog } from 'lucide-react'
 
 interface ProtectedPlatformRouteProps {
   children: React.ReactNode
+  /**
+   * Papéis que entram na área. Padrão: a EQUIPE (console `/admin`). A área do
+   * vendedor ANNETEC (`/vendas`) passa `['platform_seller']`.
+   */
   allowedRoles?: PlatformRole[]
 }
 
+const STAFF_ROLES: PlatformRole[] = ['superadmin', 'platform_admin']
+
+/**
+ * Guard das áreas de plataforma. Quem não tem o papel da área vai para a
+ * área DELE (`platformHomePath`): vendedor que abre `/admin/**` cai em
+ * `/vendas`, e a equipe que abre `/vendas/**` cai em `/admin`. Enquanto
+ * decide, nada da área é montado — os providers do console (que chamam rotas
+ * da equipe) nem chegam a carregar para o vendedor.
+ */
 export function ProtectedPlatformRoute({
   children,
-  allowedRoles = ['superadmin', 'platform_admin'],
+  allowedRoles = STAFF_ROLES,
 }: ProtectedPlatformRouteProps) {
   const { user, isLoading, isAuthenticated, isImpersonating, impersonatedName } = usePlatformAuth()
   const router = useRouter()
@@ -29,8 +43,8 @@ export function ProtectedPlatformRoute({
 
     if (!isAuthenticated) {
       router.push('/login')
-    } else if (user?.platformRole && !allowedRoles.includes(user.platformRole)) {
-      router.push('/admin')
+    } else if (!user?.platformRole || !allowedRoles.includes(user.platformRole)) {
+      router.replace(platformHomePath(user?.platformRole))
     }
   }, [isLoading, isAuthenticated, isImpersonating, user, allowedRoles, router])
 
@@ -47,7 +61,7 @@ export function ProtectedPlatformRoute({
 
   if (isImpersonating) return <ImpersonationBlock name={impersonatedName} />
 
-  if (!isAuthenticated || (user?.platformRole && !allowedRoles.includes(user.platformRole))) {
+  if (!isAuthenticated || !user?.platformRole || !allowedRoles.includes(user.platformRole)) {
     return null
   }
 

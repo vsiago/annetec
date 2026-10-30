@@ -137,6 +137,14 @@ export const platformSubscriptions = pgTable(
     scheduledPlanId: text('scheduled_plan_id').references(() => tenantPlans.id, { onDelete: 'set null' }),
     /** Itens a lançar na próxima fatura (proporcional de upgrade, ajustes). */
     pendingAdjustments: jsonb('pending_adjustments').$type<PlatformChargeItem[]>().notNull().default([]),
+    /**
+     * Desconto na mensalidade aprovado na venda (0 = sem). Vale para o período
+     * que começa até `monthly_discount_until` (inclusive; `null` = permanente).
+     * O preço do plano (`plan_price_monthly`) fica cheio: o desconto entra como
+     * linha `discount` na geração de cada fatura.
+     */
+    monthlyDiscountPercent: numeric('monthly_discount_percent', { precision: 5, scale: 2 }).notNull().default('0'),
+    monthlyDiscountUntil: date('monthly_discount_until'),
     pastDueAt: timestamp('past_due_at', { withTimezone: true }),
     restrictedAt: timestamp('restricted_at', { withTimezone: true }),
     suspendedAt: timestamp('suspended_at', { withTimezone: true }),

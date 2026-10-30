@@ -15,7 +15,9 @@ internet ──443──▶ caddy ─┬─▶ web:3000  (Next standalone)  ─�
 | `deploy/Caddyfile` | sites a partir de `WEB_DOMAIN` / `API_DOMAIN` / `APEX_DOMAIN` |
 | `deploy/.env.prod.example` | modelo do `deploy/.env.prod` (só existe no servidor) |
 | `deploy/deploy.sh` | da sua máquina: envia o `HEAD` e sobe |
-| `deploy/backup.sh` | no servidor: `pg_dump` + arquivos, guarda 7 |
+| `deploy/backup.sh` | no servidor: `pg_dump` (custom) + volume de arquivos, 14 diários + 8 semanais |
+| `deploy/install-backup-cron.sh` | no servidor: instala o backup diário no cron (idempotente) |
+| `deploy/restore.sh` | no servidor: restaura dump e/ou arquivos, com confirmação |
 
 Fases:
 
@@ -66,6 +68,7 @@ Variáveis novas do deploy:
 | --- | --- | --- |
 | `WEB_DOMAIN`, `API_DOMAIN`, `APEX_DOMAIN`, `ACME_EMAIL` | Caddy | sites HTTPS e e-mail da conta ACME |
 | `DEPLOY_STAGE=preview` | API | `NODE_ENV=production` aceitando Asaas **sandbox** (e recusando chave de produção), `EMAIL_PROVIDER=outbox` e `STORAGE_DRIVER=local`; superadmin pode revelar senhas provisórias na caixa de saída. Vazio = produção estrita. Aviso grande no log a cada boot. |
+| `ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true` | API | aceite explícito de `STORAGE_DRIVER=local` em produção estrita (documentos no disco do servidor). Sem ele a API recusa subir. Avisa no log a cada boot. Exige o backup diário (seção 6). |
 | `TRUST_PROXY` | API | usa `X-Forwarded-For` (1º salto) como IP do cliente — rate limit, auditoria, `remoteIp` do Asaas. O compose fixa `true` (o Caddy sobrescreve o cabeçalho e a porta da API não é publicada). Sem a env: ligado na Vercel e fora de produção, desligado em produção. |
 
 ## 3. Deploy
@@ -160,25 +163,44 @@ Logs: json-file, 10 MB × 5 por container.
 
 ## 6. Backup e restore
 
-```bash
-bash ~/annetec/deploy/backup.sh                        # ~/backups/annetec-db-*.sql.gz e annetec-storage-*.tar.gz (guarda 7)
-BACKUP_S3_URI=s3://bucket/annetec bash ~/annetec/deploy/backup.sh   # também envia ao S3 (AWS CLI + IAM role)
-```
-
-Cron diário (`crontab -e`):
-
-```
-15 3 * * * /bin/bash $HOME/annetec/deploy/backup.sh >> $HOME/backups/backup.log 2>&1
-```
-
-Restore (o dump tem `--clean --if-exists`, recria por cima):
+O backup guarda, em `~/backups`, um par com o mesmo carimbo de data:
+`annetec-db-AAAAMMDD-HHMMSS.dump` (`pg_dump` formato custom) e `annetec-storage-AAAAMMDD-HHMMSS.tar.gz`
+(volume `api_storage`: contrato social, documentos dos sócios, logos). Confere cada arquivo (não vazio,
+`pg_restore --list`, `gzip -t`), registra tudo em `~/backups/backup.log` e sai com erro se algo falhar.
+Retenção: 14 pares diários + 8 semanais (os de domingo).
 
 ```bash
-dc stop api web
-gunzip -c ~/backups/annetec-db-AAAAMMDD-HHMMSS.sql.gz | dc exec -T postgres psql -U annetec -d annetec -v ON_ERROR_STOP=1
-dc run --rm --no-deps -T --entrypoint sh migrate -c 'tar -xzf - -C /data/storage' < ~/backups/annetec-storage-AAAAMMDD-HHMMSS.tar.gz
-dc start api web
+bash ~/annetec/deploy/backup.sh                                   # agora, manual
+BACKUP_S3_URI=s3://bucket/annetec bash ~/annetec/deploy/backup.sh # opcional: também envia ao S3
+bash ~/annetec/deploy/install-backup-cron.sh                      # agenda todo dia às 03:30 (idempotente)
+crontab -l | grep annetec-backup                                  # conferir
+tail -n 20 ~/backups/backup.log                                   # conferir o último resultado
 ```
+
+> O horário do cron é o do **servidor**, que na EC2 Ubuntu é **UTC**: 03:30 UTC = 00:30 em Brasília.
+
+Restaurar (pede para digitar `RESTAURAR`; para api e web, sobrescreve e sobe de novo; o storage é esvaziado antes
+de extrair). Faça um `backup.sh` antes, para poder desfazer:
+
+```bash
+ls -1t ~/backups | head
+bash ~/annetec/deploy/restore.sh   --db ~/backups/annetec-db-AAAAMMDD-HHMMSS.dump   --storage ~/backups/annetec-storage-AAAAMMDD-HHMMSS.tar.gz      # um dos dois também vale
+```
+
+### Cópia fora do servidor (recomendado)
+
+Backup no **mesmo disco** não protege contra a perda da instância (disco corrompido, instância apagada,
+região com problema). Ative os **snapshots automáticos do volume EBS** — é feito uma vez, no console da AWS:
+
+1. EC2 → **Elastic Block Store → Lifecycle Manager** → **Create lifecycle policy**.
+2. Tipo **EBS snapshot policy**; em *Target resources* escolha **Volume** e o filtro por tag (ou o ID do
+   volume raiz da instância; confira em EC2 → Instances → Storage). Se usar tag, marque o volume com ela.
+3. Schedule: **Daily**, a cada 24 h, horário de início por exemplo 04:00 UTC (depois do backup das 03:30);
+   **Retention: 7** snapshots.
+4. IAM role: *Default role*. Crie a política e confirme que o primeiro snapshot aparece em EBS → Snapshots.
+
+Os snapshots cobrem banco, arquivos e `~/backups` de uma vez. Teste a restauração de tempos em tempos
+(criar volume a partir do snapshot, anexar a uma instância de teste).
 
 ## 7. Virada para o domínio final (annetec.org.br)
 
@@ -192,6 +214,7 @@ dc start api web
    bash ~/annetec/deploy/backup.sh               # guarda a demo, por via das dúvidas
    dc down
    docker volume rm annetec_postgres_data annetec_api_storage
+   # (o backup acima fica em ~/backups; o cron do passo 7 só entra depois)
    ```
 3. **`deploy/.env.prod`**:
    - `WEB_DOMAIN=www.annetec.org.br`, `API_DOMAIN=api.annetec.org.br`, `APEX_DOMAIN=annetec.org.br`
@@ -202,7 +225,10 @@ dc start api web
      conectaram na demo deixam de valer: em produção estrita a API só aceita chave `$aact_prod_` de clube —
      cada clube reconecta com a chave de produção da conta dele
    - `EMAIL_PROVIDER=resend` + `RESEND_API_KEY` (domínio do remetente verificado no Resend)
-   - `STORAGE_DRIVER=s3` + `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
+   - `EMAIL_FROM` de domínio verificado no Resend
+   - `STORAGE_DRIVER=local` + `ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true` (decisão atual: documentos no disco do
+     servidor, volume `api_storage`, com o backup diário abaixo). Alternativa futura: `STORAGE_DRIVER=s3` +
+     `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
    - Google: adicione `https://www.annetec.org.br` às origens autorizadas do client OAuth
 4. **Banco primeiro, migrações antes da API** (a API nova nunca sobe com o schema velho):
    ```bash
@@ -212,7 +238,7 @@ dc start api web
 5. **Subir**: `dc up -d` (o Caddy emite os certificados novos; a API valida a config estrita no boot —
    se faltar algo, `dc logs api` lista tudo). Mudou `NEXT_PUBLIC_*`? `dc up -d --build web`.
    Depois, o admin: `dc run --rm migrate pnpm platform:create-admin ...` (sem seeds).
-6. **Webhooks do Asaas de produção**:
+6. **Webhook da plataforma no Asaas de produção** (só o da ANNETEC; o de cada clube a API cadastra sozinha):
    ```bash
    dc run --rm migrate pnpm asaas:setup --public-url https://api.annetec.org.br
    ```
@@ -223,4 +249,12 @@ dc start api web
    na conta dele quando o admin conecta o recebimento (com `API_BASE_URL` pública). **Mudou a lista
    `ASAAS_WEBHOOK_EVENTS` (`src/integrations/asaas/webhook-events.ts`)? Rode o setup de novo e clique em
    "Testar" no recebimento de cada clube.** Teste com um evento pelo painel do Asaas e acompanhe `dc logs -f api`.
-7. Os certificados do sslip.io simplesmente deixam de ser renovados; nada a remover.
+7. **Backup diário** (documentos dos clubes estão no disco do servidor): rode uma vez para validar e agende.
+   ```bash
+   bash ~/annetec/deploy/backup.sh
+   ls -lh ~/backups && tail -n 5 ~/backups/backup.log
+   bash ~/annetec/deploy/install-backup-cron.sh
+   crontab -l | grep annetec-backup
+   ```
+   Depois ative os snapshots do EBS (seção 6, "Cópia fora do servidor").
+8. Os certificados do sslip.io simplesmente deixam de ser renovados; nada a remover.

@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { loginAction, loginClientPortalAction } from "@/lib/actions/auth-api"
 import { maskCpfInput } from "@/lib/cpf"
+import { platformHomePath } from "@/lib/auth/redirect"
 
 const passwordSchema = loginInput.shape.password
 
@@ -173,9 +174,10 @@ function LoginContent() {
         setError(result.error)
         return
       }
+      // Plataforma: vendedor ANNETEC vai para a área de vendas; a equipe, para o console.
       router.push(
         result.data.scope === "platform"
-          ? "/admin"
+          ? platformHomePath(result.data.platformRole)
           : tenantDestination(result.data.tenantSlug, result.data.tenantRole),
       )
     } finally {

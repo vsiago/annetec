@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   Ban,
+  BriefcaseBusiness,
   Building2,
   CircleCheck,
   CircleX,
@@ -70,6 +71,7 @@ import {
 } from '@/components/admin-platform/compliance/compliance-ui'
 import {
   ApproveDialog,
+  DiscountPendingNotice,
   PendingInfoDialog,
   ProvisionDialog,
   ReadinessList,
@@ -314,6 +316,18 @@ export default function ComplianceProposalPage() {
               <span>
                 Código <span className="font-mono">{proposal.code}</span>
               </span>
+              <span aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1">
+                <BriefcaseBusiness className="h-3.5 w-3.5" aria-hidden="true" />
+                {proposal.seller ? (
+                  <>
+                    Vendedor {proposal.seller.name}
+                    {proposal.seller.referralCode ? <span className="font-mono">({proposal.seller.referralCode})</span> : null}
+                  </>
+                ) : (
+                  'Venda direta'
+                )}
+              </span>
             </span>
           </>
         }
@@ -392,6 +406,8 @@ export default function ComplianceProposalPage() {
           </>
         }
       />
+
+      {proposal.discountPending ? <DiscountPendingNotice proposalId={proposal.id} /> : null}
 
       {decidable && readiness && (
         <SectionCard>

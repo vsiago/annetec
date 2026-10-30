@@ -65,12 +65,29 @@ export function CommercialPanel({ proposal }: { proposal: OnboardingProposalDeta
                 <span className="text-muted-foreground">Adesão</span>
                 <span className="text-foreground">{formatBRL(quote.setupFee)}</span>
               </div>
+              {quote.setupFeeDiscount > 0 ? (
+                <div className="flex justify-between gap-3 py-0.5 text-[#067647]">
+                  <span>
+                    {quote.setupFeeDiscountPercent >= 100 ? 'Isenção da adesão' : `Desconto de ${quote.setupFeeDiscountPercent.toLocaleString('pt-BR')}% na adesão`}
+                  </span>
+                  <span>−{formatBRL(quote.setupFeeDiscount)}</span>
+                </div>
+              ) : null}
+              {quote.planFeeDiscount > 0 ? (
+                <div className="flex justify-between gap-3 py-0.5 text-[#067647]">
+                  <span>
+                    Desconto de {quote.planFeeDiscountPercent.toLocaleString('pt-BR')}% na mensalidade
+                    {plan.discount ? (plan.discount.monthlyMonths === null ? ' (permanente)' : ` (${plan.discount.monthlyMonths} ${plan.discount.monthlyMonths === 1 ? 'mês' : 'meses'})`) : ''}
+                  </span>
+                  <span>−{formatBRL(quote.planFeeDiscount)}</span>
+                </div>
+              ) : null}
               <div className="mt-1 flex justify-between gap-3 border-t border-border pt-2 font-semibold">
                 <span className="text-foreground">Cobrança de ativação</span>
                 <span className="text-foreground">{formatBRL(quote.activationTotal)}</span>
               </div>
               <p className="m-0 mt-1 text-xs text-muted-foreground">
-                Adesão mais a 1ª mensalidade. O clube recebe essa cobrança quando você aprova.
+                Adesão mais a 1ª mensalidade{plan.discount ? ', já com a condição especial aprovada' : ''}. O clube recebe essa cobrança quando você aprova.
               </p>
             </div>
           )}

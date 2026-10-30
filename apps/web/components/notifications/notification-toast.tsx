@@ -1,7 +1,7 @@
 'use client'
 
 import type { CSSProperties } from 'react'
-import { ArrowRight, BadgeCheck, BellRing, CircleDollarSign, UserPlus, X } from 'lucide-react'
+import { ArrowRight, BadgeCheck, BadgePercent, BellRing, CircleDollarSign, CircleX, UserPlus, X, type LucideIcon } from 'lucide-react'
 import { NOTIFICATION_KIND_LABELS, NOTIFICATION_SIGNUP_VIA_LABELS, type AppNotification } from '@annetec/contracts'
 import { amountLabel, initialsOf, isPayment, platformHeadline } from '@/lib/notifications/format'
 import { cn } from '@/lib/utils'
@@ -240,6 +240,41 @@ export function SummaryToast({ count, onOpen, onClose }: { count: number; onOpen
         Ver todas
       </button>
       <CloseButton onClose={onClose} />
+    </div>
+  )
+}
+
+/** Ícone e cor de uma notificação de vendas (pedido de desconto e decisão). */
+export function salesNotificationLook(notification: Pick<AppNotification, 'kind'>): { icon: LucideIcon; className: string } {
+  if (notification.kind === 'sales_discount_approved') return { icon: BadgeCheck, className: 'bg-[#ECFDF3] text-[#067647]' }
+  if (notification.kind === 'sales_discount_rejected') return { icon: CircleX, className: 'bg-[#FEF3F2] text-[#B42318]' }
+  return { icon: BadgePercent, className: 'bg-[#FFFAEB] text-[#B54708]' }
+}
+
+/** Vendas da plataforma: uma linha com o ícone da decisão, o título e "Ver detalhes". */
+export function SalesNotificationToast({ notification, onOpen, onClose }: ToastProps) {
+  const look = salesNotificationLook(notification)
+  const Icon = look.icon
+  return (
+    <div
+      role="status"
+      className="flex w-full items-center gap-2.5 rounded-xl border sm:w-[var(--width)] border-border bg-card py-2 pl-2 pr-1.5 shadow-[0_10px_28px_-12px_rgba(15,23,42,0.35)]"
+    >
+      <span className={cn('notif-pop flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', look.className)}>
+        <Icon className="h-4 w-4" aria-hidden />
+      </span>
+      <p className="min-w-0 flex-1 text-[13px]">
+        <span className="block truncate font-semibold text-foreground">{notification.title}</span>
+        {notification.body ? <span className="block truncate text-xs text-muted-foreground">{notification.body}</span> : null}
+      </p>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="shrink-0 rounded-md px-1.5 py-1 text-xs font-semibold text-secondary transition-colors hover:bg-secondary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        Ver detalhes
+      </button>
+      <CloseButton onClose={onClose} className="shrink-0" />
     </div>
   )
 }

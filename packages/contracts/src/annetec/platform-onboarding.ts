@@ -1219,6 +1219,18 @@ export type ProvisionOnboardingInput = z.infer<typeof provisionOnboardingInput>
 // Início, acompanhamento e fila
 // ---------------------------------------------------------------------------
 
+/**
+ * Código de indicação do vendedor ANNETEC (slug curto, ex.: `joao-silva`).
+ * Vem do link do vendedor (`/contratar?ref=joao-silva`).
+ */
+export const sellerReferralCode = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, 'Código de indicação com ao menos 3 caracteres')
+  .max(40, 'Código de indicação longo demais')
+  .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, 'Use só letras minúsculas, números e hífens')
+
 /** `POST /api/v1/public/contratacao/propostas`. */
 export const startOnboardingInput = z
   .object({
@@ -1231,6 +1243,15 @@ export const startOnboardingInput = z
     acceptPrivacy: z.literal(true, {
       errorMap: () => ({ message: 'Autorize o uso dos dados para a análise da proposta' }),
     }),
+    /**
+     * Código do vendedor que indicou (opcional). Código de vendedor ATIVO
+     * vincula a proposta a ele; desconhecido/inativo é ignorado em silêncio
+     * (a contratação nunca falha por causa dele).
+     */
+    referralCode: z.preprocess(
+      value => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.string().trim().toLowerCase().max(60).optional(),
+    ),
   })
   .refine(v => LEGAL_FORMS_BY_CONTRACTOR_TYPE[v.contractorType].includes(v.legalForm), {
     message: 'Forma jurídica não corresponde ao tipo de contratante',
@@ -1362,6 +1383,35 @@ export const kybChecklistRow = z.object({
 })
 export type KybChecklistRow = z.infer<typeof kybChecklistRow>
 
+/**
+ * Desconto APROVADO pelo superadmin para a proposta (pedido do vendedor):
+ * `setupFeePercent` 0–100 (100 = isenção da adesão), `monthlyPercent` 0–50 na
+ * mensalidade do plano por `monthlyMonths` mensalidades (contando a 1ª, que vai
+ * na ativação; `null` = permanente). Já está aplicado em `plan.quote`.
+ */
+export const proposalDiscount = z.object({
+  setupFeePercent: z.number().min(0).max(100),
+  monthlyPercent: z.number().min(0).max(50),
+  monthlyMonths: z.number().int().min(1).nullable(),
+})
+export type ProposalDiscount = z.infer<typeof proposalDiscount>
+
+/** O que a proposta guarda do desconto aprovado (`platform_onboarding_proposals.discount`). */
+export interface ProposalDiscountRecord extends ProposalDiscount {
+  requestId: string
+  approvedAt: string
+  approvedByUserId: string | null
+  approvedByName: string | null
+}
+
+/** Vendedor ANNETEC a quem a proposta está atribuída (link do vendedor ou código no site). */
+export const proposalSellerRef = z.object({
+  userId: z.string(),
+  name: z.string(),
+  referralCode: z.string().nullable(),
+})
+export type ProposalSellerRef = z.infer<typeof proposalSellerRef>
+
 /** `GET /api/v1/public/contratacao/propostas/:id?chave=` — o que o candidato vê (wizard e acompanhamento). */
 export const onboardingApplicantView = z.object({
   id: uuid,
@@ -1375,7 +1425,10 @@ export const onboardingApplicantView = z.object({
     planId: uuid.nullable(),
     expectedLives: z.number().int(),
     offer: platformPlanOffer.nullable(),
+    /** Já com o desconto aprovado (`discount`), quando houver. */
     quote: platformPlanQuote.nullable(),
+    /** Desconto aprovado pelo superadmin; `null` sem desconto. */
+    discount: proposalDiscount.nullable(),
   }),
   paymentMethod: clubPaymentMethod.nullable(),
   company: onboardingCompanyInput.nullable(),
@@ -1453,6 +1506,8 @@ export const onboardingProposalListItem = z.object({
   /** Exigências obrigatórias sem documento. */
   documentsMissing: z.number().int(),
   assignedTo: onboardingAssignee.nullable(),
+  /** Vendedor ANNETEC atribuído (link do vendedor ou código de indicação). */
+  seller: proposalSellerRef.nullable(),
   submittedAt: z.string().datetime().nullable(),
   /** submittedAt + ONBOARDING_REVIEW_SLA_HOURS (só na fila). */
   slaDueAt: z.string().datetime().nullable(),
@@ -1472,6 +1527,8 @@ export const listOnboardingProposalsQuery = paginationQuery.extend({
   precheck: precheckSummary.optional(),
   assigned: z.enum(['me', 'unassigned', 'any']).optional(),
   contractorType: contractorType.optional(),
+  /** Só as propostas atribuídas a este vendedor. */
+  sellerUserId: z.string().trim().min(1).max(100).optional(),
 })
 export type ListOnboardingProposalsQuery = z.infer<typeof listOnboardingProposalsQuery>
 
@@ -1599,6 +1656,10 @@ export const onboardingProposalDetail = onboardingApplicantView.extend({
   source: z.enum(['site', 'console', 'seed']),
   applicantIp: z.string().nullable(),
   emails: z.array(platformEmailListItem),
+  /** Vendedor ANNETEC atribuído; `null` = venda direta. */
+  seller: proposalSellerRef.nullable(),
+  /** Pedido de desconto aguardando o superadmin (a aprovação da proposta espera por ele). */
+  discountPending: z.boolean(),
 })
 export type OnboardingProposalDetail = z.infer<typeof onboardingProposalDetail>
 

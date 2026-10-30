@@ -50,6 +50,7 @@ import {
   listOnboardingProposalsAction,
 } from '@/lib/actions/platform-onboarding-api'
 import { formatCnpj, formatCount, formatDateTimeBR, formatRelative, slaInfo } from '@/lib/adapters/platform-console'
+import { useSellers } from '@/components/admin-platform/comercial/comercial-kit'
 import { cn } from '@/lib/utils'
 
 /**
@@ -141,6 +142,8 @@ export default function CompliancePage() {
   const [assigned, setAssigned] = useState<'all' | 'me' | 'unassigned'>('all')
   const [type, setType] = useState<'all' | ContractorType>('all')
   const [sla, setSla] = useState<SlaFilter>('all')
+  const [seller, setSeller] = useState('all')
+  const sellers = useSellers()
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState('25')
   const q = useDebounced(search)
@@ -159,13 +162,14 @@ export default function CompliancePage() {
         precheck: precheck === 'all' ? undefined : precheck,
         assigned: assigned === 'all' ? undefined : assigned,
         contractorType: type === 'all' ? undefined : type,
+        sellerUserId: seller === 'all' ? undefined : seller,
         page: slaActive ? 1 : page,
         perPage: slaActive ? 200 : Number(perPage),
       }),
-    [group, q, status, precheck, assigned, type, page, perPage, slaActive],
+    [group, q, status, precheck, assigned, type, seller, page, perPage, slaActive],
   )
 
-  useEffect(() => setPage(1), [group, q, status, precheck, assigned, type, perPage, sla])
+  useEffect(() => setPage(1), [group, q, status, precheck, assigned, type, seller, perPage, sla])
 
   const rows = useMemo(() => (list.data?.items ?? []).filter(item => matchesSla(item, sla)), [list.data, sla])
   const total = slaActive ? rows.length : (list.data?.meta.total ?? 0)
@@ -190,7 +194,8 @@ export default function CompliancePage() {
     void list.reload({ silent: true })
   }
 
-  const filtered = !!q || status !== 'all' || type !== 'all' || sla !== 'all' || precheck !== 'all' || assigned !== 'all'
+  const filtered =
+    !!q || status !== 'all' || type !== 'all' || sla !== 'all' || precheck !== 'all' || assigned !== 'all' || seller !== 'all'
 
   const clearFilters = () => {
     setSearch('')
@@ -199,6 +204,7 @@ export default function CompliancePage() {
     setAssigned('all')
     setType('all')
     setSla('all')
+    setSeller('all')
   }
 
   const columns: Column<OnboardingProposalListItem>[] = [
@@ -271,6 +277,16 @@ export default function CompliancePage() {
       render: item => (
         <span className="text-xs text-foreground">
           {item.assignedTo?.name ?? <span className="text-muted-foreground">Ninguém assumiu ainda</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'vendedor',
+      header: 'Vendedor',
+      hideOnMobile: true,
+      render: item => (
+        <span className="text-xs text-foreground">
+          {item.seller?.name ?? <span className="text-muted-foreground">Venda direta</span>}
         </span>
       ),
     },
@@ -419,6 +435,9 @@ export default function CompliancePage() {
               { value: 'unassigned', label: 'Ninguém assumiu' },
             ]}
           />
+          {sellers.options.length > 0 ? (
+            <FilterSelect label="Vendedor" value={seller} onChange={setSeller} allLabel="Qualquer um" options={sellers.options} />
+          ) : null}
         </div>
 
         <div className="border-t border-border">

@@ -95,6 +95,27 @@ function build(template: EmailTemplate, d: Record<string, unknown>): Block {
 
   switch (template) {
     case 'onboarding_started':
+      // Link montado por um vendedor ANNETEC: convite com o plano e o preço combinados.
+      if (str(d.sellerName)) {
+        return {
+          subject: `Sua contratação da plataforma ANNETEC — protocolo ${code}`,
+          greeting: hello(d.applicantName),
+          paragraphs: [
+            `${str(d.sellerName)}, da ANNETEC, preparou a sua contratação da plataforma${str(d.legalName) ? ` para ${str(d.legalName)}` : ''}. Protocolo: ${code}.`,
+            'Continue pelo link abaixo: complete os dados, envie os documentos e aceite o contrato. Ele é a sua chave de acesso à proposta: guarde este e-mail e não compartilhe o link.',
+          ],
+          facts: (
+            [
+              ['Plano', str(d.planName)],
+              ['Mensalidade', money(d.monthlyAmount)],
+              ['Adesão', money(d.setupFee)],
+              ['Condição especial', str(d.discountSummary)],
+            ] as [string, string][]
+          ).filter(pair => pair[1] !== ''),
+          action: tracking ? { label: 'Continuar a contratação', url: tracking } : undefined,
+          after: ['Dúvidas? Fale direto com quem te atendeu.'],
+        }
+      }
       return {
         subject: `Contratação ANNETEC iniciada — protocolo ${code}`,
         greeting: hello(d.applicantName),

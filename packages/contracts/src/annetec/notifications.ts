@@ -10,7 +10,11 @@ import { z } from 'zod'
  * clube de origem — nulo só na fatura de ativação de um clube que ainda não existe.
  */
 
-export const NOTIFICATION_AUDIENCES = ['tenant', 'platform'] as const
+/**
+ * `seller` = UM vendedor ANNETEC (`recipientUserId`): pedido de desconto
+ * aprovado/recusado. Lido em `/api/v1/platform/vendas/notificacoes`.
+ */
+export const NOTIFICATION_AUDIENCES = ['tenant', 'platform', 'seller'] as const
 export const notificationAudience = z.enum(NOTIFICATION_AUDIENCES)
 export type NotificationAudience = z.infer<typeof notificationAudience>
 
@@ -20,13 +24,18 @@ export type NotificationAudience = z.infer<typeof notificationAudience>
  * - `payment_received`: cobranças seguintes (recorrência, segunda via);
  * - `client_signed_up`: associado novo no clube (checkout, Google, cadastro
  *   com senha, admin cadastrou ou associado excluído que voltou);
- * - `platform_invoice_paid`: o clube pagou uma fatura da Annetec (só plataforma).
+ * - `platform_invoice_paid`: o clube pagou uma fatura da Annetec (só plataforma);
+ * - `sales_discount_requested`: vendedor pediu desconto (equipe, decide o superadmin);
+ * - `sales_discount_approved` / `sales_discount_rejected`: decisão (só o vendedor).
  */
 export const NOTIFICATION_KINDS = [
   'subscription_activated',
   'payment_received',
   'client_signed_up',
   'platform_invoice_paid',
+  'sales_discount_requested',
+  'sales_discount_approved',
+  'sales_discount_rejected',
 ] as const
 export const notificationKind = z.enum(NOTIFICATION_KINDS)
 export type NotificationKind = z.infer<typeof notificationKind>
@@ -36,6 +45,9 @@ export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   payment_received: 'Pagamento recebido',
   client_signed_up: 'Novo cadastro',
   platform_invoice_paid: 'Fatura da Annetec paga',
+  sales_discount_requested: 'Pedido de desconto',
+  sales_discount_approved: 'Desconto aprovado',
+  sales_discount_rejected: 'Desconto recusado',
 }
 
 /** Família visual/sonora: dinheiro entrando ou pessoa chegando. */
@@ -70,6 +82,9 @@ export const notificationPayload = z.object({
   via: z.enum(NOTIFICATION_SIGNUP_VIA).optional(),
   /** Gerada pelo botão "Enviar notificação de teste" (fora de produção). */
   test: z.boolean().optional(),
+  /** Vendas: proposta e pedido de desconto envolvidos. */
+  proposalId: z.string().optional(),
+  discountRequestId: z.string().optional(),
 })
 export type NotificationPayload = z.infer<typeof notificationPayload>
 

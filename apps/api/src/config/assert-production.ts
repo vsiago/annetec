@@ -44,6 +44,7 @@ export type ProductionConfigInput = Partial<
     | 'SENDGRID_API_KEY'
     | 'CNPJ_LOOKUP_PROVIDER'
     | 'STORAGE_DRIVER'
+    | 'ALLOW_LOCAL_STORAGE_IN_PRODUCTION'
     | 'SUPABASE_URL'
     | 'SUPABASE_SERVICE_ROLE_KEY'
     | 'S3_BUCKET'
@@ -251,8 +252,15 @@ export function productionConfigViolations(e: ProductionConfigInput): string[] {
 
   // Armazenamento (driver sem credencial cairia no disco local).
   const storage = e.STORAGE_DRIVER ?? 'local'
+  // `local` só com aceite explícito (ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true): RISCO —
+  // os documentos (KYB, logos) vivem no disco da instância; sem backup diário
+  // (deploy/backup.sh) e snapshots do EBS, perder o servidor perde os arquivos.
   if (storage === 'local') {
-    v.push('STORAGE_DRIVER não pode ser "local" (use "supabase" ou "s3")')
+    if (e.ALLOW_LOCAL_STORAGE_IN_PRODUCTION !== true) {
+      v.push(
+        'STORAGE_DRIVER não pode ser "local" (use "supabase" ou "s3"; ou aceite o risco do disco do servidor com ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true e backup diário)',
+      )
+    }
   } else if (storage === 'supabase' && (!e.SUPABASE_URL || !e.SUPABASE_SERVICE_ROLE_KEY)) {
     v.push('STORAGE_DRIVER=supabase sem SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY')
   } else if (storage === 's3' && (!e.S3_BUCKET || !e.S3_ACCESS_KEY_ID || !e.S3_SECRET_ACCESS_KEY)) {
@@ -271,6 +279,12 @@ export function productionConfigWarnings(e: ProductionConfigInput): string[] {
       '*** DEPLOY_STAGE=preview: AMBIENTE DE DEMONSTRAÇÃO com NODE_ENV=production. Asaas SANDBOX ' +
         `(${e.ASAAS_ENV ?? 'sandbox'}), e-mail "${e.EMAIL_PROVIDER ?? 'outbox'}", armazenamento "${e.STORAGE_DRIVER ?? 'local'}". ` +
         'NÃO use com clientes reais — remova DEPLOY_STAGE antes de ir para produção. ***',
+    )
+  }
+  if (!isPreviewStage(e) && (e.STORAGE_DRIVER ?? 'local') === 'local' && e.ALLOW_LOCAL_STORAGE_IN_PRODUCTION === true) {
+    warnings.push(
+      'STORAGE_DRIVER=local em PRODUÇÃO (ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true): documentos dos clubes ficam no disco do ' +
+        'servidor (volume api_storage). Garanta o backup diário (deploy/install-backup-cron.sh) e os snapshots do EBS.',
     )
   }
   // Mesma regra de `config/env.ts`: sem env explícita, desligada em produção.

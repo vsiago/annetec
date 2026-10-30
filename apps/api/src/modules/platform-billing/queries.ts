@@ -1,4 +1,4 @@
-import { ERROR_CODES } from '@annetec/contracts'
+import { ERROR_CODES, type ProposalDiscountRecord } from '@annetec/contracts'
 import { eq, inArray } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { organization, platformCharges, platformOnboardingProposals, platformSubscriptions } from '@/db/schema'
@@ -60,6 +60,8 @@ export interface ProposalBasics {
   organizationId: string | null
   applicant: { name: string; email: string; phone: string }
   company: { legalName?: string; email?: string; phone?: string } | null
+  /** Desconto aprovado pelo superadmin (pedido do vendedor). */
+  discount: ProposalDiscountRecord | null
 }
 
 export async function proposalBasics(proposalId: string, executor: Pick<typeof db, 'select'> = db): Promise<ProposalBasics | null> {
@@ -76,6 +78,7 @@ export async function proposalBasics(proposalId: string, executor: Pick<typeof d
       organizationId: platformOnboardingProposals.organizationId,
       applicant: platformOnboardingProposals.applicant,
       company: platformOnboardingProposals.company,
+      discount: platformOnboardingProposals.discount,
     })
     .from(platformOnboardingProposals)
     .where(eq(platformOnboardingProposals.id, proposalId))
@@ -84,6 +87,7 @@ export async function proposalBasics(proposalId: string, executor: Pick<typeof d
   return {
     ...row,
     company: row.company ? { legalName: row.company.legalName, email: row.company.email, phone: row.company.phone } : null,
+    discount: row.discount ?? null,
   }
 }
 

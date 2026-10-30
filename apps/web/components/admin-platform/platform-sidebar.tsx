@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 import { usePlatformAuth } from '@/contexts/platform-auth-context'
 import { usePlatformSidebarContext } from '@/app/admin/layout'
 import { getOnboardingQueueSummaryAction } from '@/lib/actions/platform-onboarding-api'
+import { listDiscountRequestsAction } from '@/lib/actions/comercial-api'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { initialsOf } from '@/components/admin-platform/ui/entity-avatar'
 import { cn } from '@/lib/utils'
@@ -30,6 +31,12 @@ import {
   Inbox,
   ScrollText,
   SlidersHorizontal,
+  BadgePercent,
+  BriefcaseBusiness,
+  ChartColumn,
+  HandCoins,
+  KanbanSquare,
+  Percent,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -60,8 +67,8 @@ interface NavItem {
   icon: LucideIcon
   /** Rotas que também acendem o item, além do próprio `href` e das subpáginas. */
   alsoActive?: string[]
-  /** Aprovações mostra quantos clubes esperam análise. */
-  showWaitingCount?: boolean
+  /** Contador ao lado do item: clubes esperando análise (Aprovações) ou descontos esperando o superadmin. */
+  counter?: 'approvals' | 'discounts'
 }
 
 interface NavGroup {
@@ -70,8 +77,8 @@ interface NavGroup {
 }
 
 /**
- * Menu principal em grupos com rótulo (Operação, Financeiro, Equipe) — os
- * mesmos itens e a mesma ordem no desktop e no mobile.
+ * Menu principal em grupos com rótulo (Operação, Financeiro, Comercial,
+ * Equipe) — a mesma ordem no desktop e no mobile.
  */
 const navGroups: NavGroup[] = [
   {
@@ -79,7 +86,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: '/admin', label: 'Início', icon: LayoutDashboard },
       { href: '/admin/inquilinos', label: 'Clubes', icon: Building2 },
-      { href: '/admin/compliance', label: 'Aprovações', icon: ShieldCheck, showWaitingCount: true },
+      { href: '/admin/compliance', label: 'Aprovações', icon: ShieldCheck, counter: 'approvals' },
     ],
   },
   {
@@ -90,13 +97,33 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    // Vendedores próprios da ANNETEC (prospectam operadoras/clubes). Leitura
+    // para a equipe toda; as ações de escrita são só do superadmin.
+    label: 'Comercial',
+    items: [
+      { href: '/admin/comercial/vendedores', label: 'Vendedores', icon: BriefcaseBusiness },
+      { href: '/admin/comercial/funil', label: 'Funil geral', icon: KanbanSquare },
+      { href: '/admin/comercial/descontos', label: 'Descontos', icon: BadgePercent, counter: 'discounts' },
+      { href: '/admin/comercial/comissoes', label: 'Comissões', icon: HandCoins },
+      { href: '/admin/comercial/regras', label: 'Regras de comissão', icon: Percent },
+      { href: '/admin/comercial/relatorio', label: 'Relatório', icon: ChartColumn },
+    ],
+  },
+  {
     label: 'Equipe',
     items: [{ href: '/admin/usuarios', label: 'Equipe ANNETEC', icon: Users }],
   },
 ]
 
-/** Os mesmos itens, sem os grupos (barra inferior do celular). */
-const mainLinks: NavItem[] = navGroups.flatMap(group => group.items)
+/**
+ * Barra inferior do celular: os mesmos itens, sem os grupos — o Comercial
+ * vira um item só (as telas dele têm abas próprias no topo).
+ */
+const mainLinks: NavItem[] = navGroups.flatMap(group =>
+  group.label === 'Comercial'
+    ? [{ href: '/admin/comercial/vendedores', label: 'Comercial', icon: BriefcaseBusiness, alsoActive: ['/admin/comercial'], counter: 'discounts' as const }]
+    : group.items,
+)
 
 /**
  * Grupo "Avançado": só superadmin, fechado por padrão. Além do que é de
@@ -153,6 +180,35 @@ function useWaitingApprovals(pathname: string | null): number | null {
       try {
         const result = await getOnboardingQueueSummaryAction()
         if (!cancelled && result.success) setCount(result.data.queue)
+      } catch {
+        // Sem o contador o menu continua funcionando.
+      }
+    }
+    void load()
+    const timer = setInterval(load, 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [pathname])
+
+  return count
+}
+
+/**
+ * Pedidos de desconto aguardando o superadmin (Comercial › Descontos). Mesmo
+ * ritmo do contador de Aprovações; se falhar, o contador não aparece.
+ */
+function usePendingDiscounts(pathname: string | null): number | null {
+  const [count, setCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      if (document.visibilityState === 'hidden') return
+      try {
+        const result = await listDiscountRequestsAction({ status: 'pending', perPage: 1 })
+        if (!cancelled && result.success) setCount(result.data.meta.total)
       } catch {
         // Sem o contador o menu continua funcionando.
       }
@@ -228,6 +284,12 @@ export function PlatformSidebar() {
   const { user, logout } = usePlatformAuth()
   const { isCollapsed, toggleSidebar } = usePlatformSidebarContext()
   const waiting = useWaitingApprovals(pathname)
+  const discounts = usePendingDiscounts(pathname)
+
+  /** Contador do item (0 = não mostra). */
+  const countOf = (item: NavItem): number =>
+    item.counter === 'approvals' ? waiting ?? 0 : item.counter === 'discounts' ? discounts ?? 0 : 0
+  const countNoun = (item: NavItem): string => (item.counter === 'discounts' ? 'para decidir' : 'para analisar')
 
   const isSuperadmin = user?.platformRole === 'superadmin'
   const role = roleLabel(user?.platformRole)
@@ -247,13 +309,15 @@ export function PlatformSidebar() {
     setAdvancedSheetOpen(false)
   }, [pathname])
 
-  const waitingLabel = (item: NavItem) =>
-    item.showWaitingCount && waiting ? `${item.label} · ${waiting} para analisar` : item.label
+  const waitingLabel = (item: NavItem) => {
+    const count = countOf(item)
+    return count > 0 ? `${item.label} · ${count} ${countNoun(item)}` : item.label
+  }
 
   /** Link da sidebar do desktop; `nested` são os itens do grupo Avançado. */
   function desktopLink(item: NavItem, nested = false) {
     const isActive = isLinkActive(pathname, item)
-    const count = item.showWaitingCount && waiting ? waiting : 0
+    const count = countOf(item)
 
     const linkElement = (
       <Link
@@ -283,7 +347,9 @@ export function PlatformSidebar() {
         {!isCollapsed && count > 0 && (
           <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-bold leading-none text-secondary tabular-nums">
             <span aria-hidden="true">{countText(count)}</span>
-            <span className="sr-only">{count} para analisar</span>
+            <span className="sr-only">
+              {count} {countNoun(item)}
+            </span>
           </span>
         )}
       </Link>
@@ -619,7 +685,7 @@ export function PlatformSidebar() {
       >
         {mainLinks.map(item => {
           const isActive = isLinkActive(pathname, item)
-          const count = item.showWaitingCount && waiting ? waiting : 0
+          const count = countOf(item)
           return (
             <Link
               key={item.href}
@@ -642,7 +708,9 @@ export function PlatformSidebar() {
                 {count > 0 && (
                   <span className="absolute -right-2.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold leading-none text-secondary ring-2 ring-secondary">
                     <span aria-hidden="true">{countText(count)}</span>
-                    <span className="sr-only">{count} para analisar</span>
+                    <span className="sr-only">
+                      {count} {countNoun(item)}
+                    </span>
                   </span>
                 )}
               </span>

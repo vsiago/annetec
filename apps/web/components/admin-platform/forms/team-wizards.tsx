@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Eye, EyeOff, KeyRound, Mail, Plus, Shield, ShieldCheck, UserPlus, UserRoundPen } from 'lucide-react'
+import Link from 'next/link'
+import { BriefcaseBusiness, Eye, EyeOff, KeyRound, Mail, Plus, Shield, ShieldCheck, UserPlus, UserRoundPen } from 'lucide-react'
 import { createPlatformUserInput, formatPhone, updatePlatformUserInput, type PlatformRole } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
 import {
@@ -55,6 +56,18 @@ const ROLE_OPTIONS = [
     icon: ShieldCheck,
   },
 ] as const
+
+/**
+ * Vendedor ANNETEC: aparece só ao editar uma conta que já é de vendedor. O
+ * cadastro de vendedor fica em Comercial › Vendedores, que cria a conta junto
+ * com o código de indicação e a meta.
+ */
+const SELLER_OPTION = {
+  value: 'platform_seller',
+  title: 'Vendedor ANNETEC',
+  description: 'Só a área de vendas. Código e meta em Comercial › Vendedores.',
+  icon: BriefcaseBusiness,
+} as const
 
 const MESSAGES = {
   name: { required: 'Informe o nome da pessoa.' },
@@ -216,7 +229,24 @@ export function TeamMemberWizard({
         maxLength={15}
         placeholder="(21) 99999-9999"
       />
-      <ChoiceField {...wizard.field('role')} onValueChange={value => wizard.set('role', value as PlatformRole)} label="Nível de acesso" required span={12} options={ROLE_OPTIONS} />
+      <ChoiceField
+        {...wizard.field('role')}
+        onValueChange={value => wizard.set('role', value as PlatformRole)}
+        label="Nível de acesso"
+        required
+        span={12}
+        columns={member?.role === 'platform_seller' ? 3 : 2}
+        options={member?.role === 'platform_seller' ? [...ROLE_OPTIONS, SELLER_OPTION] : ROLE_OPTIONS}
+      />
+      {editing ? null : (
+        <Notice tone="info" icon={BriefcaseBusiness}>
+          Vai cadastrar um vendedor ANNETEC? Use{' '}
+          <Link href="/admin/comercial/vendedores" className="font-semibold underline underline-offset-2">
+            Comercial › Vendedores
+          </Link>
+          : ele cria a conta já com o código de indicação e a meta.
+        </Notice>
+      )}
       {editing ? null : (
         <TextField
           {...wizard.field('password')}

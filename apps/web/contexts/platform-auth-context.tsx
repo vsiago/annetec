@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { useRouter } from 'next/navigation'
 import type { SessionUser } from '@annetec/contracts'
 import { loginAction, logoutAction, meAction } from '@/lib/actions/auth-api'
+import { platformHomePath } from '@/lib/auth/redirect'
 
 interface PlatformAuthContextType {
   user: SessionUser | null
@@ -24,8 +25,9 @@ interface PlatformAuthContextType {
 const PlatformAuthContext = createContext<PlatformAuthContextType | undefined>(undefined)
 
 /**
- * Auth do painel de plataforma (`/admin`, equipe Annetec: superadmin /
- * platform_admin). A sessão em si é do Better Auth — vive num cookie
+ * Auth das áreas de plataforma: console `/admin` (equipe Annetec:
+ * superadmin / platform_admin) e área de vendas `/vendas` (vendedor ANNETEC,
+ * `platform_seller`). A sessão em si é do Better Auth — vive num cookie
  * httpOnly gravado pelas Server Actions em `lib/actions/auth-api.ts`; este
  * contexto só espelha o usuário autenticado em estado de cliente para a UI
  * (sidebar, guard de rota) não precisar de round-trip a cada render.
@@ -67,7 +69,7 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(result.data)
     setIsLoading(false)
-    router.push('/admin')
+    router.push(platformHomePath(result.data.platformRole))
     return { success: true }
   }
 

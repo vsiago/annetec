@@ -1,3 +1,4 @@
+import { isPlatformAccountRole, type PlatformRole } from '@annetec/contracts'
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { member, organization } from '@/db/schema'
@@ -9,11 +10,10 @@ import { member, organization } from '@/db/schema'
  * — nenhum controller recalcula escopo/papel por conta própria.
  */
 
-const PLATFORM_ROLES = new Set(['superadmin', 'platform_admin'])
-
 export interface ResolvedMembership {
   scope: 'platform' | 'tenant'
-  platformRole: 'superadmin' | 'platform_admin' | null
+  /** `platform_seller` = vendedor ANNETEC: conta de plataforma SÓ da área de vendas. */
+  platformRole: PlatformRole | null
   tenantId: string | null
   tenantSlug: string | null
   tenantRole: 'admin' | 'seller' | 'client' | null
@@ -48,10 +48,10 @@ export async function resolveActiveMembership(
     return { scope: 'tenant', platformRole: null, tenantId: null, tenantSlug: null, tenantRole: null, impersonatedBy }
   }
 
-  if (authUser.role && PLATFORM_ROLES.has(authUser.role)) {
+  if (isPlatformAccountRole(authUser.role)) {
     return {
       scope: 'platform',
-      platformRole: authUser.role as 'superadmin' | 'platform_admin',
+      platformRole: authUser.role,
       tenantId: null,
       tenantSlug: null,
       tenantRole: null,

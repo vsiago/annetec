@@ -1,5 +1,6 @@
 import {
   ERROR_CODES,
+  isPlatformAccountRole,
   type ClientPortalLoginInput,
   type GoogleLoginInput,
   type LoginInput,
@@ -161,7 +162,6 @@ const GOOGLE_INVALID_MESSAGE = 'Não foi possível validar o login com Google. T
  */
 const GOOGLE_STAFF_MESSAGE =
   'Este e-mail já é usado por uma conta administrativa e não pode ser cadastrado como associado deste clube. Entre com outro e-mail do Google.'
-const PLATFORM_ROLES = new Set(['superadmin', 'platform_admin'])
 
 /**
  * Passo comum aos logins que abrem sessão ANTES de saber o vínculo (senha e
@@ -292,7 +292,7 @@ async function canSignUpWithGoogle(idToken: string, tenantSlug: string | undefin
  * clube pode (a mesma pessoa física pode ser associada de dois clubes).
  */
 async function canJoinAsClient(userId: string, platformRole: string | null | undefined): Promise<boolean> {
-  if (platformRole && PLATFORM_ROLES.has(platformRole)) return false
+  if (isPlatformAccountRole(platformRole)) return false
   const [staff] = await db
     .select({ id: member.id })
     .from(member)

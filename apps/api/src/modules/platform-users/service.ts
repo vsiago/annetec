@@ -1,6 +1,8 @@
 import {
   ERROR_CODES,
+  platformRole,
   type CreatePlatformUserInput,
+  type PlatformRole,
   type PlatformUser,
   type UpdatePlatformUserInput,
 } from '@annetec/contracts'
@@ -10,14 +12,26 @@ import { session, user } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { auth } from '@/lib/auth'
 import { logger } from '@/lib/logger'
+import { ensureSellerProfile, referralCodeTaken } from '@/modules/platform-sales/seller-profile'
 
 /**
- * Contas de equipe Annetec (`user.role` = 'superadmin' | 'platform_admin').
- * Mesma tabela `user` do Better Auth que os inquilinos usam — o filtro por
- * papel de plataforma é o que isola "quem é Annetec" de "quem é membro de
- * algum inquilino" (que fica com role 'user', o default).
+ * Contas de plataforma Annetec (`user.role` = 'superadmin' | 'platform_admin'
+ * | 'platform_seller'). Mesma tabela `user` do Better Auth que os inquilinos
+ * usam — o filtro por papel de plataforma é o que isola "quem é Annetec" de
+ * "quem é membro de algum inquilino" (que fica com role 'user', o default).
+ *
+ * Conta `platform_seller` (vendedor) sempre tem perfil de vendedor
+ * (`platform_sellers`, código de indicação): criado junto da conta ou quando
+ * o papel passa a ser de vendedor.
  */
-const PLATFORM_ROLES = ['superadmin', 'platform_admin'] as const
+const PLATFORM_ROLES = platformRole.options
+
+/** Perfil de vendedor criado junto da conta `platform_seller`. */
+export interface SellerProfileOptions {
+  referralCode?: string | null
+  monthlyGoal?: number | null
+  createdByUserId?: string | null
+}
 
 export interface PlatformUserSessionDeps {
   /** Apaga todas as sessões da conta (inclusive impersonações abertas por ela). Devolve quantas. */
@@ -35,7 +49,7 @@ export const platformUserSessionsDb: PlatformUserSessionDeps = {
 }
 
 export const platformUsersService = {
-  async list(params: { page: number; perPage: number; role?: 'superadmin' | 'platform_admin'; search?: string }) {
+  async list(params: { page: number; perPage: number; role?: PlatformRole; search?: string }) {
     const filters: SQL[] = [inArray(user.role, PLATFORM_ROLES)]
     if (params.role) filters.push(eq(user.role, params.role))
     if (params.search) {
@@ -65,7 +79,7 @@ export const platformUsersService = {
    * (só superadmin chega aqui) já foi feita por `requirePlatformRole` na rota;
    * não depende de sessão do Better Auth para isso.
    */
-  async create(input: CreatePlatformUserInput): Promise<PlatformUser> {
+  async create(input: CreatePlatformUserInput, seller: SellerProfileOptions = {}): Promise<PlatformUser> {
     const [existing] = await db
       .select({ id: user.id })
       .from(user)
@@ -73,6 +87,10 @@ export const platformUsersService = {
       .limit(1)
     if (existing) {
       throw new AppError(ERROR_CODES.ALREADY_EXISTS, 'Já existe uma conta com este e-mail')
+    }
+    // Código pedido já ocupado: recusa ANTES de criar a conta (sem conta órfã).
+    if (input.role === 'platform_seller' && seller.referralCode && (await referralCodeTaken(seller.referralCode))) {
+      throw AppError.conflict('Este código de indicação já é de outro vendedor')
     }
 
     const created = await auth.api.createUser({
@@ -87,6 +105,15 @@ export const platformUsersService = {
 
     const [row] = await db.select().from(user).where(eq(user.id, created.user.id)).limit(1)
     if (!row) throw AppError.businessRule('Falha ao carregar a conta recém-criada')
+    if (input.role === 'platform_seller') {
+      await ensureSellerProfile({
+        userId: row.id,
+        name: row.name,
+        referralCode: seller.referralCode ?? null,
+        monthlyGoal: seller.monthlyGoal ?? null,
+        createdByUserId: seller.createdByUserId ?? null,
+      })
+    }
     return toDomain(row)
   },
 
@@ -165,6 +192,10 @@ export const platformUsersService = {
     // até a sessão expirar (30 dias).
     const desativou = input.active === false && alvo.active
     const trocouPapel = input.role !== undefined && input.role !== alvo.role
+    // Virou vendedor: ganha o perfil (código gerado do nome) se ainda não tinha.
+    if (trocouPapel && input.role === 'platform_seller') {
+      await ensureSellerProfile({ userId: id, name: input.name ?? alvo.name, createdByUserId: actorId ?? null })
+    }
     if (desativou || trocouPapel) {
       const revogadas = await deps.revokeAllSessions(id)
       logger.info({ userId: id, desativou, trocouPapel, sessoesRevogadas: revogadas }, 'Sessões da conta de plataforma revogadas')

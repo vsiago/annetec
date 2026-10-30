@@ -158,6 +158,22 @@ vi.mock('@/db/client', async () => {
   return { db }
 })
 
+// Comissão do vendedor: o handler chama dentro da transação do pagamento (savepoint).
+const commissionCalls = vi.hoisted(() => ({ recorded: [] as unknown[], reversed: [] as unknown[][] }))
+vi.mock('@/modules/platform-sales/commissions.service', () => ({
+  safely: async (tx: unknown, _label: string, work: (tx: unknown) => Promise<unknown>) => {
+    await work(tx)
+  },
+  recordCommissionsForPaidCharge: async (_tx: unknown, charge: unknown) => {
+    commissionCalls.recorded.push(charge)
+    return 1
+  },
+  reverseCommissionsForCharge: async (_tx: unknown, chargeId: string, reason: string) => {
+    commissionCalls.reversed.push([chargeId, reason])
+    return 1
+  },
+}))
+
 vi.mock('@/modules/platform-onboarding/provisioning.service', () => ({
   onActivationPaid: async (...args: unknown[]) => {
     state.onActivationPaid.push(args)
@@ -245,6 +261,8 @@ beforeEach(() => {
   state.onActivationPaid = []
   state.emails = []
   state.invalidated = []
+  commissionCalls.recorded = []
+  commissionCalls.reversed = []
 })
 
 describe('handler único da plataforma — ativação', () => {
@@ -447,5 +465,46 @@ describe('chargeback e pagamento órfão (plataforma)', () => {
     } finally {
       error.mockRestore()
     }
+  })
+})
+
+describe('comissão do vendedor ANNETEC no handler da cobrança', () => {
+  it('ativação paga gera a comissão UMA vez (evento repetido e CONFIRMED depois não geram de novo)', async () => {
+    const eventId = platformSyntheticEventId('sim_pay_pix_0_abcd1234', 'PAYMENT_RECEIVED')
+    await handlePlatformGatewayEvent(received(eventId), { source: 'simulation', provider: 'simulated' })
+    await handlePlatformGatewayEvent(received(eventId), { source: 'simulation', provider: 'simulated' })
+    await handlePlatformGatewayEvent(received('evt_asaas_9', 'PAYMENT_CONFIRMED'), { source: 'webhook', provider: 'simulated' })
+    expect(commissionCalls.recorded).toHaveLength(1)
+    expect(commissionCalls.recorded[0]).toMatchObject({ id: CHARGE_ID, kind: 'activation', status: 'paid', proposalId: PROPOSAL_ID })
+  })
+
+  it('mensalidade paga também passa pela comissão; vencimento não', async () => {
+    state.charge = monthlyCharge('overdue')
+    state.sub = subscription('restricted')
+    await handlePlatformGatewayEvent(received('evt_cm1'), { source: 'simulation', provider: 'simulated' })
+    expect(commissionCalls.recorded).toHaveLength(1)
+    state.charge = monthlyCharge('pending')
+    await handlePlatformGatewayEvent(
+      { id: 'evt_cm2', event: 'PAYMENT_OVERDUE', payment: { id: 'sim_pay_pix_0_abcd1234', externalReference: platformReference(CHARGE_ID) } },
+      { source: 'automation', provider: 'simulated' },
+    )
+    expect(commissionCalls.recorded).toHaveLength(1)
+  })
+
+  it('estorno e chargeback revertem as comissões da fatura', async () => {
+    state.charge = { ...monthlyCharge('paid'), gatewayProvider: 'asaas', gatewayChargeId: 'pay_m1' }
+    await handlePlatformGatewayEvent(
+      { id: 'evt_ref', event: 'PAYMENT_REFUNDED', payment: { id: 'pay_m1', externalReference: platformReference(CHARGE_ID), value: 990 } },
+      { source: 'webhook', provider: 'asaas' },
+    )
+    expect(commissionCalls.reversed).toEqual([[CHARGE_ID, 'Fatura estornada']])
+
+    state.charge = { ...monthlyCharge('paid'), gatewayProvider: 'asaas', gatewayChargeId: 'pay_m1' }
+    state.sub = subscription('active')
+    await handlePlatformGatewayEvent(
+      { id: 'evt_cb_c', event: 'PAYMENT_CHARGEBACK_REQUESTED', payment: { id: 'pay_m1', externalReference: platformReference(CHARGE_ID), value: 990 } },
+      { source: 'webhook', provider: 'asaas' },
+    )
+    expect(commissionCalls.reversed[1]).toEqual([CHARGE_ID, 'Chargeback (contestação do cartão)'])
   })
 })

@@ -19,6 +19,7 @@ import { logger } from '@/lib/logger'
 import { notifyPlatformInvoicePaid } from '@/lib/notifications'
 import { noonSP, todaySP } from '@/modules/club-billing/dates'
 import { invalidateHoldingCache } from '@/modules/holding/cache'
+import { recordCommissionsForPaidCharge, reverseCommissionsForCharge, safely } from '@/modules/platform-sales/commissions.service'
 import { parsePlatformReference, platformInvoiceUrl } from './access-key'
 import { sendPlatformEmails, type PlatformEmail } from './notify'
 import { OPEN_PLATFORM_CHARGE_STATUSES, type PlatformChargeRow, type PlatformSubscriptionRow } from './presenter'
@@ -632,6 +633,12 @@ async function applyPaid(
   if (recipient) effects.emails.push(chargeEmail('platform_invoice_paid', updated, recipient, { paidAmount }))
   effects.paidCharges.push(updated.id)
 
+  // Comissão do vendedor ANNETEC (clube atribuído): mesma transação, savepoint
+  // próprio — falha na comissão nunca desfaz o pagamento.
+  if (updated.proposalId && updated.kind !== 'adjustment') {
+    await safely(tx, 'commission.paid', sp => recordCommissionsForPaidCharge(sp, updated, now))
+  }
+
   // Cartão aprovado: token + bandeira/finais para a recorrência.
   if (card?.creditCardToken && last4.length === 4) {
     const saved: StashedCard = {
@@ -745,6 +752,7 @@ async function applyRefunded(
     .where(and(eq(platformCharges.id, charge.id), eq(platformCharges.status, 'paid')))
     .returning({ id: platformCharges.id })
   if (!updated) return false
+  await safely(tx, 'commission.refund', sp => reverseCommissionsForCharge(sp, charge.id, 'Fatura estornada', now))
   logger.warn(
     {
       alert: 'refund',
@@ -805,6 +813,7 @@ async function applyChargeback(
     return false
   }
   logger.error(logFields, 'Chargeback numa fatura da plataforma — revisar (painel bloqueado até a holding liberar)')
+  await safely(tx, 'commission.chargeback', sp => reverseCommissionsForCharge(sp, updated.id, 'Chargeback (contestação do cartão)', now))
   if (!updated.subscriptionId || !updated.organizationId) return true
 
   const reason = `Chargeback do pagamento de ${formatBRL(value)} (${updated.description}) — revisar antes de liberar`

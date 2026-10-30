@@ -1,4 +1,4 @@
-import type { ClubAccessStatus, ClubSubscriptionStatus, EmailStatus, EmailTemplate } from '@annetec/contracts'
+import { platformRole, type ClubAccessStatus, type ClubSubscriptionStatus, type EmailStatus, type EmailTemplate } from '@annetec/contracts'
 import { and, asc, desc, eq, inArray, isNull, notInArray, or, sql } from 'drizzle-orm'
 import { env, isProduction, webBaseUrl } from '@/config/env'
 import { db } from '@/db/client'
@@ -258,7 +258,7 @@ export async function listOnboardingCandidates(
         eq(member.role, 'client'),
         eq(member.accessStatus, 'active'),
         sql`${roundStartedAt} >= ${since.toISOString()}::timestamptz`,
-        or(isNull(user.role), notInArray(user.role, ['superadmin', 'platform_admin'])),
+        or(isNull(user.role), notInArray(user.role, [...platformRole.options])),
         options.userId ? eq(member.userId, options.userId) : undefined,
       ),
     )

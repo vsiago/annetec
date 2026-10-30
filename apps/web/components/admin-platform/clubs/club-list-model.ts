@@ -20,6 +20,7 @@ export type ClubMetrics = Pick<
   | 'platformDaysLate'
   | 'healthBand'
   | 'healthScore'
+  | 'seller'
 >
 
 export interface ClubListRow {

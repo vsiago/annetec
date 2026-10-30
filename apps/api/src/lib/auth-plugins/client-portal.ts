@@ -1,4 +1,4 @@
-import { ERROR_CODES, onlyDigits } from '@annetec/contracts'
+import { ERROR_CODES, isPlatformAccountRole, onlyDigits } from '@annetec/contracts'
 import { APIError, createAuthEndpoint } from 'better-auth/api'
 import { setSessionCookie } from 'better-auth/cookies'
 import { and, eq, ne } from 'drizzle-orm'
@@ -80,7 +80,7 @@ async function findClubMember(tenantId: string, email: string, cpf: string): Pro
  * contrato com este e-mail.
  */
 async function isPortalEligible(account: { id: string; role?: string | null }, tenantId: string): Promise<boolean> {
-  if (account.role === 'superadmin' || account.role === 'platform_admin') return false
+  if (isPlatformAccountRole(account.role)) return false
   const [staff] = await db
     .select({ id: member.id })
     .from(member)

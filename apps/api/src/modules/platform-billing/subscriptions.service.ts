@@ -424,6 +424,7 @@ export async function demoTimeTravel(
         reactivatedAt: shiftInstantBack(sub.reactivatedAt, days),
         accessOverrideUntil: shiftInstantBack(sub.accessOverrideUntil, days),
         accessOverrideAt: shiftInstantBack(sub.accessOverrideAt, days),
+        monthlyDiscountUntil: shiftDateBack(sub.monthlyDiscountUntil, days),
         updatedAt: new Date(),
       })
       .where(eq(platformSubscriptions.id, sub.id))

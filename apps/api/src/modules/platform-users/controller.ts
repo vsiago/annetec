@@ -17,11 +17,12 @@ const listQuery = paginationQuery.extend({ role: platformRole.optional() })
 const idParam = z.object({ id: z.string() })
 
 /**
- * Contas de equipe Annetec. Montado em `/api/v1/platform/users`.
+ * Contas de plataforma Annetec (equipe e vendedores). Montado em
+ * `/api/v1/platform/users`.
  *
- * Leitura liberada a qualquer papel de plataforma; criar uma conta nova é
- * restrito a superadmin — evita que um platform_admin se autopromova criando
- * outro superadmin.
+ * Leitura liberada à EQUIPE (superadmin/platform_admin — vendedor não entra);
+ * criar uma conta nova (inclusive `platform_seller`) é restrito a superadmin —
+ * evita que um platform_admin se autopromova criando outro superadmin.
  */
 export const platformUsersController = new Hono<AppEnv>()
   .use('*', requireAuth, requirePlatformRole())
@@ -34,7 +35,7 @@ export const platformUsersController = new Hono<AppEnv>()
   })
 
   .post('/', requirePlatformRole('superadmin'), json(createPlatformUserInput), async c => {
-    const platformUser = await platformUsersService.create(c.req.valid('json'))
+    const platformUser = await platformUsersService.create(c.req.valid('json'), { createdByUserId: c.get('auth')?.user.id ?? null })
     await recordAudit(c, {
       action: 'platform_user.created',
       resource: 'platform_user',

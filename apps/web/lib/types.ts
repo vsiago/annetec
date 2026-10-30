@@ -2,7 +2,14 @@
 // Platform-level types (Annetec staff, operates /admin, manages tenants)
 // ---------------------------------------------------------------------------
 
-export type PlatformRole = 'superadmin' | 'platform_admin'
+import type { PlatformRole as ContractsPlatformRole } from '@annetec/contracts'
+
+/**
+ * Papel da conta de plataforma — o mesmo de @annetec/contracts:
+ * `superadmin` e `platform_admin` (equipe, console `/admin`) e
+ * `platform_seller` (vendedor ANNETEC, só a área `/vendas`).
+ */
+export type PlatformRole = ContractsPlatformRole
 
 /** Situação do vínculo com o clube — espelha `MemberAccessStatus` de @annetec/contracts. */
 export type MemberAccessStatus = 'active' | 'removed' | 'blocked'

@@ -1,5 +1,6 @@
 import {
   monthlyChargeItems,
+  monthlyDiscountPercentFor,
   sumChargeItems,
   type ClubChargeStatus,
   type ClubPaymentMethod,
@@ -128,6 +129,20 @@ export interface MonthlyChargeInput {
   memberLimit: number
   pricePerExtraLife: number
   revenueSharePercent: number
+  /** Desconto da mensalidade da venda (`percent` 0 = sem; `until` nulo = permanente). */
+  monthlyDiscount?: { percent: number; until: string | null } | null
+}
+
+/**
+ * Último dia (inclusive) do desconto de `months` mensalidades para uma
+ * assinatura que começou em `startDate`: a 1ª mensalidade é a da ativação e o
+ * k-ésimo período começa em `startDate + (k−1) meses` no `dueDay`; o desconto
+ * cobre os períodos que COMEÇAM até o dia anterior ao período `months + 1`.
+ * `null` (permanente) quando `months` é nulo.
+ */
+export function monthlyDiscountUntilFor(startDate: string, months: number | null, dueDay: number): string | null {
+  if (months === null) return null
+  return addDays(addMonthsOnDueDay(startDate, Math.max(1, Math.trunc(months)), dueDay), -1)
 }
 
 /**
@@ -143,6 +158,7 @@ export function buildMonthlyCharge(
     clubRevenue: sub.revenueSharePercent > 0 ? input.clubRevenue : 0,
     periodLabel: monthLabel(input.periodStart),
     adjustments: input.adjustments ?? [],
+    monthlyDiscountPercent: monthlyDiscountPercentFor(sub.monthlyDiscount, input.periodStart),
   })
   return { items, amount: Math.max(0, sumChargeItems(items)) }
 }

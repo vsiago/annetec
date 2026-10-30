@@ -128,12 +128,12 @@ export const annetecModules: ApiModule[] = [
     prefix: '/api/v1/platform/users',
     controllerRef: 'platformUsersController',
     summary:
-      'Contas de equipe Annetec (superadmin, platform_admin) — a mesma tabela user do Better Auth que os inquilinos usam; o que isola "é Annetec" é o papel. Sem nenhuma dependência da Digital Saúde.',
+      'Contas de plataforma Annetec — equipe (superadmin, platform_admin) e vendedor ANNETEC (platform_seller, que só entra em /platform/vendas) — na mesma tabela user do Better Auth que os inquilinos usam; o que isola "é Annetec" é o papel. Criar conta platform_seller também cria o perfil de vendedor. Sem nenhuma dependência da Digital Saúde.',
     sections: [
       {
         heading: 'Cadastro',
         items: [
-          { method: 'GET', route: '/', description: 'Lista as contas de plataforma, com busca e filtro por papel.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/', description: 'Lista as contas de plataforma (equipe e vendedores), com busca e filtro por papel.', access: 'superadmin · platform_admin' },
           { method: 'POST', route: '/', description: 'Cria uma conta de plataforma nova. Só superadmin — evita autopromoção.', access: 'superadmin' },
           { method: 'GET', route: '/:id', description: 'Detalhe de uma conta de plataforma.', access: 'superadmin · platform_admin' },
           { method: 'PATCH', route: '/:id', description: 'Edita nome, telefone, papel e ativação. Recusa autodesativação e recusa deixar a plataforma sem nenhum superadmin ativo. Desativar usa user.banned do Better Auth — a conta para de entrar de verdade, e continua assinando o histórico.', access: 'superadmin' },
@@ -558,7 +558,7 @@ export const annetecModules: ApiModule[] = [
           { method: 'GET', route: '/planos', description: 'Planos ANNETEC visíveis na vitrine, com preço completo (adesão, vida extra, split).', access: 'público' },
           { method: 'GET', route: '/cnpj/:cnpj', description: 'Consulta a Receita (BrasilAPI ou simulada); indisponível não é erro — o formulário segue manual.', access: 'público (30/min/IP)' },
           { method: 'GET', route: '/slug-disponivel?slug=', description: 'Endereço do site livre? Com motivo e sugestões.', access: 'público' },
-          { method: 'POST', route: '/propostas', description: 'Cria a proposta e devolve o link de acompanhamento com a chave (409 se o CNPJ já tem proposta aberta ou já é inquilino).', access: 'público (5/h/IP)' },
+          { method: 'POST', route: '/propostas', description: 'Cria a proposta e devolve o link de acompanhamento com a chave (409 se o CNPJ já tem proposta aberta ou já é inquilino). referralCode opcional (o ?ref= do link do vendedor): código de vendedor ativo atribui a proposta a ele; desconhecido é ignorado.', access: 'público (5/h/IP)' },
           { method: 'POST', route: '/propostas/recuperar-acesso', description: 'Reenvia o link de acompanhamento por e-mail; responde sempre { sent: true }.', access: 'público' },
         ],
       },
@@ -606,7 +606,7 @@ export const annetecModules: ApiModule[] = [
       {
         heading: 'Fila',
         items: [
-          { method: 'GET', route: '/propostas', description: 'Propostas por grupo, situação, pré-checagem, responsável e tipo; busca por nome, CNPJ ou protocolo.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/propostas', description: 'Propostas por grupo, situação, pré-checagem, responsável, tipo e vendedor (sellerUserId); busca por nome, CNPJ ou protocolo. Cada item traz o vendedor atribuído.', access: 'superadmin · platform_admin' },
           { method: 'GET', route: '/propostas/resumo', description: 'Contagens da fila: por situação, sem responsável, SLA estourado, aguardando pagamento, ativadas no mês.', access: 'superadmin · platform_admin' },
           { method: 'GET', route: '/propostas/:id', description: 'Detalhe completo: pré-checagens, checklist, documentos, eventos internos e e-mails.', access: 'superadmin · platform_admin' },
         ],
@@ -620,7 +620,7 @@ export const annetecModules: ApiModule[] = [
           { method: 'POST', route: '/propostas/:id/documentos/:docId/revisao', description: 'Aprova ou recusa (com motivo) um documento.', access: 'superadmin · platform_admin' },
           { method: 'GET', route: '/propostas/:id/documentos/:docId/arquivo', description: 'Arquivo do documento para o visualizador (a web repassa por proxy, sem expor o token).', access: 'superadmin · platform_admin' },
           { method: 'POST', route: '/propostas/:id/pendencias', description: 'Pede pendência com itens; a proposta volta para o contratante e ele recebe e-mail.', access: 'superadmin · platform_admin' },
-          { method: 'POST', route: '/propostas/:id/aprovar', description: 'Aprova (422 com bloqueante/checklist incompleto, salvo override com motivo) e emite a cobrança de ativação.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/propostas/:id/aprovar', description: 'Aprova (422 com bloqueante/checklist incompleto, salvo override com motivo; 422 também com pedido de desconto do vendedor pendente) e emite a cobrança de ativação.', access: 'superadmin · platform_admin' },
           { method: 'POST', route: '/propostas/:id/reprovar', description: 'Reprova com motivo (final).', access: 'superadmin · platform_admin' },
           { method: 'POST', route: '/propostas/:id/cancelar', description: 'Cancela proposta não final; cobrança de ativação aberta é cancelada.', access: 'superadmin · platform_admin' },
           { method: 'POST', route: '/propostas/:id/notas', description: 'Nota interna na linha do tempo.', access: 'superadmin · platform_admin' },
@@ -711,6 +711,99 @@ export const annetecModules: ApiModule[] = [
         heading: 'Controle',
         items: [
           { method: 'POST', route: '/inquilinos/:orgId/ciclo-de-vida', description: 'Restringir, suspender, reativar (com prazo) ou voltar à régua; 422 para inquilino não gerenciado.', access: 'superadmin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Plataforma — Vendas (vendedor ANNETEC)',
+    prefix: '/api/v1/platform/vendas',
+    controllerRef: 'platformSellerController',
+    summary:
+      'Área do vendedor próprio da ANNETEC (conta platform_seller), usada pela tela /vendas. Só os dados do próprio vendedor: o vendedor é sempre o da sessão e nenhuma rota aceita sellerUserId de fora (de outro vendedor = 404). Perfil inativo só consulta (escritas → 403). O vendedor nunca recebe a URL da proposta — o link vai só para o e-mail do cliente.',
+    sections: [
+      {
+        heading: 'Perfil e painel',
+        items: [
+          { method: 'GET', route: '/perfil', description: 'Perfil do vendedor: código de indicação, meta, ativo e o referralUrl (/contratar?ref=código).', access: 'platform_seller' },
+          { method: 'GET', route: '/painel', description: 'Painel do mês: prospects por etapa, propostas em andamento, descontos pendentes, ganhos, comissão, meta e próximas ações (até 7 dias, com as atrasadas).', access: 'platform_seller' },
+          { method: 'GET', route: '/planos', description: 'Todos os planos ANNETEC, inclusive os fora da vitrine pública (só o vendedor oferece).', access: 'platform_seller' },
+        ],
+      },
+      {
+        heading: 'Funil',
+        items: [
+          { method: 'GET', route: '/prospects?stage=&status=&q=', description: 'Prospects do vendedor (operadoras/clubes que ainda não são clientes), com filtro por etapa e situação (open/closed/all).', access: 'platform_seller' },
+          { method: 'POST', route: '/prospects', description: 'Cadastra prospect (nasce "novo" ou na etapa informada, menos as de proposta).', access: 'platform_seller (perfil ativo)' },
+          { method: 'GET', route: '/prospects/:id', description: 'Detalhe com a linha do tempo de interações (mais recente primeiro).', access: 'platform_seller' },
+          { method: 'PATCH', route: '/prospects/:id', description: 'Edita dados ou move a etapa ("perdido" exige lostReason). Com proposta em andamento a etapa acompanha a proposta.', access: 'platform_seller (perfil ativo)' },
+          { method: 'POST', route: '/prospects/:id/interacoes', description: 'Registra ligação, WhatsApp, e-mail, reunião, visita ou nota.', access: 'platform_seller (perfil ativo)' },
+          { method: 'POST', route: '/prospects/:id/link', description: 'Gera o link de contratação: proposta em rascunho (pode usar plano não público) e e-mail ao cliente; com discount, o e-mail fica retido até o superadmin decidir. Limite: 20 a cada 15 min.', access: 'platform_seller (perfil ativo)' },
+        ],
+      },
+      {
+        heading: 'Propostas e descontos',
+        items: [
+          { method: 'GET', route: '/propostas?group=&status=', description: 'Propostas atribuídas ao vendedor (links dele e clientes que vieram pelo código), com linkStatus e o último pedido de desconto.', access: 'platform_seller' },
+          { method: 'GET', route: '/propostas/:id', description: 'Detalhe da proposta do vendedor (sem a URL com a chave).', access: 'platform_seller' },
+          { method: 'POST', route: '/propostas/:id/enviar-link', description: '(Re)envia o e-mail com o link ao cliente — inclusive sem desconto depois de uma recusa. Bloqueado com pedido pendente. Limite: 10 a cada 15 min.', access: 'platform_seller (perfil ativo)' },
+          { method: 'POST', route: '/propostas/:id/desconto', description: 'Novo pedido de desconto (antes da aprovação da proposta, sem desconto aprovado nem pedido pendente).', access: 'platform_seller (perfil ativo)' },
+          { method: 'GET', route: '/descontos?status=', description: 'Pedidos de desconto do vendedor.', access: 'platform_seller' },
+        ],
+      },
+      {
+        heading: 'Comissões e notificações',
+        items: [
+          { method: 'GET', route: '/comissoes?mes=&status=', description: 'Lançamentos de comissão do vendedor com os totais do filtro (a pagar, paga, a descontar, líquido).', access: 'platform_seller' },
+          { method: 'GET', route: '/notificacoes', description: 'Notificações do vendedor (público seller): pedido de desconto aprovado/recusado.', access: 'platform_seller' },
+          { method: 'GET', route: '/notificacoes/stream', description: 'Stream SSE das notificações do vendedor (a web repassa por proxy em /api/notificacoes/vendas/stream).', access: 'platform_seller' },
+          { method: 'POST', route: '/notificacoes/lidas', description: 'Marca notificações como lidas (sem ids: todas).', access: 'platform_seller' },
+          { method: 'POST', route: '/notificacoes/teste', description: 'Sem rota de teste para o vendedor: responde 404.', access: 'platform_seller' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Plataforma — Comercial (equipe)',
+    prefix: '/api/v1/platform/comercial',
+    controllerRef: 'platformSalesTeamController',
+    summary:
+      'Gestão dos vendedores ANNETEC pela equipe, usada em /admin/comercial/*. Leitura para superadmin e platform_admin; escrita (vendedores, reatribuição, descontos, repasse de comissão e regra) só superadmin. Vendedor recebe 403 em tudo aqui.',
+    sections: [
+      {
+        heading: 'Vendedores',
+        items: [
+          { method: 'GET', route: '/vendedores', description: 'Vendedores com código, meta, perfil ativo e conta ativa.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/vendedores', description: 'Cria a conta platform_seller e o perfil (código gerado do nome se ausente, meta opcional).', access: 'superadmin' },
+          { method: 'GET', route: '/vendedores/:userId', description: 'Detalhe de um vendedor.', access: 'superadmin · platform_admin' },
+          { method: 'PATCH', route: '/vendedores/:userId', description: 'Código de indicação, perfil ativo e meta. Nome, senha e desligar a conta ficam em /platform/users.', access: 'superadmin' },
+        ],
+      },
+      {
+        heading: 'Funil geral',
+        items: [
+          { method: 'GET', route: '/prospects?sellerUserId=&stage=&status=&q=', description: 'Prospects de todos os vendedores, com filtro por vendedor.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/prospects/:id', description: 'Detalhe do prospect com a linha do tempo.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/prospects/:id/reatribuir', description: 'Passa o prospect (e a proposta em andamento) para outro vendedor ativo, com motivo opcional.', access: 'superadmin' },
+        ],
+      },
+      {
+        heading: 'Descontos',
+        items: [
+          { method: 'GET', route: '/descontos?status=&sellerUserId=', description: 'Pedidos de desconto, com a cotação cheia (quote) e a com o pedido aplicado (quoteWithDiscount).', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/descontos/:id', description: 'Detalhe do pedido.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/descontos/:id/aprovar', description: 'Aprova como pedido ou com ajuste (adesão 0–100%, mensalidade 0–50% por N meses ou permanente) e nota; libera o e-mail do link ao cliente.', access: 'superadmin' },
+          { method: 'POST', route: '/descontos/:id/recusar', description: 'Recusa com motivo; o vendedor é avisado e pode reenviar o link sem desconto.', access: 'superadmin' },
+        ],
+      },
+      {
+        heading: 'Comissões, regra e relatório',
+        items: [
+          { method: 'GET', route: '/comissoes?sellerUserId=&mes=&status=', description: 'Lançamentos de comissão de todos os vendedores, com os totais do filtro.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/comissoes/pagar', description: 'Marca comissões "a pagar" como pagas (repasse), com data e observação; as que não estavam a pagar voltam em skipped.', access: 'superadmin' },
+          { method: 'GET', route: '/configuracao', description: 'Regra de comissão vigente: escala por mensalidade paga (padrão 50%, 20%, 10%) e % da adesão (padrão 50%).', access: 'superadmin · platform_admin' },
+          { method: 'PUT', route: '/configuracao', description: 'Altera a regra; vale para as faturas pagas daqui em diante.', access: 'superadmin' },
+          { method: 'GET', route: '/relatorio?mes=aaaa-mm', description: 'Por vendedor no mês: prospects ativos, propostas em andamento, ganhos, perdidos, meta e comissão.', access: 'superadmin · platform_admin' },
         ],
       },
     ],

@@ -50,5 +50,42 @@ export function platformHeadline(notification: AppNotification): string {
       return notification.payload.via === 'returned' ? 'Associado de volta' : 'Novo cadastro'
     case 'platform_invoice_paid':
       return notification.title
+    case 'sales_discount_requested':
+      return 'Pedido de desconto para aprovar'
+    case 'sales_discount_approved':
+      return 'Desconto aprovado'
+    case 'sales_discount_rejected':
+      return 'Desconto recusado'
+  }
+}
+
+/** Notificação das vendas da plataforma (pedido de desconto e decisão). */
+export function isSalesNotification(notification: Pick<AppNotification, 'kind'>): boolean {
+  return (
+    notification.kind === 'sales_discount_requested' ||
+    notification.kind === 'sales_discount_approved' ||
+    notification.kind === 'sales_discount_rejected'
+  )
+}
+
+/**
+ * Para onde a notificação leva ao clicar. As de vendas são montadas aqui a
+ * partir dos ids do `payload` (a API também grava o mesmo link):
+ *  - pedido de desconto (equipe) → Comercial › Descontos, com o pedido aberto;
+ *  - aprovado/recusado (vendedor) → a proposta na área do vendedor.
+ * As demais usam o `link` gravado pela API.
+ */
+export function notificationHref(notification: Pick<AppNotification, 'kind' | 'link' | 'payload'>): string | null {
+  const { payload } = notification
+  switch (notification.kind) {
+    case 'sales_discount_requested':
+      return payload.discountRequestId
+        ? `/admin/comercial/descontos?pedido=${encodeURIComponent(payload.discountRequestId)}`
+        : '/admin/comercial/descontos'
+    case 'sales_discount_approved':
+    case 'sales_discount_rejected':
+      return payload.proposalId ? `/vendas/propostas/${encodeURIComponent(payload.proposalId)}` : '/vendas/propostas'
+    default:
+      return notification.link
   }
 }

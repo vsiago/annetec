@@ -29,11 +29,13 @@ import {
   platformOnboardingPeople,
   platformOnboardingProposals,
   tenantPlans,
+  user,
 } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { listProposalEmails } from '@/lib/email/outbox'
 import { logger } from '@/lib/logger'
 import { createActivationCharge } from '@/modules/platform-billing/activation'
+import { hasPendingDiscount } from '@/modules/platform-sales/prospect-sync'
 import { notifyApplicant } from './notify'
 import { findPlanOffer } from './plans'
 import { runPrechecks } from './prechecks.service'
@@ -84,15 +86,24 @@ async function requireProposal(id: string): Promise<ProposalRow> {
 // Leitura
 // ---------------------------------------------------------------------------
 
+/** Vendedor atribuído à proposta (nome atual da conta). */
+async function sellerRefOf(proposal: Pick<ProposalRow, 'sellerUserId' | 'referralCode'>) {
+  if (!proposal.sellerUserId) return null
+  const [row] = await db.select({ name: user.name }).from(user).where(eq(user.id, proposal.sellerUserId)).limit(1)
+  return { userId: proposal.sellerUserId, name: row?.name ?? 'Vendedor removido', referralCode: proposal.referralCode ?? null }
+}
+
 export async function getProposalDetail(id: string): Promise<OnboardingProposalDetail> {
   const bundle = await loadBundle(id)
   if (!bundle) throw proposalNotFound()
-  const [offer, charge, emails] = await Promise.all([
+  const [offer, charge, emails, seller, discountPending] = await Promise.all([
     bundle.proposal.planId ? findPlanOffer(bundle.proposal.planId) : Promise.resolve(null),
     activationChargeOf(bundle.proposal, false),
     listProposalEmails(id),
+    sellerRefOf(bundle.proposal),
+    bundle.proposal.sellerUserId ? hasPendingDiscount(id) : Promise.resolve(false),
   ])
-  return toProposalDetail(bundle, { offer, activationCharge: charge, emails })
+  return toProposalDetail(bundle, { offer, activationCharge: charge, emails, seller, discountPending })
 }
 
 export async function listProposals(
@@ -108,6 +119,7 @@ export async function listProposals(
   if (query.assigned === 'me') filters.push(eq(t.assignedToUserId, actor.userId))
   if (query.assigned === 'unassigned') filters.push(isNull(t.assignedToUserId))
   if (query.contractorType) filters.push(eq(t.contractorType, query.contractorType))
+  if (query.sellerUserId) filters.push(eq(t.sellerUserId, query.sellerUserId))
   if (query.q) {
     const term = `%${query.q.replace(/[%_\\]/g, m => `\\${m}`)}%`
     const digits = query.q.replace(/\D/g, '')
@@ -125,9 +137,10 @@ export async function listProposals(
 
   const [rows, [total]] = await Promise.all([
     db
-      .select({ proposal: t, planName: tenantPlans.name })
+      .select({ proposal: t, planName: tenantPlans.name, sellerName: user.name })
       .from(t)
       .leftJoin(tenantPlans, eq(tenantPlans.id, t.planId))
+      .leftJoin(user, eq(user.id, t.sellerUserId))
       .where(where)
       .orderBy(...order)
       .limit(query.perPage)
@@ -158,7 +171,7 @@ export async function listProposals(
       ])
     : [[] as PersonRow[], [] as { document: DocumentWithFile; file: DocumentWithFile['file'] }[]]
 
-  const items = rows.map(({ proposal, planName }): OnboardingProposalListItem => {
+  const items = rows.map(({ proposal, planName, sellerName }): OnboardingProposalListItem => {
     const ownPeople = people.filter(p => p.proposalId === proposal.id)
     const ownDocs: DocumentWithFile[] = documents
       .filter(d => d.document.proposalId === proposal.id)
@@ -186,6 +199,9 @@ export async function listProposals(
         proposal.assignedToUserId && proposal.assignedToName
           ? { userId: proposal.assignedToUserId, name: proposal.assignedToName }
           : null,
+      seller: proposal.sellerUserId
+        ? { userId: proposal.sellerUserId, name: sellerName ?? 'Vendedor removido', referralCode: proposal.referralCode ?? null }
+        : null,
       submittedAt: proposal.submittedAt?.toISOString() ?? null,
       slaDueAt: slaDue?.toISOString() ?? null,
       slaBreached: slaDue ? slaDue.getTime() < now.getTime() : false,
@@ -410,6 +426,12 @@ export async function requestInfo(id: string, input: RequestOnboardingInfoInput,
 export async function approveProposal(id: string, input: ApproveOnboardingInput, actor: Actor): Promise<void> {
   let proposal = await requireProposal(id)
   if (!DECISION_STATUSES.includes(proposal.status)) throw statusError(proposal, 'aprovar')
+  // A aprovação emite a cobrança de ativação: o preço precisa estar decidido.
+  if (proposal.sellerUserId && (await hasPendingDiscount(id))) {
+    throw AppError.businessRule(
+      'Há um pedido de desconto do vendedor aguardando o superadmin. Decida o desconto (Comercial → Descontos) antes de aprovar a proposta.',
+    )
+  }
   const now = new Date()
   if (!proposal.precheckRanAt || now.getTime() - proposal.precheckRanAt.getTime() > 24 * 3_600_000) {
     proposal = await runPrechecks(id, { actor, trigger: 'approve' })

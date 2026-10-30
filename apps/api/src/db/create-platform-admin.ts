@@ -1,4 +1,5 @@
 import { auth } from '@/lib/auth'
+import { ensureSellerProfile } from '@/modules/platform-sales/seller-profile'
 import { sql } from './client'
 import { logger } from '@/lib/logger'
 
@@ -14,7 +15,7 @@ import { logger } from '@/lib/logger'
  * lista de processos). Em ordem de preferência:
  *
  *   # 1) digitada (sem eco) quando o terminal é interativo
- *   pnpm --filter @annetec/api exec tsx src/db/create-platform-admin.ts "Nome da Pessoa" email@annetec.com.br [superadmin|platform_admin]
+ *   pnpm --filter @annetec/api exec tsx src/db/create-platform-admin.ts "Nome da Pessoa" email@annetec.com.br [superadmin|platform_admin|platform_seller]
  *
  *   # 2) variável de ambiente (ex.: `read -rs PLATFORM_ADMIN_PASSWORD; export PLATFORM_ADMIN_PASSWORD`)
  *   PLATFORM_ADMIN_PASSWORD=... pnpm ... create-platform-admin.ts "Nome" email@annetec.com.br
@@ -22,11 +23,14 @@ import { logger } from '@/lib/logger'
  *   # 3) stdin (pipe), ex.: de um gerenciador de senhas
  *   pass annetec/admin | pnpm ... create-platform-admin.ts "Nome" email@annetec.com.br
  *
+ * `platform_seller` (vendedor ANNETEC) também ganha o perfil de vendedor com o
+ * código de indicação gerado do nome.
+ *
  * Compatibilidade: a senha como 3º argumento ainda funciona, com aviso.
  * Mínimo de 12 caracteres.
  */
 
-const ROLES = ['superadmin', 'platform_admin'] as const
+const ROLES = ['superadmin', 'platform_admin', 'platform_seller'] as const
 type PlatformRole = (typeof ROLES)[number]
 const MIN_PLATFORM_PASSWORD_LENGTH = 12
 const PASSWORD_ENV = 'PLATFORM_ADMIN_PASSWORD'
@@ -93,13 +97,13 @@ async function main() {
 
   if (!name || !email) {
     console.error(
-      `Uso: create-platform-admin.ts "<nome>" <email> [superadmin|platform_admin]\n` +
+      `Uso: create-platform-admin.ts "<nome>" <email> [superadmin|platform_admin|platform_seller]\n` +
         `A senha vem de ${PASSWORD_ENV}, do stdin (pipe) ou é digitada sem eco.`,
     )
     process.exit(1)
   }
   if (!isRole(role)) {
-    console.error('Papel inválido — use "superadmin" ou "platform_admin"')
+    console.error('Papel inválido — use "superadmin", "platform_admin" ou "platform_seller"')
     process.exit(1)
   }
 
@@ -125,6 +129,10 @@ async function main() {
       { userId: result.user.id, email: result.user.email, role },
       'Conta de plataforma criada',
     )
+    if (role === 'platform_seller') {
+      const profile = await ensureSellerProfile({ userId: result.user.id, name })
+      logger.info({ userId: result.user.id, referralCode: profile.referralCode }, 'Perfil de vendedor criado')
+    }
   } finally {
     await sql.end()
   }

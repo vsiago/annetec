@@ -216,6 +216,8 @@ export const holdingTenantRow = z.object({
   healthFactors: z.array(healthFactor),
   alerts: z.array(holdingAlertKind),
   createdAt: z.string().datetime(),
+  /** Vendedor ANNETEC que trouxe o clube (proposta de origem). Só na lista `GET /holding/inquilinos`. */
+  seller: z.object({ userId: z.string(), name: z.string() }).nullable().optional(),
 })
 export type HoldingTenantRow = z.infer<typeof holdingTenantRow>
 

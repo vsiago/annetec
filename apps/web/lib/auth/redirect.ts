@@ -37,3 +37,12 @@ export function tenantLoginPath(tenantSlug: string, options: { sessionEnded?: bo
   const base = `/${tenantSlug}/login`
   return options.sessionEnded ? `${base}?motivo=${SESSION_ENDED_REASON}` : base
 }
+
+/**
+ * Página inicial de cada conta de PLATAFORMA depois do login: o vendedor
+ * ANNETEC (`platform_seller`) tem área própria em `/vendas`; a equipe
+ * (superadmin/platform_admin) usa o console `/admin`.
+ */
+export function platformHomePath(platformRole: string | null | undefined): '/vendas' | '/admin' {
+  return platformRole === 'platform_seller' ? '/vendas' : '/admin'
+}

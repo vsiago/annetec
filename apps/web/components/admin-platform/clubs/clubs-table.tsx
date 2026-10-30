@@ -168,6 +168,9 @@ export function ClubsTable({ rows }: { rows: ClubListRow[] }) {
                     {siteAddress(row.slug)}
                     <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
                   </a>
+                  {row.metrics?.seller ? (
+                    <span className="text-xs text-muted-foreground">Vendedor: {row.metrics.seller.name}</span>
+                  ) : null}
                 </div>
               </div>
             </Td>

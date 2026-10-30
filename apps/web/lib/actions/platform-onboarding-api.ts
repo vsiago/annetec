@@ -79,6 +79,7 @@ export async function listOnboardingProposalsAction(
         precheck: query.precheck,
         assigned: query.assigned,
         contractorType: query.contractorType,
+        sellerUserId: query.sellerUserId,
       },
     })
     return pagedOf(data ?? [], meta, query.page, query.perPage)

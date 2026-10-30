@@ -70,13 +70,24 @@ export function PaymentStep({ ctx }: { ctx: StepContext }) {
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ativação (após aprovação)</p>
             <p className="mt-1 font-display text-3xl font-extrabold tracking-tight text-foreground">{formatBRL(quote.activationTotal)}</p>
             <p className="text-[13px] text-muted-foreground">
-              {quote.setupFee > 0 ? `Adesão ${formatBRL(quote.setupFee)} + ` : ''}1ª mensalidade {formatBRL(quote.planFee)}
+              {quote.setupFee > 0
+                ? `Adesão ${quote.setupFeeDiscountPercent >= 100 ? 'isenta' : formatBRL(quote.setupFee - quote.setupFeeDiscount)} + `
+                : ''}
+              1ª mensalidade {formatBRL(quote.planFee - quote.planFeeDiscount)}
+              {quote.setupFeeDiscount > 0 || quote.planFeeDiscount > 0 ? ' · com a condição especial aprovada' : ''}
             </p>
           </div>
           <div className="rounded-2xl border p-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Depois, por mês</p>
             <p className="mt-1 font-display text-3xl font-extrabold tracking-tight text-foreground">{formatBRL(quote.monthlyTotal)}</p>
-            <p className="text-[13px] text-muted-foreground">Estimado para {quote.lives.toLocaleString('pt-BR')} vidas; varia com as vidas ativas.</p>
+            <p className="text-[13px] text-muted-foreground">
+              Estimado para {quote.lives.toLocaleString('pt-BR')} vidas; varia com as vidas ativas.
+              {view.plan.discount && view.plan.discount.monthlyPercent > 0
+                ? view.plan.discount.monthlyMonths === null
+                  ? ` Inclui ${view.plan.discount.monthlyPercent.toLocaleString('pt-BR')}% de desconto permanente na mensalidade.`
+                  : ` Inclui ${view.plan.discount.monthlyPercent.toLocaleString('pt-BR')}% de desconto nas ${view.plan.discount.monthlyMonths} primeiras mensalidades.`
+                : ''}
+            </p>
           </div>
         </div>
       ) : (

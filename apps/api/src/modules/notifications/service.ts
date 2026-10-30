@@ -11,14 +11,16 @@ import { logger } from '@/lib/logger'
  * ESCOPO é a única regra de acesso, aplicada em TODA consulta:
  *  - `tenant`: linhas `audience = 'tenant'` do clube da rota (o
  *    `requireTenantRole('admin')` já garantiu que a sessão é deste clube);
- *  - `platform`: linhas `audience = 'platform'` de todos os clubes.
+ *  - `platform`: linhas `audience = 'platform'` de todos os clubes;
+ *  - `seller`: linhas `audience = 'seller'` destinadas ao PRÓPRIO vendedor
+ *    (`recipient_user_id` = a pessoa da sessão).
  * "Não lida" é por pessoa (`notification_reads`) e só conta os últimos
  * 30 dias — conta nova não nasce com um histórico inteiro "não lido".
  */
 
 export interface NotificationScope {
   audience: NotificationAudience
-  /** Obrigatório no público `tenant`; ignorado no `platform`. */
+  /** Obrigatório no público `tenant`; ignorado no `platform` e no `seller`. */
   organizationId: string | null
   userId: string
 }
@@ -48,6 +50,10 @@ export function scopeCondition(scope: NotificationScope): SQL {
     // Sem clube não há o que ler: condição que nunca casa, em vez de "todas".
     if (!scope.organizationId) return sql`false`
     return and(eq(notifications.audience, 'tenant'), eq(notifications.organizationId, scope.organizationId))!
+  }
+  if (scope.audience === 'seller') {
+    if (!scope.userId) return sql`false`
+    return and(eq(notifications.audience, 'seller'), eq(notifications.recipientUserId, scope.userId))!
   }
   return eq(notifications.audience, 'platform')
 }

@@ -15,6 +15,9 @@ import {
   type PlatformCharge,
   type PlatformEmailListItem,
   type PlatformPlanOffer,
+  type ProposalDiscount,
+  type ProposalDiscountRecord,
+  type ProposalSellerRef,
 } from '@annetec/contracts'
 import { platformDemoToolsEnabled, webBaseUrl } from '@/config/env'
 import { publicFileUrl } from '@/lib/storage/files'
@@ -33,6 +36,16 @@ import { computeCompleteness, fullChecklist, isComplete, isEditableStatus } from
 export interface ViewContext {
   offer: PlatformPlanOffer | null
   activationCharge: PlatformCharge | null
+}
+
+/** Parte pública do desconto aprovado (sem quem aprovou). */
+export function publicDiscount(record: ProposalDiscountRecord | null | undefined): ProposalDiscount | null {
+  if (!record) return null
+  return {
+    setupFeePercent: Number(record.setupFeePercent) || 0,
+    monthlyPercent: Number(record.monthlyPercent) || 0,
+    monthlyMonths: record.monthlyMonths ?? null,
+  }
 }
 
 const STAFF_LABEL = 'Equipe ANNETEC'
@@ -156,6 +169,7 @@ function buildView(bundle: ProposalBundle, ctx: ViewContext, forApplicant: boole
   const canEdit = isEditableStatus(proposal.status)
   const brand = proposal.brand
   const documents = liveDocuments(bundle.documents).filter(d => !forApplicant || d.status !== 'replaced')
+  const discount = publicDiscount(proposal.discount)
 
   return {
     id: proposal.id,
@@ -169,7 +183,8 @@ function buildView(bundle: ProposalBundle, ctx: ViewContext, forApplicant: boole
       planId: proposal.planId,
       expectedLives: proposal.expectedLives,
       offer: ctx.offer,
-      quote: ctx.offer ? quotePlatformPlan(ctx.offer, ctx.offer.pricing, proposal.expectedLives) : null,
+      quote: ctx.offer ? quotePlatformPlan(ctx.offer, ctx.offer.pricing, proposal.expectedLives, { discount }) : null,
+      discount,
     },
     paymentMethod: proposal.paymentMethod,
     company: proposal.company,
@@ -217,7 +232,7 @@ export function toApplicantView(bundle: ProposalBundle, ctx: ViewContext): Onboa
 
 export function toProposalDetail(
   bundle: ProposalBundle,
-  ctx: ViewContext & { emails: PlatformEmailListItem[] },
+  ctx: ViewContext & { emails: PlatformEmailListItem[]; seller?: ProposalSellerRef | null; discountPending?: boolean },
 ): OnboardingProposalDetail {
   const { proposal } = bundle
   const base = buildView(bundle, ctx, false)
@@ -252,5 +267,7 @@ export function toProposalDetail(
     source: proposal.source,
     applicantIp: proposal.applicantIp,
     emails: ctx.emails,
+    seller: ctx.seller ?? null,
+    discountPending: ctx.discountPending ?? false,
   }
 }

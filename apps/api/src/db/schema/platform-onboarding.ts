@@ -16,6 +16,7 @@ import type {
   PersonPosition,
   PrecheckResult,
   PrecheckSummary,
+  ProposalDiscountRecord,
 } from '@annetec/contracts'
 import { relations, sql } from 'drizzle-orm'
 import {
@@ -184,6 +185,18 @@ export const platformOnboardingProposals = pgTable(
     /** Última ação do candidato ou do compliance (expiração de rascunho). */
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
     source: text('source', { enum: ['site', 'console', 'seed'] }).notNull().default('site'),
+    /**
+     * Vendedor ANNETEC atribuído (link criado por ele, `source = 'console'`, ou
+     * código de indicação no site). Sem FK: a atribuição sobrevive à conta. É a
+     * chave da comissão.
+     */
+    sellerUserId: text('seller_user_id'),
+    /** Código de indicação que vinculou a proposta (só quando válido). */
+    referralCode: text('referral_code'),
+    /** Desconto APROVADO pelo superadmin (cotação, ativação e assinatura leem daqui). */
+    discount: jsonb('discount').$type<ProposalDiscountRecord>(),
+    /** Link enviado ao cliente pelo fluxo do vendedor (`null` = e-mail ainda retido/não enviado). */
+    inviteSentAt: timestamp('invite_sent_at', { withTimezone: true }),
     applicantIp: text('applicant_ip'),
     applicantUserAgent: text('applicant_user_agent'),
     createdAt: createdAt(),
@@ -194,6 +207,7 @@ export const platformOnboardingProposals = pgTable(
     index('platform_onboarding_status_idx').on(table.status, table.submittedAt),
     index('platform_onboarding_cnpj_idx').on(table.cnpj),
     index('platform_onboarding_org_idx').on(table.organizationId),
+    index('platform_onboarding_seller_idx').on(table.sellerUserId, table.status),
     uniqueIndex('platform_onboarding_open_cnpj_key').on(table.cnpj).where(OPEN_PROPOSAL),
     uniqueIndex('platform_onboarding_open_slug_key')
       .on(table.slug)

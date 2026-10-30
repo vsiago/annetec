@@ -121,6 +121,26 @@ describe('assertProductionConfig', () => {
     expect(joined).toContain('ASAAS_WEBHOOK_TOKEN ausente (token do webhook da plataforma')
   })
 
+  it('produção: STORAGE_DRIVER=local só passa com ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true (e avisa no boot)', () => {
+    const local = { ...FULL_PRODUCTION, STORAGE_DRIVER: 'local' as const }
+    expect(productionConfigViolations(local).join(' | ')).toContain('STORAGE_DRIVER não pode ser "local"')
+    expect(
+      productionConfigViolations({ ...local, ALLOW_LOCAL_STORAGE_IN_PRODUCTION: false }).join(' | '),
+    ).toContain('STORAGE_DRIVER não pode ser "local"')
+
+    const accepted = { ...local, ALLOW_LOCAL_STORAGE_IN_PRODUCTION: true }
+    const log = { warn: vi.fn() }
+    expect(productionConfigViolations(accepted)).toEqual([])
+    expect(() => assertProductionConfig(accepted, log)).not.toThrow()
+    expect(log.warn).toHaveBeenCalledTimes(1)
+    expect(String(log.warn.mock.calls[0]?.[1])).toMatch(/STORAGE_DRIVER=local em PRODUÇÃO/)
+
+    // O aceite não afrouxa as demais exigências.
+    const joined = productionConfigViolations({ ...accepted, ASAAS_ENV: 'sandbox', TRUST_PROXY: undefined }).join(' | ')
+    expect(joined).toContain('ASAAS_ENV')
+    expect(joined).toContain('TRUST_PROXY')
+  })
+
   it('produção completa: passa sem avisos', () => {
     const log = { warn: vi.fn() }
     expect(productionConfigViolations(FULL_PRODUCTION)).toEqual([])

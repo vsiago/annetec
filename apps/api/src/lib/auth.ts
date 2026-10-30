@@ -153,8 +153,17 @@ export const auth = betterAuth({
       // recebe explicitamente 'superadmin'/'platform_admin' é equipe Annetec.
       // Os dois usam as mesmas permissões administrativas padrão do plugin —
       // a distinção entre eles é só rótulo, ainda não regra de negócio.
+      // `platform_seller` (vendedor ANNETEC) existe no mapa só para o plugin
+      // aceitar o papel em `createUser`/`setRole`; tem as permissões de um
+      // usuário comum e fica FORA de `adminRoles` (não lista, não bane, não
+      // personifica ninguém).
       adminRoles: ['superadmin', 'platform_admin'],
-      roles: { user: platformUserAc, superadmin: platformAdminAc, platform_admin: platformAdminAc },
+      roles: {
+        user: platformUserAc,
+        superadmin: platformAdminAc,
+        platform_admin: platformAdminAc,
+        platform_seller: platformUserAc,
+      },
     }),
     organization({
       roles: tenantRoles,

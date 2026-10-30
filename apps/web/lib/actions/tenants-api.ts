@@ -109,6 +109,8 @@ export async function listClubsOverviewAction(): Promise<ActionResult<ClubListRo
               platformDaysLate: row.platformDaysLate,
               healthBand: row.healthBand,
               healthScore: row.healthScore,
+              // Vendedor ANNETEC que trouxe o clube (proposta de origem); ausente = venda direta.
+              seller: row.seller ?? null,
             }
           : null,
       }

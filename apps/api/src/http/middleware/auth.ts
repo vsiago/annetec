@@ -1,4 +1,4 @@
-import { ERROR_CODES } from '@annetec/contracts'
+import { ERROR_CODES, PLATFORM_STAFF_ROLES, isPlatformStaffRole, type PlatformRole, type PlatformStaffRole } from '@annetec/contracts'
 import { createMiddleware } from 'hono/factory'
 import { auth } from '@/lib/auth'
 import { isUserBanned } from '@/modules/auth/membership'
@@ -60,32 +60,56 @@ export function requireClubSubscription(options: { allowPending?: boolean } = {}
   })
 }
 
-/** Exige sessão de plataforma (equipe Annetec) com um dos papéis informados. */
-export function requirePlatformRole(...roles: ('superadmin' | 'platform_admin')[]) {
+/**
+ * Exige sessão da EQUIPE Annetec com um dos papéis informados. Sem argumentos
+ * = qualquer papel da EQUIPE (`superadmin` | `platform_admin`) — o vendedor
+ * (`platform_seller`) é conta de plataforma, mas NUNCA passa aqui: ele só tem
+ * as rotas próprias, atrás de `requirePlatformSeller`. O tipo do parâmetro nem
+ * aceita `platform_seller`, para ninguém liberar uma rota da equipe por engano.
+ */
+export function requirePlatformRole(...roles: PlatformStaffRole[]) {
+  const allowed: readonly PlatformStaffRole[] = roles.length > 0 ? roles : PLATFORM_STAFF_ROLES
   return createMiddleware<AppEnv>(async (c, next) => {
     const session = c.get('auth')
     if (!session) throw AppError.unauthenticated()
-    if (session.membership.scope !== 'platform' || !session.membership.platformRole) {
+    const role = session.membership.platformRole
+    if (session.membership.scope !== 'platform' || !isPlatformStaffRole(role)) {
       throw AppError.forbidden('Rota restrita à equipe Annetec')
     }
-    if (roles.length > 0 && !roles.includes(session.membership.platformRole)) {
+    if (!allowed.includes(role)) {
       throw AppError.forbidden('Papel insuficiente para esta operação')
     }
     await next()
   })
 }
 
+/**
+ * Exige sessão de VENDEDOR ANNETEC (`platform_seller`). Só as rotas
+ * `/api/v1/platform/vendas/*` usam; os serviços dali filtram tudo pelo
+ * próprio vendedor da sessão.
+ */
+export const requirePlatformSeller = createMiddleware<AppEnv>(async (c, next) => {
+  const session = c.get('auth')
+  if (!session) throw AppError.unauthenticated()
+  if (session.membership.scope !== 'platform' || session.membership.platformRole !== 'platform_seller') {
+    throw AppError.forbidden('Rota restrita aos vendedores ANNETEC')
+  }
+  await next()
+})
+
 const READ_ONLY_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 /**
  * Sessão de PLATAFORMA numa rota de inquilino: leitura sempre; escrita só
- * superadmin, ou no inquilino-operador (`kind: 'platform'`). Puro.
+ * superadmin, ou no inquilino-operador (`kind: 'platform'`). Vendedor ANNETEC
+ * (ou papel desconhecido) não lê nem escreve painel de clube. Puro.
  */
 export function platformMayAccess(
   method: string,
-  platformRole: 'superadmin' | 'platform_admin' | null,
+  platformRole: PlatformRole | null,
   tenantKind: 'operator' | 'platform' | null,
 ): boolean {
+  if (!isPlatformStaffRole(platformRole)) return false
   if (READ_ONLY_METHODS.has(method.toUpperCase())) return true
   if (platformRole === 'superadmin') return true
   return tenantKind === 'platform'
@@ -107,6 +131,9 @@ export function requireTenantRole(...roles: ('admin' | 'seller' | 'client')[]) {
     // própria Annetec operando como operadora, `kind: 'platform'`).
     if (session.membership.scope === 'platform') {
       const tenant = c.get('tenant')
+      if (!isPlatformStaffRole(session.membership.platformRole)) {
+        throw AppError.forbidden('Conta de vendedor ANNETEC não acessa o painel dos clubes')
+      }
       if (!platformMayAccess(c.req.method, session.membership.platformRole, tenant?.kind ?? null)) {
         throw AppError.forbidden('A equipe Annetec só consulta este inquilino. Alterações exigem superadmin.')
       }

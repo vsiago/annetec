@@ -13,7 +13,8 @@ import { useTenants } from '@/contexts/tenants-context'
 import { usePlatformAuth } from '@/contexts/platform-auth-context'
 import { updatePlatformUserAction } from '@/lib/actions/platform-users-api'
 import { getInitials } from '@/lib/utils'
-import { Plus, ShieldCheck, Shield, Mail, Phone, Pencil, UserX, UserCheck, Users } from 'lucide-react'
+import Link from 'next/link'
+import { BriefcaseBusiness, Plus, ShieldCheck, Shield, Mail, Phone, Pencil, UserX, UserCheck, Users } from 'lucide-react'
 
 const BOTAO = 'h-11 rounded-[10px] px-4 font-semibold'
 
@@ -68,7 +69,16 @@ export default function PlatformUsuariosPage() {
       <PageHeader
         icon={Users}
         title="Equipe ANNETEC"
-        description="Quem da ANNETEC tem acesso ao console."
+        description={
+          <>
+            Quem da ANNETEC tem acesso ao console. Os vendedores aparecem aqui para cuidar da conta (nome, telefone, acesso); código de
+            indicação e meta ficam em{' '}
+            <Link href="/admin/comercial/vendedores" className="font-medium text-secondary underline-offset-2 hover:underline">
+              Comercial › Vendedores
+            </Link>
+            .
+          </>
+        }
         actions={botaoAdicionar}
       />
 
@@ -131,6 +141,10 @@ export default function PlatformUsuariosPage() {
                     {u.role === 'superadmin' ? (
                       <StatusPill tone="danger" icon={<ShieldCheck />}>
                         Superadmin
+                      </StatusPill>
+                    ) : u.role === 'platform_seller' ? (
+                      <StatusPill tone="warning" icon={<BriefcaseBusiness />}>
+                        Vendedor ANNETEC
                       </StatusPill>
                     ) : (
                       <StatusPill tone="info" icon={<Shield />}>

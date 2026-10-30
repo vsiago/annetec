@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { CircleCheck, CircleX, Loader2, Plus, ShieldAlert, Trash2 } from 'lucide-react'
+import Link from 'next/link'
+import { BadgePercent, CircleCheck, CircleX, Loader2, Plus, ShieldAlert, Trash2 } from 'lucide-react'
 import {
   KYB_DOCUMENT_KIND_LABELS,
   ONBOARDING_SECTION_LABELS,
@@ -79,6 +80,28 @@ export function ReadinessList({ readiness }: { readiness: ApprovalReadiness }) {
 // Aprovar
 // ---------------------------------------------------------------------------
 
+/**
+ * Aviso de pedido de desconto do vendedor aguardando o superadmin: a
+ * aprovação do clube espera a decisão (a API responde 422 antes disso).
+ */
+export function DiscountPendingNotice({ proposalId, className }: { proposalId: string; className?: string }) {
+  return (
+    <div
+      role="status"
+      className={cn('flex flex-col gap-3 rounded-xl border border-[#FEDF89] bg-[#FFFAEB] p-4 text-sm text-[#93370D] sm:flex-row sm:items-center', className)}
+    >
+      <BadgePercent className="size-5 shrink-0" aria-hidden="true" />
+      <p className="m-0 min-w-0 flex-1">
+        <strong className="font-semibold">Há um pedido de desconto do vendedor aguardando.</strong> Aprove ou recuse o desconto antes
+        de aprovar o clube.
+      </p>
+      <Button asChild variant="outline" className="h-10 shrink-0 rounded-[10px] border-[#FEC84B] bg-white px-3 text-sm font-semibold text-[#93370D] hover:bg-[#FEF0C7]">
+        <Link href={`/admin/comercial/descontos?proposta=${proposalId}`}>Abrir o pedido de desconto</Link>
+      </Button>
+    </div>
+  )
+}
+
 export function ApproveDialog({
   proposal,
   readiness,
@@ -108,7 +131,9 @@ export function ApproveDialog({
 
   const needsOverride = !readiness.ready
   const reasonOk = overrideReason.trim().length >= 10
-  const canSubmit = !busy && (!needsOverride || (override && reasonOk))
+  // Pedido de desconto do vendedor aguardando: a API recusa (422) até o superadmin decidir.
+  const discountPending = proposal.discountPending
+  const canSubmit = !busy && !discountPending && (!needsOverride || (override && reasonOk))
   const total = proposal.plan.quote?.activationTotal
 
   const submit = async () => {
@@ -145,6 +170,7 @@ export function ApproveDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
+          {discountPending ? <DiscountPendingNotice proposalId={proposal.id} /> : null}
           <div className="rounded-xl border border-border p-4">
             <ReadinessList readiness={readiness} />
           </div>

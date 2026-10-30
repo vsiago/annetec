@@ -75,6 +75,9 @@ export function PlanStep({ ctx }: { ctx: StepContext }) {
           setTouched(true)
         }}
         errors={{ planId: errors.planId || undefined, expectedLives: errors.expectedLives || undefined }}
+        // Proposta do vendedor ANNETEC: o plano dele pode não estar na vitrine, e o desconto aprovado já vale.
+        proposalOffer={view.plan.offer}
+        discount={view.plan.discount}
       />
       <ApprovalFirstBadge />
       <ActionError message={error} details={orphanErrors(errors, ['planId', 'expectedLives'])} />

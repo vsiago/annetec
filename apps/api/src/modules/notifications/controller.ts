@@ -3,7 +3,7 @@ import { Hono, type Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { demoToolsAllowed } from '@/config/env'
 import { AppError } from '@/http/errors'
-import { requireAuth, requirePlatformRole, requireTenantRole } from '@/http/middleware/auth'
+import { requireAuth, requirePlatformRole, requirePlatformSeller, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
 import { created, ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
@@ -51,7 +51,15 @@ function platformScope(c: Context<AppEnv>): NotificationScope {
   return { audience: 'platform', organizationId: null, userId: session.user.id }
 }
 
-function buildController(scopeOf: (c: Context<AppEnv>) => NotificationScope) {
+/** Vendedor ANNETEC: só as notificações destinadas a ELE. */
+function sellerScope(c: Context<AppEnv>): NotificationScope {
+  const session = c.get('auth')
+  if (!session) throw AppError.unauthenticated()
+  return { audience: 'seller', organizationId: null, userId: session.user.id }
+}
+
+function buildController(scopeOf: (c: Context<AppEnv>) => NotificationScope, options: { allowTest?: boolean } = {}) {
+  const allowTest = options.allowTest ?? true
   const controller = new Hono<AppEnv>()
     .get('/', query(listNotificationsQuery), async c =>
       ok(c, await listNotifications(scopeOf(c), c.req.valid('query').limit, demoToolsAllowed)),
@@ -79,7 +87,7 @@ function buildController(scopeOf: (c: Context<AppEnv>) => NotificationScope) {
     })
 
     .post('/teste', json(sendTestNotificationInput), async c => {
-      if (!demoToolsAllowed) throw AppError.notFound('Rota')
+      if (!demoToolsAllowed || !allowTest) throw AppError.notFound('Rota')
       const scope = scopeOf(c)
       return created(c, await sendTestNotification(scope.audience, scope.organizationId, c.req.valid('json')))
     })
@@ -93,3 +101,8 @@ export const tenantNotificationsController = new Hono<AppEnv>()
 export const platformNotificationsController = new Hono<AppEnv>()
   .use('*', requireAuth, requirePlatformRole())
   .route('/', buildController(platformScope))
+
+/** `/api/v1/platform/vendas/notificacoes` — o sino do vendedor (sem rota de teste). */
+export const sellerNotificationsController = new Hono<AppEnv>()
+  .use('*', requireAuth, requirePlatformSeller)
+  .route('/', buildController(sellerScope, { allowTest: false }))

@@ -7,13 +7,17 @@ import { run, type ActionResult } from './_api-result'
 
 /**
  * Notificações em tempo real — `/api/v1/t/:tenantSlug/notificacoes` (admin do
- * clube) e `/api/v1/platform/notificacoes` (equipe Annetec). A lista e as
+ * clube), `/api/v1/platform/notificacoes` (equipe Annetec) e
+ * `/api/v1/platform/vendas/notificacoes` (vendedor ANNETEC). A lista e as
  * ações passam por aqui; o stream SSE passa pelo route handler
  * `app/api/notificacoes/…/stream`, que também lê o token do cookie httpOnly.
  */
 
 function base(scope: NotificationsScope, path = ''): string {
-  return scope.kind === 'tenant' ? tenantPath(scope.slug, `/notificacoes${path}`) : `/api/v1/platform/notificacoes${path}`
+  if (scope.kind === 'tenant') return tenantPath(scope.slug, `/notificacoes${path}`)
+  // Vendedor ANNETEC: só as notificações dele (pedido de desconto aprovado/recusado).
+  if (scope.kind === 'seller') return `/api/v1/platform/vendas/notificacoes${path}`
+  return `/api/v1/platform/notificacoes${path}`
 }
 
 export async function listNotificationsAction(scope: NotificationsScope, limit = 20): Promise<ActionResult<NotificationList>> {

@@ -45,6 +45,7 @@ import { logger } from '@/lib/logger'
 import { checkUpload, discardFile, findFile, publicFileUrl, sanitizeFileName, storeFile } from '@/lib/storage'
 import type { PlatformFileRow } from '@/lib/storage/files'
 import { cancelActivationCharge, getActivationCharge } from '@/modules/platform-billing/activation'
+import { createReferralProspect, resolveReferral } from '@/modules/platform-sales/referral'
 import { onboardingAccessKey, onboardingTrackingPath } from './access-key'
 import { notifyApplicant } from './notify'
 import { findPlanOffer } from './plans'
@@ -159,67 +160,107 @@ export async function getApplicantView(id: string, opts: { sync?: boolean } = {}
 // Início e recuperação de acesso
 // ---------------------------------------------------------------------------
 
+const OPEN_CNPJ_MESSAGE =
+  'Já existe uma proposta em andamento para este CNPJ. Use "Recuperar acesso" para receber o link de acompanhamento.'
+
+/** CNPJ já é inquilino ou tem proposta aberta → 409 (antes de gravar). */
+export async function assertCnpjAvailable(cnpj: string, openMessage = OPEN_CNPJ_MESSAGE): Promise<void> {
+  if (await cnpjIsTenant(cnpj)) {
+    throw AppError.conflict('Este CNPJ já é cliente da plataforma ANNETEC. Fale com o nosso time para mudanças no contrato.')
+  }
+  if (await openProposalForCnpj(cnpj)) throw AppError.conflict(openMessage)
+}
+
+type NewProposalValues = Omit<typeof platformOnboardingProposals.$inferInsert, 'code'>
+
+/**
+ * Grava a proposta com protocolo único (até 5 tentativas no raro choque de
+ * código). CNPJ/slug já em proposta aberta (índice parcial) → 409.
+ */
+export async function insertProposal(values: NewProposalValues, now: Date, openMessage = OPEN_CNPJ_MESSAGE): Promise<ProposalRow> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const [row] = await db
+        .insert(platformOnboardingProposals)
+        .values({ ...values, code: generateProposalCode(now, size => randomBytes(size)) })
+        .returning()
+      if (row) return row
+    } catch (error) {
+      if (isUniqueViolation(error, 'platform_onboarding_code_key')) continue
+      if (isUniqueViolation(error)) throw AppError.conflict(openMessage)
+      throw error
+    }
+  }
+  throw new AppError(ERROR_CODES.INTERNAL_ERROR, 'Não foi possível gerar o protocolo da proposta')
+}
+
 export async function startProposal(input: StartOnboardingInput, meta: RequestMeta): Promise<StartOnboardingResult> {
   const offer = await findPlanOffer(input.planId)
   if (!offer || !offer.pricing.publicVisible) throw fieldError('planId', 'Plano indisponível para contratação')
 
-  if (await cnpjIsTenant(input.cnpj)) {
-    throw AppError.conflict('Este CNPJ já é cliente da plataforma ANNETEC. Fale com o nosso time para mudanças no contrato.')
-  }
-  if (await openProposalForCnpj(input.cnpj)) {
-    throw AppError.conflict(
-      'Já existe uma proposta em andamento para este CNPJ. Use "Recuperar acesso" para receber o link de acompanhamento.',
-    )
-  }
+  await assertCnpjAvailable(input.cnpj)
 
   const lookup = await lookupCnpj(input.cnpj)
   const receita = lookup.found ? lookup.result : null
   const now = new Date()
+  // Código de vendedor ATIVO vincula a proposta; outro qualquer é ignorado.
+  const seller = await resolveReferral(input.referralCode)
 
-  let proposal: ProposalRow | null = null
-  for (let attempt = 0; attempt < 5 && !proposal; attempt++) {
-    try {
-      const [row] = await db
-        .insert(platformOnboardingProposals)
-        .values({
-          code: generateProposalCode(now, size => randomBytes(size)),
-          status: 'draft',
-          contractorType: input.contractorType,
-          legalForm: input.legalForm,
-          cnpj: input.cnpj,
-          legalName: receita?.legalName ?? null,
-          tradeName: receita?.tradeName ?? null,
-          planId: input.planId,
-          expectedLives: input.expectedLives,
-          applicant: input.applicant,
-          receitaSnapshot: receita,
-          receitaCheckedAt: receita ? now : null,
-          source: 'site',
-          applicantIp: meta.ip,
-          applicantUserAgent: meta.userAgent?.slice(0, 400) ?? null,
-          lastActivityAt: now,
-        })
-        .returning()
-      proposal = row ?? null
-    } catch (error) {
-      if (isUniqueViolation(error, 'platform_onboarding_code_key')) continue
-      if (isUniqueViolation(error)) {
-        throw AppError.conflict(
-          'Já existe uma proposta em andamento para este CNPJ. Use "Recuperar acesso" para receber o link de acompanhamento.',
-        )
-      }
-      throw error
-    }
-  }
-  if (!proposal) throw new AppError(ERROR_CODES.INTERNAL_ERROR, 'Não foi possível gerar o protocolo da proposta')
+  const proposal = await insertProposal(
+    {
+      status: 'draft',
+      contractorType: input.contractorType,
+      legalForm: input.legalForm,
+      cnpj: input.cnpj,
+      legalName: receita?.legalName ?? null,
+      tradeName: receita?.tradeName ?? null,
+      planId: input.planId,
+      expectedLives: input.expectedLives,
+      applicant: input.applicant,
+      receitaSnapshot: receita,
+      receitaCheckedAt: receita ? now : null,
+      source: 'site',
+      sellerUserId: seller?.userId ?? null,
+      referralCode: seller?.referralCode ?? null,
+      applicantIp: meta.ip,
+      applicantUserAgent: meta.userAgent?.slice(0, 400) ?? null,
+      lastActivityAt: now,
+    },
+    now,
+  )
 
   await insertEvent(db, {
     proposalId: proposal.id,
     type: 'PROPOSAL_CREATED',
     visibility: 'public',
     message: `Proposta iniciada — protocolo ${proposal.code}.`,
-    data: { planId: input.planId, expectedLives: input.expectedLives, receita: lookup.found ? 'found' : lookup.unavailable ? 'unavailable' : 'not_found' },
+    data: {
+      planId: input.planId,
+      expectedLives: input.expectedLives,
+      receita: lookup.found ? 'found' : lookup.unavailable ? 'unavailable' : 'not_found',
+      ...(seller ? { sellerUserId: seller.userId, referralCode: seller.referralCode } : {}),
+    },
   })
+  if (seller) {
+    await insertEvent(db, {
+      proposalId: proposal.id,
+      type: 'NOTE_ADDED',
+      visibility: 'internal',
+      message: `Indicação do vendedor ${seller.name} (código "${seller.referralCode}").`,
+    })
+    await createReferralProspect({
+      seller,
+      proposalId: proposal.id,
+      proposalCode: proposal.code,
+      name: receita?.tradeName || receita?.legalName || input.applicant.name,
+      cnpj: input.cnpj,
+      applicant: input.applicant,
+      expectedLives: input.expectedLives,
+      planId: input.planId,
+      city: receita?.address.city ?? null,
+      state: receita?.address.state ?? null,
+    })
+  }
   await notifyApplicant(proposal, 'onboarding_started')
 
   const view = await getApplicantView(proposal.id)
@@ -316,7 +357,14 @@ async function saveSection(
 
 export async function savePlan(id: string, input: OnboardingPlanInput): Promise<void> {
   const offer = await findPlanOffer(input.planId)
-  if (!offer || !offer.pricing.publicVisible) throw fieldError('planId', 'Plano indisponível para contratação')
+  if (!offer) throw fieldError('planId', 'Plano indisponível para contratação')
+  if (!offer.pricing.publicVisible) {
+    // Plano fora da vitrine só vale na proposta que o VENDEDOR montou com ele
+    // (o cliente pode ajustar as vidas, não trocar para outro plano oculto).
+    const proposal = await getProposal(id)
+    const sellerPlan = proposal?.source === 'console' && Boolean(proposal.sellerUserId) && proposal.planId === input.planId
+    if (!sellerPlan) throw fieldError('planId', 'Plano indisponível para contratação')
+  }
   await saveSection(id, 'plan', { planId: input.planId, expectedLives: input.expectedLives })
 }
 

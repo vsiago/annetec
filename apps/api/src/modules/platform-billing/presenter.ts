@@ -1,6 +1,7 @@
 import {
   CARD_BRANDS,
   effectivePlatformAccess,
+  monthlyDiscountPercentFor,
   onlyDigits,
   quotePlatformPlan,
   type CardBrand,
@@ -12,7 +13,7 @@ import {
   type PlatformSubscription,
 } from '@annetec/contracts'
 import type { platformBillingEvents, platformCharges, platformSubscriptions } from '@/db/schema'
-import { diffDays } from '@/modules/club-billing/dates'
+import { diffDays, todaySP } from '@/modules/club-billing/dates'
 import { platformInvoiceUrl } from './access-key'
 
 /**
@@ -162,7 +163,22 @@ export function subscriptionCardInfo(row: PlatformSubscriptionRow): ClubCardInfo
 }
 
 /** Retrato do plano da assinatura no formato da cotação. */
-export function subscriptionQuote(row: Pick<PlatformSubscriptionRow, 'planPriceMonthly' | 'memberLimit' | 'pricePerExtraLife' | 'setupFee' | 'revenueSharePercent'>, lives: number) {
+/** Desconto da mensalidade da assinatura (`null` sem desconto). */
+export function subscriptionMonthlyDiscount(
+  row: Partial<Pick<PlatformSubscriptionRow, 'monthlyDiscountPercent' | 'monthlyDiscountUntil'>>,
+): { percent: number; until: string | null } | null {
+  const percent = Number(row.monthlyDiscountPercent ?? 0)
+  return percent > 0 ? { percent, until: row.monthlyDiscountUntil ?? null } : null
+}
+
+/** Cotação da assinatura com as vidas atuais e o desconto que vale no período de `today`. */
+export function subscriptionQuote(
+  row: Pick<PlatformSubscriptionRow, 'planPriceMonthly' | 'memberLimit' | 'pricePerExtraLife' | 'setupFee' | 'revenueSharePercent'> &
+    Partial<Pick<PlatformSubscriptionRow, 'monthlyDiscountPercent' | 'monthlyDiscountUntil' | 'currentPeriodStart'>>,
+  lives: number,
+  today: string = todaySP(),
+) {
+  const monthlyPercent = monthlyDiscountPercentFor(subscriptionMonthlyDiscount(row), row.currentPeriodStart ?? today)
   return quotePlatformPlan(
     { priceMonthly: Number(row.planPriceMonthly), memberLimit: row.memberLimit },
     {
@@ -171,6 +187,7 @@ export function subscriptionQuote(row: Pick<PlatformSubscriptionRow, 'planPriceM
       revenueSharePercent: Number(row.revenueSharePercent),
     },
     lives,
+    { discount: monthlyPercent > 0 ? { monthlyPercent } : null },
   )
 }
 
@@ -185,7 +202,7 @@ export interface SubscriptionContext {
 
 export function toPlatformSubscription(row: PlatformSubscriptionRow, ctx: SubscriptionContext): PlatformSubscription {
   const access = effectivePlatformAccess(row, ctx.now)
-  const quote = subscriptionQuote(row, ctx.lives)
+  const quote = subscriptionQuote(row, ctx.lives, ctx.today)
   return {
     id: row.id,
     organizationId: row.organizationId,
@@ -221,6 +238,7 @@ export function toPlatformSubscription(row: PlatformSubscriptionRow, ctx: Subscr
     lives: ctx.lives,
     usagePct: quote.usagePct,
     estimatedMonthly: quote.monthlyTotal,
+    monthlyDiscount: subscriptionMonthlyDiscount(row),
     openAmount: ctx.aggregates.openAmount,
     overdueCount: ctx.aggregates.overdueCount,
     oldestOpenDueDate: ctx.aggregates.oldestOpenDueDate,

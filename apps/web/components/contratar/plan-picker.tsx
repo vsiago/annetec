@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Check, RefreshCw, Sparkles, Target, Users } from 'lucide-react'
+import { BadgePercent, Check, Handshake, RefreshCw, Sparkles, Target, Users } from 'lucide-react'
 import {
   formatBRL,
   onlyDigits,
   quotePlatformPlan,
   recommendPlatformPlan,
   type PlatformPlanOffer,
+  type ProposalDiscount,
 } from '@annetec/contracts'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -40,6 +41,30 @@ interface PlanPickerProps {
   /** Escolha feita pela pessoa (clique no card). */
   onPlanChange: (id: string) => void
   errors?: { planId?: string; expectedLives?: string }
+  /**
+   * Plano que o vendedor ANNETEC escolheu para esta proposta e que não está na
+   * vitrine pública (só existe aqui). Aparece como mais uma opção, em destaque.
+   */
+  proposalOffer?: PlatformPlanOffer | null
+  /** Condição especial aprovada pelo superadmin: os valores dos planos já saem com ela. */
+  discount?: ProposalDiscount | null
+}
+
+/** "Isenção da adesão e 20% de desconto na mensalidade nas 3 primeiras mensalidades". */
+export function discountText(discount: ProposalDiscount): string {
+  const parts: string[] = []
+  if (discount.setupFeePercent >= 100) parts.push('isenção da adesão')
+  else if (discount.setupFeePercent > 0) parts.push(`${discount.setupFeePercent.toLocaleString('pt-BR')}% de desconto na adesão`)
+  if (discount.monthlyPercent > 0) {
+    const months = discount.monthlyMonths
+    parts.push(
+      `${discount.monthlyPercent.toLocaleString('pt-BR')}% de desconto na mensalidade ${
+        months === null ? 'enquanto o contrato durar' : months === 1 ? 'só na 1ª mensalidade' : `nas ${months} primeiras mensalidades`
+      }`,
+    )
+  }
+  const text = parts.join(' e ')
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : ''
 }
 
 /**
@@ -66,9 +91,17 @@ export function PlanPicker({
   planId,
   onPlanChange,
   errors,
+  proposalOffer = null,
+  discount = null,
 }: PlanPickerProps) {
   const [draft, setDraft] = useState(() => formatNumber(lives))
-  const visible = useMemo(() => (offers ?? []).filter(offer => offer.pricing.publicVisible), [offers])
+  const visible = useMemo(() => {
+    const list = (offers ?? []).filter(offer => offer.pricing.publicVisible)
+    // Plano fora da vitrine que veio com a proposta do vendedor: entra primeiro na lista.
+    if (proposalOffer && !list.some(offer => offer.id === proposalOffer.id)) return [proposalOffer, ...list]
+    return list
+  }, [offers, proposalOffer])
+  const hasDiscount = Boolean(discount && (discount.setupFeePercent > 0 || discount.monthlyPercent > 0))
   const recommended = useMemo(() => recommendedPlanId(offers, lives), [offers, lives])
 
   useEffect(() => {
@@ -125,6 +158,18 @@ export function PlanPicker({
         {errors?.expectedLives ? <p className="mt-2 text-[13px] text-rose-200">{errors.expectedLives}</p> : null}
       </div>
 
+      {hasDiscount && discount ? (
+        <div role="note" className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white" aria-hidden>
+            <BadgePercent className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-semibold">Condição especial aprovada</p>
+            <p className="text-[13px] leading-snug text-emerald-800">{discountText(discount)}. Os valores abaixo já estão com o desconto.</p>
+          </div>
+        </div>
+      ) : null}
+
       {error && !offers ? (
         <Notice
           tone="error"
@@ -148,7 +193,7 @@ export function PlanPicker({
         </div>
       ) : null}
 
-      {offers && visible.length === 0 ? (
+      {offers && visible.length === 0 && !proposalOffer ? (
         <Notice tone="info" title="Nenhum plano disponível para contratação online no momento.">
           Fale com a nossa equipe comercial pelo contato@annetec.org.br que montamos a proposta com você.
         </Notice>
@@ -157,9 +202,11 @@ export function PlanPicker({
       {visible.length ? (
         <div role="radiogroup" aria-label="Planos da plataforma" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map(offer => {
-            const quote = quotePlatformPlan(offer, offer.pricing, lives)
+            const full = quotePlatformPlan(offer, offer.pricing, lives)
+            const quote = hasDiscount ? quotePlatformPlan(offer, offer.pricing, lives, { discount }) : full
             const selected = offer.id === planId
             const isRecommended = offer.id === recommended
+            const fromSeller = proposalOffer?.id === offer.id && !offer.pricing.publicVisible
             return (
               <button
                 key={offer.id}
@@ -175,6 +222,12 @@ export function PlanPicker({
                 )}
               >
                 <div className="flex flex-wrap items-center gap-1.5">
+                  {fromSeller ? (
+                    <Pill tone="success">
+                      <Handshake className="size-3" aria-hidden />
+                      Plano da sua proposta
+                    </Pill>
+                  ) : null}
                   {isRecommended ? (
                     <Pill tone="brand">
                       <Target className="size-3" aria-hidden />
@@ -191,7 +244,12 @@ export function PlanPicker({
                 <p className="mt-2 font-display text-lg font-bold text-foreground">{offer.name}</p>
                 {offer.pricing.tagline ? <p className="text-[13px] text-muted-foreground">{offer.pricing.tagline}</p> : null}
 
-                <p className="mt-4 flex items-baseline gap-1">
+                <p className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  {quote.monthlyTotal < full.monthlyTotal ? (
+                    <span className="text-sm text-muted-foreground line-through" aria-label={`de ${formatBRL(full.monthlyTotal)}`}>
+                      {formatBRL(full.monthlyTotal)}
+                    </span>
+                  ) : null}
                   <span className="font-display text-3xl font-extrabold tracking-tight text-foreground">
                     {formatBRL(quote.monthlyTotal)}
                   </span>
@@ -218,9 +276,33 @@ export function PlanPicker({
                       {quote.pricePerExtraLife > 0 ? formatBRL(quote.pricePerExtraLife) : 'sem excedente'}
                     </dd>
                   </div>
+                  {quote.setupFee > 0 ? (
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-muted-foreground">Adesão</dt>
+                      <dd className="flex flex-col items-end tabular-nums text-foreground">
+                        {quote.setupFeeDiscount > 0 ? (
+                          <>
+                            <span className="text-xs text-muted-foreground line-through">{formatBRL(quote.setupFee)}</span>
+                            <span className="font-medium text-emerald-700">
+                              {quote.setupFeeDiscountPercent >= 100 ? 'isenta' : formatBRL(quote.setupFee - quote.setupFeeDiscount)}
+                            </span>
+                          </>
+                        ) : (
+                          formatBRL(quote.setupFee)
+                        )}
+                      </dd>
+                    </div>
+                  ) : null}
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Ativação</dt>
-                    <dd className="tabular-nums text-foreground">{formatBRL(quote.activationTotal)}</dd>
+                    <dd className="flex flex-col items-end tabular-nums text-foreground">
+                      {quote.activationTotal < full.activationTotal ? (
+                        <span className="text-xs text-muted-foreground line-through">{formatBRL(full.activationTotal)}</span>
+                      ) : null}
+                      <span className={quote.activationTotal < full.activationTotal ? 'font-medium text-emerald-700' : undefined}>
+                        {formatBRL(quote.activationTotal)}
+                      </span>
+                    </dd>
                   </div>
                 </dl>
 

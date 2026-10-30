@@ -548,6 +548,7 @@ async function generateCycle(
         memberLimit: current.memberLimit,
         pricePerExtraLife: Number(current.pricePerExtraLife),
         revenueSharePercent,
+        monthlyDiscount: { percent: Number(current.monthlyDiscountPercent ?? 0), until: current.monthlyDiscountUntil ?? null },
       },
       { lives, clubRevenue, periodStart, adjustments: current.pendingAdjustments ?? [] },
     )

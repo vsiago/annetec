@@ -35,7 +35,7 @@ import { DEFAULT_BILLING_SETTINGS } from '@/modules/club-billing/settings.servic
 import { clubPlanColumns } from '@/modules/network/controller'
 import { cancelActivationCharge, createPlatformSubscription } from '@/modules/platform-billing/activation'
 import { tenantsService } from '@/modules/tenants/service'
-import { loginUrl, siteUrlOf } from './presenter'
+import { loginUrl, publicDiscount, siteUrlOf } from './presenter'
 import { getProposal, insertEvent, transitionProposal, type Actor, type ProposalRow } from './repository'
 import { PAYABLE_STATUSES, WAIVABLE_STATUSES } from './rules'
 
@@ -215,6 +215,7 @@ async function provision(
       },
       startDate: todaySP(),
       activationWaived: proposal.activationWaived,
+      discount: publicDiscount(proposal.discount),
     })
 
     // 5. Arquivos da proposta passam a ser do inquilino
@@ -310,6 +311,7 @@ async function resultOf(proposal: ProposalRow): Promise<ProvisioningResult> {
       },
       startDate: todaySP(),
       activationWaived: proposal.activationWaived,
+      discount: publicDiscount(proposal.discount),
     }),
   ])
   const slug = org?.slug ?? proposal.brand?.slug ?? ''

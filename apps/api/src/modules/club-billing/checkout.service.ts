@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import {
   ERROR_CODES,
+  isPlatformAccountRole,
   cardNumberIssue,
   maskCpfPartially,
   onlyDigits,
@@ -183,7 +184,7 @@ async function assertCanSubscribe(
   isOwner: boolean,
 ) {
   if (existing) {
-    if (existing.role === 'superadmin' || existing.role === 'platform_admin') {
+    if (isPlatformAccountRole(existing.role)) {
       throw AppError.conflict('Este e-mail pertence à equipe; use outro')
     }
     const [membership] = await db

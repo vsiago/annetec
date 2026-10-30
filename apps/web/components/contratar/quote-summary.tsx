@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowRight, CalendarClock, ChevronUp, Loader2, ShieldCheck, Sparkles, Users } from 'lucide-react'
+import { ArrowRight, BadgePercent, CalendarClock, ChevronUp, Loader2, ShieldCheck, Sparkles, Users } from 'lucide-react'
 import {
   CLUB_PAYMENT_METHOD_LABELS,
   formatBRL,
@@ -45,8 +45,20 @@ export function QuoteLines({ offer, quote, method, facts }: SummaryProps) {
       ) : null}
       {offer && quote ? (
         <>
+          {quote.setupFeeDiscount > 0 || quote.planFeeDiscount > 0 ? (
+            <p className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800">
+              <BadgePercent className="size-4 shrink-0" aria-hidden />
+              Condição especial aprovada
+            </p>
+          ) : null}
           <dl className="space-y-1.5 border-t pt-4 text-sm">
             <Row label={`Mensalidade (até ${formatNumber(quote.memberLimit)} vidas)`} value={formatBRL(quote.planFee)} />
+            {quote.planFeeDiscount > 0 ? (
+              <Row
+                label={`Desconto de ${quote.planFeeDiscountPercent.toLocaleString('pt-BR')}% na mensalidade`}
+                value={<span className="text-emerald-700">−{formatBRL(quote.planFeeDiscount)}</span>}
+              />
+            ) : null}
             {quote.extraLives > 0 ? (
               <Row
                 label={`${formatNumber(quote.extraLives)} vidas excedentes × ${formatBRL(quote.pricePerExtraLife)}`}
@@ -57,7 +69,17 @@ export function QuoteLines({ offer, quote, method, facts }: SummaryProps) {
           </dl>
           <dl className="space-y-1.5 rounded-xl bg-muted/50 p-3 text-sm">
             {quote.setupFee > 0 ? <Row label="Adesão (única)" value={formatBRL(quote.setupFee)} /> : null}
-            <Row label="1ª mensalidade" value={formatBRL(quote.planFee)} />
+            {quote.setupFeeDiscount > 0 ? (
+              <Row
+                label={
+                  quote.setupFeeDiscountPercent >= 100
+                    ? 'Isenção da adesão'
+                    : `Desconto de ${quote.setupFeeDiscountPercent.toLocaleString('pt-BR')}% na adesão`
+                }
+                value={<span className="text-emerald-700">−{formatBRL(quote.setupFeeDiscount)}</span>}
+              />
+            ) : null}
+            <Row label="1ª mensalidade" value={formatBRL(quote.planFee - quote.planFeeDiscount)} />
             <Row label="Ativação" value={formatBRL(quote.activationTotal)} strong />
             {method ? <Row label="Forma de pagamento" value={CLUB_PAYMENT_METHOD_LABELS[method]} /> : null}
           </dl>

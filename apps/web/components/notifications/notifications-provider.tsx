@@ -10,7 +10,7 @@ import {
   sendTestNotificationAction,
 } from '@/lib/actions/notificacoes-api'
 import { isDemoMode } from '@/lib/demo-mode'
-import { isPayment } from '@/lib/notifications/format'
+import { isPayment, isSalesNotification, notificationHref } from '@/lib/notifications/format'
 import {
   playNotificationSound,
   readSoundPreference,
@@ -19,7 +19,7 @@ import {
   type NotificationSound,
 } from '@/lib/notifications/sounds'
 import { notificationStreamPath, type NotificationsScope } from '@/lib/notifications/types'
-import { PlatformNotificationToast, SummaryToast, TenantNotificationToast } from './notification-toast'
+import { PlatformNotificationToast, SalesNotificationToast, SummaryToast, TenantNotificationToast } from './notification-toast'
 
 /**
  * Notificações em tempo real de uma área (painel do clube ou backoffice).
@@ -77,8 +77,12 @@ const SUMMARY_TOAST_ID = 'notificacoes-resumo'
 const LAST_SOUND_KEY = 'annetec.notificacoes.ultimo-som'
 
 function soundFor(scope: NotificationsScope, notification: AppNotification): NotificationSound {
+  // Vendas (pedido/decisão de desconto): o som curto da plataforma; aprovado soa como "dinheiro".
+  if (isSalesNotification(notification)) {
+    return notification.kind === 'sales_discount_approved' ? 'platform-payment' : 'platform-signup'
+  }
   const payment = isPayment(notification)
-  if (scope.kind === 'platform') return payment ? 'platform-payment' : 'platform-signup'
+  if (scope.kind === 'platform' || scope.kind === 'seller') return payment ? 'platform-payment' : 'platform-signup'
   return payment ? 'tenant-payment' : 'tenant-signup'
 }
 
@@ -125,7 +129,7 @@ export function NotificationsProvider({
   const onNotificationRef = useRef(onNotification)
   onNotificationRef.current = onNotification
 
-  const scopeKey = scope.kind === 'tenant' ? `tenant:${scope.slug}` : 'platform'
+  const scopeKey = scope.kind === 'tenant' ? `tenant:${scope.slug}` : scope.kind
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableScope = useMemo(() => scope, [scopeKey])
 
@@ -143,7 +147,7 @@ export function NotificationsProvider({
     setSoundOnState(on)
     writeSoundPreference(on)
     // Ligar o som é um gesto: aproveita para tocar uma amostra curta.
-    if (on) playNotificationSound(stableScope.kind === 'platform' ? 'platform-payment' : 'tenant-payment')
+    if (on) playNotificationSound(stableScope.kind === 'tenant' ? 'tenant-payment' : 'platform-payment')
   }, [stableScope])
 
   const markRead = useCallback(
@@ -165,7 +169,8 @@ export function NotificationsProvider({
         setUnread(count => Math.max(0, count - 1))
         markRead([notification.id])
       }
-      if (notification.link) router.push(notification.link)
+      const href = notificationHref(notification)
+      if (href) router.push(href)
     },
     [markRead, router, requestPanel],
   )
@@ -215,10 +220,14 @@ export function NotificationsProvider({
       }
       recentToasts.current.push(now)
 
-      const Toast = stableScope.kind === 'platform' ? PlatformNotificationToast : TenantNotificationToast
+      const Toast = isSalesNotification(notification)
+        ? SalesNotificationToast
+        : stableScope.kind === 'tenant'
+          ? TenantNotificationToast
+          : PlatformNotificationToast
       toast.custom(
         id => <Toast notification={notification} onOpen={() => open(notification)} onClose={() => toast.dismiss(id)} />,
-        { id: notification.id, duration: stableScope.kind === 'platform' ? 6000 : TOAST_DURATION_MS },
+        { id: notification.id, duration: stableScope.kind === 'tenant' ? TOAST_DURATION_MS : 6000 },
       )
 
       if (soundOnRef.current && now - lastSoundAt.current > 700 && claimSound(notification.id)) {

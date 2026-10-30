@@ -32,13 +32,16 @@ export const notifications = pgTable(
     payload: jsonb('payload').$type<NotificationPayload>().notNull().default({}),
     link: text('link'),
     dedupeKey: text('dedupe_key'),
+    /** Público `seller`: o vendedor destinatário. Nulo nos outros públicos. */
+    recipientUserId: text('recipient_user_id').references(() => user.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   table => [
     index('notifications_audience_org_created_idx').on(table.audience, table.organizationId, table.createdAt),
     index('notifications_audience_created_idx').on(table.audience, table.createdAt),
     uniqueIndex('notifications_audience_dedupe_key').on(table.audience, table.dedupeKey),
-    check('notifications_audience_check', sql`${table.audience} in ('tenant', 'platform')`),
+    index('notifications_recipient_created_idx').on(table.recipientUserId, table.createdAt),
+    check('notifications_audience_check', sql`${table.audience} in ('tenant', 'platform', 'seller')`),
   ],
 )
 

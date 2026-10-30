@@ -21,6 +21,8 @@ import { platformWebhookController } from '@/modules/platform-billing/webhook-co
 import { holdingController } from '@/modules/holding/controller'
 import { platformAccessGuard } from '@/http/middleware/platform-access'
 import { platformUsersController } from '@/modules/platform-users/controller'
+import { platformSellerController } from '@/modules/platform-sales/seller-controller'
+import { platformSalesTeamController } from '@/modules/platform-sales/team-controller'
 import { supportController } from '@/modules/support/controller'
 import { tenantPlansController } from '@/modules/tenant-plans/controller'
 import { tenantsController } from '@/modules/tenants/controller'
@@ -32,7 +34,8 @@ import type { AppEnv } from '@/http/types'
  * Mapa de rotas da API v1.
  *
  * Dois espaços, espelhando as duas áreas do frontend:
- *   /api/v1/platform/*            → `/admin` (equipe Annetec)
+ *   /api/v1/platform/*            → `/admin` (equipe Annetec; o vendedor ANNETEC
+ *                                   só tem `/api/v1/platform/vendas/*`)
  *   /api/v1/t/:tenantSlug/*       → `/[tenant]` (admin, vendedor, cliente)
  *
  * O slug na URL é o mesmo do App Router, então cada tela do Next tem uma rota
@@ -59,6 +62,11 @@ export const routes = new Hono<AppEnv>()
   .route('/api/v1/platform/billing', platformBillingController)
   .route('/api/v1/platform/holding', holdingController)
   .route('/api/v1/platform/notificacoes', platformNotificationsController)
+  // Vendas da plataforma: área do vendedor ANNETEC (`platform_seller`) e a
+  // gestão comercial da equipe. Prefixos separados de propósito: o guard de um
+  // nunca alcança as rotas do outro.
+  .route('/api/v1/platform/vendas', platformSellerController)
+  .route('/api/v1/platform/comercial', platformSalesTeamController)
   .use('/api/v1/t/:tenantSlug/*', platformAccessGuard)
   .route('/api/v1/t/:tenantSlug/assinatura-annetec', tenantPlatformSubscriptionController)
   .route('/api/v1/t/:tenantSlug/public/checkout', clubCheckoutController)
