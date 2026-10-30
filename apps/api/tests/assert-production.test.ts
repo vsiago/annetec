@@ -142,6 +142,24 @@ describe('assertProductionConfig', () => {
     expect(joined).toContain('TRUST_PROXY')
   })
 
+  it('produção: EMAIL_PROVIDER=outbox só passa com ALLOW_OUTBOX_EMAIL_IN_PRODUCTION=true (e avisa no boot)', () => {
+    const outbox = { ...FULL_PRODUCTION, EMAIL_PROVIDER: 'outbox' as const }
+    expect(productionConfigViolations(outbox).join(' | ')).toContain('EMAIL_PROVIDER não pode ser "outbox"')
+    expect(
+      productionConfigViolations({ ...outbox, ALLOW_OUTBOX_EMAIL_IN_PRODUCTION: false }).join(' | '),
+    ).toContain('EMAIL_PROVIDER não pode ser "outbox"')
+
+    const accepted = { ...outbox, ALLOW_OUTBOX_EMAIL_IN_PRODUCTION: true }
+    const log = { warn: vi.fn() }
+    expect(productionConfigViolations(accepted)).toEqual([])
+    expect(() => assertProductionConfig(accepted, log)).not.toThrow()
+    expect(log.warn.mock.calls.map(call => String(call[1])).join(' | ')).toMatch(/EMAIL_PROVIDER=outbox em PRODUÇÃO/)
+
+    // O aceite não afrouxa as demais exigências.
+    const joined = productionConfigViolations({ ...accepted, ASAAS_ENV: 'sandbox' }).join(' | ')
+    expect(joined).toContain('ASAAS_ENV')
+  })
+
   it('produção completa: passa sem avisos', () => {
     const log = { warn: vi.fn() }
     expect(productionConfigViolations(FULL_PRODUCTION)).toEqual([])

@@ -217,6 +217,13 @@ const envSchema = z.object({
 
   /** E-mail transacional. `outbox` = só grava na caixa de saída (visível no console). */
   EMAIL_PROVIDER: z.preprocess(emptyAsUndefined, z.enum(['outbox', 'resend', 'sendgrid']).default('outbox')),
+  /**
+   * Aceite TEMPORÁRIO de `EMAIL_PROVIDER=outbox` em produção estrita: nenhum
+   * e-mail sai; o superadmin repassa links e senhas provisórias a partir da
+   * caixa de saída do console (os lacres podem ser abertos, como na
+   * demonstração). Remover assim que o Resend estiver configurado.
+   */
+  ALLOW_OUTBOX_EMAIL_IN_PRODUCTION: z.preprocess(parseBooleanish, z.boolean().optional()),
   EMAIL_FROM: z.preprocess(emptyAsUndefined, z.string().min(3).default('ANNETEC <nao-responda@annetec.org.br>')),
   RESEND_API_KEY: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),
   SENDGRID_API_KEY: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),

@@ -41,6 +41,7 @@ export type ProductionConfigInput = Partial<
     | 'TRUST_PROXY'
     | 'INTERNAL_PROXY_SECRET'
     | 'EMAIL_PROVIDER'
+    | 'ALLOW_OUTBOX_EMAIL_IN_PRODUCTION'
     | 'RESEND_API_KEY'
     | 'SENDGRID_API_KEY'
     | 'CNPJ_LOOKUP_PROVIDER'
@@ -238,8 +239,15 @@ export function productionConfigViolations(e: ProductionConfigInput): string[] {
 
   // E-mail transacional.
   const emailProvider = e.EMAIL_PROVIDER ?? 'outbox'
+  // `outbox` só com aceite explícito e TEMPORÁRIO (ALLOW_OUTBOX_EMAIL_IN_PRODUCTION=true):
+  // nenhum e-mail sai — links, avisos e senhas provisórias ficam na caixa de
+  // saída do console até o provedor real (Resend) ser configurado.
   if (emailProvider === 'outbox') {
-    v.push('EMAIL_PROVIDER não pode ser "outbox" (use "resend" ou "sendgrid")')
+    if (e.ALLOW_OUTBOX_EMAIL_IN_PRODUCTION !== true) {
+      v.push(
+        'EMAIL_PROVIDER não pode ser "outbox" (use "resend" ou "sendgrid"; ou aceite temporariamente com ALLOW_OUTBOX_EMAIL_IN_PRODUCTION=true)',
+      )
+    }
   } else if (emailProvider === 'resend' && !e.RESEND_API_KEY) {
     v.push('EMAIL_PROVIDER=resend sem RESEND_API_KEY')
   } else if (emailProvider === 'sendgrid' && !e.SENDGRID_API_KEY) {
@@ -286,6 +294,12 @@ export function productionConfigWarnings(e: ProductionConfigInput): string[] {
     warnings.push(
       'STORAGE_DRIVER=local em PRODUÇÃO (ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true): documentos dos clubes ficam no disco do ' +
         'servidor (volume api_storage). Garanta o backup diário (deploy/install-backup-cron.sh) e os snapshots do EBS.',
+    )
+  }
+  if (!isPreviewStage(e) && (e.EMAIL_PROVIDER ?? 'outbox') === 'outbox' && e.ALLOW_OUTBOX_EMAIL_IN_PRODUCTION === true) {
+    warnings.push(
+      'EMAIL_PROVIDER=outbox em PRODUÇÃO (ALLOW_OUTBOX_EMAIL_IN_PRODUCTION=true): NENHUM e-mail é enviado — links de ' +
+        'contratação, avisos e senhas provisórias ficam só na caixa de saída do console. Configure o Resend e remova o aceite.',
     )
   }
   // Sem o segredo web↔API, as chamadas das server actions chegam com o IP do
