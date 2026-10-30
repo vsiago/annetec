@@ -21,6 +21,7 @@ import { toast } from 'sonner'
 import {
   CLUB_RECEIVING_WEBHOOK_STATUS_LABELS,
   connectClubReceivingAccountInput,
+  type ClubManagedAccountStatus,
   type ClubReceivingAccount,
   type ClubReceivingWebhookStatus,
 } from '@annetec/contracts'
@@ -34,12 +35,15 @@ import { notifyReceivingAccountChanged } from '@/lib/receiving-account-events'
 import {
   connectReceivingAccountAction,
   disconnectReceivingAccountAction,
+  getManagedAccountStatusAction,
   getReceivingAccountAction,
   testReceivingAccountAction,
 } from '@/lib/actions/faturamento-api'
 import { formatDateTimeBR, formatRelative } from '@/lib/adapters/faturamento'
 import { cn } from '@/lib/utils'
 import { LoadError } from './billing-ui'
+import { ManagedAccountWizard } from './managed-account-wizard'
+import { ManagedConnected, ManagedOffer, ManagedRequestCard, OwnAccountOffer } from './managed-account-view'
 import { ReasonConfirmDialog } from './reason-confirm-dialog'
 import { useActionData } from './use-action-data'
 
@@ -535,9 +539,10 @@ function ReceivingSkeleton() {
 }
 
 /**
- * Aba "Recebimento": a conta Asaas própria do clube. Sem ela, adesão e cobrança
- * ficam bloqueadas pela API (`RECEBIMENTO_NAO_CONFIGURADO`). A chave só passa
- * pelo formulário — nunca volta da API nem fica guardada na tela.
+ * Aba "Recebimento": o clube escolhe entre a conta Asaas PRÓPRIA (chave colada)
+ * e a conta GERENCIADA pela ANNETEC (pedido + aprovação). Sem uma das duas,
+ * adesão e cobrança ficam bloqueadas pela API (`RECEBIMENTO_NAO_CONFIGURADO`).
+ * A chave só passa pelo formulário — nunca volta da API nem fica guardada.
  */
 export function ReceivingAccountPanel({
   tenantSlug,
@@ -548,13 +553,31 @@ export function ReceivingAccountPanel({
   onChanged: () => void
 }) {
   const account = useActionData(tenantSlug ? () => getReceivingAccountAction(tenantSlug) : null, [tenantSlug])
+  const managedStatus = useActionData(tenantSlug ? () => getManagedAccountStatusAction(tenantSlug) : null, [tenantSlug])
   const [replacing, setReplacing] = useState(false)
+  const [ownOpen, setOwnOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   const data = account.data
+  const managed = managedStatus.data
 
   function applyAccount(next: ClubReceivingAccount) {
     account.setData(next)
     setReplacing(false)
+    onChanged()
+    void managedStatus.reload({ silent: true })
+  }
+
+  function applyManagedAccount(next: ClubReceivingAccount) {
+    account.setData(next)
+    notifyReceivingAccountChanged(next.connected, next.managed?.pendingDocuments ?? 0)
+    onChanged()
+  }
+
+  function applySubmitted(next: ClubManagedAccountStatus) {
+    managedStatus.setData(next)
+    account.setData(next.account)
+    toast.success('Pedido enviado à ANNETEC', { description: 'Avisaremos você aqui quando ele for analisado.' })
     onChanged()
   }
 
@@ -565,29 +588,84 @@ export function ReceivingAccountPanel({
     return <ReceivingSkeleton />
   }
 
+  // Conta gerenciada pela ANNETEC: sem "Trocar chave" nem "Desconectar" (a ANNETEC é quem muda).
+  if (data.connected && data.source === 'subaccount') {
+    return <ManagedConnected tenantSlug={tenantSlug} account={data} onUpdate={applyManagedAccount} />
+  }
+
   if (!data.connected) {
-    return (
+    const request = managed?.request ?? null
+    const inReview = request !== null && ['pendente', 'aprovando', 'falhou'].includes(request.status)
+    const refused = request?.status === 'recusado'
+    const ownForm = (
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Landmark className="h-5 w-5 text-primary" />
-            Conecte a conta Asaas do clube
+            Conecte a sua conta Asaas
           </CardTitle>
           <CardDescription>
-            O clube recebe as mensalidades na própria conta Asaas. Sem uma conta conectada, a adesão de novos
-            associados e as cobranças ficam bloqueadas.
+            Siga o passo a passo, gere a chave de API no Asaas e cole no campo abaixo.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-            <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            Este clube ainda não configurou o recebimento das mensalidades. Quem tentar assinar vê um aviso para falar
-            com o clube.
-          </p>
           <KeyGuide defaultOpen />
           <KeyForm tenantSlug={tenantSlug} replacing={false} onConnected={applyAccount} />
         </CardContent>
       </Card>
+    )
+
+    return (
+      <div className="space-y-5">
+        <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          Este clube ainda não configurou o recebimento das mensalidades. Sem uma conta de recebimento, novas adesões e
+          cobranças ficam bloqueadas e quem tentar assinar vê um aviso para falar com o clube.
+        </p>
+
+        {managedStatus.error && !managed && (
+          <LoadError message={managedStatus.error} onRetry={() => void managedStatus.reload()} />
+        )}
+
+        {request && (inReview || refused) && (
+          <ManagedRequestCard
+            request={request}
+            canRequest={managed?.canRequest ?? false}
+            blockedReason={managed?.blockedReason ?? null}
+            onRequestAgain={() => setWizardOpen(true)}
+          />
+        )}
+
+        {inReview ? (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button variant="outline" className="gap-2" onClick={() => setOwnOpen(open => !open)} aria-expanded={ownOpen}>
+                <Landmark className="h-4 w-4" />
+                {ownOpen ? 'Ocultar o passo a passo' : 'Conectar minha conta Asaas'}
+              </Button>
+            </div>
+            {ownOpen && ownForm}
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <OwnAccountOffer open={ownOpen} onToggle={() => setOwnOpen(open => !open)} />
+              {!refused && <ManagedOffer status={managed} onRequest={() => setWizardOpen(true)} />}
+            </div>
+            {ownOpen && ownForm}
+          </>
+        )}
+
+        {managed && (
+          <ManagedAccountWizard
+            open={wizardOpen}
+            onOpenChange={setWizardOpen}
+            tenantSlug={tenantSlug}
+            status={managed}
+            onSubmitted={applySubmitted}
+          />
+        )}
+      </div>
     )
   }
 

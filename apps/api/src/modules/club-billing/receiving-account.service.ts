@@ -12,6 +12,8 @@ import { ASAAS_WEBHOOK_EVENTS } from '@/integrations/asaas/webhook-events'
 import { GatewayNotConfiguredError } from '@/integrations/payments/gateway'
 import { decryptSecret, encryptSecret } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
+import { hasRunningDebit, lastDebitOf } from '@/modules/managed-account/queries'
+import { managedInfoOf } from '@/modules/managed-account/rules'
 import {
   INVALID_KEY_MESSAGE,
   LINKED_SUBSCRIPTION_STATUSES,
@@ -40,6 +42,10 @@ import {
  *    próprio) é cadastrado/reativado na conta do clube a cada conectar/testar;
  *  - sem conta conectada o provider recusa o Asaas (`GatewayNotConfiguredError`)
  *    — a chave global `ASAAS_API_KEY` é só da plataforma.
+ *
+ * Conta GERENCIADA (`source = 'subaccount'`, criada pela ANNETEC — ver
+ * `modules/managed-account`): usa esta mesma linha e o mesmo provider; o
+ * admin do clube não troca a chave nem desconecta (só o superadmin).
  */
 
 export interface ClubAsaasCredentials {
@@ -87,6 +93,11 @@ export async function resolveClubAsaasCredentials(orgId: string): Promise<ClubAs
   const apiKey = decryptSecret(row.apiKeyEncrypted)
   credentialsCache.set(orgId, { updatedAt: stamp, apiKey, env: row.env })
   return { apiKey, env: row.env, updatedAt: row.updatedAt }
+}
+
+/** Esquece a chave decifrada em cache (conta trocada/removida por outro serviço). */
+export function invalidateClubCredentials(orgId: string): void {
+  credentialsCache.delete(orgId)
 }
 
 /** Token esperado no webhook do clube; `null` = clube sem conta (ou token ainda não gerado). */
@@ -180,7 +191,7 @@ export async function countLinkedSubscriptions(orgId: string): Promise<number> {
  * (as vivas já foram barradas pela regra de vínculo): os ids eram de outra
  * conta Asaas e uma reativação criaria a cobrança com cliente inexistente.
  */
-async function forgetClosedGatewayLinks(orgId: string): Promise<void> {
+export async function forgetClosedGatewayLinks(orgId: string): Promise<void> {
   await db
     .update(clubSubscriptions)
     .set({ gatewayCustomerId: null, cardToken: null, updatedAt: new Date() })
@@ -224,7 +235,7 @@ function describeAsaasError(error: unknown): string {
  * effort: falha só vai para o log. Usado ao desconectar e ao trocar de conta
  * (o webhook da conta antiga não pode continuar apontando para nós).
  */
-async function deleteWebhookBestEffort(orgId: string, row: Pick<AccountRow, 'apiKeyEncrypted' | 'env' | 'webhookId'>): Promise<void> {
+export async function deleteWebhookBestEffort(orgId: string, row: Pick<AccountRow, 'apiKeyEncrypted' | 'env' | 'webhookId'>): Promise<void> {
   if (!row.webhookId) return
   try {
     await clientFor(decryptSecret(row.apiKeyEncrypted), row.env).webhooks.delete(row.webhookId)
@@ -306,6 +317,7 @@ function toDto(row: AccountRow | null, orgId: string): ClubReceivingAccount {
   if (!row) {
     return {
       connected: false,
+      source: null,
       env: null,
       keyHint: null,
       accountName: null,
@@ -317,10 +329,12 @@ function toDto(row: AccountRow | null, orgId: string): ClubReceivingAccount {
       webhookUrl: null,
       connectedAt: null,
       lastCheckedAt: null,
+      managed: null,
     }
   }
   return {
     connected: true,
+    source: row.source ?? 'api_key',
     env: row.env,
     keyHint: row.keyHint,
     accountName: row.accountName,
@@ -332,8 +346,30 @@ function toDto(row: AccountRow | null, orgId: string): ClubReceivingAccount {
     webhookUrl: clubWebhookUrl(env.API_BASE_URL, orgId),
     connectedAt: row.connectedAt.toISOString(),
     lastCheckedAt: row.lastCheckedAt ? row.lastCheckedAt.toISOString() : null,
+    managed: null,
   }
 }
+
+/** DTO completo: conta gerenciada ganha situação, documentos, débito automático e o último débito. */
+export async function receivingAccountDto(row: AccountRow | null, orgId: string): Promise<ClubReceivingAccount> {
+  const dto = toDto(row, orgId)
+  if (!row || row.source !== 'subaccount') return dto
+  return {
+    ...dto,
+    managed: managedInfoOf(
+      {
+        accountStatusJson: row.accountStatusJson ?? null,
+        documentsJson: row.documentsJson ?? null,
+        documentsCheckedAt: row.documentsCheckedAt ?? null,
+        autoDebitEnabled: Boolean(row.autoDebitEnabled),
+      },
+      await lastDebitOf(orgId),
+    ),
+  }
+}
+
+export const MANAGED_ACCOUNT_LOCKED_MESSAGE =
+  'O recebimento do clube é gerenciado pela ANNETEC. Para usar uma conta Asaas própria, peça à ANNETEC para desconectar a conta gerenciada.'
 
 export interface ConnectResult {
   account: ClubReceivingAccount
@@ -345,7 +381,7 @@ export interface ConnectResult {
 
 export const receivingAccountService = {
   async status(orgId: string): Promise<ClubReceivingAccount> {
-    return toDto(await loadRow(orgId), orgId)
+    return receivingAccountDto(await loadRow(orgId), orgId)
   },
 
   /**
@@ -360,6 +396,10 @@ export const receivingAccountService = {
     const policy = environmentPolicyIssue(parsed.env, allowedClubAsaasEnvironments({ NODE_ENV: env.NODE_ENV, DEPLOY_STAGE: env.DEPLOY_STAGE }))
     if (policy) throw AppError.validation([{ path: 'apiKey', message: policy }], policy)
 
+    // Conta gerenciada: chave e conta são da ANNETEC (troca só depois de o superadmin desconectar).
+    const current = await loadRow(orgId)
+    if (current?.source === 'subaccount') throw AppError.conflict(MANAGED_ACCOUNT_LOCKED_MESSAGE)
+
     const client = clientFor(parsed.apiKey, parsed.env)
     const { info, status } = await fetchAccount(client)
     const identity = {
@@ -368,7 +408,6 @@ export const receivingAccountService = {
       accountCpfCnpj: onlyDigits(info.cpfCnpj) || null,
     }
 
-    const current = await loadRow(orgId)
     const accountChanged = Boolean(current) && !sameAsaasAccount(current!, identity)
     if (accountChanged) {
       const linked = await countLinkedSubscriptions(orgId)
@@ -408,7 +447,7 @@ export const receivingAccountService = {
     if (!current || accountChanged) await forgetClosedGatewayLinks(orgId)
     await syncWebhookWith(orgId, client)
 
-    return { account: toDto(await loadRow(orgId), orgId), replaced: Boolean(current), accountChanged }
+    return { account: await receivingAccountDto(await loadRow(orgId), orgId), replaced: Boolean(current), accountChanged }
   },
 
   /** Cadastra/reativa o webhook do clube com a chave salva. */
@@ -433,13 +472,28 @@ export const receivingAccountService = {
       lastCheckedAt: now,
     })
     await syncWebhookWith(orgId, client)
-    return toDto(await loadRow(orgId), orgId)
+    return receivingAccountDto(await loadRow(orgId), orgId)
   },
 
-  /** Remove a conta (bloqueado com assinaturas vinculadas). Apagar o webhook no Asaas é best effort. */
-  async disconnect(orgId: string): Promise<{ account: ClubReceivingAccount; removed: boolean }> {
+  /**
+   * Remove a conta (bloqueado com assinaturas vinculadas). Apagar o webhook no
+   * Asaas é best effort. Conta GERENCIADA: só com `allowManaged` (superadmin) e
+   * sem débito automático em andamento — a subconta continua existindo no
+   * Asaas (com o saldo dela); aqui só deixamos de usá-la.
+   */
+  async disconnect(
+    orgId: string,
+    options: { allowManaged?: boolean } = {},
+  ): Promise<{ account: ClubReceivingAccount; removed: boolean; managed: boolean }> {
     const row = await loadRow(orgId)
-    if (!row) return { account: toDto(null, orgId), removed: false }
+    if (!row) return { account: toDto(null, orgId), removed: false, managed: false }
+    const managed = row.source === 'subaccount'
+    if (managed) {
+      if (!options.allowManaged) throw AppError.forbidden('A conta gerenciada pela ANNETEC só pode ser desconectada pela equipe ANNETEC (superadmin).')
+      if (await hasRunningDebit(orgId)) {
+        throw AppError.conflict('Há um débito automático em andamento nesta conta. Aguarde a conclusão (ou confira em Contas gerenciadas) antes de desconectar.')
+      }
+    }
     const linked = await countLinkedSubscriptions(orgId)
     if (linked > 0) throw AppError.conflict(linkedSubscriptionsMessage(linked, 'disconnect'))
 
@@ -447,6 +501,6 @@ export const receivingAccountService = {
     await db.delete(tenantAsaasAccounts).where(eq(tenantAsaasAccounts.organizationId, orgId))
     credentialsCache.delete(orgId)
     await forgetClosedGatewayLinks(orgId)
-    return { account: toDto(null, orgId), removed: true }
+    return { account: toDto(null, orgId), removed: true, managed }
   },
 }

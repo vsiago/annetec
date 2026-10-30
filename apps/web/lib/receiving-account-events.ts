@@ -5,7 +5,7 @@
  */
 export const RECEIVING_ACCOUNT_CHANGED_EVENT = 'annetec:receiving-account-changed'
 
-export function notifyReceivingAccountChanged(connected: boolean) {
+export function notifyReceivingAccountChanged(connected: boolean, pendingDocuments = 0) {
   if (typeof window === 'undefined') return
-  window.dispatchEvent(new CustomEvent(RECEIVING_ACCOUNT_CHANGED_EVENT, { detail: { connected } }))
+  window.dispatchEvent(new CustomEvent(RECEIVING_ACCOUNT_CHANGED_EVENT, { detail: { connected, pendingDocuments } }))
 }

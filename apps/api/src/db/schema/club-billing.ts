@@ -11,6 +11,7 @@ import type {
 } from '@annetec/contracts'
 import { relations, sql } from 'drizzle-orm'
 import {
+  boolean,
   date,
   index,
   integer,
@@ -102,6 +103,21 @@ export interface AsaasAccountStatusSnapshot {
   general?: string | null
 }
 
+/** Retrato de `GET /myAccount/documents` da subconta (conta gerenciada). Sem dado pessoal além do nome do responsável. */
+export interface ManagedAccountDocumentsSnapshot {
+  rejectReasons: string | null
+  groups: {
+    id: string
+    status: string
+    type: string | null
+    title: string | null
+    description: string | null
+    responsibleName: string | null
+    onboardingUrl: string | null
+    onboardingUrlExpirationDate: string | null
+  }[]
+}
+
 /**
  * Conta Asaas PRÓPRIA do clube, onde caem as mensalidades dos associados
  * (1:1 com `organization`). Sem linha = recebimento não configurado: com
@@ -112,6 +128,12 @@ export interface AsaasAccountStatusSnapshot {
  * API. `source = 'subaccount'` fica reservado para quando a ANNETEC criar a
  * subconta do clube pela API (a chave devolvida na criação alimenta esta
  * mesma linha).
+ *
+ * Conta GERENCIADA (`source = 'subaccount'`, `modules/managed-account`): a
+ * subconta foi criada pela API na conta da ANNETEC a pedido do clube; a chave
+ * devolvida na criação fica aqui (cifrada), com a carteira (`wallet_id`), o
+ * retrato dos documentos exigidos pelo Asaas e o débito automático das
+ * faturas da ANNETEC (ligado na aprovação).
  */
 export const tenantAsaasAccounts = pgTable('tenant_asaas_accounts', {
   organizationId: text('organization_id')
@@ -138,6 +160,15 @@ export const tenantAsaasAccounts = pgTable('tenant_asaas_accounts', {
   connectedBy: text('connected_by'),
   connectedAt: timestamp('connected_at', { withTimezone: true }).notNull().defaultNow(),
   lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+  /** Carteira da conta no Asaas (`walletId`) — conta gerenciada. */
+  walletId: text('wallet_id'),
+  /** Débito automático das faturas da ANNETEC no saldo (só conta gerenciada). */
+  autoDebitEnabled: boolean('auto_debit_enabled').notNull().default(false),
+  /** Retrato de `GET /myAccount/documents` (conta gerenciada). */
+  documentsJson: jsonb('documents_json').$type<ManagedAccountDocumentsSnapshot>(),
+  documentsCheckedAt: timestamp('documents_checked_at', { withTimezone: true }),
+  /** Pedido (`managed_account_requests.id`) que criou a conta gerenciada. Sem FK (histórico). */
+  managedRequestId: uuid('managed_request_id'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })

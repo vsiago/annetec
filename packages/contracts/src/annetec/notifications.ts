@@ -36,6 +36,12 @@ export const NOTIFICATION_KINDS = [
   'sales_discount_requested',
   'sales_discount_approved',
   'sales_discount_rejected',
+  /** Clube pediu a conta gerenciada (sino da equipe). */
+  'managed_account_requested',
+  /** Superadmin aprovou/recusou o pedido (sino do clube). */
+  'managed_account_decided',
+  /** Débito automático da fatura ANNETEC não realizado (sino do clube). */
+  'platform_auto_debit_failed',
 ] as const
 export const notificationKind = z.enum(NOTIFICATION_KINDS)
 export type NotificationKind = z.infer<typeof notificationKind>
@@ -48,6 +54,9 @@ export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   sales_discount_requested: 'Pedido de desconto',
   sales_discount_approved: 'Desconto aprovado',
   sales_discount_rejected: 'Desconto recusado',
+  managed_account_requested: 'Pedido de conta gerenciada',
+  managed_account_decided: 'Conta gerenciada',
+  platform_auto_debit_failed: 'Débito automático não realizado',
 }
 
 /** Família visual/sonora: dinheiro entrando ou pessoa chegando. */

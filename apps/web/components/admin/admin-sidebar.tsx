@@ -22,6 +22,7 @@ import { AdminUserMenu } from './admin-user-menu'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { getBillingSettingsAction } from '@/lib/actions/faturamento-api'
 import { RECEIVING_ACCOUNT_CHANGED_EVENT } from '@/lib/receiving-account-events'
+import { getReceivingAccountAction } from '@/lib/actions/faturamento-api'
 import { SUPPORT_EMAIL } from '@/lib/support-contact'
 import { cn } from '@/lib/utils'
 import {
@@ -58,7 +59,14 @@ function useNavIndicators(slug: string) {
         const result = await getBillingSettingsAction(slug)
         // Só o gateway Asaas pede conta própria; nos demais não há o que conectar.
         if (!cancelled && result.success) {
-          setReceivingMissing(result.data.gateway === 'asaas' && !result.data.asaasConfigured)
+          const missing = result.data.gateway === 'asaas' && !result.data.asaasConfigured
+          let pendingDocs = false
+          // Conta gerenciada pela ANNETEC com documento a enviar também é pendência.
+          if (!missing && result.data.gateway === 'asaas') {
+            const account = await getReceivingAccountAction(slug)
+            pendingDocs = account.success && (account.data.managed?.pendingDocuments ?? 0) > 0
+          }
+          if (!cancelled) setReceivingMissing(missing || pendingDocs)
         }
       } catch {
         // Sem resposta: mantém o estado anterior.
@@ -66,8 +74,8 @@ function useNavIndicators(slug: string) {
     }
     void check()
     function onChanged(event: Event) {
-      const detail = (event as CustomEvent<{ connected?: boolean }>).detail
-      if (typeof detail?.connected === 'boolean') setReceivingMissing(!detail.connected)
+      const detail = (event as CustomEvent<{ connected?: boolean; pendingDocuments?: number }>).detail
+      if (typeof detail?.connected === 'boolean') setReceivingMissing(!detail.connected || (detail.pendingDocuments ?? 0) > 0)
       else void check()
     }
     window.addEventListener(RECEIVING_ACCOUNT_CHANGED_EVENT, onChanged)
@@ -117,7 +125,7 @@ function NavBadge({ value, inline = false, label }: { value: number | true; inli
 }
 
 function badgeLabel(item: AdminNavItem, value: number | true): string {
-  if (item.badge === 'receiving-missing') return 'Conta de recebimento não conectada'
+  if (item.badge === 'receiving-missing') return 'Conta de recebimento com pendência'
   return typeof value === 'number' ? `${value} aguardando resposta` : ''
 }
 

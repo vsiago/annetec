@@ -120,6 +120,13 @@
       "when": 1793332829472,
       "tag": "0016_platform_sales_sellers",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793372308865,
+      "tag": "0017_managed_accounts",
+      "breakpoints": true
     }
   ]
 }

@@ -74,6 +74,8 @@ export interface PlatformGatewayEventContext {
   cardExpiry?: string | null
   paidAt?: Date | null
   paidAmount?: number | null
+  /** Frase da timeline no lugar da padrão (ex.: débito automático do saldo da conta gerenciada). */
+  message?: string | null
 }
 
 export interface PlatformGatewayEventOutcome {
@@ -926,6 +928,7 @@ async function applyDeleted(tx: Executor, payload: PlatformGatewayEventPayload, 
 // ---------------------------------------------------------------------------
 
 function eventMessage(payload: PlatformGatewayEventPayload, charge: PlatformChargeRow, ctx: PlatformGatewayEventContext): string {
+  if (ctx.message) return ctx.message
   const amount = formatBRL(ctx.paidAmount ?? payload.payment.value ?? Number(charge.amount))
   const method = CLUB_PAYMENT_METHOD_LABELS[charge.method]
   const kind = PLATFORM_CHARGE_KIND_LABELS[charge.kind].toLowerCase()

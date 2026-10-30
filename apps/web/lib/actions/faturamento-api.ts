@@ -9,6 +9,7 @@ import type {
   ClubCharge,
   ClubChargeDetail,
   ClubReceiptsPage,
+  ClubManagedAccountStatus,
   ClubReceivingAccount,
   ClubSubscription,
   ClubSubscriptionDetail,
@@ -20,10 +21,12 @@ import type {
   ListPaymentEventsQuery,
   ManualChargePreview,
   ManualChargeResult,
+  ManagedAutoDebit,
   ManualPaymentInput,
   PageMeta,
   PaymentEvent,
   ReissueClubChargeInput,
+  RequestManagedAccountInput,
   UpdateBillingSettingsInput,
 } from '@annetec/contracts'
 import { apiFetch, tenantPath } from '@/lib/api/client'
@@ -412,6 +415,52 @@ export async function disconnectReceivingAccountAction(
       method: 'DELETE',
     })
     return data
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Conta de recebimento gerenciada pela ANNETEC
+// ---------------------------------------------------------------------------
+
+export async function getManagedAccountStatusAction(
+  tenantSlug: string,
+): Promise<ActionResult<ClubManagedAccountStatus>> {
+  return run(async () => {
+    const { data } = await apiFetch<ClubManagedAccountStatus>(
+      base(tenantSlug, '/configuracoes/recebimento/gerenciada'),
+    )
+    return data
+  })
+}
+
+/** Pedido + aceite do termo. 409 com a mensagem da API (ex.: conta própria com assinaturas vinculadas). */
+export async function requestManagedAccountAction(
+  tenantSlug: string,
+  input: RequestManagedAccountInput,
+): Promise<ActionResult<ClubManagedAccountStatus>> {
+  return run(async () => {
+    const { data } = await apiFetch<ClubManagedAccountStatus>(
+      base(tenantSlug, '/configuracoes/recebimento/gerenciada'),
+      { method: 'POST', body: input },
+    )
+    return data
+  })
+}
+
+export async function refreshManagedAccountAction(tenantSlug: string): Promise<ActionResult<ClubReceivingAccount>> {
+  return run(async () => {
+    const { data } = await apiFetch<ClubReceivingAccount>(
+      base(tenantSlug, '/configuracoes/recebimento/gerenciada/atualizar-status'),
+      { method: 'POST', body: {} },
+    )
+    return data
+  })
+}
+
+export async function listManagedDebitsAction(tenantSlug: string): Promise<ActionResult<ManagedAutoDebit[]>> {
+  return run(async () => {
+    const { data } = await apiFetch<ManagedAutoDebit[]>(base(tenantSlug, '/configuracoes/recebimento/gerenciada/debitos'))
+    return data ?? []
   })
 }
 

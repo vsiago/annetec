@@ -9,6 +9,7 @@ import {
   listPaymentEventsQuery,
   manualPaymentInput,
   reissueClubChargeInput,
+  requestManagedAccountInput,
   updateBillingSettingsInput,
 } from '@annetec/contracts'
 import { Hono, type Context } from 'hono'
@@ -20,7 +21,9 @@ import { created, ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, param, query } from '@/http/validate'
 import { recordAudit } from '@/lib/audit'
-import { rateLimit } from '@/lib/rate-limit'
+import { rateLimit, requestIp } from '@/lib/rate-limit'
+import { listDebitsOf } from '@/modules/managed-account/queries'
+import { managedAccountService } from '@/modules/managed-account/service'
 import { runForTenant } from './automation.service'
 import { chargesService, findChargeOfTenant } from './charges.service'
 import { limitBody } from './http'
@@ -68,6 +71,14 @@ function actorOf(c: Context<AppEnv>): string | null {
 const receivingRateLimit = rateLimit({
   key: 'clube:recebimento',
   limit: 10,
+  windowMs: 60 * 60 * 1000,
+  keyOf: c => c.get('tenant')?.id ?? null,
+})
+
+/** Conta gerenciada (pedido, atualizar status): 30 por hora POR CLUBE. */
+const managedRateLimit = rateLimit({
+  key: 'clube:conta-gerenciada',
+  limit: 30,
   windowMs: 60 * 60 * 1000,
   keyOf: c => c.get('tenant')?.id ?? null,
 })
@@ -254,16 +265,49 @@ export const clubBillingAdminController = new Hono<AppEnv>()
   })
 
   .delete('/configuracoes/recebimento', receivingRateLimit, async c => {
-    const { account, removed } = await receivingAccountService.disconnect(tenantOf(c).id)
+    // Conta gerenciada pela ANNETEC: só o superadmin desconecta (o admin do clube recebe 403).
+    const membership = c.get('auth')?.membership
+    const allowManaged = membership?.scope === 'platform' && membership.platformRole === 'superadmin'
+    const { account, removed, managed } = await receivingAccountService.disconnect(tenantOf(c).id, { allowManaged })
     if (removed) {
       await recordAudit(c, {
-        action: 'club_receiving_account.disconnected',
-        resource: 'club_receiving_account',
+        action: managed ? 'managed_account.disconnected' : 'club_receiving_account.disconnected',
+        resource: managed ? 'managed_account' : 'club_receiving_account',
         resourceId: tenantOf(c).id,
       })
     }
     return ok(c, account)
   })
+
+  // ---- Conta gerenciada pela ANNETEC (subconta Asaas do clube) -------------
+  .get('/configuracoes/recebimento/gerenciada', async c => ok(c, await managedAccountService.clubStatus(tenantOf(c).id)))
+
+  // Pedido + aceite do termo: só o ADMIN DO CLUBE (o aceite é do clube; a equipe ANNETEC não pede por ele).
+  .post('/configuracoes/recebimento/gerenciada', managedRateLimit, limitBody(8), json(requestManagedAccountInput), async c => {
+    const session = c.get('auth')
+    if (!session || session.membership.scope !== 'tenant') {
+      throw AppError.forbidden('O pedido e o aceite do termo são feitos pelo administrador do clube.')
+    }
+    const status = await managedAccountService.submitRequest(tenantOf(c).id, c.req.valid('json'), {
+      userId: session.user.id,
+      userName: session.user.name ?? null,
+      ip: requestIp(c),
+      userAgent: c.req.header('user-agent') ?? null,
+    })
+    await recordAudit(c, {
+      action: 'managed_account.requested',
+      resource: 'managed_account',
+      resourceId: status.request?.id ?? tenantOf(c).id,
+      metadata: { termo: status.request?.terms.version ?? null, natureza: status.request?.companyType ?? null },
+    })
+    return created(c, status)
+  })
+
+  .post('/configuracoes/recebimento/gerenciada/atualizar-status', managedRateLimit, async c =>
+    ok(c, await managedAccountService.refreshStatus(tenantOf(c).id)),
+  )
+
+  .get('/configuracoes/recebimento/gerenciada/debitos', async c => ok(c, await listDebitsOf(tenantOf(c).id, 100)))
 
   // ---- Timeline e automação ------------------------------------------------
   .get('/eventos', query(listPaymentEventsQuery.extend(q)), async c => {

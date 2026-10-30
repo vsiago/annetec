@@ -3,7 +3,18 @@ import { AppError } from '@/http/errors'
 import { CardDeclinedError } from '@/integrations/payments/gateway'
 import { logger } from '@/lib/logger'
 import type {
+  AsaasAccessToken,
+  AsaasAccountDocuments,
   AsaasAccountStatus,
+  AsaasBalance,
+  AsaasCreateAccessTokenInput,
+  AsaasCreateInternalTransferInput,
+  AsaasCreateSubaccountInput,
+  AsaasListSubaccountsQuery,
+  AsaasListTransfersQuery,
+  AsaasSubaccount,
+  AsaasTransfer,
+  AsaasWallet,
   AsaasCreateCustomerInput,
   AsaasCreatePaymentInput,
   AsaasCommercialInfo,
@@ -241,6 +252,34 @@ export function createAsaasClient(config: AsaasClientConfig) {
       commercialInfo: () => request<AsaasCommercialInfo>('GET', '/myAccount/commercialInfo/'),
       /** Situação cadastral da conta (aprovada ou com pendências) + `id` da conta. */
       status: () => request<AsaasAccountStatus>('GET', '/myAccount/status/'),
+      /** Documentos exigidos para aprovar a conta (links de envio quando houver). */
+      documents: () => request<AsaasAccountDocuments>('GET', '/myAccount/documents'),
+    },
+    /** Subcontas da conta dona da chave (conta gerenciada: chave da ANNETEC). */
+    accounts: {
+      /** NÃO idempotente: a resposta traz a chave da subconta UMA vez. Nunca logar o corpo. */
+      create: (input: AsaasCreateSubaccountInput) => request<AsaasSubaccount>('POST', '/accounts', { body: input }),
+      list: (query: AsaasListSubaccountsQuery = {}) =>
+        request<AsaasList<AsaasSubaccount>>('GET', '/accounts', { query: { ...query } }),
+      /** Nova chave de API da subconta (exige habilitação no painel + IP na whitelist). */
+      createAccessToken: (id: string, input: AsaasCreateAccessTokenInput = {}) =>
+        request<AsaasAccessToken>('POST', `/accounts/${encodeURIComponent(id)}/accessTokens`, { body: input }),
+    },
+    finance: {
+      /** Saldo disponível da conta dona da chave. */
+      balance: () => request<AsaasBalance>('GET', '/finance/balance'),
+    },
+    wallets: {
+      list: () => request<AsaasList<AsaasWallet>>('GET', '/wallets/'),
+    },
+    transfers: {
+      /** NÃO idempotente: mande sempre `externalReference` para reencontrar a transferência se a resposta se perder. */
+      create: (input: AsaasCreateInternalTransferInput) => request<AsaasTransfer>('POST', '/transfers', { body: input }),
+      get: (id: string) => request<AsaasTransfer>('GET', `/transfers/${encodeURIComponent(id)}`),
+      list: (query: AsaasListTransfersQuery = {}) =>
+        request<AsaasList<AsaasTransfer>>('GET', '/transfers', { query: { ...query } }),
+      /** Só antes de efetivar; o valor volta ao saldo de origem. */
+      cancel: (id: string) => request<AsaasTransfer>('DELETE', `/transfers/${encodeURIComponent(id)}/cancel`),
     },
     webhooks: {
       create: (input: AsaasCreateWebhookInput) => request<AsaasWebhook>('POST', '/webhooks', { body: input }),

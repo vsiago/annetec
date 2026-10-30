@@ -82,6 +82,8 @@ function emptyReport(now: Date, errors: string[] = []): PlatformBillingAutomatio
     reactivated: 0,
     overridesExpired: 0,
     proposalsExpired: 0,
+    autoDebited: 0,
+    autoDebitFailed: 0,
     errors,
   }
 }
@@ -266,6 +268,22 @@ async function run(now: Date): Promise<PlatformBillingAutomationReport> {
         else if (result.status === 'failed') report.cardFailed += 1
       })
     }
+  })
+
+  // 4b. Conta gerenciada: débito automático do saldo no vencimento (e conferência
+  //     das transferências em andamento) + situação/documentos das subcontas
+  //     ainda não aprovadas. Módulo carregado sob demanda (ele importa este).
+  await step('débito automático', async () => {
+    const { runManagedDebits } = await import('@/modules/managed-account/debit.service')
+    const result = await runManagedDebits(now, { shouldStop: () => stopping })
+    report.autoDebited += result.concluded
+    report.autoDebitFailed += result.failed
+    for (const error of result.errors.slice(0, 10)) report.errors.push(`débito automático: ${error}`)
+  })
+  await step('contas gerenciadas', async () => {
+    const { refreshPendingManagedAccounts } = await import('@/modules/managed-account/service')
+    const errors = await refreshPendingManagedAccounts(now)
+    for (const error of errors.slice(0, 5)) report.errors.push(`contas gerenciadas: ${error}`)
   })
 
   // 5. Lembretes de vencimento.
@@ -464,7 +482,7 @@ async function run(now: Date): Promise<PlatformBillingAutomationReport> {
   await step('registrar rodada', () => touchPlatformAutomationRun(now))
 
   if (
-    report.generated + report.markedOverdue + report.pastDue + report.restricted + report.suspended + report.canceled + report.reactivated + report.overridesExpired >
+    report.generated + report.autoDebited + report.markedOverdue + report.pastDue + report.restricted + report.suspended + report.canceled + report.reactivated + report.overridesExpired >
     0
   ) {
     invalidateHoldingCache()

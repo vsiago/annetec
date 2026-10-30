@@ -46,6 +46,7 @@ import { formatCnpj, formatNumber, todayInSaoPaulo, validate } from '@/lib/adapt
 import { cn } from '@/lib/utils'
 import { tenantInvoicePath } from './access-gate'
 import { ChargeStatusPill } from './charge-ui'
+import { ManagedDebitNotice } from './managed-debit-notice'
 
 type UpgradeOption = MyPlatformSubscription['upgradeOptions'][number]
 
@@ -392,6 +393,8 @@ export function MyPlatformSubscriptionView() {
           {access.message}
         </Notice>
       ) : null}
+
+      <ManagedDebitNotice slug={slug} data={data} />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card title="Plano" icon={Sparkles}>

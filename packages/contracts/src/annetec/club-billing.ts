@@ -944,11 +944,139 @@ export const clubReceivingAccountApproval = z.object({
 export type ClubReceivingAccountApproval = z.infer<typeof clubReceivingAccountApproval>
 
 /**
+ * Origem da conta de recebimento: `api_key` = conta Asaas PRÓPRIA do clube
+ * (chave colada pelo admin); `subaccount` = conta GERENCIADA pela ANNETEC
+ * (subconta criada pela API dentro da conta da ANNETEC, a pedido do clube).
+ */
+export const receivingAccountSource = z.enum(['api_key', 'subaccount'])
+export type ReceivingAccountSource = z.infer<typeof receivingAccountSource>
+
+export const RECEIVING_ACCOUNT_SOURCE_LABELS: Record<ReceivingAccountSource, string> = {
+  api_key: 'Conta própria do clube',
+  subaccount: 'Conta gerenciada pela ANNETEC',
+}
+
+/** Situação geral da subconta (resumo de `GET /myAccount/status` → `general`). */
+export const managedAccountGeneralStatus = z.enum(['aprovada', 'em_analise', 'pendente', 'recusada', 'desconhecida'])
+export type ManagedAccountGeneralStatus = z.infer<typeof managedAccountGeneralStatus>
+
+export const MANAGED_ACCOUNT_GENERAL_STATUS_LABELS: Record<ManagedAccountGeneralStatus, string> = {
+  aprovada: 'Aprovada',
+  em_analise: 'Em análise',
+  pendente: 'Com pendências',
+  recusada: 'Recusada',
+  desconhecida: 'Ainda não consultada',
+}
+
+/** Status do documento no Asaas (`GET /myAccount/documents`). Valor desconhecido = o cru. */
+export const MANAGED_ACCOUNT_DOCUMENT_STATUS_LABELS: Record<string, string> = {
+  NOT_SENT: 'Não enviado',
+  PENDING: 'Em análise',
+  APPROVED: 'Aprovado',
+  REJECTED: 'Recusado',
+  IGNORED: 'Não exigido',
+}
+
+/** Documento (grupo) exigido pelo Asaas para aprovar a subconta. */
+export const managedAccountDocument = z.object({
+  id: z.string(),
+  /** Tipo cru do Asaas (`IDENTIFICATION`, `SOCIAL_CONTRACT`, `MINUTES_OF_ELECTION`…). */
+  type: z.string().nullable(),
+  title: z.string(),
+  description: z.string().nullable(),
+  /** Status cru do Asaas (`NOT_SENT`, `PENDING`, `APPROVED`, `REJECTED`, `IGNORED`). */
+  status: z.string(),
+  statusLabel: z.string(),
+  /** Precisa de ação do clube (não enviado ou recusado). */
+  actionRequired: z.boolean(),
+  /** Quem deve enviar (nome do responsável que o Asaas indicou). */
+  responsibleName: z.string().nullable(),
+  /** Link do Asaas para enviar o documento (quando existe, o envio é por ele). */
+  onboardingUrl: z.string().nullable(),
+  onboardingUrlExpiresAt: z.string().nullable(),
+})
+export type ManagedAccountDocument = z.infer<typeof managedAccountDocument>
+
+/** `em_andamento` = transferência pedida/aguardando o Asaas; `concluida` = fatura quitada pelo saldo; `falhou` = não debitou. */
+export const managedAutoDebitStatus = z.enum(['em_andamento', 'concluida', 'falhou'])
+export type ManagedAutoDebitStatus = z.infer<typeof managedAutoDebitStatus>
+
+export const MANAGED_AUTO_DEBIT_STATUS_LABELS: Record<ManagedAutoDebitStatus, string> = {
+  em_andamento: 'Em andamento',
+  concluida: 'Débito realizado',
+  falhou: 'Não realizado',
+}
+
+export const managedAutoDebitFailureCode = z.enum([
+  'saldo_insuficiente',
+  'fatura_paga',
+  'transferencia_recusada',
+  'transferencia_cancelada',
+  'erro_asaas',
+  'pagamento_duplicado',
+])
+export type ManagedAutoDebitFailureCode = z.infer<typeof managedAutoDebitFailureCode>
+
+export const MANAGED_AUTO_DEBIT_FAILURE_LABELS: Record<ManagedAutoDebitFailureCode, string> = {
+  saldo_insuficiente: 'Saldo insuficiente',
+  fatura_paga: 'Fatura já paga por outro meio',
+  transferencia_recusada: 'Transferência recusada pelo Asaas',
+  transferencia_cancelada: 'Transferência cancelada',
+  erro_asaas: 'Falha de comunicação com o Asaas',
+  pagamento_duplicado: 'Pagamento em duplicidade (devolver ao clube)',
+}
+
+/** Uma tentativa de débito automático de uma fatura da ANNETEC no saldo da conta gerenciada. */
+export const managedAutoDebit = z.object({
+  id: uuid,
+  chargeId: uuid.nullable(),
+  chargeDescription: z.string().nullable(),
+  chargeDueDate: z.string().nullable(),
+  /** Nº da tentativa nesta fatura (1, 2, 3…). */
+  attempt: z.number().int(),
+  status: managedAutoDebitStatus,
+  statusLabel: z.string(),
+  failureCode: managedAutoDebitFailureCode.nullable(),
+  /** Motivo pronto para a tela. */
+  failureReason: z.string().nullable(),
+  amount: z.number(),
+  /** Saldo consultado antes de transferir (`null` = não chegou a consultar). */
+  balance: z.number().nullable(),
+  transferId: z.string().nullable(),
+  /** Status cru da transferência no Asaas (`PENDING`, `DONE`, `FAILED`, `CANCELLED`…). */
+  transferStatus: z.string().nullable(),
+  source: z.enum(['automation', 'manual']),
+  /** O valor saiu do saldo, mas a fatura já tinha sido paga: a ANNETEC precisa devolver ao clube. */
+  refundRequired: z.boolean(),
+  startedAt: z.string().datetime(),
+  finishedAt: z.string().datetime().nullable(),
+})
+export type ManagedAutoDebit = z.infer<typeof managedAutoDebit>
+
+/** Dados da gestão (só conta `subaccount`). */
+export const clubManagedAccountInfo = z.object({
+  generalStatus: managedAccountGeneralStatus,
+  generalStatusLabel: z.string(),
+  documents: z.array(managedAccountDocument),
+  /** Documentos que precisam de ação do clube. */
+  pendingDocuments: z.number().int(),
+  /** Motivo de reprovação informado pelo Asaas. */
+  rejectReasons: z.string().nullable(),
+  documentsCheckedAt: z.string().datetime().nullable(),
+  /** Débito automático das faturas da ANNETEC no vencimento (liga/desliga só o superadmin). */
+  autoDebitEnabled: z.boolean(),
+  lastDebit: managedAutoDebit.nullable(),
+})
+export type ClubManagedAccountInfo = z.infer<typeof clubManagedAccountInfo>
+
+/**
  * `GET /t/:slug/faturamento/configuracoes/recebimento` (e resposta das
  * mutações). NUNCA traz a chave nem o token do webhook.
  */
 export const clubReceivingAccount = z.object({
   connected: z.boolean(),
+  /** `null` = sem conta conectada. */
+  source: receivingAccountSource.nullable(),
   env: asaasEnvironment.nullable(),
   /** 4 últimos caracteres da chave (para o admin reconhecer qual colou). */
   keyHint: z.string().nullable(),
@@ -964,6 +1092,8 @@ export const clubReceivingAccount = z.object({
   webhookUrl: z.string().nullable(),
   connectedAt: z.string().datetime().nullable(),
   lastCheckedAt: z.string().datetime().nullable(),
+  /** Situação da subconta, documentos e débito automático — só quando `source = 'subaccount'`. */
+  managed: clubManagedAccountInfo.nullable(),
 })
 export type ClubReceivingAccount = z.infer<typeof clubReceivingAccount>
 

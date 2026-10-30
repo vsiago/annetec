@@ -466,6 +466,10 @@ export const annetecModules: ApiModule[] = [
           { method: 'PUT', route: '/configuracoes/recebimento', description: 'Conecta a conta ou troca a chave de API do Asaas (valida no Asaas e cadastra o webhook). Chave inválida/ambiente errado 400; recusada pelo Asaas 422; outra conta com assinaturas vinculadas 409; 10 mutações/h por clube (429).', access: 'admin' },
           { method: 'POST', route: '/configuracoes/recebimento/testar', description: 'Revalida a chave salva, atualiza a situação da conta e recadastra o webhook. Sem conta conectada: 409 RECEBIMENTO_NAO_CONFIGURADO.', access: 'admin' },
           { method: 'DELETE', route: '/configuracoes/recebimento', description: 'Desconecta a conta de recebimento; 409 enquanto houver assinaturas vinculadas a ela.', access: 'admin' },
+          { method: 'GET', route: '/configuracoes/recebimento/gerenciada', description: 'Conta de recebimento gerenciada pela ANNETEC: último pedido, conta atual, se pode pedir (canRequest/blockedReason), dados pré-preenchidos e o termo de aceite.', access: 'admin' },
+          { method: 'POST', route: '/configuracoes/recebimento/gerenciada', description: 'Pede a conta gerenciada com o aceite do termo (versão atual). Só o administrador do clube; conta própria com assinaturas vinculadas ou pedido em aberto 409; 30/h por clube (429).', access: 'admin' },
+          { method: 'POST', route: '/configuracoes/recebimento/gerenciada/atualizar-status', description: 'Reconsulta no Asaas a situação da conta gerenciada e dos documentos.', access: 'admin' },
+          { method: 'GET', route: '/configuracoes/recebimento/gerenciada/debitos', description: 'Histórico do débito automático das faturas da ANNETEC no saldo da conta gerenciada (até 100).', access: 'admin' },
         ],
       },
       {
@@ -685,6 +689,29 @@ export const annetecModules: ApiModule[] = [
           { method: 'POST', route: '/faturas/:id/baixa-manual', description: 'Registra pagamento recebido fora do gateway.', access: 'superadmin' },
           { method: 'POST', route: '/faturas/:id/cancelar', description: 'Cancela fatura em aberto.', access: 'superadmin' },
           { method: 'POST', route: '/faturas/:id/simular-pagamento', description: 'Confirma o pagamento no gateway simulado/sandbox.', access: 'superadmin · platform_admin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Plataforma — Contas gerenciadas',
+    prefix: '/api/v1/platform/contas-gerenciadas',
+    controllerRef: 'managedAccountsPlatformController',
+    summary:
+      'Conta de recebimento gerenciada pela ANNETEC: pedidos dos clubes, criação da subconta Asaas, documentos e débito automático das faturas da ANNETEC no saldo. A equipe lê; só o superadmin escreve; vendedor nunca acessa.',
+    sections: [
+      {
+        heading: 'Pedidos e contas',
+        items: [
+          { method: 'GET', route: '/?status=&q=', description: 'Clubes com pedido ou conta gerenciada: situação, documentos pendentes, débito automático e último débito.', access: 'superadmin · platform_admin' },
+          { method: 'GET', route: '/:orgId', description: 'Detalhe: pedido com aceite, conta, saldo da subconta, débitos e keyRecoveryNeeded.', access: 'superadmin · platform_admin' },
+          { method: 'POST', route: '/:orgId/aprovar', description: 'Aprova o pedido e cria a subconta Asaas em nome do clube.', access: 'superadmin' },
+          { method: 'POST', route: '/:orgId/recusar', description: 'Recusa o pedido com motivo (notifica o clube).', access: 'superadmin' },
+          { method: 'POST', route: '/:orgId/recuperar-chave', description: 'Recupera a chave da subconta já criada quando não chegou a ser gravada.', access: 'superadmin' },
+          { method: 'POST', route: '/:orgId/atualizar-status', description: 'Reconsulta situação e documentos da subconta no Asaas.', access: 'superadmin' },
+          { method: 'PATCH', route: '/:orgId/debito-automatico', description: 'Liga ou desliga o débito automático das faturas da ANNETEC no saldo.', access: 'superadmin' },
+          { method: 'POST', route: '/:orgId/debitar-agora', description: 'Tenta o débito agora (chargeId opcional; sem ele, a fatura vencida mais antiga) e devolve o resultado.', access: 'superadmin' },
+          { method: 'POST', route: '/:orgId/desconectar', description: 'Desconecta a conta gerenciada do clube (a subconta e o saldo continuam no Asaas).', access: 'superadmin' },
         ],
       },
     ],

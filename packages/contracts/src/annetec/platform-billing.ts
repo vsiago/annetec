@@ -191,6 +191,9 @@ export const PLATFORM_BILLING_EVENT_TYPES = [
   'CHARGE_REISSUED',
   'CHARGE_CANCELED',
   'CHARGE_MANUAL_PAYMENT',
+  /** Fatura quitada pelo saldo da conta gerenciada do clube (transferência para a ANNETEC). */
+  'CHARGE_AUTO_DEBIT',
+  'CHARGE_AUTO_DEBIT_FAILED',
   'REMINDER_SENT',
   'SUBSCRIPTION_CREATED',
   'SUBSCRIPTION_PAST_DUE',
@@ -229,6 +232,8 @@ export const PLATFORM_BILLING_EVENT_LABELS: Record<PlatformBillingEventType, str
   CHARGE_REISSUED: 'Segunda via emitida',
   CHARGE_CANCELED: 'Fatura cancelada',
   CHARGE_MANUAL_PAYMENT: 'Baixa manual',
+  CHARGE_AUTO_DEBIT: 'Débito automático do saldo (conta gerenciada)',
+  CHARGE_AUTO_DEBIT_FAILED: 'Débito automático não realizado',
   REMINDER_SENT: 'Lembrete de vencimento enviado',
   SUBSCRIPTION_CREATED: 'Assinatura da plataforma criada',
   SUBSCRIPTION_PAST_DUE: 'Assinatura em atraso',
@@ -950,6 +955,10 @@ export const platformBillingAutomationReport = z.object({
   reactivated: z.number().int(),
   overridesExpired: z.number().int(),
   proposalsExpired: z.number().int(),
+  /** Faturas quitadas pelo saldo da conta gerenciada do clube. */
+  autoDebited: z.number().int(),
+  /** Tentativas de débito automático sem sucesso (saldo insuficiente, recusa…). */
+  autoDebitFailed: z.number().int(),
   errors: z.array(z.string()),
 })
 export type PlatformBillingAutomationReport = z.infer<typeof platformBillingAutomationReport>

@@ -262,3 +262,142 @@ export interface AsaasWebhookEvent {
   dateCreated?: string
   payment?: AsaasPayment
 }
+
+// ---------------------------------------------------------------------------
+// Subcontas, documentos, saldo, carteiras e transferências (conta gerenciada)
+// ---------------------------------------------------------------------------
+
+export type AsaasCompanyTypeValue = 'MEI' | 'LIMITED' | 'INDIVIDUAL' | 'ASSOCIATION'
+
+/** `POST /accounts` — cria a subconta (chave da conta-pai). */
+export interface AsaasCreateSubaccountInput {
+  name: string
+  email: string
+  loginEmail?: string
+  /** Só dígitos. */
+  cpfCnpj: string
+  /** `YYYY-MM-DD`, só pessoa física. */
+  birthDate?: string
+  /** Só pessoa jurídica. */
+  companyType?: AsaasCompanyTypeValue
+  phone?: string
+  mobilePhone: string
+  site?: string
+  /** Faturamento/renda mensal (R$). */
+  incomeValue: number
+  address: string
+  addressNumber: string
+  complement?: string
+  /** Bairro. */
+  province: string
+  postalCode: string
+}
+
+/** Chave de API de uma subconta (`apiKey` só vem na criação). */
+export interface AsaasAccessToken {
+  id?: string
+  name?: string | null
+  enabled?: boolean
+  disabledReason?: string | null
+  expirationDate?: string | null
+  dateCreated?: string | null
+  apiKey?: string
+}
+
+/**
+ * Subconta. A chave vem em `accessToken.apiKey` na criação (versões antigas da
+ * API devolviam `apiKey` no topo — aceitamos os dois). Nunca logar.
+ */
+export interface AsaasSubaccount {
+  object?: string
+  id: string
+  name?: string | null
+  email?: string | null
+  loginEmail?: string | null
+  cpfCnpj?: string | null
+  walletId?: string | null
+  apiKey?: string | null
+  accessToken?: AsaasAccessToken | null
+}
+
+export interface AsaasListSubaccountsQuery {
+  cpfCnpj?: string
+  email?: string
+  name?: string
+  walletId?: string
+  offset?: number
+  limit?: number
+}
+
+/** `POST /accounts/{id}/accessTokens` — exige o "Gerenciamento de chaves de subcontas" habilitado no painel e IP na whitelist. */
+export interface AsaasCreateAccessTokenInput {
+  name?: string
+  /** `YYYY-MM-DD HH:mm:ss`. */
+  expirationDate?: string
+}
+
+/** Grupo de documentos exigido (`GET /myAccount/documents`, chave da subconta). */
+export interface AsaasAccountDocumentGroup {
+  id: string
+  /** `NOT_SENT`, `PENDING`, `APPROVED`, `REJECTED`, `IGNORED`. */
+  status?: string | null
+  type?: string | null
+  title?: string | null
+  description?: string | null
+  responsible?: { name?: string | null; type?: string | null } | null
+  onboardingUrl?: string | null
+  onboardingUrlExpirationDate?: string | null
+  documents?: { id: string; status?: string | null }[] | null
+}
+
+export interface AsaasAccountDocuments {
+  rejectReasons?: string | null
+  data?: AsaasAccountDocumentGroup[] | null
+}
+
+export interface AsaasBalance {
+  balance: number
+}
+
+export interface AsaasWallet {
+  object?: string
+  id: string
+}
+
+export type AsaasTransferStatus = 'PENDING' | 'BANK_PROCESSING' | 'DONE' | 'CANCELLED' | 'FAILED' | (string & {})
+
+export interface AsaasTransfer {
+  object?: string
+  id: string
+  /** `PIX`, `TED` ou `INTERNAL` (entre contas Asaas). */
+  type?: string | null
+  dateCreated?: string | null
+  value: number
+  netValue?: number | null
+  status: AsaasTransferStatus
+  transferFee?: number | null
+  effectiveDate?: string | null
+  scheduleDate?: string | null
+  /** `false` = aguardando autorização (token/evento crítico). */
+  authorized?: boolean | null
+  failReason?: string | null
+  externalReference?: string | null
+  walletId?: string | null
+  operationType?: string | null
+  description?: string | null
+}
+
+/** `POST /transfers` para outra conta Asaas (carteira). */
+export interface AsaasCreateInternalTransferInput {
+  value: number
+  walletId: string
+  externalReference?: string
+}
+
+export interface AsaasListTransfersQuery {
+  'dateCreated[ge]'?: string
+  'dateCreated[le]'?: string
+  type?: string
+  offset?: number
+  limit?: number
+}

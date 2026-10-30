@@ -19,6 +19,8 @@ import { platformPublicInvoiceController } from '@/modules/platform-billing/publ
 import { tenantPlatformSubscriptionController } from '@/modules/platform-billing/tenant-controller'
 import { platformWebhookController } from '@/modules/platform-billing/webhook-controller'
 import { holdingController } from '@/modules/holding/controller'
+import { managedAccountsPlatformController } from '@/modules/managed-account/platform-controller'
+import { transferValidationController } from '@/modules/managed-account/transfer-validation'
 import { platformAccessGuard } from '@/http/middleware/platform-access'
 import { platformUsersController } from '@/modules/platform-users/controller'
 import { platformSellerController } from '@/modules/platform-sales/seller-controller'
@@ -50,6 +52,8 @@ export const routes = new Hono<AppEnv>()
   .route('/api/v1/platform/users', platformUsersController)
   .route('/api/v1/platform/plans', tenantPlansController)
   .route('/api/v1/webhooks', webhooksController)
+  // Validação de transferências/saques (mecanismo de segurança do Asaas da ANNETEC, vale para as subcontas).
+  .route('/api/v1/webhooks/asaas/validacao-transferencia', transferValidationController)
   // Contratação B2B da plataforma (Q1): jornada pública, arquivos, compliance e caixa de saída.
   .route('/api/v1/public/contratacao', onboardingPublicController)
   .route('/api/v1/public/arquivos', publicFilesController)
@@ -60,6 +64,8 @@ export const routes = new Hono<AppEnv>()
   .route('/api/v1/webhooks/asaas-plataforma', platformWebhookController)
   .route('/api/v1/public/faturas-annetec', platformPublicInvoiceController)
   .route('/api/v1/platform/billing', platformBillingController)
+  // Contas de recebimento gerenciadas pela ANNETEC (subcontas Asaas dos clubes).
+  .route('/api/v1/platform/contas-gerenciadas', managedAccountsPlatformController)
   .route('/api/v1/platform/holding', holdingController)
   .route('/api/v1/platform/notificacoes', platformNotificationsController)
   // Vendas da plataforma: área do vendedor ANNETEC (`platform_seller`) e a

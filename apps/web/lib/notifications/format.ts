@@ -56,6 +56,11 @@ export function platformHeadline(notification: AppNotification): string {
       return 'Desconto aprovado'
     case 'sales_discount_rejected':
       return 'Desconto recusado'
+    case 'managed_account_requested':
+      return 'Pedido de conta gerenciada'
+    case 'managed_account_decided':
+    case 'platform_auto_debit_failed':
+      return notification.title
   }
 }
 

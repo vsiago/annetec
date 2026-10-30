@@ -15,6 +15,8 @@ import {
 } from '@/components/admin-platform/club-detail/club-model'
 import type { ClubSummary } from '@/components/admin-platform/club-detail/use-club-summary'
 import { testTenantIntegrationAction } from '@/lib/actions/tenants-api'
+import { listManagedAccountsAction } from '@/lib/actions/platform-managed-accounts-api'
+import { useConsoleData } from '@/components/admin-platform/billing/console-kit'
 import { formatDateBR } from '@/lib/adapters/platform-console'
 import type { Tenant } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -79,6 +81,9 @@ export function ReadyToSellCard({
   onOpenAdvanced: () => void
 }) {
   const [testing, setTesting] = useState(false)
+  // Só para dizer de quem é a conta de recebimento (própria ou gerenciada pela ANNETEC).
+  const managedList = useConsoleData(() => listManagedAccountsAction({ q: tenant.slug }), [tenant.slug])
+  const receivingManaged = managedList.data?.some(row => row.tenantSlug === tenant.slug && row.source === 'subaccount') ?? false
   const { health, proposal, integration, plans } = summary
   const loading =
     (health.loading && !health.data) ||
@@ -161,7 +166,7 @@ export function ReadyToSellCard({
         id: 'recebimento',
         state: 'done',
         title: 'Recebimento das mensalidades conectado',
-        detail: `Conta Asaas do próprio clube${row.receivingEnv === 'sandbox' ? ' · ambiente de testes' : ''}`,
+        detail: `${receivingManaged ? 'Gerenciada pela ANNETEC' : 'Conta Asaas do próprio clube'}${row.receivingEnv === 'sandbox' ? ' · ambiente de testes' : ''}`,
       })
     } else {
       const issue = row.receivingIssue ?? 'nao_conectado'

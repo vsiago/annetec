@@ -144,6 +144,24 @@ const envSchema = z.object({
   PLATFORM_ASAAS_API_KEY: z.preprocess(emptyAsUndefined, z.string().min(10).optional()),
   /** Token do webhook `POST /api/v1/webhooks/asaas-plataforma`. Vazio = `ASAAS_WEBHOOK_TOKEN`. */
   PLATFORM_ASAAS_WEBHOOK_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(1).max(255).optional()),
+  /**
+   * Conta gerenciada (`modules/managed-account`): carteira (`walletId`) da
+   * conta ANNETEC, destino do débito automático. O destino vem SEMPRE de
+   * `GET /v3/wallets` com a chave da plataforma; preenchida, só é aceita se
+   * for uma dessas carteiras (senão o débito é bloqueado).
+   */
+  PLATFORM_ASAAS_WALLET_ID: z.preprocess(emptyAsUndefined, z.string().min(10).max(100).optional()),
+  /**
+   * Token do webhook de validação de transferências
+   * (`POST /api/v1/webhooks/asaas/validacao-transferencia`, 32–255), cadastrado
+   * no painel do Asaas da ANNETEC (Integrações → Mecanismos de segurança).
+   * Vazio = a rota recusa tudo (o Asaas cancela a transferência).
+   */
+  ASAAS_TRANSFER_VALIDATION_TOKEN: z.preprocess(emptyAsUndefined, z.string().min(32).max(255).optional()),
+  /** Débito automático da conta gerenciada: tentativas por fatura (falhas) antes de desistir. */
+  MANAGED_DEBIT_MAX_ATTEMPTS: z.preprocess(emptyAsUndefined, z.coerce.number().int().min(1).max(10).default(3)),
+  /** Intervalo mínimo (horas) entre tentativas automáticas na mesma fatura (padrão: 1 por dia). */
+  MANAGED_DEBIT_RETRY_INTERVAL_HOURS: z.preprocess(emptyAsUndefined, z.coerce.number().int().min(1).max(168).default(24)),
   /** Automação da cobrança da plataforma. Vazio = segue a regra da automação do clube. */
   PLATFORM_BILLING_AUTOMATION_ENABLED: z.preprocess(parseBooleanish, z.boolean().optional()),
   PLATFORM_BILLING_AUTOMATION_INTERVAL_SECONDS: z.preprocess(
