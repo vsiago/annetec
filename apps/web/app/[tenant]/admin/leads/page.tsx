@@ -2,18 +2,16 @@
 
 import { useMemo, useState } from 'react'
 import {
-  CalendarDays,
   Clock,
   Filter,
   Handshake,
-  ListFilter,
   Mail,
   MoreHorizontal,
   Pencil,
   Phone,
   Plus,
   Trash2,
-  Upload,
+  Download,
   UsersRound,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -48,6 +46,7 @@ import {
 import { getAllSellers, useTenantData } from '@/contexts/tenant-data-context'
 import { formatDelta, monthKeyOf, percentChange } from '@/lib/analytics'
 import { formatPhone, leadSchema } from '@/lib/form-schemas'
+import { downloadCsv } from '@/lib/download-csv'
 import { FOLLOW_UP_STATUSES, leadStatusMeta } from '@/lib/lead-status'
 import type { Interaction, Lead, LeadStatus } from '@/lib/types'
 import { useZodForm } from '@/lib/use-zod-form'
@@ -118,6 +117,22 @@ export default function AdminLeadsPage() {
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   }, [leads, search, status, source, seller])
+
+  function exportLeads() {
+    downloadCsv('leads.csv', [
+      ['Nome', 'E-mail', 'Telefone', 'Origem', 'Situação', 'Interesse', 'Valor (R$)', 'Criado em'],
+      ...filtered.map(lead => [
+        lead.name,
+        lead.email,
+        lead.phone,
+        leadSourceLabel(lead.source),
+        leadStatusMeta[lead.status]?.label ?? lead.status,
+        lead.interest ?? '',
+        lead.value.toFixed(2).replace('.', ','),
+        new Date(lead.createdAt).toLocaleDateString('pt-BR'),
+      ]),
+    ])
+  }
 
   const size = Number(perPage)
   const totalPages = Math.max(1, Math.ceil(filtered.length / size))
@@ -219,9 +234,9 @@ export default function AdminLeadsPage() {
         title="Leads"
         description="Acompanhe e converta seus leads em novos beneficiários."
       >
-        <Button variant="outline" className="h-11 gap-2 px-5">
-          <Upload className="h-4 w-4" />
-          Importar Leads
+        <Button variant="outline" className="h-11 gap-2 px-5" onClick={exportLeads}>
+          <Download className="h-4 w-4" />
+          Exportar leads
         </Button>
         <Button className="h-11 gap-2 px-5" onClick={openCreate}>
           <Plus className="h-4 w-4" />
@@ -297,14 +312,6 @@ export default function AdminLeadsPage() {
             options={sellers.map(item => ({ value: item.id, label: item.name }))}
           />
 
-          <Button variant="outline" className="h-14 gap-2 rounded-xl">
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">Período</span>
-          </Button>
-          <Button variant="outline" className="h-14 gap-2 rounded-xl">
-            <ListFilter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">Mais filtros</span>
-          </Button>
         </div>
 
         <CardContent className="p-0">

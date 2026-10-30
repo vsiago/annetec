@@ -200,12 +200,12 @@ export default function AdminParceirosPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Rede de Parceiros"
+        title="Rede credenciada"
         description="Encontre clínicas, laboratórios, profissionais e parceiros credenciados."
       >
         <Button className="h-11 gap-2 px-5" onClick={openCreate}>
           <Plus className="h-4 w-4" />
-          Novo Parceiro
+          Novo parceiro
         </Button>
       </PageHeader>
 
@@ -612,10 +612,6 @@ function PartnerPanel({ partner, onEdit }: { partner: Partner; onEdit: () => voi
         <Button variant="outline" className="flex-1 gap-2" onClick={onEdit}>
           <Pencil className="h-4 w-4" />
           Editar
-        </Button>
-        <Button className="flex-1 gap-2">
-          <MapPin className="h-4 w-4" />
-          Ver no mapa
         </Button>
       </div>
     </Card>

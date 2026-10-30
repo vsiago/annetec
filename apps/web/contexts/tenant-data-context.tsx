@@ -475,11 +475,14 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
 
     createAppointment: async input => {
       const result = await createOperatorAppointmentAction(slug, atendimentoParaApiCriacao(input))
-      if (result.success) setAppointments(prev => upsert(prev, atendimentoDaApi(result.data)))
+      // Rejeita com a mensagem da API: a mesa precisa saber que não gravou.
+      if (!result.success) throw new Error(result.error)
+      setAppointments(prev => upsert(prev, atendimentoDaApi(result.data)))
     },
     updateAppointment: async (id, patch) => {
       const result = await updateOperatorAppointmentAction(slug, id, atendimentoParaApi(patch))
-      if (result.success) setAppointments(prev => upsert(prev, atendimentoDaApi(result.data)))
+      if (!result.success) throw new Error(result.error)
+      setAppointments(prev => upsert(prev, atendimentoDaApi(result.data)))
     },
 
     /**
@@ -490,7 +493,7 @@ export function TenantDataProvider({ children }: { children: ReactNode }) {
      */
     addAppointmentMessage: async (id, message) => {
       const result = await addOperatorAppointmentMessageAction(slug, id, mensagemParaApi(message))
-      if (!result.success) return
+      if (!result.success) throw new Error(result.error)
       const criada = mensagemDaApi(result.data)
       setAppointments(prev =>
         prev.map(item =>

@@ -1,12 +1,12 @@
 'use client'
 
+import { downloadCsv } from '@/lib/download-csv'
 import { useMemo, useState } from 'react'
 import {
   BarChart3,
   CalendarDays,
   CircleDollarSign,
   Download,
-  ListFilter,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -214,6 +214,23 @@ export default function AdminVendasPage() {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }, [sales, search, status, plan, seller, source])
 
+  function exportSales() {
+    downloadCsv('vendas.csv', [
+      ['Venda', 'Cliente', 'Plano', 'Vendedor', 'Origem', 'Situação', 'Valor (R$)', 'Comissão (R$)', 'Data'],
+      ...filtered.map(sale => [
+        saleNumber(sale.id),
+        sale.clientName,
+        sale.plan,
+        sale.sellerName,
+        leadSourceLabel(sale.source),
+        saleStatusMeta[sale.status].label,
+        sale.value.toFixed(2).replace('.', ','),
+        sale.commission.toFixed(2).replace('.', ','),
+        new Date(sale.date).toLocaleDateString('pt-BR'),
+      ]),
+    ])
+  }
+
   const size = Number(perPage)
   const totalPages = Math.max(1, Math.ceil(filtered.length / size))
   const currentPage = Math.min(page, totalPages)
@@ -381,13 +398,9 @@ export default function AdminVendasPage() {
             allLabel="Todas"
             options={sources.map(item => ({ value: item, label: item }))}
           />
-          <Button variant="outline" className="h-14 gap-2 rounded-xl">
-            <ListFilter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">Mais filtros</span>
-          </Button>
-          <Button variant="outline" className="h-14 gap-2 rounded-xl">
+          <Button variant="outline" className="h-14 gap-2 rounded-xl" onClick={exportSales}>
             <Download className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">Exportar</span>
+            <span className="text-sm">Exportar vendas</span>
           </Button>
         </div>
       </Card>
@@ -688,10 +701,6 @@ function SaleActions({
         <DropdownMenuItem onClick={onEdit}>
           <Pencil className="mr-2 h-4 w-4" />
           Editar venda
-        </DropdownMenuItem>
-        <DropdownMenuItem>
-          <Receipt className="mr-2 h-4 w-4" />
-          Ver contrato
         </DropdownMenuItem>
         {canCancel && (
           <>

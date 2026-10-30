@@ -1,104 +1,239 @@
 import type { LucideIcon } from 'lucide-react'
 import {
   BadgeCheck,
+  BarChart3,
   CircleDollarSign,
-  FileText,
+  Gift,
   HandCoins,
   Handshake,
   Headset,
   Home,
   IdCard,
+  Landmark,
   Package,
   ReceiptText,
   Settings,
+  Target,
   TrendingUp,
   UserCog,
   Users,
-  UsersRound,
   Wallet,
+  UsersRound,
 } from 'lucide-react'
+
+/** Indicador que a sidebar desenha ao lado do item (dado vivo, não texto fixo). */
+export type AdminNavBadge = 'receiving-missing' | 'support-waiting'
 
 export interface AdminNavItem {
   /** Segmento sob `/[tenant]/admin`; vazio é o próprio painel. */
   segment: string
   label: string
-  /** Rótulo curto da barra inferior no mobile, onde não cabe o nome inteiro. */
+  /** Rótulo curto da barra inferior e da folha do mobile, onde não cabe o nome inteiro. */
   shortLabel?: string
+  /** Frase curta que explica o item (dica no menu recolhido e na folha do mobile). */
+  hint?: string
   icon: LucideIcon
+  /**
+   * Quando dois itens apontam para a mesma tela em abas diferentes
+   * (Cobranças × Conta de recebimento): `tab` é o `?tab=` do link e, em
+   * `tabOf`, a aba que o item representa. O padrão da tela é `cobrancas`.
+   */
+  tab?: string
+  badge?: AdminNavBadge
 }
-
-/**
- * Menu do painel da administradora — fonte única para a sidebar do desktop
- * (expandida e recolhida) e a barra inferior do mobile.
- *
- * O menu é enxuto de propósito: o dia a dia do clube é montar a oferta e
- * receber cadastros e pagamentos, então só Início, Produtos e Planos,
- * Cadastros e o grupo Financeiro ficam à vista. O resto vai para o grupo
- * "Mais módulos" — continua a um clique, sem disputar atenção com o que
- * importa.
- *
- * Financeiro agrupa Recebimento (o dinheiro que entrou) e Faturamento
- * (cobranças e assinaturas). Faturamento continua em `/admin/faturamento`
- * — os links antigos (`?tab=cobrancas`...) seguem valendo; `/admin/financeiro`
- * e `/admin/cobranca` redirecionam para lá.
- * "Clínicas e Elegibilidade" virou a Rede de Parceiros e "Comunicação" virou o
- * Atendimento — eram maquetes que duplicavam essas telas.
- */
-export const adminNavPrimary: AdminNavItem[] = [
-  { segment: '', label: 'Início', icon: Home },
-  { segment: 'planos', label: 'Produtos e Planos', shortLabel: 'Produtos', icon: Package },
-  { segment: 'cadastros', label: 'Cadastros', icon: IdCard },
-]
 
 export interface AdminNavGroup {
   label: string
-  icon: LucideIcon
   items: AdminNavItem[]
 }
 
-/** Grupo Financeiro: abre e fecha na sidebar; recolhida, vira menu flutuante. */
-export const adminNavFinance: AdminNavGroup = {
-  label: 'Financeiro',
-  icon: Wallet,
-  items: [
-    { segment: 'financeiro/recebimento', label: 'Recebimento', icon: HandCoins },
-    { segment: 'faturamento', label: 'Faturamento', icon: ReceiptText },
-  ],
-}
+/**
+ * Menu do painel do clube — fonte única para a sidebar do desktop (expandida
+ * e recolhida) e a folha "Menu" do mobile. Tudo fica à vista, agrupado pela
+ * tarefa de quem administra o clube; nada escondido atrás de "Mais módulos".
+ *
+ * - Associados × Contas de acesso: "Associados" (cadastros) é a assinatura —
+ *   plano, dependentes, pagamento. "Contas de acesso" (clientes) é a pessoa
+ *   que entra no portal: dados cadastrais, carteirinha, bloqueio de acesso.
+ *   São duas visões do mesmo público, por isso ficam lado a lado.
+ * - Financeiro: Cobranças e assinaturas e Conta de recebimento são abas da
+ *   mesma tela (`/faturamento`); o atalho existe porque, sem a conta do
+ *   Asaas conectada, o clube não consegue cobrar ninguém.
+ * - `/admin/financeiro` e `/admin/cobranca` redirecionam para Faturamento.
+ */
+export const adminNavHome: AdminNavItem = { segment: '', label: 'Início', icon: Home }
 
-export const adminNavMore: AdminNavItem[] = [
-  { segment: 'leads', label: 'Leads', icon: Users },
-  { segment: 'vendas', label: 'Vendas', icon: TrendingUp },
-  { segment: 'clientes', label: 'Beneficiários', icon: UsersRound },
-  { segment: 'parceiros', label: 'Rede de Parceiros', shortLabel: 'Parceiros', icon: Handshake },
-  { segment: 'comissoes', label: 'Comissões', icon: CircleDollarSign },
-  { segment: 'relatorios', label: 'Relatórios', icon: FileText },
-  { segment: 'atendimento', label: 'Atendimento', icon: Headset },
-  { segment: 'usuarios', label: 'Usuários e Permissões', shortLabel: 'Usuários', icon: UserCog },
-  { segment: 'configuracoes', label: 'Configurações', shortLabel: 'Config', icon: Settings },
-  { segment: 'assinatura', label: 'Assinatura da plataforma', shortLabel: 'Assinatura', icon: BadgeCheck },
+export const adminNavGroups: AdminNavGroup[] = [
+  {
+    label: 'Associados',
+    items: [
+      {
+        segment: 'cadastros',
+        label: 'Associados',
+        icon: IdCard,
+        hint: 'Assinaturas, planos e dependentes',
+      },
+      {
+        segment: 'clientes',
+        label: 'Contas de acesso',
+        shortLabel: 'Acessos',
+        icon: UsersRound,
+        hint: 'Quem entra no portal do associado',
+      },
+    ],
+  },
+  {
+    label: 'Produto',
+    items: [
+      { segment: 'planos', label: 'Planos', icon: Package, hint: 'O que o clube vende' },
+      { segment: 'beneficios', label: 'Benefícios', icon: Gift, hint: 'O que o associado recebe' },
+      {
+        segment: 'parceiros',
+        label: 'Rede credenciada',
+        shortLabel: 'Rede',
+        icon: Handshake,
+        hint: 'Clínicas, farmácias e parceiros',
+      },
+    ],
+  },
+  {
+    label: 'Vendas',
+    items: [
+      { segment: 'leads', label: 'Leads', icon: Users, hint: 'Interessados em contratar' },
+      { segment: 'vendas', label: 'Vendas', icon: TrendingUp, hint: 'Contratos fechados' },
+      {
+        segment: 'vendedores',
+        label: 'Vendedores e metas',
+        shortLabel: 'Vendedores',
+        icon: Target,
+        hint: 'Equipe de vendas e metas do mês',
+      },
+      { segment: 'comissoes', label: 'Comissões', icon: CircleDollarSign, hint: 'Estimativa pelas vendas' },
+    ],
+  },
+  {
+    label: 'Financeiro',
+    items: [
+      {
+        segment: 'faturamento',
+        tab: 'cobrancas',
+        label: 'Cobranças e assinaturas',
+        shortLabel: 'Cobranças',
+        icon: ReceiptText,
+        hint: 'Mensalidades, atrasos e assinaturas',
+      },
+      {
+        segment: 'financeiro/recebimento',
+        label: 'Recebimentos',
+        icon: HandCoins,
+        hint: 'O dinheiro que entrou',
+      },
+      {
+        segment: 'faturamento',
+        tab: 'recebimento',
+        label: 'Conta de recebimento',
+        shortLabel: 'Conta',
+        icon: Landmark,
+        hint: 'Conta Asaas onde o clube recebe',
+        badge: 'receiving-missing',
+      },
+      { segment: 'relatorios', label: 'Relatórios', icon: BarChart3, hint: 'Números do clube' },
+    ],
+  },
+  {
+    label: 'Atendimento',
+    items: [
+      {
+        segment: 'atendimento',
+        label: 'Atendimento',
+        icon: Headset,
+        hint: 'Chamados dos associados',
+        badge: 'support-waiting',
+      },
+    ],
+  },
+  {
+    label: 'Clube',
+    items: [
+      {
+        segment: 'usuarios',
+        label: 'Equipe e permissões',
+        shortLabel: 'Equipe',
+        icon: UserCog,
+        hint: 'Quem acessa o painel',
+      },
+      {
+        segment: 'configuracoes',
+        label: 'Dados do clube',
+        shortLabel: 'Dados',
+        icon: Settings,
+        hint: 'Nome, cores e contato',
+      },
+      {
+        segment: 'assinatura',
+        label: 'Plano ANNETEC',
+        icon: BadgeCheck,
+        hint: 'Sua assinatura da plataforma',
+      },
+    ],
+  },
 ]
 
-/** Lista completa, na ordem do menu — para quem só precisa percorrer tudo. */
-export const adminNavItems: AdminNavItem[] = [...adminNavPrimary, ...adminNavFinance.items, ...adminNavMore]
+/** Barra inferior do mobile: quatro atalhos + "Menu" (folha com todos os grupos). */
+export const adminNavMobileBar: AdminNavItem[] = [
+  adminNavHome,
+  { segment: 'cadastros', label: 'Associados', icon: IdCard },
+  { segment: 'planos', label: 'Planos', icon: Package },
+  { segment: 'faturamento', tab: 'cobrancas', label: 'Financeiro', icon: Wallet },
+]
 
-/** Chave do `localStorage` que lembra se "Mais módulos" ficou aberto. */
-export const ADMIN_NAV_MORE_STORAGE_KEY = 'annetec_admin_more_open'
+/** Lista completa, na ordem do menu. */
+export const adminNavItems: AdminNavItem[] = [adminNavHome, ...adminNavGroups.flatMap(group => group.items)]
 
-/** Chave do `localStorage` que lembra se o grupo Financeiro ficou aberto. */
-export const ADMIN_NAV_FINANCE_STORAGE_KEY = 'annetec_admin_finance_open'
+export function adminNavHref(base: string, segment: string, tab?: string): string {
+  const path = segment ? `${base}/${segment}` : base
+  // A aba padrão (cobranças) fica sem `?tab=`: é o endereço "limpo" da tela.
+  return tab && tab !== 'cobrancas' ? `${path}?tab=${tab}` : path
+}
 
-export function adminNavHref(base: string, segment: string): string {
-  return segment ? `${base}/${segment}` : base
+/** Chave única do item (dois itens podem dividir o mesmo segmento). */
+export function adminNavKey(item: AdminNavItem): string {
+  return `${item.segment}|${item.tab ?? ''}`
 }
 
 /**
  * Item ativo: Início só na igualdade (senão ficaria aceso em toda página);
- * os demais também nas sub-rotas (`/faturamento/...`).
+ * os demais também nas sub-rotas (`/faturamento/...`). Quando o item é uma
+ * aba de uma tela, só acende se a aba da URL for a dele (`currentTab` vazio =
+ * aba padrão, cobranças).
  */
-export function isAdminNavActive(pathname: string | null, base: string, segment: string): boolean {
+export function isAdminNavActive(
+  pathname: string | null,
+  base: string,
+  segment: string,
+  tab?: string,
+  currentTab?: string | null,
+): boolean {
   if (!pathname) return false
   const href = adminNavHref(base, segment)
-  if (!segment) return pathname === href || pathname === `${href}/`
-  return pathname === href || pathname.startsWith(`${href}/`)
+  const onPath = !segment
+    ? pathname === href || pathname === `${href}/`
+    : pathname === href || pathname.startsWith(`${href}/`)
+  if (!onPath || !tab) return onPath
+  return (currentTab || 'cobrancas') === tab
+}
+
+/** Atalho: ativo ou não, direto de um item do menu. */
+export function isAdminNavItemActive(
+  pathname: string | null,
+  base: string,
+  item: AdminNavItem,
+  currentTab?: string | null,
+): boolean {
+  // "Cobranças" é a aba padrão: qualquer aba que não seja "Conta de recebimento"
+  // continua sendo Cobranças e assinaturas (automação, visão geral...).
+  if (item.tab === 'cobrancas') {
+    return isAdminNavActive(pathname, base, item.segment) && currentTab !== 'recebimento'
+  }
+  return isAdminNavActive(pathname, base, item.segment, item.tab, currentTab)
 }

@@ -1,14 +1,13 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { leadSourceLabel } from '@/lib/lead-sources'
 import {
   CalendarDays,
   CircleDollarSign,
   Download,
   Info,
-  ListFilter,
-  MoreHorizontal,
   Percent,
   ShoppingBag,
   Trophy,
@@ -28,12 +27,6 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -47,15 +40,15 @@ import { SectionTab, SectionTabsList } from '@/components/dashboard/section-tabs
 import { StatCard } from '@/components/dashboard/stat-card'
 import {
   DataTable,
-  FilterSelect,
   SearchInput,
-  StatusPill,
   SummaryRow,
   TableFooter,
   type Column,
 } from '@/components/dashboard/table-controls'
 import { getAllSellers, useTenantData } from '@/contexts/tenant-data-context'
 import { formatCurrency, formatMonthLabel, formatMonthRange, lastMonths, monthKeyOf } from '@/lib/analytics'
+import { useTenant } from '@/contexts/tenant-context'
+import { downloadCsv } from '@/lib/download-csv'
 import { useChartColors } from '@/lib/use-chart-colors'
 import { getInitials } from '@/lib/utils'
 
@@ -74,7 +67,6 @@ interface SellerRow {
   sales: number
   amount: number
   commission: number
-  paid: boolean
   tone: string
 }
 
@@ -88,14 +80,15 @@ interface GroupRow {
 }
 
 export default function AdminComissoesPage() {
+  const { tenant } = useTenant()
   const { users, sales, partners, isLoading } = useTenantData()
+  const base = tenant ? `/${tenant.slug}/admin` : ''
   const colors = useChartColors()
 
   const months = useMemo(() => [...lastMonths(12)].reverse(), [])
   const [referenceMonth, setReferenceMonth] = useState(() => months[0]?.key ?? '')
   const [tab, setTab] = useState('vendedor')
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('all')
   const [perPage, setPerPage] = useState('10')
   const [page, setPage] = useState(1)
 
@@ -118,9 +111,6 @@ export default function AdminComissoesPage() {
             sales: own.length,
             amount: own.reduce((sum, sale) => sum + sale.value, 0),
             commission: own.reduce((sum, sale) => sum + sale.commission, 0),
-            // Sem módulo de pagamento de comissão: alterna para a coluna
-            // mostrar os dois estados que a tela precisa exibir.
-            paid: index % 2 === 1,
             tone: AVATAR_TONES[index % AVATAR_TONES.length],
           }
         })
@@ -171,7 +161,6 @@ export default function AdminComissoesPage() {
           city: item.city ?? '—',
           category: item.category,
           discount: item.discountPercent,
-          appointments: null as number | null,
         }))
         .sort((a, b) => b.discount - a.discount),
     [partners],
@@ -179,7 +168,7 @@ export default function AdminComissoesPage() {
 
   const historyRows = useMemo(
     () =>
-      [...lastMonths(8)].reverse().map((bucket, index) => {
+      [...lastMonths(8)].reverse().map(bucket => {
         const bucketSales = sales.filter(
           sale => monthKeyOf(sale.date) === bucket.key && sale.status !== 'cancelled',
         )
@@ -189,8 +178,6 @@ export default function AdminComissoesPage() {
           sales: bucketSales.length,
           amount: bucketSales.reduce((sum, sale) => sum + sale.value, 0),
           commission: bucketSales.reduce((sum, sale) => sum + sale.commission, 0),
-          // O mês corrente ainda não fechou; os anteriores já foram pagos.
-          paid: index > 0,
         }
       }),
     [sales],
@@ -218,8 +205,6 @@ export default function AdminComissoesPage() {
 
   const term = search.trim().toLowerCase()
   const filteredSellers = sellerRows.filter(row => {
-    if (status === 'pago' && !row.paid) return false
-    if (status === 'apagar' && row.paid) return false
     if (!term) return true
     return [row.name, row.code].some(field => field.toLowerCase().includes(term))
   })
@@ -239,6 +224,23 @@ export default function AdminComissoesPage() {
   const money = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
   const shareOf = (value: number) =>
     totalCommission === 0 ? '0%' : `${Math.round((value / totalCommission) * 100)}%`
+
+  function exportCommissions() {
+    const month = months.find(item => item.key === referenceMonth)
+    downloadCsv(`comissoes-${referenceMonth}.csv`, [
+      ['Competência', month ? formatMonthLabel(month.date) : referenceMonth],
+      ['Os valores são estimados pelas vendas; o sistema não registra pagamento de comissão.'],
+      [],
+      ['Vendedor', 'Código', 'Vendas', 'Valor das vendas (R$)', 'Comissão estimada (R$)'],
+      ...sellerRows.map(row => [
+        row.name,
+        row.code,
+        row.sales,
+        row.amount.toFixed(2).replace('.', ','),
+        row.commission.toFixed(2).replace('.', ','),
+      ]),
+    ])
+  }
 
   const sellerColumns: Column<SellerRow>[] = [
     {
@@ -265,38 +267,8 @@ export default function AdminComissoesPage() {
     },
     {
       key: 'commission',
-      header: 'Comissão (R$)',
+      header: 'Comissão estimada (R$)',
       render: row => <span className="font-medium text-foreground">{money(row.commission)}</span>,
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: row => (
-        <StatusPill
-          label={row.paid ? 'Pago' : 'A pagar'}
-          className={row.paid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}
-        />
-      ),
-    },
-    {
-      key: 'actions',
-      header: 'Ações',
-      align: 'right',
-      render: () => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreHorizontal className="h-4 w-4" />
-              <span className="sr-only">Ações da comissão</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem>Ver extrato</DropdownMenuItem>
-            <DropdownMenuItem>Marcar como pago</DropdownMenuItem>
-            <DropdownMenuItem>Exportar recibo</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
     },
   ]
 
@@ -328,7 +300,7 @@ export default function AdminComissoesPage() {
     <div className="space-y-5">
       <PageHeader
         title="Comissões"
-        description="Acompanhe e gerencie as comissões da sua equipe de vendas e parceiros."
+        description="Comissão estimada pelas vendas de cada vendedor. O sistema ainda não registra o pagamento das comissões."
       >
         <Select value={referenceMonth} onValueChange={withPageReset(setReferenceMonth)}>
           <SelectTrigger className="w-full gap-2 bg-card data-[size=default]:h-11 sm:w-60">
@@ -343,7 +315,7 @@ export default function AdminComissoesPage() {
             ))}
           </SelectContent>
         </Select>
-        <Button className="h-11 gap-2 px-5">
+        <Button className="h-11 gap-2 px-5" onClick={exportCommissions}>
           <Download className="h-4 w-4" />
           Exportar comissões
         </Button>
@@ -354,7 +326,7 @@ export default function AdminComissoesPage() {
           icon={Wallet}
           accent="success"
           value={formatCurrency(Math.round(totalCommission))}
-          label="Comissão total"
+          label="Comissão estimada"
         />
         <StatCard
           icon={Users}
@@ -382,13 +354,9 @@ export default function AdminComissoesPage() {
             <SectionTab value="vendedor">Por Vendedor</SectionTab>
             <SectionTab value="plano">Por Plano</SectionTab>
             <SectionTab value="produto">Por Origem</SectionTab>
-            <SectionTab value="parceiro">Por Parceiro</SectionTab>
-            <SectionTab value="historico">Histórico de Pagamentos</SectionTab>
+            <SectionTab value="parceiro">Rede credenciada</SectionTab>
+            <SectionTab value="historico">Histórico mensal</SectionTab>
           </SectionTabsList>
-          <Button variant="outline" className="h-11 gap-2">
-            <ListFilter className="h-4 w-4 text-muted-foreground" />
-            Mais filtros
-          </Button>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-12">
@@ -400,16 +368,6 @@ export default function AdminComissoesPage() {
                     value={search}
                     onChange={withPageReset(setSearch)}
                     placeholder="Buscar por nome do vendedor ou código..."
-                  />
-                  <FilterSelect
-                    label="Status"
-                    value={status}
-                    onChange={withPageReset(setStatus)}
-                    allLabel="Todos os status"
-                    options={[
-                      { value: 'pago', label: 'Pago' },
-                      { value: 'apagar', label: 'A pagar' },
-                    ]}
                   />
                 </div>
                 <CardContent className="p-0">
@@ -472,10 +430,10 @@ export default function AdminComissoesPage() {
             <TabsContent value="parceiro" className="m-0">
               <Card className="gap-0 py-0 shadow-sm">
                 <CardHeader className="p-4">
-                  <CardTitle className="text-base">Uso da rede por parceiro</CardTitle>
+                  <CardTitle className="text-base">Rede credenciada</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Regra de comissionamento de parceiro ainda não existe: a aba mostra o volume de
-                    atendimentos, que é o que dá para medir hoje.
+                    Comissão de parceiro não existe como regra: a aba mostra o desconto negociado por cada
+                    parceiro ativo.
                   </p>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -488,11 +446,6 @@ export default function AdminComissoesPage() {
                       },
                       { key: 'city', header: 'Cidade', hideOnMobile: true, render: row => <span className="text-muted-foreground">{row.city}</span> },
                       {
-                        key: 'appointments',
-                        header: 'Usos no período',
-                        render: row => row.appointments ?? '—',
-                      },
-                      {
                         key: 'discount',
                         header: 'Desconto negociado',
                         align: 'right',
@@ -501,7 +454,7 @@ export default function AdminComissoesPage() {
                     ]}
                     rows={partnerRows}
                     rowKey={row => row.key}
-                    empty="Nenhum atendimento registrado na rede."
+                    empty="Nenhum parceiro ativo na rede."
                   />
                 </CardContent>
               </Card>
@@ -510,9 +463,9 @@ export default function AdminComissoesPage() {
             <TabsContent value="historico" className="m-0">
               <Card className="gap-0 py-0 shadow-sm">
                 <CardHeader className="p-4">
-                  <CardTitle className="text-base">Histórico de pagamentos</CardTitle>
+                  <CardTitle className="text-base">Histórico mensal</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Fechamento de comissão mês a mês.
+                    Comissão estimada pelas vendas, mês a mês. Sem status de pagamento.
                   </p>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -527,24 +480,12 @@ export default function AdminComissoesPage() {
                       { key: 'amount', header: 'Valor vendido', hideOnMobile: true, render: row => formatCurrency(Math.round(row.amount)) },
                       {
                         key: 'commission',
-                        header: 'Comissão',
+                        header: 'Comissão estimada',
+                        align: 'right',
                         render: row => (
                           <span className="font-medium text-foreground">
                             {formatCurrency(Math.round(row.commission))}
                           </span>
-                        ),
-                      },
-                      {
-                        key: 'status',
-                        header: 'Situação',
-                        align: 'right',
-                        render: row => (
-                          <StatusPill
-                            label={row.paid ? 'Pago' : 'Em aberto'}
-                            className={
-                              row.paid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                            }
-                          />
                         ),
                       },
                     ]}
@@ -596,7 +537,7 @@ export default function AdminComissoesPage() {
                 <SummaryRow label="Vendedores ativos" value={String(activeSellers)} />
                 <SummaryRow label="Ticket médio por venda" value={formatCurrency(Math.round(averageTicket))} />
                 <SummaryRow
-                  label="Comissão total"
+                  label="Comissão estimada"
                   value={formatCurrency(Math.round(totalCommission))}
                   emphasis
                 />
@@ -608,11 +549,11 @@ export default function AdminComissoesPage() {
                 <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-500" />
                 <div className="space-y-1 text-sm">
                   <p className="text-foreground">
-                    As comissões são calculadas conforme as regras de cada plano e produto.
+                    Comissão estimada pelas vendas. A taxa de cada vendedor é definida na meta do mês.
                   </p>
-                  <button type="button" className="text-sm font-medium text-primary hover:underline">
-                    Ver regras de comissão →
-                  </button>
+                  <Link href={`${base}/vendedores`} className="text-sm font-medium text-primary hover:underline">
+                    Ajustar metas e comissões →
+                  </Link>
                 </div>
               </CardContent>
             </Card>

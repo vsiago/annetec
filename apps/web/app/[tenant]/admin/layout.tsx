@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { Suspense, createContext, useContext, useState, useEffect } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { AdminTopbar } from '@/components/admin/admin-topbar'
@@ -56,7 +56,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <AdminSidebarContext.Provider value={{ isCollapsed, toggleSidebar, setIsCollapsed }}>
       <div className="min-h-screen bg-background">
-        <AdminSidebar />
+        {/* `useSearchParams` do menu (aba ativa) exige Suspense no App Router. */}
+        <Suspense fallback={null}>
+          <AdminSidebar />
+        </Suspense>
         <div
           className={cn(
             'flex min-h-screen flex-col pt-14 transition-[padding] duration-300 ease-in-out lg:pt-0',

@@ -1,28 +1,27 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   CircleCheckBig,
   Clock,
   Headset,
-  ListFilter,
   Mail,
   MessageCircle,
   MonitorSmartphone,
   MoreHorizontal,
-  Paperclip,
   Phone,
   Plus,
   Send,
-  Smile,
-  Timer,
   UserRound,
   X,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +38,9 @@ import {
   StatusPill,
   TableFooter,
 } from '@/components/dashboard/table-controls'
+import { FormDialog, FormField, FormRow, FormSelect } from '@/components/dashboard/form-dialog'
+import { useAuth } from '@/contexts/auth-context'
+import { useTenant } from '@/contexts/tenant-context'
 import { getAllClients, useTenantData } from '@/contexts/tenant-data-context'
 import type {
   Appointment,
@@ -106,8 +108,22 @@ const AVATAR_TONES = [
   'bg-amber-100 text-amber-700',
 ]
 
+const EMPTY_TICKET = {
+  clientId: '',
+  subject: '',
+  description: '',
+  channel: 'telefone',
+  priority: 'normal',
+}
+
+const FINISHED: AppointmentStatus[] = ['resolvido', 'encerrado']
+
 export default function AdminAtendimentoPage() {
-  const { appointments, users, isLoading, addAppointmentMessage } = useTenantData()
+  const { tenant } = useTenant()
+  const { user: me } = useAuth()
+  const { appointments, users, isLoading, addAppointmentMessage, createAppointment, updateAppointment } =
+    useTenantData()
+  const base = tenant ? `/${tenant.slug}/admin` : ''
 
   const tickets = useMemo<Chamado[]>(() => {
     const porId = new Map(getAllClients(users).map(client => [client.id, client]))
@@ -133,6 +149,9 @@ export default function AdminAtendimentoPage() {
   const [page, setPage] = useState(1)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [reply, setReply] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [newTicket, setNewTicket] = useState(EMPTY_TICKET)
+  const [newTicketError, setNewTicketError] = useState<Record<string, string>>({})
 
   const subjects = useMemo(
     () => [...new Set(tickets.map(t => t.chamado.subject).filter(Boolean))].sort(),
@@ -187,12 +206,80 @@ export default function AdminAtendimentoPage() {
   async function responder(item: Chamado) {
     const texto = reply.trim()
     if (!texto) return
-    setReply('')
-    await addAppointmentMessage(item.chamado.id, {
-      kind: 'saida',
-      title: 'Resposta enviada',
-      body: texto,
-    })
+    try {
+      await addAppointmentMessage(item.chamado.id, {
+        kind: 'saida',
+        title: 'Resposta enviada',
+        body: texto,
+      })
+      setReply('')
+    } catch (error) {
+      // O texto continua no campo para a pessoa tentar de novo.
+      toast.error('Resposta não enviada', {
+        description: error instanceof Error ? error.message : 'Tente novamente em instantes.',
+      })
+    }
+  }
+
+  async function assumir(item: Chamado) {
+    if (!me) return
+    try {
+      await updateAppointment(item.chamado.id, {
+        assignedId: me.id,
+        status: item.chamado.status === 'aguardando' ? 'em_atendimento' : item.chamado.status,
+      })
+      toast.success('Atendimento assumido', { description: item.protocolo })
+    } catch (error) {
+      toast.error('Não foi possível assumir', {
+        description: error instanceof Error ? error.message : 'Tente novamente em instantes.',
+      })
+    }
+  }
+
+  async function resolver(item: Chamado) {
+    try {
+      await updateAppointment(item.chamado.id, { status: 'resolvido' })
+      toast.success('Atendimento resolvido', { description: item.protocolo })
+    } catch (error) {
+      toast.error('Não foi possível marcar como resolvido', {
+        description: error instanceof Error ? error.message : 'Tente novamente em instantes.',
+      })
+    }
+  }
+
+  const clients = useMemo(
+    () => [...getAllClients(users)].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+    [users],
+  )
+
+  async function submitNewTicket(): Promise<string | void> {
+    const errors: Record<string, string> = {}
+    if (!newTicket.clientId) errors.clientId = 'Escolha o associado.'
+    if (newTicket.subject.trim().length < 3) errors.subject = 'Informe o assunto.'
+    if (newTicket.description.trim().length < 3) errors.description = 'Descreva o pedido.'
+    setNewTicketError(errors)
+    if (Object.keys(errors).length > 0) return 'Confira os campos destacados abaixo.'
+
+    const client = clients.find(item => item.id === newTicket.clientId)
+    if (!client) return 'Associado não encontrado.'
+    try {
+      await createAppointment({
+        clientId: client.id,
+        clientName: client.name,
+        subject: newTicket.subject.trim(),
+        description: newTicket.description.trim(),
+        channel: newTicket.channel as AppointmentChannel,
+        priority: newTicket.priority as AppointmentPriority,
+        assignedId: '',
+        assignedName: '',
+        protocol: '',
+        lastInteractionAt: new Date(),
+        messages: [],
+      } as Parameters<typeof createAppointment>[0])
+    } catch (error) {
+      return error instanceof Error ? error.message : 'Não foi possível registrar o atendimento.'
+    }
+    toast.success('Atendimento registrado', { description: client.name })
   }
 
   function withPageReset<T>(setter: (value: T) => void) {
@@ -208,20 +295,27 @@ export default function AdminAtendimentoPage() {
     <div className="space-y-5">
       <PageHeader
         title="Atendimento"
-        description="Registre, acompanhe e resolva as demandas dos nossos beneficiários."
+        description="Registre, acompanhe e resolva as demandas dos associados."
       >
-        <Button className="h-11 gap-2 px-5">
+        <Button
+          className="h-11 gap-2 px-5"
+          onClick={() => {
+            setNewTicket(EMPTY_TICKET)
+            setNewTicketError({})
+            setCreating(true)
+          }}
+        >
           <Plus className="h-4 w-4" />
           Novo atendimento
         </Button>
       </PageHeader>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={Headset}
           accent="info"
           value={tickets.length}
-          label="Atendimentos no período"
+          label="Atendimentos registrados"
         />
         <StatCard
           icon={Clock}
@@ -240,12 +334,6 @@ export default function AdminAtendimentoPage() {
           accent="success"
           value={countBy('resolvido')}
           label="Resolvidos"
-        />
-        <StatCard
-          icon={Timer}
-          accent="primary"
-          value="4h 18min"
-          label="Tempo médio de resolução"
         />
       </div>
 
@@ -293,10 +381,6 @@ export default function AdminAtendimentoPage() {
                   allLabel="Todos"
                   options={owners.map(item => ({ value: item, label: item }))}
                 />
-                <Button variant="outline" className="h-14 gap-2 rounded-xl">
-                  <ListFilter className="h-4 w-4 text-muted-foreground" />
-                  Mais filtros
-                </Button>
               </div>
 
               <CardContent className="p-0">
@@ -304,10 +388,7 @@ export default function AdminAtendimentoPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
-                        <th className="w-10 py-3 pl-4">
-                          <Checkbox aria-label="Selecionar todos" />
-                        </th>
-                        <th className="px-3 py-3 font-medium">Protocolo</th>
+                        <th className="py-3 pl-4 pr-3 font-medium">Protocolo</th>
                         <th className="px-3 py-3 font-medium">Usuário</th>
                         <th className="px-3 py-3 font-medium">Canal</th>
                         <th className="px-3 py-3 font-medium">Assunto</th>
@@ -320,7 +401,7 @@ export default function AdminAtendimentoPage() {
                     <tbody>
                       {visible.length === 0 && (
                         <tr>
-                          <td colSpan={9} className="py-12 text-center text-muted-foreground">
+                          <td colSpan={8} className="py-12 text-center text-muted-foreground">
                             Nenhum atendimento com os filtros atuais.
                           </td>
                         </tr>
@@ -338,10 +419,7 @@ export default function AdminAtendimentoPage() {
                               selected?.chamado.id === ticket.id && 'bg-primary/5',
                             )}
                           >
-                            <td className="py-3 pl-4" onClick={event => event.stopPropagation()}>
-                              <Checkbox aria-label={`Selecionar ${item.protocolo}`} />
-                            </td>
-                            <td className="px-3 py-3 font-medium text-primary">{item.protocolo}</td>
+                            <td className="py-3 pl-4 pr-3 font-medium text-primary">{item.protocolo}</td>
                             <td className="px-3 py-3">
                               <div className="flex items-center gap-2">
                                 <Avatar className="h-7 w-7">
@@ -389,9 +467,18 @@ export default function AdminAtendimentoPage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-44">
-                                  <DropdownMenuItem>Assumir atendimento</DropdownMenuItem>
-                                  <DropdownMenuItem>Transferir</DropdownMenuItem>
-                                  <DropdownMenuItem>Marcar como resolvido</DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    disabled={FINISHED.includes(ticket.status) || ticket.assignedId === me?.id}
+                                    onSelect={() => void assumir(item)}
+                                  >
+                                    Assumir atendimento
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    disabled={FINISHED.includes(ticket.status)}
+                                    onSelect={() => void resolver(item)}
+                                  >
+                                    Marcar como resolvido
+                                  </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </td>
@@ -416,6 +503,7 @@ export default function AdminAtendimentoPage() {
             <div className="xl:col-span-4">
               {selected && (
                 <TicketPanel
+                  base={base}
                   item={selected}
                   reply={reply}
                   onReplyChange={setReply}
@@ -427,17 +515,73 @@ export default function AdminAtendimentoPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <FormDialog
+        open={creating}
+        onOpenChange={setCreating}
+        title="Novo atendimento"
+        description="Registre um pedido que chegou por telefone, WhatsApp ou balcão. Ele entra na fila."
+        submitLabel="Registrar atendimento"
+        onSubmit={submitNewTicket}
+      >
+        <FormField label="Associado" required error={newTicketError.clientId}>
+          <FormSelect
+            value={newTicket.clientId}
+            onChange={value => setNewTicket(prev => ({ ...prev, clientId: value }))}
+            placeholder="Escolha o associado"
+            options={clients.map(client => ({ value: client.id, label: client.name }))}
+            invalid={Boolean(newTicketError.clientId)}
+          />
+        </FormField>
+        <FormField label="Assunto" htmlFor="ticket-subject" required error={newTicketError.subject}>
+          <Input
+            id="ticket-subject"
+            value={newTicket.subject}
+            onChange={event => setNewTicket(prev => ({ ...prev, subject: event.target.value }))}
+            aria-invalid={Boolean(newTicketError.subject)}
+          />
+        </FormField>
+        <FormField label="Descrição" htmlFor="ticket-description" required error={newTicketError.description}>
+          <Textarea
+            id="ticket-description"
+            rows={3}
+            value={newTicket.description}
+            onChange={event => setNewTicket(prev => ({ ...prev, description: event.target.value }))}
+            aria-invalid={Boolean(newTicketError.description)}
+          />
+        </FormField>
+        <FormRow>
+          <FormField label="Canal">
+            <FormSelect
+              value={newTicket.channel}
+              onChange={value => setNewTicket(prev => ({ ...prev, channel: value }))}
+              placeholder="Canal"
+              options={Object.entries(channelMeta).map(([value, meta]) => ({ value, label: meta.label }))}
+            />
+          </FormField>
+          <FormField label="Prioridade">
+            <FormSelect
+              value={newTicket.priority}
+              onChange={value => setNewTicket(prev => ({ ...prev, priority: value }))}
+              placeholder="Prioridade"
+              options={Object.entries(priorityMeta).map(([value, meta]) => ({ value, label: meta.label }))}
+            />
+          </FormField>
+        </FormRow>
+      </FormDialog>
     </div>
   )
 }
 
 function TicketPanel({
+  base,
   item,
   reply,
   onReplyChange,
   onSend,
   onClose,
 }: {
+  base: string
   item: Chamado
   reply: string
   onReplyChange: (value: string) => void
@@ -478,9 +622,11 @@ function TicketPanel({
           <p className="truncate font-semibold text-foreground">{ticket.clientName}</p>
           <p className="truncate text-xs text-muted-foreground">CPF {item.cpf}</p>
         </div>
-        <Button variant="outline" size="sm">
-          Ver perfil
-        </Button>
+        {ticket.clientId && (
+          <Button asChild variant="outline" size="sm">
+            <Link href={`${base}/clientes/${ticket.clientId}`}>Ver perfil</Link>
+          </Button>
+        )}
       </div>
 
       <dl className="space-y-1.5 border-b border-border p-4 text-sm">
@@ -580,8 +726,6 @@ function TicketPanel({
             placeholder="Digite uma mensagem..."
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
-          <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <Smile className="h-4 w-4 shrink-0 text-muted-foreground" />
         </div>
         <Button
           className="mt-2 w-full gap-2"

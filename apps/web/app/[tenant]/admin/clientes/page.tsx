@@ -1,5 +1,6 @@
 'use client'
 
+import { downloadCsv } from '@/lib/download-csv'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
@@ -9,7 +10,6 @@ import {
   CreditCard,
   Download,
   IdCard,
-  ListFilter,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -171,6 +171,23 @@ export default function AdminBeneficiariosPage() {
       .sort((a, b) => new Date(b.contractDate).getTime() - new Date(a.contractDate).getTime())
   }, [clients, search, plan, status, access])
 
+  function exportClients() {
+    downloadCsv('contas-de-acesso.csv', [
+      ['Nome', 'E-mail', 'CPF', 'Telefone', 'Cidade', 'Plano', 'Situação do plano', 'Carteirinha', 'Contrato em'],
+      ...filtered.map(client => [
+        client.name,
+        client.email,
+        client.cpf,
+        client.phone ?? '',
+        client.city ?? '',
+        client.plan,
+        statusMeta[client.planStatus].label,
+        client.cardNumber,
+        new Date(client.contractDate).toLocaleDateString('pt-BR'),
+      ]),
+    ])
+  }
+
   const size = Number(perPage)
   const totalPages = Math.max(1, Math.ceil(filtered.length / size))
   const currentPage = Math.min(page, totalPages)
@@ -280,16 +297,16 @@ export default function AdminBeneficiariosPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Beneficiários"
-        description="Gerencie a carteira de associados, planos e carteirinhas digitais."
+        title="Contas de acesso"
+        description="Quem tem cadastro e acesso ao portal do clube: dados, carteirinha e bloqueio. Planos e pagamentos ficam em Associados."
       >
-        <Button variant="outline" className="h-11 gap-2">
+        <Button variant="outline" className="h-11 gap-2" onClick={exportClients}>
           <Download className="h-4 w-4" />
-          Exportar
+          Exportar lista
         </Button>
         <Button className="h-11 gap-2 px-5" onClick={openCreate}>
           <Plus className="h-4 w-4" />
-          Novo beneficiário
+          Novo associado
         </Button>
       </PageHeader>
 
@@ -349,10 +366,6 @@ export default function AdminBeneficiariosPage() {
             allLabel="Todos"
             options={Object.entries(accessMeta).map(([value, meta]) => ({ value, label: meta.filterLabel }))}
           />
-          <Button variant="outline" className="h-14 gap-2 rounded-xl">
-            <ListFilter className="h-4 w-4 text-muted-foreground" />
-            Mais filtros
-          </Button>
         </div>
 
         <CardContent className="p-0">

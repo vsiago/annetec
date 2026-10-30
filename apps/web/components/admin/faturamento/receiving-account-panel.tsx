@@ -30,6 +30,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { notifyReceivingAccountChanged } from '@/lib/receiving-account-events'
 import {
   connectReceivingAccountAction,
   disconnectReceivingAccountAction,
@@ -146,6 +147,7 @@ function KeyForm({
           ? `Recebimento na conta de ${result.data.accountName}.`
           : 'O clube já pode receber as mensalidades.',
       })
+      notifyReceivingAccountChanged(result.data.connected)
       onConnected(result.data)
     } finally {
       setBusy(false)
@@ -504,6 +506,7 @@ function ConnectedAccount({
             return result.error
           }
           toast.success('Conta Asaas desconectada')
+          notifyReceivingAccountChanged(false)
           onDisconnected(result.data)
         }}
       />

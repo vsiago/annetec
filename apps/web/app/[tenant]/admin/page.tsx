@@ -51,12 +51,14 @@ import {
   formatMonthLabel,
   lastMonths,
   monthKeyOf,
+  percentChange,
   planDistribution,
   summaryMetrics,
 } from '@/lib/analytics'
 import { useChartColors } from '@/lib/use-chart-colors'
 import { cn } from '@/lib/utils'
 import { ClubHomeBlock } from '@/components/admin/faturamento/club-home-block'
+import { GettingStarted } from '@/components/admin/getting-started'
 import { downloadCsv } from '@/lib/download-csv'
 import { useActionData } from '@/components/admin/faturamento/use-action-data'
 import { getBillingSummaryAction } from '@/lib/actions/faturamento-api'
@@ -94,6 +96,12 @@ export default function AdminDashboard() {
   const metrics = summaryMetrics(sales, leads, clients, '1m')
 
   const monthAdmissions = clients.filter(c => monthKeyOf(c.contractDate) === referenceMonth).length
+  const referenceIndex = months.findIndex(m => m.key === referenceMonth)
+  const previousMonthKey = referenceIndex >= 0 ? months[referenceIndex + 1]?.key : undefined
+  const previousAdmissions = previousMonthKey
+    ? clients.filter(c => monthKeyOf(c.contractDate) === previousMonthKey).length
+    : 0
+  const admissionsChange = previousMonthKey ? percentChange(monthAdmissions, previousAdmissions) : null
 
   // Faturamento de um clube de benefícios é a mensalidade recorrente da
   // carteira vigente, não a soma das adesões novas — por isso soma o preço do
@@ -109,10 +117,25 @@ export default function AdminDashboard() {
     ? new Date(reference.date.getFullYear(), reference.date.getMonth() + 1, 0, 23, 59, 59)
     : new Date()
   const previousEnd = new Date(referenceEnd.getFullYear(), referenceEnd.getMonth(), 0, 23, 59, 59)
-  const monthRevenue = billedAt(referenceEnd)
-  const previousRevenue = billedAt(previousEnd)
-  const revenueChange =
-    previousRevenue === 0 ? null : Math.round(((monthRevenue - previousRevenue) / previousRevenue) * 100)
+  const estimatedRevenue = billedAt(referenceEnd)
+  const estimatedPrevious = billedAt(previousEnd)
+
+  // Valor real: o que o clube recebeu no mês, do resumo de Faturamento (que
+  // guarda os últimos 6 meses, "yyyy-MM"). Fora dessa janela, ou sem o resumo,
+  // cai na estimativa por preço do plano × contratos — e o rótulo avisa.
+  const billingMonthKey = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+  const receivedIn = (date: Date | undefined) =>
+    date ? club?.monthly.find(point => point.month === billingMonthKey(date)) : undefined
+  const receivedNow = receivedIn(reference?.date)
+  const receivedBefore = receivedIn(reference ? new Date(reference.date.getFullYear(), reference.date.getMonth() - 1, 1) : undefined)
+  const revenueIsReal = receivedNow !== undefined
+  const monthRevenue = receivedNow ? receivedNow.received : estimatedRevenue
+  const revenueChange = receivedNow
+    ? receivedBefore
+      ? percentChange(receivedNow.received, receivedBefore.received)
+      : null
+    : percentChange(estimatedRevenue, estimatedPrevious)
 
   const evolution = beneficiariesEvolution(clients, Number(evolutionMonths))
   const hasEvolution = evolution.some(point => point.beneficiarios > 0)
@@ -187,7 +210,7 @@ export default function AdminDashboard() {
       ['Mês de referência', monthLabel],
       ['Beneficiários ativos', activeClients.length],
       ['Novas adesões', monthAdmissions],
-      ['Faturamento do mês', formatCurrency(monthRevenue)],
+      [revenueIsReal ? 'Recebido no mês' : 'Faturamento estimado do mês', formatCurrency(monthRevenue)],
       ...(club
         ? [
             ['Inadimplência', formatPercent(delinquencyPercent(club.delinquencyRate))],
@@ -210,7 +233,7 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Início</h1>
           <p className="text-muted-foreground">Visão geral da operação e principais indicadores.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -233,6 +256,8 @@ export default function AdminDashboard() {
           </Button>
         </div>
       </div>
+
+      <GettingStarted slug={slug} base={base} />
 
       <ClubHomeBlock
         tenantSlug={slug}
@@ -257,16 +282,16 @@ export default function AdminDashboard() {
           accent="success"
           value={monthAdmissions.toLocaleString('pt-BR')}
           label="Novas adesões"
-          delta={formatDelta(metrics.clientsChange)}
+          delta={formatDelta(admissionsChange)}
           comparison="vs. mês anterior"
         />
         <StatCard
           icon={CreditCard}
           accent="info"
           value={formatCurrency(monthRevenue)}
-          label="Faturamento do mês"
+          label={revenueIsReal ? 'Recebido no mês' : 'Faturamento estimado'}
           delta={formatDelta(revenueChange)}
-          comparison="vs. mês anterior"
+          comparison={revenueIsReal ? 'vs. mês anterior' : 'estimativa · vs. mês anterior'}
         />
         {club ? (
           <StatCard

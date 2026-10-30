@@ -1,15 +1,12 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Building2,
   CircleCheckBig,
   Download,
   Eye,
   History,
   Minus,
-  ListFilter,
-  Mail,
   MessageSquare,
   MoreHorizontal,
   Plus,
@@ -55,75 +52,58 @@ import { formatPhone, tenantUserSchema } from '@/lib/form-schemas'
 import { useZodForm } from '@/lib/use-zod-form'
 import type { MemberAccessStatus, User, UserRole } from '@/lib/types'
 import { cn, getInitials } from '@/lib/utils'
+import { downloadCsv } from '@/lib/download-csv'
+import { SUPPORT_EMAIL } from '@/lib/support-contact'
 
 const roleMeta: Record<UserRole, { label: string; className: string }> = {
   admin: { label: 'Administrador', className: 'bg-rose-50 text-rose-700' },
   seller: { label: 'Vendedor', className: 'bg-violet-50 text-violet-700' },
-  client: { label: 'PF Associado', className: 'bg-sky-50 text-sky-700' },
+  client: { label: 'Associado', className: 'bg-sky-50 text-sky-700' },
 }
 
+/** Os três perfis que a API reconhece em um clube. */
 const ACCESS_PROFILES = [
   {
-    role: 'client' as UserRole,
-    name: 'PF Associado',
-    hint: 'Acesso à área do beneficiário, carteirinha, agendamentos e utilização.',
-    icon: Users,
-    tone: 'bg-sky-50 text-sky-500',
-  },
-  {
     role: 'admin' as UserRole,
-    name: 'Entidade / Cliente Cartão',
-    hint: 'Gestão de beneficiários, vendas, relatórios e configuração do inquilino.',
-    icon: Building2,
-    tone: 'bg-emerald-50 text-emerald-500',
+    name: 'Administrador',
+    hint: 'Acesso completo ao painel do clube: planos, financeiro, equipe e configurações.',
+    icon: ShieldCheck,
+    tone: 'bg-rose-50 text-rose-500',
   },
   {
     role: 'seller' as UserRole,
     name: 'Vendedor',
-    hint: 'Cadastro de leads, vendas e acompanhamento de comissões.',
+    hint: 'Portal próprio: cadastra e acompanha os próprios leads e vendas, vê suas metas.',
     icon: UserCog,
     tone: 'bg-violet-50 text-violet-500',
   },
   {
-    role: 'admin' as UserRole,
-    name: 'Administrador',
-    hint: 'Acesso completo ao sistema, configurações e gestão de usuários.',
-    icon: ShieldCheck,
-    tone: 'bg-rose-50 text-rose-500',
+    role: 'client' as UserRole,
+    name: 'Associado',
+    hint: 'Portal do associado: carteirinha, faturas, dependentes, benefícios e atendimento.',
+    icon: Users,
+    tone: 'bg-sky-50 text-sky-500',
   },
-]
-
-const QUICK_ACTIONS = [
-  { label: 'Novo usuário', icon: Plus },
-  { label: 'Convidar por e-mail', icon: Mail },
-  { label: 'Exportar lista', icon: Download },
-  { label: 'Gerenciar permissões', icon: ShieldCheck },
-  { label: 'Ver histórico de acesso', icon: History },
 ]
 
 const EMPTY_USER = { name: '', email: '', phone: '', role: 'seller' }
 
 type PermissionLevel = 'full' | 'read' | 'none'
 
-const PERMISSION_PROFILES = ['PF Associado', 'Entidade', 'Vendedor', 'Administrador']
+const PERMISSION_PROFILES = ['Associado', 'Vendedor', 'Administrador']
 
-/** Na ordem de `PERMISSION_PROFILES`. */
-const PERMISSION_MATRIX: { area: string; levels: PermissionLevel[] }[] = [
-  { area: 'Início / indicadores', levels: ['none', 'read', 'read', 'full'] },
-  { area: 'Leads', levels: ['none', 'read', 'full', 'full'] },
-  { area: 'Vendas', levels: ['none', 'read', 'full', 'full'] },
-  { area: 'Beneficiários', levels: ['none', 'full', 'read', 'full'] },
-  { area: 'Planos e Produtos', levels: ['read', 'read', 'read', 'full'] },
-  { area: 'Rede de Parceiros', levels: ['read', 'read', 'read', 'full'] },
-  { area: 'Clínicas e Elegibilidade', levels: ['read', 'read', 'none', 'full'] },
-  { area: 'Cobrança', levels: ['read', 'read', 'none', 'full'] },
-  { area: 'Financeiro', levels: ['none', 'read', 'none', 'full'] },
-  { area: 'Comissões', levels: ['none', 'none', 'read', 'full'] },
-  { area: 'Relatórios', levels: ['none', 'read', 'read', 'full'] },
-  { area: 'Comunicação', levels: ['none', 'read', 'none', 'full'] },
-  { area: 'Atendimento', levels: ['read', 'full', 'read', 'full'] },
-  { area: 'Usuários e Permissões', levels: ['none', 'none', 'none', 'full'] },
-  { area: 'Configurações', levels: ['none', 'none', 'none', 'full'] },
+/**
+ * O que a API realmente aplica (guardas de perfil nas rotas do clube), na
+ * ordem de `PERMISSION_PROFILES`. Só entram áreas que existem hoje.
+ */
+const PERMISSION_MATRIX: { area: string; note?: string; levels: PermissionLevel[] }[] = [
+  { area: 'Painel do clube', note: 'Tudo o que está neste menu', levels: ['none', 'none', 'full'] },
+  { area: 'Leads e vendas', note: 'O vendedor vê só os próprios', levels: ['none', 'full', 'full'] },
+  { area: 'Metas de venda', note: 'Só o administrador define', levels: ['none', 'read', 'full'] },
+  { area: 'Planos, benefícios e rede credenciada', note: 'Leitura é a vitrine do clube', levels: ['read', 'read', 'full'] },
+  { area: 'Cobranças e faturas', note: 'O associado vê só as dele', levels: ['read', 'none', 'full'] },
+  { area: 'Atendimento', note: 'O associado abre e acompanha os próprios chamados', levels: ['full', 'full', 'full'] },
+  { area: 'Equipe, permissões e dados do clube', levels: ['none', 'none', 'full'] },
 ]
 
 type UserStatus = 'ativo' | 'removido' | 'bloqueado' | 'suspenso'
@@ -219,6 +199,23 @@ export default function AdminUsuariosPage() {
   const [resetting, setResetting] = useState<User | null>(null)
   const form = useZodForm(tenantUserSchema, EMPTY_USER)
 
+  // Atalho de "Vendedores e metas": /usuarios?novo=vendedor abre o cadastro
+  // com o perfil Vendedor já escolhido.
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('novo') !== 'vendedor') return
+      url.searchParams.delete('novo')
+      window.history.replaceState(null, '', url.toString())
+      form.reset({ ...EMPTY_USER, role: 'seller' })
+      setCreating(true)
+    } catch {
+      // Sem acesso à URL: o botão "Novo usuário" continua valendo.
+    }
+    // Só na montagem.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const [tab, setTab] = useState('usuarios')
   const [search, setSearch] = useState('')
   const [role, setRole] = useState('all')
@@ -288,6 +285,19 @@ export default function AdminUsuariosPage() {
   function openCreate() {
     form.reset(EMPTY_USER)
     setCreating(true)
+  }
+
+  function exportList() {
+    downloadCsv('equipe-e-acessos.csv', [
+      ['Nome', 'E-mail', 'Perfil', 'Situação', 'Último acesso'],
+      ...filtered.map(row => [
+        row.name,
+        row.email,
+        roleMeta[row.role].label,
+        STATUS_META[row.status].label,
+        row.lastAccess ? formatDateTime(row.lastAccess) : '',
+      ]),
+    ])
   }
 
   /** A senha provisória é gerada na API e vai só para o e-mail do usuário. */
@@ -370,13 +380,20 @@ export default function AdminUsuariosPage() {
     })
   }
 
+  const quickActions = [
+    { label: 'Novo usuário', icon: Plus, onClick: openCreate },
+    { label: 'Exportar lista (CSV)', icon: Download, onClick: exportList },
+    { label: 'Ver perfis e permissões', icon: ShieldCheck, onClick: () => setTab('perfis') },
+    { label: 'Ver histórico de acesso', icon: History, onClick: () => setTab('historico') },
+  ]
+
   if (isLoading) return null
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Usuários e Permissões"
-        description="Gerencie os acessos à plataforma, perfis e permissões de cada usuário."
+        title="Equipe e permissões"
+        description="Quem acessa o clube, com qual perfil, e o que cada perfil pode fazer."
       >
         <Button className="h-11 gap-2 px-5" onClick={openCreate}>
           <Plus className="h-4 w-4" />
@@ -448,10 +465,6 @@ export default function AdminUsuariosPage() {
                     label: meta.label,
                   }))}
                 />
-                <Button variant="outline" className="h-14 gap-2 rounded-xl">
-                  <ListFilter className="h-4 w-4 text-muted-foreground" />
-                  Mais filtros
-                </Button>
               </div>
 
               <CardContent className="p-0">
@@ -578,7 +591,7 @@ export default function AdminUsuariosPage() {
                 <CardHeader className="p-4">
                   <CardTitle className="text-base">Perfis e permissões</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    O que cada perfil pode fazer em cada área do painel.
+                    O que cada perfil pode fazer, conforme as regras aplicadas pelo sistema.
                   </p>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -597,7 +610,10 @@ export default function AdminUsuariosPage() {
                       <tbody>
                         {PERMISSION_MATRIX.map(area => (
                           <tr key={area.area} className="border-b border-border/60 last:border-0">
-                            <td className="px-4 py-3 font-medium text-foreground">{area.area}</td>
+                            <td className="px-4 py-3">
+                              <span className="block font-medium text-foreground">{area.area}</span>
+                              {area.note && <span className="block text-xs text-muted-foreground">{area.note}</span>}
+                            </td>
                             {area.levels.map((level, index) => (
                               <td key={PERMISSION_PROFILES[index]} className="px-4 py-3 text-center">
                                 <PermissionMark level={level} />
@@ -721,12 +737,13 @@ export default function AdminUsuariosPage() {
                   <CardTitle className="text-base">Ações Rápidas</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {QUICK_ACTIONS.map(action => {
+                  {quickActions.map(action => {
                     const Icon = action.icon
                     return (
                       <button
                         key={action.label}
                         type="button"
+                        onClick={action.onClick}
                         className="flex w-full items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-muted"
                       >
                         <Icon className="h-4 w-4 shrink-0 text-primary" />
@@ -746,12 +763,14 @@ export default function AdminUsuariosPage() {
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-foreground">Precisa de ajuda?</p>
                       <p className="text-xs text-muted-foreground">
-                        Nossa equipe está pronta para te atender.
+                        Escreva para a equipe ANNETEC.
                       </p>
                     </div>
                   </div>
-                  <Button variant="outline" className="w-full bg-card">
-                    Falar com o suporte →
+                  <Button asChild variant="outline" className="w-full bg-card">
+                    <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Suporte do painel do clube')}`}>
+                      Falar com o suporte
+                    </a>
                   </Button>
                 </CardContent>
               </Card>

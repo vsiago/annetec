@@ -1,41 +1,29 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Headset,
-  Heart,
-  LayoutGrid,
-} from 'lucide-react'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { ChevronLeft, ChevronRight, Headset, Heart, Menu } from 'lucide-react'
 import { useTenant } from '@/contexts/tenant-context'
+import { useTenantData } from '@/contexts/tenant-data-context'
 import { useAdminSidebarContext } from '@/app/[tenant]/admin/layout'
 import {
-  ADMIN_NAV_FINANCE_STORAGE_KEY,
-  ADMIN_NAV_MORE_STORAGE_KEY,
-  adminNavFinance,
+  adminNavGroups,
+  adminNavHome,
   adminNavHref,
-  adminNavMore,
-  adminNavPrimary,
-  isAdminNavActive,
+  adminNavItems,
+  adminNavKey,
+  adminNavMobileBar,
+  isAdminNavItemActive,
+  type AdminNavBadge,
   type AdminNavItem,
 } from './admin-nav'
 import { AdminUserMenu } from './admin-user-menu'
 import { NotificationBell } from '@/components/notifications/notification-bell'
+import { getBillingSettingsAction } from '@/lib/actions/faturamento-api'
+import { RECEIVING_ACCOUNT_CHANGED_EVENT } from '@/lib/receiving-account-events'
+import { SUPPORT_EMAIL } from '@/lib/support-contact'
 import { cn } from '@/lib/utils'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Sheet,
   SheetContent,
@@ -50,82 +38,119 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
+/** Atendimento que ainda espera a primeira resposta do clube. */
+const AWAITING_SUPPORT = new Set(['aguardando'])
+
 /**
- * `localStorage` pode não existir ou lançar (aba anônima, cookies bloqueados).
- * Sem ele o grupo só não lembra do último estado — nunca quebra o menu.
+ * Dados vivos dos indicadores do menu: se o clube já tem conta de recebimento
+ * e quantos atendimentos esperam resposta. Falha ao consultar a conta NÃO
+ * acende o alerta (melhor calar do que acusar sem saber).
  */
-function readGroupOpen(key: string): boolean {
-  try {
-    return window.localStorage.getItem(key) === 'true'
-  } catch {
-    return false
+function useNavIndicators(slug: string) {
+  const { appointments } = useTenantData()
+  const [receivingMissing, setReceivingMissing] = useState(false)
+
+  useEffect(() => {
+    if (!slug) return
+    let cancelled = false
+    async function check() {
+      try {
+        const result = await getBillingSettingsAction(slug)
+        // Só o gateway Asaas pede conta própria; nos demais não há o que conectar.
+        if (!cancelled && result.success) {
+          setReceivingMissing(result.data.gateway === 'asaas' && !result.data.asaasConfigured)
+        }
+      } catch {
+        // Sem resposta: mantém o estado anterior.
+      }
+    }
+    void check()
+    function onChanged(event: Event) {
+      const detail = (event as CustomEvent<{ connected?: boolean }>).detail
+      if (typeof detail?.connected === 'boolean') setReceivingMissing(!detail.connected)
+      else void check()
+    }
+    window.addEventListener(RECEIVING_ACCOUNT_CHANGED_EVENT, onChanged)
+    return () => {
+      cancelled = true
+      window.removeEventListener(RECEIVING_ACCOUNT_CHANGED_EVENT, onChanged)
+    }
+  }, [slug])
+
+  const supportWaiting = appointments.filter(item => AWAITING_SUPPORT.has(item.status)).length
+
+  /** Contagem (número) ou alerta (true); `null` = sem indicador. */
+  function badgeOf(badge: AdminNavBadge | undefined): number | true | null {
+    if (badge === 'receiving-missing') return receivingMissing ? true : null
+    if (badge === 'support-waiting') return supportWaiting > 0 ? supportWaiting : null
+    return null
   }
+
+  return { badgeOf, receivingMissing, supportWaiting }
 }
 
-function writeGroupOpen(key: string, open: boolean) {
-  try {
-    window.localStorage.setItem(key, String(open))
-  } catch {
-    // Sem armazenamento: o estado vale só até recarregar a página.
+/** Indicador do item: ponto âmbar (alerta) ou contador. */
+function NavBadge({ value, inline = false, label }: { value: number | true; inline?: boolean; label: string }) {
+  if (value === true) {
+    return (
+      <span
+        role="img"
+        aria-label={label}
+        className={cn(
+          'h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 ring-2 ring-card',
+          !inline && 'absolute right-1.5 top-1.5',
+        )}
+      />
+    )
   }
+  return (
+    <span
+      aria-label={label}
+      className={cn(
+        'flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground',
+        !inline && 'absolute -right-0.5 -top-0.5 h-4 min-w-4 px-1 text-[10px]',
+      )}
+    >
+      {value > 99 ? '99+' : value}
+    </span>
+  )
 }
 
-type MobileSheet = 'more' | 'finance' | null
+function badgeLabel(item: AdminNavItem, value: number | true): string {
+  if (item.badge === 'receiving-missing') return 'Conta de recebimento não conectada'
+  return typeof value === 'number' ? `${value} aguardando resposta` : ''
+}
 
 export function AdminSidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get('tab')
   const { tenant } = useTenant()
   const { isCollapsed, toggleSidebar } = useAdminSidebarContext()
-
-  // "Mais módulos" nasce recolhido; o que a pessoa escolheu da última vez
-  // vem do localStorage depois da montagem (no servidor não há storage).
-  const [moreOpen, setMoreOpen] = useState(false)
-  const [financeOpen, setFinanceOpen] = useState(false)
-  const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const { badgeOf } = useNavIndicators(tenant?.slug ?? '')
 
   const base = tenant ? `/${tenant.slug}/admin` : ''
-  const moreActive = adminNavMore.some(item => isAdminNavActive(pathname, base, item.segment))
-  const financeActive = adminNavFinance.items.some(item => isAdminNavActive(pathname, base, item.segment))
-
-  useEffect(() => {
-    if (readGroupOpen(ADMIN_NAV_MORE_STORAGE_KEY)) setMoreOpen(true)
-    if (readGroupOpen(ADMIN_NAV_FINANCE_STORAGE_KEY)) setFinanceOpen(true)
-  }, [])
-
-  // Rota dentro do grupo abre o grupo, para o item ativo aparecer destacado.
-  // Não grava: é consequência da navegação, não uma escolha da pessoa.
-  useEffect(() => {
-    if (moreActive) setMoreOpen(true)
-  }, [moreActive, pathname])
-
-  useEffect(() => {
-    if (financeActive) setFinanceOpen(true)
-  }, [financeActive, pathname])
+  const activeOf = (item: AdminNavItem) => isAdminNavItemActive(pathname, base, item, currentTab)
+  const financeActive = adminNavGroups.find(group => group.label === 'Financeiro')?.items.some(activeOf) ?? false
+  // Atalho "Financeiro" da barra inferior acende em qualquer tela do grupo.
+  const mobileBarActive = (item: AdminNavItem) =>
+    item.label === 'Financeiro' ? financeActive : activeOf(item)
+  // O "Menu" acende quando a página atual só existe nele (fora dos atalhos).
+  const menuActive = adminNavItems.some(activeOf) && !adminNavMobileBar.some(mobileBarActive)
 
   // A folha do mobile fecha ao trocar de página.
   useEffect(() => {
-    setMobileSheet(null)
-  }, [pathname])
+    setMenuOpen(false)
+  }, [pathname, currentTab])
 
   if (!tenant) return null
 
   const logo = tenant.branding.logoUrl
 
-  function handleMoreOpenChange(open: boolean) {
-    setMoreOpen(open)
-    writeGroupOpen(ADMIN_NAV_MORE_STORAGE_KEY, open)
-  }
-
-  function handleFinanceOpenChange(open: boolean) {
-    setFinanceOpen(open)
-    writeGroupOpen(ADMIN_NAV_FINANCE_STORAGE_KEY, open)
-  }
-
-  const mobileSheetItems = mobileSheet === 'finance' ? adminNavFinance.items : adminNavMore
-
   const helpCard = (
     <Link
-      href={`${base}/configuracoes`}
+      href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Suporte do painel do clube')}`}
       className={cn(
         'flex items-center rounded-xl border border-primary/15 bg-primary/5 transition-colors hover:bg-primary/10',
         isCollapsed ? 'justify-center p-2.5' : 'gap-3 p-3',
@@ -141,7 +166,7 @@ export function AdminSidebar() {
               Precisa de ajuda?
             </span>
             <span className="block truncate text-[11px] text-muted-foreground">
-              Acesse nosso suporte
+              Fale com a ANNETEC
             </span>
           </span>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -150,138 +175,46 @@ export function AdminSidebar() {
     </Link>
   )
 
-  /** Link da sidebar do desktop; `nested` é o recuo dos itens do grupo. */
-  function desktopLink(item: AdminNavItem, nested = false) {
-    const href = adminNavHref(base, item.segment)
+  /** Link da sidebar do desktop. */
+  function desktopLink(item: AdminNavItem) {
+    const href = adminNavHref(base, item.segment, item.tab)
     const Icon = item.icon
-    const isActive = isAdminNavActive(pathname, base, item.segment)
+    const isActive = activeOf(item)
+    const badge = badgeOf(item.badge)
+    const label = badge !== null ? badgeLabel(item, badge) : ''
 
     const link = (
       <Link
         href={href}
         aria-current={isActive ? 'page' : undefined}
         className={cn(
-          'flex items-center rounded-lg text-sm transition-colors',
-          isCollapsed ? 'justify-center p-2.5' : nested ? 'gap-3 px-3 py-2' : 'gap-3 px-3 py-2.5',
+          'relative flex items-center rounded-lg text-sm transition-colors',
+          isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2',
           isActive
             ? 'bg-primary/10 font-semibold text-primary'
             : 'font-medium text-muted-foreground hover:bg-muted hover:text-foreground',
         )}
       >
-        <Icon className={cn('shrink-0', nested ? 'h-4.5 w-4.5' : 'h-5 w-5')} />
-        {!isCollapsed && <span className="truncate">{item.label}</span>}
+        <Icon className="h-5 w-5 shrink-0" />
+        {!isCollapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+        {badge !== null && <NavBadge value={badge} inline={!isCollapsed} label={label} />}
       </Link>
     )
 
     return (
-      <li key={href}>
+      <li key={adminNavKey(item)}>
         {isCollapsed ? (
           <Tooltip>
             <TooltipTrigger asChild>{link}</TooltipTrigger>
-            <TooltipContent side="right">{item.label}</TooltipContent>
+            <TooltipContent side="right">
+              {item.label}
+              {label && <span className="block text-xs opacity-80">{label}</span>}
+            </TooltipContent>
           </Tooltip>
         ) : (
           link
         )}
       </li>
-    )
-  }
-
-  /**
-   * Grupo do menu (Financeiro, Mais módulos). Expandida, abre e fecha como
-   * acordeão; recolhida não cabe o acordeão: vira um menu flutuante ao lado
-   * do ícone, com o item ativo destacado lá dentro.
-   */
-  function navGroup({
-    label,
-    icon: Icon,
-    items,
-    active,
-    open,
-    onOpenChange,
-  }: {
-    label: string
-    icon: LucideIcon
-    items: AdminNavItem[]
-    active: boolean
-    open: boolean
-    onOpenChange: (open: boolean) => void
-  }) {
-    if (isCollapsed) {
-      return (
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={label}
-                  className={cn(
-                    'relative flex w-full items-center justify-center rounded-lg p-2.5 transition-colors',
-                    active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                  )}
-                >
-                  <Icon className="h-5 w-5" />
-                </button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="right">{label}</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent side="right" align="start" sideOffset={12} className="max-h-[75vh] w-64 overflow-y-auto">
-            <DropdownMenuLabel className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {label}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {items.map(item => {
-              const ItemIcon = item.icon
-              const isActive = isAdminNavActive(pathname, base, item.segment)
-              return (
-                <DropdownMenuItem key={item.segment} asChild>
-                  <Link
-                    href={adminNavHref(base, item.segment)}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={cn(
-                      'cursor-pointer gap-3 py-2',
-                      isActive && 'bg-primary/10 font-semibold text-primary focus:bg-primary/15 focus:text-primary',
-                    )}
-                  >
-                    <ItemIcon className={cn('h-4 w-4', isActive ? 'text-primary' : 'text-muted-foreground')} />
-                    {item.label}
-                  </Link>
-                </DropdownMenuItem>
-              )
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )
-    }
-
-    return (
-      <Collapsible open={open} onOpenChange={onOpenChange}>
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-              active && !open
-                ? 'bg-primary/5 text-primary'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            <Icon className="h-5 w-5 shrink-0" />
-            <span className="flex-1 truncate text-left">{label}</span>
-            {active && !open && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden />}
-            <ChevronDown
-              className={cn('h-4 w-4 shrink-0 transition-transform duration-200', open && 'rotate-180')}
-            />
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-          <ul className="ml-5 mt-1 space-y-0.5 border-l border-border pl-2">
-            {items.map(item => desktopLink(item, true))}
-          </ul>
-        </CollapsibleContent>
-      </Collapsible>
     )
   }
 
@@ -345,35 +278,26 @@ export function AdminSidebar() {
         </Tooltip>
 
         <nav className="scrollbar-translucent flex-1 overflow-y-auto overflow-x-hidden p-3" aria-label="Menu do painel">
-          <ul className="space-y-1">{adminNavPrimary.map(item => desktopLink(item))}</ul>
-          <div className="mt-1">
-            {navGroup({
-              label: adminNavFinance.label,
-              icon: adminNavFinance.icon,
-              items: adminNavFinance.items,
-              active: financeActive,
-              open: financeOpen,
-              onOpenChange: handleFinanceOpenChange,
-            })}
-          </div>
-
-          <div className="my-3 h-px bg-border" role="separator" />
-
-          {navGroup({
-            label: 'Mais módulos',
-            icon: LayoutGrid,
-            items: adminNavMore,
-            active: moreActive,
-            open: moreOpen,
-            onOpenChange: handleMoreOpenChange,
-          })}
+          <ul className="space-y-0.5">{desktopLink(adminNavHome)}</ul>
+          {adminNavGroups.map(group => (
+            <div key={group.label} className="mt-4">
+              {isCollapsed ? (
+                <div className="mx-2 mb-2 h-px bg-border" role="separator" />
+              ) : (
+                <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                  {group.label}
+                </p>
+              )}
+              <ul className="space-y-0.5">{group.items.map(item => desktopLink(item))}</ul>
+            </div>
+          ))}
         </nav>
 
         <div className="space-y-2 p-3">
           {isCollapsed ? (
             <Tooltip>
               <TooltipTrigger asChild>{helpCard}</TooltipTrigger>
-              <TooltipContent side="right">Precisa de ajuda? Acesse nosso suporte</TooltipContent>
+              <TooltipContent side="right">Precisa de ajuda? Fale com a ANNETEC</TooltipContent>
             </Tooltip>
           ) : (
             helpCard
@@ -395,18 +319,17 @@ export function AdminSidebar() {
         </div>
       </aside>
 
-      {/* Barra inferior do mobile: os três primários, "Financeiro" e "Mais" (uma
-          coluna cada; os dois últimos abrem a folha com seus itens). Em ~360px
-          cada coluna tem ~70px: margem e vão mínimos e rótulo de 10px (11px a
-          partir de 400px) para "Financeiro" caber inteiro, sem reticências. */}
+      {/* Barra inferior do mobile: quatro atalhos e "Menu" (a folha com todos os
+          grupos). Em ~360px cada coluna tem ~70px: margem e vão mínimos e
+          rótulo de 10px (11px a partir de 400px) para caber sem reticências. */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-100 grid h-16 grid-cols-5 items-center gap-0.5 border-t border-border bg-card px-1 shadow-[0_-2px_12px_rgba(15,23,42,0.06)] min-[400px]:gap-1 min-[400px]:px-2 lg:hidden"
         aria-label="Navegação móvel"
       >
-        {adminNavPrimary.map(item => {
+        {adminNavMobileBar.map(item => {
           const href = adminNavHref(base, item.segment)
           const Icon = item.icon
-          const isActive = isAdminNavActive(pathname, base, item.segment)
+          const isActive = mobileBarActive(item)
           return (
             <Link
               key={href}
@@ -424,68 +347,65 @@ export function AdminSidebar() {
             </Link>
           )
         })}
-        {(
-          [
-            { sheet: 'finance', label: adminNavFinance.label, icon: adminNavFinance.icon, active: financeActive },
-            { sheet: 'more', label: 'Mais', icon: LayoutGrid, active: moreActive },
-          ] as const
-        ).map(entry => {
-          const Icon = entry.icon
-          const open = mobileSheet === entry.sheet
-          return (
-            <button
-              key={entry.sheet}
-              type="button"
-              onClick={() => setMobileSheet(current => (current === entry.sheet ? null : entry.sheet))}
-              aria-expanded={open}
-              className={cn(
-                'relative flex h-13 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-center text-[10px] font-medium tracking-tight transition-all min-[400px]:text-[11px] min-[400px]:tracking-normal',
-                entry.active || open
-                  ? 'bg-primary/10 font-semibold text-primary'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-              )}
-            >
-              <Icon className={cn('h-5 w-5 shrink-0 transition-transform', entry.active && 'scale-110')} />
-              <span className="w-full truncate px-0.5">{entry.label}</span>
-            </button>
-          )
-        })}
+        <button
+          type="button"
+          onClick={() => setMenuOpen(open => !open)}
+          aria-expanded={menuOpen}
+          className={cn(
+            'relative flex h-13 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-center text-[10px] font-medium tracking-tight transition-all min-[400px]:text-[11px] min-[400px]:tracking-normal',
+            menuActive || menuOpen
+              ? 'bg-primary/10 font-semibold text-primary'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          )}
+        >
+          <Menu className={cn('h-5 w-5 shrink-0 transition-transform', menuActive && 'scale-110')} />
+          <span className="w-full truncate px-0.5">Menu</span>
+          {(badgeOf('receiving-missing') !== null || badgeOf('support-waiting') !== null) && (
+            <span className="absolute right-3 top-1.5 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-card" aria-hidden />
+          )}
+        </button>
       </nav>
 
-      <Sheet open={mobileSheet !== null} onOpenChange={open => !open && setMobileSheet(null)}>
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         {/* Fica acima da barra inferior (bottom-16), que continua à vista. */}
-        <SheetContent
-          side="bottom"
-          className="bottom-16 max-h-[70vh] gap-0 rounded-t-2xl pb-2 lg:hidden"
-        >
+        <SheetContent side="bottom" className="bottom-16 max-h-[78vh] gap-0 rounded-t-2xl pb-2 lg:hidden">
           <SheetHeader className="pb-2">
-            <SheetTitle>{mobileSheet === 'finance' ? adminNavFinance.label : 'Mais módulos'}</SheetTitle>
-            <SheetDescription>
-              {mobileSheet === 'finance' ? 'Recebimentos e faturamento do clube.' : 'Os demais módulos do painel.'}
-            </SheetDescription>
+            <SheetTitle>Menu</SheetTitle>
+            <SheetDescription>Tudo o que o clube precisa para funcionar.</SheetDescription>
           </SheetHeader>
-          <div className="grid grid-cols-3 gap-2 overflow-y-auto px-4 pb-2">
-            {mobileSheetItems.map(item => {
-              const Icon = item.icon
-              const isActive = isAdminNavActive(pathname, base, item.segment)
-              return (
-                <Link
-                  key={item.segment}
-                  href={adminNavHref(base, item.segment)}
-                  onClick={() => setMobileSheet(null)}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={cn(
-                    'flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl border p-2 text-center text-xs transition-colors',
-                    isActive
-                      ? 'border-primary/30 bg-primary/10 font-semibold text-primary'
-                      : 'border-border/70 font-medium text-foreground hover:bg-muted',
-                  )}
-                >
-                  <Icon className={cn('h-5 w-5', isActive ? 'text-primary' : 'text-muted-foreground')} />
-                  <span className="line-clamp-2 leading-tight">{item.shortLabel ?? item.label}</span>
-                </Link>
-              )
-            })}
+          <div className="space-y-4 overflow-y-auto px-4 pb-2">
+            {adminNavGroups.map(group => (
+              <section key={group.label} aria-label={group.label}>
+                <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.label}
+                </h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {group.items.map(item => {
+                    const Icon = item.icon
+                    const isActive = activeOf(item)
+                    const badge = badgeOf(item.badge)
+                    return (
+                      <Link
+                        key={adminNavKey(item)}
+                        href={adminNavHref(base, item.segment, item.tab)}
+                        onClick={() => setMenuOpen(false)}
+                        aria-current={isActive ? 'page' : undefined}
+                        className={cn(
+                          'relative flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl border p-2 text-center text-xs transition-colors',
+                          isActive
+                            ? 'border-primary/30 bg-primary/10 font-semibold text-primary'
+                            : 'border-border/70 font-medium text-foreground hover:bg-muted',
+                        )}
+                      >
+                        <Icon className={cn('h-5 w-5', isActive ? 'text-primary' : 'text-muted-foreground')} />
+                        <span className="line-clamp-2 leading-tight">{item.shortLabel ?? item.label}</span>
+                        {badge !== null && <NavBadge value={badge} label={badgeLabel(item, badge)} />}
+                      </Link>
+                    )
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
         </SheetContent>
       </Sheet>

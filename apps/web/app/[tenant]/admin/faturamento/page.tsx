@@ -60,7 +60,25 @@ function FaturamentoContent() {
   const params = useSearchParams()
   const slug = tenant?.slug ?? ''
 
-  const [tab, setTab] = useState<TabKey>(() => parseTab(params.get('tab')))
+  const [tab, setTabState] = useState<TabKey>(() => parseTab(params.get('tab')))
+
+  // A aba vive na URL (sem recarregar): o menu lateral sabe se a pessoa está
+  // em "Conta de recebimento", e um link `?tab=` vale mesmo já estando na tela.
+  const setTab = useCallback((next: TabKey) => {
+    setTabState(next)
+    try {
+      const url = new URL(window.location.href)
+      if (next === 'cobrancas') url.searchParams.delete('tab')
+      else url.searchParams.set('tab', next)
+      window.history.replaceState(null, '', url.toString())
+    } catch {
+      // Sem histórico (ambiente restrito): a aba continua valendo só na tela.
+    }
+  }, [])
+  const tabParam = params.get('tab')
+  useEffect(() => {
+    setTabState(parseTab(tabParam))
+  }, [tabParam])
   const [chargeStatus, setChargeStatus] = useState<ClubChargeStatus | undefined>(() =>
     parseChargeStatus(params.get('status')),
   )
