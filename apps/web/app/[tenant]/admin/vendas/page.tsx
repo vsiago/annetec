@@ -73,6 +73,7 @@ import {
 import { saleSchema } from '@/lib/form-schemas'
 import { saleStatusMeta } from '@/lib/sale-status'
 import { useZodForm } from '@/lib/use-zod-form'
+import { leadSourceLabel, leadSourceOptions, DEFAULT_LEAD_SOURCE } from '@/lib/lead-sources'
 import type { Lead, Sale } from '@/lib/types'
 import { useChartColors } from '@/lib/use-chart-colors'
 import { cn } from '@/lib/utils'
@@ -105,7 +106,7 @@ const EMPTY_SALE = {
   sellerId: '',
   plan: '',
   value: '',
-  source: 'Site',
+  source: DEFAULT_LEAD_SOURCE,
   status: 'pending',
 }
 
@@ -135,7 +136,7 @@ export default function AdminVendasPage() {
 
   const plans = useMemo(() => [...new Set(sales.map(s => s.plan).filter(Boolean))].sort(), [sales])
   const sources = useMemo(
-    () => [...new Set(sales.map(s => s.source).filter((v): v is string => Boolean(v)))].sort(),
+    () => [...new Set(sales.map(s => leadSourceLabel(s.source)).filter(Boolean))].sort(),
     [sales],
   )
 
@@ -204,7 +205,7 @@ export default function AdminVendasPage() {
         if (status !== 'all' && sale.status !== status) return false
         if (plan !== 'all' && sale.plan !== plan) return false
         if (seller !== 'all' && sale.sellerId !== seller) return false
-        if (source !== 'all' && sale.source !== source) return false
+        if (source !== 'all' && leadSourceLabel(sale.source) !== source) return false
         if (!term) return true
         return [sale.clientName, sale.plan, sale.sellerName, saleNumber(sale.id)].some(field =>
           field?.toLowerCase().includes(term),
@@ -240,7 +241,7 @@ export default function AdminVendasPage() {
       sellerId: sale.sellerId,
       plan: sale.plan,
       value: String(sale.value).replace('.', ','),
-      source: sale.source ?? 'Site',
+      source: leadSourceLabel(sale.source) || DEFAULT_LEAD_SOURCE,
       status: sale.status,
     })
     setEditing(sale)
@@ -641,9 +642,7 @@ export default function AdminVendasPage() {
             value={form.values.source}
             onChange={value => form.setField('source', value)}
             placeholder="Selecione a origem"
-            options={['Site', 'Indicação', 'Campanha', 'Evento', 'Redes Sociais', 'Parceiro'].map(
-              item => ({ value: item, label: item }),
-            )}
+            options={leadSourceOptions}
           />
         </FormField>
       </FormDialog>

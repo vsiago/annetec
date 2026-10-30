@@ -5,6 +5,9 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FormField } from '@/components/dashboard/form-dialog'
+import { beneficiarioSchema, formatCpf, formatPhone } from '@/lib/form-schemas'
+import { useZodForm } from '@/lib/use-zod-form'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
 import { useTenant } from '@/contexts/tenant-context'
@@ -86,11 +89,11 @@ export default function VendedorClientesPage() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
 
-  // Form States for New Client
-  const [newName, setNewName] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [newPhone, setNewPhone] = useState('')
-  const [newCPF, setNewCPF] = useState('')
+  // Só a conta nasce aqui; plano e vendedor vêm da adesão (ver admin/clientes).
+  const form = useZodForm(
+    beneficiarioSchema.pick({ name: true, email: true, cpf: true, phone: true }),
+    { name: '', email: '', cpf: '', phone: '' },
+  )
 
   const getStatusBadge = (status: Client['planStatus']) => {
     switch (status) {
@@ -121,8 +124,18 @@ export default function VendedorClientesPage() {
   // Handle adding client
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newName || !newEmail || !newCPF || !tenant || !seller) {
-      toast.error('Preencha nome, e-mail e CPF.')
+    const data = form.validate()
+    if (!data) return
+    if (!tenant || !seller) return
+
+    // CPF é a chave do beneficiário na carteira (mesma checagem do admin).
+    const cpfTaken = users.some(
+      item =>
+        item.role === 'client' &&
+        (item as Client).cpf?.replace(/\D/g, '') === data.cpf.replace(/\D/g, ''),
+    )
+    if (cpfTaken) {
+      form.setErrors({ cpf: 'Já existe um beneficiário com este CPF nesta carteira.' })
       return
     }
 
@@ -130,11 +143,11 @@ export default function VendedorClientesPage() {
     // situação e dependentes vêm da adesão (a carteirinha é emitida na
     // confirmação do pagamento) e senha o associado não tem.
     const result = await createUser({
-      name: newName,
-      email: newEmail,
-      phone: newPhone.trim() || undefined,
+      name: data.name,
+      email: data.email,
+      phone: formatPhone(data.phone),
       role: 'client',
-      cpf: newCPF,
+      cpf: formatCpf(data.cpf),
     })
 
     if (!result.success) {
@@ -145,15 +158,11 @@ export default function VendedorClientesPage() {
     }
 
     toast.success('Cliente cadastrado', {
-      description: `${newName} recebeu as boas-vindas do clube por e-mail. Plano e carteirinha nascem da adesão.`,
+      description: `${data.name} recebeu as boas-vindas do clube por e-mail. Plano e carteirinha nascem da adesão.`,
     })
     setIsAddOpen(false)
 
-    // Clear inputs
-    setNewName('')
-    setNewEmail('')
-    setNewPhone('')
-    setNewCPF('')
+    form.reset()
   }
 
   // Stats calculation
@@ -413,7 +422,7 @@ export default function VendedorClientesPage() {
       {/* Dialog for Adding New Client */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="sm:max-w-[425px]">
-          <form onSubmit={handleAddClient}>
+          <form onSubmit={handleAddClient} noValidate>
             <DialogHeader>
               <DialogTitle>Cadastrar Novo Cliente</DialogTitle>
               <DialogDescription>
@@ -421,42 +430,44 @@ export default function VendedorClientesPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Nome Completo *</label>
+              <FormField label="Nome completo" htmlFor="cli-name" error={form.errors.name} required>
                 <Input
-                  required
+                  id="cli-name"
                   placeholder="Ex: João da Silva"
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
+                  value={form.values.name}
+                  onChange={e => form.setField('name', e.target.value)}
+                  aria-invalid={!!form.errors.name}
                 />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">E-mail *</label>
+              </FormField>
+              <FormField label="E-mail" htmlFor="cli-email" error={form.errors.email} required>
                 <Input
-                  required
+                  id="cli-email"
                   type="email"
                   placeholder="Ex: joao@email.com"
-                  value={newEmail}
-                  onChange={e => setNewEmail(e.target.value)}
+                  value={form.values.email}
+                  onChange={e => form.setField('email', e.target.value)}
+                  aria-invalid={!!form.errors.email}
                 />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Telefone</label>
+              </FormField>
+              <FormField label="Telefone" htmlFor="cli-phone" error={form.errors.phone} required hint="Com DDD">
                 <Input
+                  id="cli-phone"
                   placeholder="Ex: (11) 98888-7777"
-                  value={newPhone}
-                  onChange={e => setNewPhone(e.target.value)}
+                  value={form.values.phone}
+                  onChange={e => form.setField('phone', e.target.value)}
+                  aria-invalid={!!form.errors.phone}
                 />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">CPF *</label>
+              </FormField>
+              <FormField label="CPF" htmlFor="cli-cpf" error={form.errors.cpf} required>
                 <Input
-                  required
-                  placeholder="Ex: 123.456.789-00"
-                  value={newCPF}
-                  onChange={e => setNewCPF(e.target.value)}
+                  id="cli-cpf"
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
+                  value={form.values.cpf}
+                  onChange={e => form.setField('cpf', e.target.value)}
+                  aria-invalid={!!form.errors.cpf}
                 />
-              </div>
+              </FormField>
               <p className="text-xs text-muted-foreground">
                 Plano, situação, carteirinha e dependentes nascem da adesão (venda): a carteirinha é
                 emitida quando o pagamento é confirmado.

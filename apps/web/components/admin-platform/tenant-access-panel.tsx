@@ -5,8 +5,6 @@ import { toast } from 'sonner'
 import { Button } from '@/components/admin-platform/ui/button'
 import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
 import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -19,20 +17,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { SuperadminOnly, usePlatformRole } from '@/components/admin-platform/billing/console-kit'
+import { AddResponsibleWizard, ResetPasswordWizard } from '@/components/admin-platform/forms/club-access-wizards'
 import { getInitials } from '@/lib/utils'
 import {
-  addTenantResponsibleAction,
   listTenantMembersAction,
   removeTenantMemberAction,
-  resetTenantMemberPasswordAction,
   setTenantMemberAccessAction,
   type TenantMember,
 } from '@/lib/actions/tenants-api'
 import { impersonateTenantMemberAction } from '@/lib/actions/auth-api'
 import {
   AlertCircle,
-  Check,
-  Copy,
   KeyRound,
   Loader2,
   LogIn,
@@ -96,12 +91,8 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
 
+  /** Conta cujo acesso está sendo redefinido (assistente "Redefinir senha"). */
   const [alvo, setAlvo] = useState<TenantMember | null>(null)
-  const [senhaManual, setSenhaManual] = useState('')
-  const [salvando, setSalvando] = useState(false)
-  const [erroDialogo, setErroDialogo] = useState('')
-  const [gerada, setGerada] = useState<{ email: string; password: string } | null>(null)
-  const [copiado, setCopiado] = useState(false)
 
   const [alvoEntrar, setAlvoEntrar] = useState<TenantMember | null>(null)
   const [entrando, setEntrando] = useState(false)
@@ -113,10 +104,6 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
   const [reativando, setReativando] = useState<string | null>(null)
 
   const [novoAberto, setNovoAberto] = useState(false)
-  const [novoNome, setNovoNome] = useState('')
-  const [novoEmail, setNovoEmail] = useState('')
-  const [adicionando, setAdicionando] = useState(false)
-  const [erroNovo, setErroNovo] = useState('')
 
   const carregar = useCallback(async () => {
     const resultado = await listTenantMembersAction(tenantId)
@@ -136,34 +123,6 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
 
   function abrir(membro: TenantMember) {
     setAlvo(membro)
-    setSenhaManual('')
-    setErroDialogo('')
-    setGerada(null)
-    setCopiado(false)
-  }
-
-  async function redefinir() {
-    if (!alvo) return
-    setErroDialogo('')
-
-    if (senhaManual && senhaManual.length < 8) {
-      setErroDialogo('A senha precisa de pelo menos 8 caracteres.')
-      return
-    }
-
-    setSalvando(true)
-    const resultado = await resetTenantMemberPasswordAction(
-      tenantId,
-      alvo.id,
-      senhaManual ? { password: senhaManual } : {},
-    )
-    setSalvando(false)
-
-    if (!resultado.success) {
-      setErroDialogo(resultado.error)
-      return
-    }
-    setGerada(resultado.data)
   }
 
   async function entrarComo() {
@@ -183,17 +142,6 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
     // Navegação dura: a identidade da sessão inteira muda, então não dá pra
     // reaproveitar a árvore de contexto já montada com a sessão antiga.
     window.location.href = `/${tenantSlug}/${PORTAL_PATH[alvoEntrar.role]}`
-  }
-
-  async function copiar() {
-    if (!gerada) return
-    try {
-      await navigator.clipboard.writeText(gerada.password)
-      setCopiado(true)
-      setTimeout(() => setCopiado(false), 2000)
-    } catch {
-      // Área de transferência bloqueada — a senha continua visível na tela.
-    }
   }
 
   function pedirConfirmacao(tipo: AcaoConfirmada['tipo'], membro: TenantMember) {
@@ -252,40 +200,6 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
 
   function abrirNovo() {
     setNovoAberto(true)
-    setNovoNome('')
-    setNovoEmail('')
-    setErroNovo('')
-  }
-
-  async function adicionarResponsavel() {
-    setErroNovo('')
-    if (novoNome.trim().length < 2) {
-      setErroNovo('Informe o nome.')
-      return
-    }
-    if (!/^\S+@\S+\.\S+$/.test(novoEmail.trim())) {
-      setErroNovo('Informe um e-mail válido.')
-      return
-    }
-    setAdicionando(true)
-    const resultado = await addTenantResponsibleAction(tenantId, {
-      name: novoNome.trim(),
-      email: novoEmail.trim(),
-    })
-    setAdicionando(false)
-    if (!resultado.success) {
-      setErroNovo(resultado.error)
-      return
-    }
-    const envio =
-      resultado.data.emailStatus === 'failed'
-        ? 'O convite por e-mail não foi enviado. Use "Redefinir senha" para gerar uma senha.'
-        : resultado.data.accountCreated
-          ? 'O convite com a senha provisória foi enviado por e-mail.'
-          : 'A pessoa já tinha conta, então o convite foi enviado sem senha.'
-    toast.success(`${resultado.data.member.name} agora é responsável pelo clube. ${envio}`)
-    setNovoAberto(false)
-    void carregar()
   }
 
   const admins = membros.filter(m => m.role === 'admin')
@@ -474,70 +388,7 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
         são registradas.
       </p>
 
-      <Dialog open={alvo !== null} onOpenChange={aberto => !aberto && setAlvo(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Redefinir senha — {alvo?.name}</DialogTitle>
-            <DialogDescription>
-              {gerada
-                ? 'Esta senha aparece uma única vez. Copie antes de fechar.'
-                : 'Define uma senha nova sem precisar da senha atual. A pessoa já pode entrar com ela.'}
-            </DialogDescription>
-          </DialogHeader>
-
-          {gerada ? (
-            <div className="space-y-3">
-              <div className="rounded-md border border-border bg-muted/40 p-4">
-                <p className="text-xs text-muted-foreground">{gerada.email}</p>
-                <p className="mt-1 font-mono text-lg font-semibold tracking-wide">{gerada.password}</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={copiar}>
-                {copiado ? <Check className="mr-2 h-3.5 w-3.5" /> : <Copy className="mr-2 h-3.5 w-3.5" />}
-                {copiado ? 'Copiada' : 'Copiar senha'}
-              </Button>
-            </div>
-          ) : (
-            <div className="grid gap-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor="senha">Senha nova</Label>
-                <Input
-                  id="senha"
-                  type="text"
-                  value={senhaManual}
-                  onChange={e => setSenhaManual(e.target.value)}
-                  placeholder="Deixe em branco para gerar automaticamente"
-                  autoComplete="off"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Mínimo de 8 caracteres. Em branco, a ANNETEC gera uma senha provisória.
-                </p>
-              </div>
-              {erroDialogo && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{erroDialogo}</AlertDescription>
-                </Alert>
-              )}
-            </div>
-          )}
-
-          <DialogFooter>
-            {gerada ? (
-              <Button onClick={() => setAlvo(null)}>Fechar</Button>
-            ) : (
-              <>
-                <Button variant="outline" onClick={() => setAlvo(null)}>
-                  Cancelar
-                </Button>
-                <Button onClick={redefinir} disabled={salvando}>
-                  {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Redefinir
-                </Button>
-              </>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ResetPasswordWizard member={alvo} tenantId={tenantId} onOpenChange={aberto => !aberto && setAlvo(null)} />
 
       <Dialog open={alvoEntrar !== null} onOpenChange={aberto => !aberto && !entrando && setAlvoEntrar(null)}>
         <DialogContent>
@@ -618,50 +469,12 @@ export function TenantAccessPanel({ tenantId, tenantSlug }: { tenantId: string; 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={novoAberto} onOpenChange={aberto => !aberto && !adicionando && setNovoAberto(false)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Adicionar responsável</DialogTitle>
-            <DialogDescription>
-              A pessoa passa a ser responsável por este clube. Se ainda não tem conta, a senha provisória é gerada
-              pela plataforma e enviada só por e-mail, no convite com a marca do clube.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="novo-nome">Nome</Label>
-              <Input id="novo-nome" value={novoNome} onChange={e => setNovoNome(e.target.value)} autoComplete="off" />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="novo-email">E-mail</Label>
-              <Input
-                id="novo-email"
-                type="email"
-                value={novoEmail}
-                onChange={e => setNovoEmail(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-            {erroNovo && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{erroNovo}</AlertDescription>
-              </Alert>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setNovoAberto(false)} disabled={adicionando}>
-              Cancelar
-            </Button>
-            <Button onClick={adicionarResponsavel} disabled={adicionando}>
-              {adicionando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Adicionar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AddResponsibleWizard
+        open={novoAberto}
+        onOpenChange={setNovoAberto}
+        tenantId={tenantId}
+        onAdded={() => void carregar()}
+      />
     </div>
   )
 }

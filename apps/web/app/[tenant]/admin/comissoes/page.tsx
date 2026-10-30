@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { leadSourceLabel } from '@/lib/lead-sources'
 import {
   CalendarDays,
   CircleDollarSign,
@@ -146,7 +147,7 @@ export default function AdminComissoesPage() {
   )
 
   const planRows = useMemo(() => groupBy(sale => sale.plan), [groupBy])
-  const sourceRows = useMemo(() => groupBy(sale => sale.source ?? ''), [groupBy])
+  const sourceRows = useMemo(() => groupBy(sale => leadSourceLabel(sale.source)), [groupBy])
 
   /**
    * Rede credenciada, com o desconto vigente de cada prestador. Comissão de

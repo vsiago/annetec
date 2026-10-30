@@ -60,10 +60,9 @@ import {
   FormDialog,
   FormField,
   FormRow,
-  FormSelect,
 } from '@/components/dashboard/form-dialog'
 import { useTenant } from '@/contexts/tenant-context'
-import { getAllClients, getAllSellers, useTenantData } from '@/contexts/tenant-data-context'
+import { getAllClients, useTenantData } from '@/contexts/tenant-data-context'
 import { formatCurrency, monthKeyOf } from '@/lib/analytics'
 import { beneficiarioSchema, formatCpf, formatPhone } from '@/lib/form-schemas'
 import { useZodForm } from '@/lib/use-zod-form'
@@ -92,6 +91,17 @@ const EXCLUIR_DESCRICAO =
 
 const BLOQUEAR_DESCRICAO =
   'A pessoa não conseguirá mais entrar nem se cadastrar de novo com este e-mail neste clube.'
+
+/**
+ * Plano, vendedor e cidade não têm rota de escrita (nascem da adesão): o
+ * formulário só valida e envia os dados da conta.
+ */
+const beneficiarioContaSchema = beneficiarioSchema.pick({
+  name: true,
+  email: true,
+  cpf: true,
+  phone: true,
+})
 
 const EMPTY_BENEFICIARIO = {
   name: '',
@@ -128,13 +138,12 @@ export default function AdminBeneficiariosPage() {
   const [removing, setRemoving] = useState<Client | null>(null)
   const [blocking, setBlocking] = useState<Client | null>(null)
   const [viewCardClient, setViewCardClient] = useState<Client | null>(null)
-  const form = useZodForm(beneficiarioSchema, EMPTY_BENEFICIARIO)
+  const form = useZodForm(beneficiarioContaSchema, EMPTY_BENEFICIARIO)
 
   // A lista traz todo vínculo (ativos, removidos e bloqueados); os
   // indicadores contam só a carteira ativa.
   const clients = getAllClients(users)
   const activeClients = clients.filter(client => accessOf(client) === 'active')
-  const sellers = getAllSellers(users)
 
   const planPrices = useMemo(
     () => new Map(clientPlans.map(item => [item.name, item.priceMonthly])),
@@ -175,11 +184,7 @@ export default function AdminBeneficiariosPage() {
   }
 
   function openCreate() {
-    form.reset({
-      ...EMPTY_BENEFICIARIO,
-      plan: clientPlans[0]?.name ?? '',
-      sellerId: sellers[0]?.id ?? '',
-    })
+    form.reset(EMPTY_BENEFICIARIO)
     setCreating(true)
   }
 
@@ -189,9 +194,9 @@ export default function AdminBeneficiariosPage() {
       email: client.email,
       cpf: client.cpf,
       phone: client.phone ?? '',
-      plan: client.plan,
-      sellerId: client.sellerId,
-      city: client.city ?? '',
+      plan: '',
+      sellerId: '',
+      city: '',
     })
     setEditing(client)
   }
@@ -214,9 +219,6 @@ export default function AdminBeneficiariosPage() {
       email: data.email,
       phone: formatPhone(data.phone),
       cpf: formatCpf(data.cpf),
-      plan: data.plan,
-      sellerId: data.sellerId,
-      city: data.city || undefined,
     }
 
     if (existing) {
@@ -552,38 +554,13 @@ export default function AdminBeneficiariosPage() {
           />
         </FormField>
 
-        <FormRow>
-          <FormField label="Plano" error={form.errors.plan} required>
-            <FormSelect
-              value={form.values.plan}
-              onChange={value => form.setField('plan', value)}
-              placeholder="Selecione o plano"
-              options={clientPlans.map(item => ({
-                value: item.name,
-                label: `${item.name} — ${formatCurrency(item.priceMonthly)}`,
-              }))}
-              invalid={!!form.errors.plan}
-            />
-          </FormField>
-          <FormField label="Vendedor responsável" error={form.errors.sellerId} required>
-            <FormSelect
-              value={form.values.sellerId}
-              onChange={value => form.setField('sellerId', value)}
-              placeholder="Selecione o vendedor"
-              options={sellers.map(seller => ({ value: seller.id, label: seller.name }))}
-              invalid={!!form.errors.sellerId}
-            />
-          </FormField>
-        </FormRow>
-
-        <FormField label="Cidade" htmlFor="ben-city" error={form.errors.city}>
-          <Input
-            id="ben-city"
-            placeholder="Cabo Frio - RJ"
-            value={form.values.city}
-            onChange={event => form.setField('city', event.target.value)}
-          />
-        </FormField>
+        {editing && (
+          <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            Plano: <strong className="text-foreground">{editing.plan || '—'}</strong>
+            {' · '}Cidade: <strong className="text-foreground">{editing.city || '—'}</strong>. Esses dados vêm da adesão
+            e não são editados aqui.
+          </p>
+        )}
       </FormDialog>
 
       <ConfirmDialog

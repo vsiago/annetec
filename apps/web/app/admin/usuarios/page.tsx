@@ -7,99 +7,37 @@ import { PageHeader } from '@/components/admin-platform/ui/page-header'
 import { DataTable, TableLoading, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
 import { EmptyState } from '@/components/admin-platform/ui/empty-state'
 import { StatusPill } from '@/components/admin-platform/ui/status-pill'
-import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { TeamMemberWizard } from '@/components/admin-platform/forms/team-wizards'
 import { useTenants } from '@/contexts/tenants-context'
 import { usePlatformAuth } from '@/contexts/platform-auth-context'
 import { updatePlatformUserAction } from '@/lib/actions/platform-users-api'
 import { getInitials } from '@/lib/utils'
-import type { PlatformRole } from '@/lib/types'
 import { Plus, ShieldCheck, Shield, Mail, Phone, Pencil, UserX, UserCheck, Users } from 'lucide-react'
 
 const BOTAO = 'h-11 rounded-[10px] px-4 font-semibold'
-const CAMPO = 'h-11 rounded-[10px]'
 
 export default function PlatformUsuariosPage() {
-  const { platformUsers, createPlatformUser, refresh, isLoading } = useTenants()
+  const { platformUsers, refresh, isLoading } = useTenants()
   const { user: contaAtual } = usePlatformAuth()
   const [isAddOpen, setIsAddOpen] = useState(false)
-  const [error, setError] = useState('')
   /** `null` = criando; com id = editando aquela conta. */
   const [editingId, setEditingId] = useState<string | null>(null)
   const [listError, setListError] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [role, setRole] = useState<PlatformRole>('platform_admin')
-  const [password, setPassword] = useState('')
-
   const abrirNovo = () => {
     setEditingId(null)
-    setName('')
-    setEmail('')
-    setPhone('')
-    setRole('platform_admin')
-    setPassword('')
-    setError('')
     setIsAddOpen(true)
   }
 
   const abrirEdicao = (conta: (typeof platformUsers)[number]) => {
     setEditingId(conta.id)
-    setName(conta.name)
-    setEmail(conta.email)
-    setPhone(conta.phone ?? '')
-    setRole(conta.role)
-    setPassword('')
-    setError('')
     setIsAddOpen(true)
   }
 
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    // Editar não mexe em e-mail nem senha: e-mail é a identidade da conta no
-    // Better Auth e senha tem fluxo próprio de troca.
-    if (editingId) {
-      const result = await updatePlatformUserAction(editingId, { name, phone: phone || null, role })
-      if (!result.success) {
-        setError(result.error || 'Não foi possível salvar as alterações. Confira os dados e tente de novo.')
-        return
-      }
-      await refresh()
-      setIsAddOpen(false)
-      setEditingId(null)
-      return
-    }
-
-    if (!name || !email || !password) {
-      setError('Preencha nome, e-mail e senha inicial para adicionar a pessoa.')
-      return
-    }
-    const result = await createPlatformUser({ name, email, phone, role, password })
-    if (!result.success) {
-      setError(result.error || 'Não foi possível adicionar a pessoa. Confira os dados e tente de novo.')
-      return
-    }
-    setIsAddOpen(false)
-    setName('')
-    setEmail('')
-    setPhone('')
-    setRole('platform_admin')
-    setPassword('')
-  }
+  /** Conta em edição (o assistente de "Equipe ANNETEC" cuida do formulário e das validações). */
+  const emEdicao = editingId ? platformUsers.find(u => u.id === editingId) ?? null : null
 
   /**
    * Desativar em vez de apagar: a conta continua assinando o histórico da
@@ -229,90 +167,7 @@ export default function PlatformUsuariosPage() {
         </DataTable>
       )}
 
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="rounded-2xl sm:max-w-[425px]">
-          <form onSubmit={handleAdd}>
-            <DialogHeader>
-              <DialogTitle>{editingId ? 'Editar pessoa' : 'Adicionar pessoa à equipe'}</DialogTitle>
-              <DialogDescription>
-                {editingId
-                  ? 'O e-mail e a senha não mudam por aqui.'
-                  : 'Escolha o nível de acesso: superadmin tem acesso total; padrão cuida da operação.'}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              {error && (
-                <p role="alert" className="m-0 text-sm text-[#B42318]">
-                  {error}
-                </p>
-              )}
-              <div className="grid gap-2">
-                <label htmlFor="equipe-nome" className="text-sm font-medium">
-                  Nome *
-                </label>
-                <Input id="equipe-nome" className={CAMPO} value={name} onChange={e => setName(e.target.value)} required />
-              </div>
-              <div className="grid gap-2">
-                <label htmlFor="equipe-email" className="text-sm font-medium">
-                  E-mail {editingId ? '' : '*'}
-                </label>
-                <Input
-                  id="equipe-email"
-                  className={CAMPO}
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required={!editingId}
-                  disabled={Boolean(editingId)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <label htmlFor="equipe-telefone" className="text-sm font-medium">
-                  Telefone
-                </label>
-                <Input id="equipe-telefone" className={CAMPO} value={phone} onChange={e => setPhone(e.target.value)} />
-              </div>
-              <div className="grid gap-2">
-                <label htmlFor="equipe-acesso" className="text-sm font-medium">
-                  Acesso *
-                </label>
-                <Select value={role} onValueChange={v => setRole(v as PlatformRole)}>
-                  <SelectTrigger id="equipe-acesso" className={`${CAMPO} w-full data-[size=default]:h-11`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="superadmin">Superadmin (acesso total)</SelectItem>
-                    <SelectItem value="platform_admin">Padrão (operacional)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {!editingId && (
-                <div className="grid gap-2">
-                  <label htmlFor="equipe-senha" className="text-sm font-medium">
-                    Senha inicial *
-                  </label>
-                  <Input
-                    id="equipe-senha"
-                    className={CAMPO}
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" className={BOTAO} onClick={() => setIsAddOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" className={BOTAO}>
-                {editingId ? 'Salvar alterações' : 'Adicionar pessoa'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <TeamMemberWizard open={isAddOpen} onOpenChange={setIsAddOpen} member={emEdicao} onSaved={refresh} />
     </PageContainer>
   )
 }

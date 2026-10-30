@@ -1,7 +1,11 @@
+'use client'
+
 import Link from 'next/link'
 import { Building2, CircleCheck, HeartPulse } from 'lucide-react'
 import { Button } from '@/components/admin-platform/ui/button'
 import { EmptyState } from '@/components/admin-platform/ui/empty-state'
+import { EntityAvatar } from '@/components/admin-platform/ui/entity-avatar'
+import { useClubColors } from '@/components/admin-platform/ui/use-club-colors'
 import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { HEALTH_BAND_TEXT, type AttentionClub } from './derive'
@@ -25,6 +29,7 @@ const SEGMENTS = [
  * clube, explica e leva ao cadastro do primeiro.
  */
 export function ClubHealthCard({ counts, attention }: { counts: HealthCounts; attention: AttentionClub[] }) {
+  const colorOf = useClubColors()
   const total = counts.healthy + counts.attention + counts.risk
   const description = `${plural(counts.healthy, 'clube', 'clubes')} com saúde boa, ${formatCount(counts.attention)} em atenção e ${formatCount(counts.risk)} ${counts.risk === 1 ? 'crítico' : 'críticos'}`
 
@@ -32,6 +37,7 @@ export function ClubHealthCard({ counts, attention }: { counts: HealthCounts; at
     <SectionCard
       id="home-saude"
       icon={HeartPulse}
+      iconTone="coral"
       title="Saúde dos clubes"
       className="flex-[1_1_320px]"
       actions={
@@ -63,7 +69,7 @@ export function ClubHealthCard({ counts, attention }: { counts: HealthCounts; at
         />
       ) : (
         <>
-          <div role="img" aria-label={description} className="flex h-3 gap-[3px] overflow-hidden rounded-full">
+          <div role="img" aria-label={description} className="flex h-2.5 gap-0.5 overflow-hidden rounded-full">
             {SEGMENTS.filter(segment => counts[segment.key] > 0).map(segment => (
               <div
                 key={segment.key}
@@ -102,11 +108,14 @@ export function ClubHealthCard({ counts, attention }: { counts: HealthCounts; at
                     <li key={club.id} className="border-b border-[#EEF0F3] last:border-b-0">
                       <Link
                         href={`/admin/inquilinos/${encodeURIComponent(club.id)}`}
-                        className="flex min-h-11 items-center justify-between gap-3 rounded-xl py-3 text-foreground no-underline hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
+                        className="-mx-2 flex min-h-11 items-center justify-between gap-3 rounded-xl px-2 py-3 text-foreground no-underline transition-colors duration-150 hover:bg-[#F6F9FC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
                       >
-                        <span className="flex min-w-0 flex-col gap-0.5">
-                          <strong className="truncate text-sm">{club.name}</strong>
-                          <span className="text-[13px] text-muted-foreground">{club.reason}</span>
+                        <span className="flex min-w-0 items-center gap-3">
+                          <EntityAvatar name={club.name} color={colorOf(club.id)} size="sm" />
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <strong className="truncate text-sm font-semibold">{club.name}</strong>
+                            <span className="text-[13px] text-muted-foreground">{club.reason}</span>
+                          </span>
                         </span>
                         <StatusPill tone={band.tone}>{band.label}</StatusPill>
                       </Link>

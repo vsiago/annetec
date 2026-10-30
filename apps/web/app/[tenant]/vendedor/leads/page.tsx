@@ -4,6 +4,10 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FormField, FormSelect } from '@/components/dashboard/form-dialog'
+import { formatPhone, leadSchema } from '@/lib/form-schemas'
+import { useZodForm } from '@/lib/use-zod-form'
+import { leadSourceLabel, leadSourceOptions, DEFAULT_LEAD_SOURCE } from '@/lib/lead-sources'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
 import { useTenant } from '@/contexts/tenant-context'
@@ -54,31 +58,30 @@ export default function LeadsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [isAddOpen, setIsAddOpen] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [newPhone, setNewPhone] = useState('')
-  const [newSource, setNewSource] = useState('Website')
-  const [newValue, setNewValue] = useState('')
+  const form = useZodForm(leadSchema.pick({ name: true, email: true, phone: true, source: true, value: true }), {
+    name: '',
+    email: '',
+    phone: '',
+    source: DEFAULT_LEAD_SOURCE,
+    value: '0',
+  })
 
   const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newName || !newEmail || !tenant || !seller) return
+    const data = form.validate()
+    if (!data || !tenant || !seller) return
     await createLead({
-      name: newName,
-      email: newEmail,
-      phone: newPhone,
-      source: newSource,
+      name: data.name,
+      email: data.email,
+      phone: formatPhone(data.phone),
+      source: data.source,
       status: 'new',
       notes: '',
-      value: Number(newValue) || 0,
+      value: data.value,
       sellerId: seller.id,
     })
     setIsAddOpen(false)
-    setNewName('')
-    setNewEmail('')
-    setNewPhone('')
-    setNewSource('Website')
-    setNewValue('')
+    form.reset()
   }
 
   const filteredLeads = allLeads.filter(lead => {
@@ -177,7 +180,7 @@ export default function LeadsPage() {
                       </div>
                     </td>
                     <td className="py-4 px-6">
-                      <Badge variant="outline">{lead.source}</Badge>
+                      <Badge variant="outline">{leadSourceLabel(lead.source) || '—'}</Badge>
                     </td>
                     <td className="py-4 px-6">
                       <span className="font-medium text-secondary">
@@ -215,43 +218,33 @@ export default function LeadsPage() {
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="sm:max-w-[425px]">
-          <form onSubmit={handleAddLead}>
+          <form onSubmit={handleAddLead} noValidate>
             <DialogHeader>
               <DialogTitle>Novo Lead</DialogTitle>
               <DialogDescription>Cadastre um novo lead no seu funil de vendas</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Nome *</label>
-                <Input required value={newName} onChange={e => setNewName(e.target.value)} placeholder="Ex: Ana Souza" />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">E-mail *</label>
-                <Input required type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Ex: ana@email.com" />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Telefone</label>
-                <Input value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="Ex: (11) 98888-7777" />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Origem</label>
-                <Select value={newSource} onValueChange={setNewSource}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Website">Website</SelectItem>
-                    <SelectItem value="Indicação">Indicação</SelectItem>
-                    <SelectItem value="Instagram">Instagram</SelectItem>
-                    <SelectItem value="LinkedIn">LinkedIn</SelectItem>
-                    <SelectItem value="Evento">Evento</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Valor estimado (R$)</label>
-                <Input type="number" value={newValue} onChange={e => setNewValue(e.target.value)} placeholder="Ex: 2400" />
-              </div>
+              <FormField label="Nome" htmlFor="lead-name" error={form.errors.name} required>
+                <Input id="lead-name" value={form.values.name} onChange={e => form.setField('name', e.target.value)} placeholder="Ex: Ana Souza" aria-invalid={!!form.errors.name} />
+              </FormField>
+              <FormField label="E-mail" htmlFor="lead-email" error={form.errors.email} required>
+                <Input id="lead-email" type="email" value={form.values.email} onChange={e => form.setField('email', e.target.value)} placeholder="Ex: ana@email.com" aria-invalid={!!form.errors.email} />
+              </FormField>
+              <FormField label="Telefone" htmlFor="lead-phone" error={form.errors.phone} required hint="Com DDD">
+                <Input id="lead-phone" value={form.values.phone} onChange={e => form.setField('phone', e.target.value)} placeholder="Ex: (11) 98888-7777" aria-invalid={!!form.errors.phone} />
+              </FormField>
+              <FormField label="Origem" error={form.errors.source} required>
+                <FormSelect
+                  value={form.values.source}
+                  onChange={value => form.setField('source', value)}
+                  placeholder="Selecione a origem"
+                  options={leadSourceOptions}
+                  invalid={!!form.errors.source}
+                />
+              </FormField>
+              <FormField label="Valor estimado (R$)" htmlFor="lead-value" error={form.errors.value} required>
+                <Input id="lead-value" inputMode="decimal" value={form.values.value} onChange={e => form.setField('value', e.target.value)} placeholder="Ex: 2400" aria-invalid={!!form.errors.value} />
+              </FormField>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>

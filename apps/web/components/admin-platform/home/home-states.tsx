@@ -1,8 +1,9 @@
 import { ErrorState } from '@/components/admin-platform/ui/empty-state'
 import { SectionHeading } from '@/components/admin-platform/ui/section-card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { CARD_SURFACE } from '@/components/admin-platform/ui/tone'
 
-const CARD = 'rounded-2xl border border-border bg-card shadow-sm'
+const CARD = CARD_SURFACE
 
 /** Esqueleto discreto enquanto os dados chegam: mesma grade da tela pronta. */
 export function HomeLoading() {
@@ -31,9 +32,9 @@ export function HomeLoading() {
         <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
           {[0, 1, 2, 3].map(index => (
             <div key={index} className={`${CARD} flex flex-col gap-3 px-6 py-[22px]`}>
-              <div className="flex items-start justify-between gap-3">
-                <Skeleton className="h-4 w-32" />
+              <div className="flex items-center gap-3">
                 <Skeleton className="size-10 rounded-xl" />
+                <Skeleton className="h-4 w-32" />
               </div>
               <Skeleton className="h-9 w-28" />
               <Skeleton className="h-4 w-40" />

@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import { RefreshCw, TriangleAlert } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/admin-platform/ui/button'
+import { CARD_SURFACE } from '@/components/admin-platform/ui/tone'
 import { cn } from '@/lib/utils'
 
 /**
@@ -9,7 +10,10 @@ import { cn } from '@/lib/utils'
  * (/admin). Nunca deixe uma área em branco, uma barra cinza ou um texto solto:
  * mostre o ícone, diga o que está acontecendo e, se houver, o próximo passo.
  *
- * - `icon`: ícone do lucide, desenhado num círculo suave (decorativo).
+ * - `icon`: ícone do lucide, desenhado num círculo na cor do tom, com anéis
+ *   suaves em volta (decorativo).
+ * - `satellites` (opcional): até 2 ícones pequenos em tom claro orbitando o
+ *   principal — dão contexto ("faturas", "clubes") sem virar ilustração.
  * - `title`: frase curta (16–18px). `description`: uma frase de apoio.
  * - `action`: botão opcional (`Button` de `ui/button` — `asChild` + `Link`
  *   para navegar). No máximo uma ação principal.
@@ -26,26 +30,120 @@ import { cn } from '@/lib/utils'
 type Tone = 'default' | 'success' | 'warning'
 type Size = 'sm' | 'md' | 'lg'
 
-const TONES: Record<Tone, { chip: string; ring: string }> = {
-  default: { chip: 'bg-accent text-secondary', ring: 'ring-accent/60' },
-  success: { chip: 'bg-[#ECFDF3] text-[#067647]', ring: 'ring-[#ECFDF3]/70' },
-  warning: { chip: 'bg-[#FFFAEB] text-[#B54708]', ring: 'ring-[#FFFAEB]/80' },
+const TONES: Record<Tone, { core: string; halo: string }> = {
+  default: { core: 'bg-[#E5EDF5] text-secondary', halo: 'bg-[#E5EDF5]/55' },
+  success: { core: 'bg-[#DCFAE6] text-[#067647]', halo: 'bg-[#ECFDF3]/80' },
+  warning: { core: 'bg-[#FEF0C7] text-[#B54708]', halo: 'bg-[#FFFAEB]/90' },
 }
 
-const SIZES: Record<Size, { wrap: string; chip: string; icon: string; title: string; text: string }> = {
-  sm: { wrap: 'gap-1 px-4 py-8', chip: 'size-11 ring-4', icon: 'size-5', title: 'text-base', text: 'text-sm' },
-  md: { wrap: 'gap-1.5 px-6 py-12', chip: 'size-14 ring-[6px]', icon: 'size-6', title: 'text-[17px]', text: 'text-sm' },
-  lg: { wrap: 'gap-2 px-6 py-16', chip: 'size-16 ring-8', icon: 'size-7', title: 'text-lg', text: 'text-[15px]' },
+const SIZES: Record<
+  Size,
+  {
+    wrap: string
+    stage: string
+    halo: string
+    core: string
+    icon: string
+    sat: string
+    satIcon: string
+    title: string
+    text: string
+  }
+> = {
+  sm: {
+    wrap: 'gap-1 px-4 py-7',
+    stage: 'size-20',
+    halo: 'inset-[14%]',
+    core: 'size-11 ring-4',
+    icon: 'size-5',
+    sat: 'size-7',
+    satIcon: 'size-3.5',
+    title: 'text-base',
+    text: 'text-sm',
+  },
+  md: {
+    wrap: 'gap-1.5 px-6 py-10',
+    stage: 'size-28',
+    halo: 'inset-[15%]',
+    core: 'size-14 ring-[6px]',
+    icon: 'size-6',
+    sat: 'size-8',
+    satIcon: 'size-4',
+    title: 'text-[17px]',
+    text: 'text-sm',
+  },
+  lg: {
+    wrap: 'gap-2 px-6 py-14',
+    stage: 'size-32',
+    halo: 'inset-[15%]',
+    core: 'size-16 ring-8',
+    icon: 'size-7',
+    sat: 'size-9',
+    satIcon: 'size-[18px]',
+    title: 'text-lg',
+    text: 'text-[15px]',
+  },
+}
+
+/** Ícone principal com anéis suaves e, se houver, os satélites (tudo decorativo). */
+function EmptyArt({
+  icon: Icon,
+  tone,
+  size,
+  satellites,
+}: {
+  icon: LucideIcon
+  tone: Tone
+  size: Size
+  satellites?: LucideIcon[]
+}) {
+  const t = TONES[tone]
+  const s = SIZES[size]
+  const [first, second] = satellites ?? []
+  return (
+    <span className={cn('relative mb-3 inline-flex shrink-0 items-center justify-center', s.stage)} aria-hidden="true">
+      {/* anel externo, bem fino */}
+      <span className="absolute inset-0 rounded-full border border-[#E4E9F0]" />
+      {/* halo do tom */}
+      <span className={cn('absolute rounded-full', s.halo, t.halo)} />
+      {/* círculo principal */}
+      <span
+        className={cn(
+          'relative inline-flex items-center justify-center rounded-full ring-white shadow-[0_1px_3px_rgba(16,24,40,0.08)]',
+          s.core,
+          t.core,
+        )}
+      >
+        <Icon className={s.icon} />
+      </span>
+      {first ? <Satellite icon={first} className={cn(s.sat, 'left-0 top-[8%]')} iconClass={s.satIcon} /> : null}
+      {second ? <Satellite icon={second} className={cn(s.sat, 'bottom-[6%] right-0')} iconClass={s.satIcon} /> : null}
+    </span>
+  )
+}
+
+function Satellite({ icon: Icon, className, iconClass }: { icon: LucideIcon; className: string; iconClass: string }) {
+  return (
+    <span
+      className={cn(
+        'absolute inline-flex items-center justify-center rounded-full border border-[#E4E9F0] bg-white text-[#98A2B3] shadow-[0_1px_2px_rgba(16,24,40,0.06)]',
+        className,
+      )}
+    >
+      <Icon className={iconClass} />
+    </span>
+  )
 }
 
 export function EmptyState({
-  icon: Icon,
+  icon,
   title,
   description,
   action,
   tone = 'default',
   size = 'md',
   framed = false,
+  satellites,
   role,
   className,
 }: {
@@ -56,10 +154,11 @@ export function EmptyState({
   tone?: Tone
   size?: Size
   framed?: boolean
+  /** Até 2 ícones pequenos ao redor do principal (decorativos). */
+  satellites?: LucideIcon[]
   role?: 'alert' | 'status'
   className?: string
 }) {
-  const t = TONES[tone]
   const s = SIZES[size]
   return (
     <div
@@ -67,16 +166,11 @@ export function EmptyState({
       className={cn(
         'flex min-w-0 flex-col items-center justify-center text-center',
         s.wrap,
-        framed && 'rounded-2xl border border-border bg-card shadow-sm',
+        framed && CARD_SURFACE,
         className,
       )}
     >
-      <span
-        className={cn('mb-3 inline-flex shrink-0 items-center justify-center rounded-full', s.chip, t.chip, t.ring)}
-        aria-hidden="true"
-      >
-        <Icon className={s.icon} />
-      </span>
+      <EmptyArt icon={icon} tone={tone} size={size} satellites={satellites?.slice(0, 2)} />
       <p className={cn('m-0 font-semibold leading-snug text-foreground', s.title)}>{title}</p>
       {description ? (
         <p className={cn('m-0 max-w-md leading-relaxed text-muted-foreground', s.text)}>{description}</p>

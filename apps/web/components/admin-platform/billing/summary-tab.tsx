@@ -7,6 +7,8 @@ import { daysBetweenDates, type PlatformBillingSummary, type PlatformCharge, typ
 import { Button } from '@/components/admin-platform/ui/button'
 import { EmptyState } from '@/components/admin-platform/ui/empty-state'
 import { DataTable, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { EntityAvatar } from '@/components/admin-platform/ui/entity-avatar'
+import { useClubColors } from '@/components/admin-platform/ui/use-club-colors'
 import { KpiCard, type KpiDelta } from '@/components/admin-platform/ui/kpi-card'
 import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
 import { KpiSkeleton, LoadError, TableSkeleton, useConsoleData } from '@/components/admin-platform/billing/console-kit'
@@ -145,6 +147,8 @@ function KpiRow({ summary, version, overdueClubs }: { summary: PlatformBillingSu
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <KpiCard
         icon={<Wallet />}
+        accent="green"
+        trend={months.map(month => month.received)}
         label={`Recebido em ${currentName}`}
         value={formatBRL(summary.receivedThisMonth)}
         delta={change !== null ? changeDelta(change) : undefined}
@@ -164,6 +168,7 @@ function KpiRow({ summary, version, overdueClubs }: { summary: PlatformBillingSu
 
       <KpiCard
         icon={<Receipt />}
+        accent="blue"
         label={`A receber até ${formatDateBR(monthEnd).slice(0, 5)}`}
         value={formatBRL(summary.pendingThisMonth)}
         hint={
@@ -177,6 +182,8 @@ function KpiRow({ summary, version, overdueClubs }: { summary: PlatformBillingSu
 
       <KpiCard
         icon={<CircleAlert />}
+        accent="red"
+        trend={months.map(month => month.overdue)}
         label="Em atraso"
         value={formatBRL(summary.overdueAmount)}
         tone={summary.overdueAmount > 0 ? 'danger' : 'default'}
@@ -192,6 +199,7 @@ function KpiRow({ summary, version, overdueClubs }: { summary: PlatformBillingSu
 
       <KpiCard
         icon={<TrendingUp />}
+        accent="navy"
         label="Receita mensal"
         value={formatBRL(summary.mrr)}
         hint={`soma das mensalidades ${billableClubs === 1 ? 'do clube ativo' : `dos ${formatCount(billableClubs)} clubes ativos`}`}
@@ -243,6 +251,7 @@ function MonthlyChart({ summary }: { summary: PlatformBillingSummary }) {
       title="Previsto e recebido nos últimos 6 meses"
       description="Previsto e em atraso contam pelo mês de vencimento; recebido, pelo mês do pagamento. O último mês é o atual, até hoje."
       icon={BarChart3}
+      iconTone="green"
       actions={
         hasData ? (
           <Button
@@ -259,6 +268,7 @@ function MonthlyChart({ summary }: { summary: PlatformBillingSummary }) {
       {!hasData ? (
         <EmptyState
           icon={BarChart3}
+          satellites={[Receipt, Wallet]}
           size="sm"
           title="Ainda sem faturas"
           description="O gráfico aparece com a primeira fatura de um clube (adesão ou mensalidade)."
@@ -303,7 +313,7 @@ function MonthlyChart({ summary }: { summary: PlatformBillingSummary }) {
           <div className="h-64" role="img" aria-label="Gráfico de colunas: previsto, em atraso e recebido por mês, em reais">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barGap={2} barCategoryGap="24%">
-                <CartesianGrid vertical={false} stroke="#E4E7EC" strokeWidth={1} />
+                <CartesianGrid vertical={false} stroke="#EAEEF4" strokeDasharray="4 4" strokeWidth={1} />
                 <XAxis
                   dataKey="label"
                   tickLine={false}
@@ -315,18 +325,19 @@ function MonthlyChart({ summary }: { summary: PlatformBillingSummary }) {
                   tickLine={false}
                   axisLine={false}
                   width={72}
+                  tickCount={4}
                   tick={{ fontSize: 12, fill: '#475467' }}
                   tickFormatter={value => formatBRLCompact(Number(value))}
                 />
-                <Tooltip cursor={{ fill: 'rgba(11,11,11,0.04)' }} content={<ChartTooltip />} />
+                <Tooltip cursor={{ fill: 'rgba(30,42,74,0.05)', radius: 8 }} content={<ChartTooltip />} />
                 {SERIES.map(series => (
                   <Bar
                     key={series.key}
                     dataKey={series.key}
                     name={series.label}
                     fill={series.color}
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={24}
+                    radius={[5, 5, 0, 0]}
+                    maxBarSize={26}
                   />
                 ))}
               </BarChart>
@@ -461,6 +472,7 @@ function AttentionSection({
 }) {
   const [localVersion, setLocalVersion] = useState(0)
   const [detailId, setDetailId] = useState<string | null>(null)
+  const colorOf = useClubColors()
   const today = todaySP()
 
   const attention = useConsoleData<AttentionData>(async (): Promise<ConsoleActionResult<AttentionData>> => {
@@ -500,6 +512,7 @@ function AttentionSection({
         title="Precisam de atenção"
         description="Faturas em atraso, da mais antiga para a mais recente."
         icon={CircleAlert}
+        iconTone="red"
         padded={false}
         className="overflow-hidden"
         actions={
@@ -543,11 +556,18 @@ function AttentionSection({
                   return (
                     <Tr key={charge.id} {...openableRowProps(() => setDetailId(charge.id))}>
                       <Td>
-                        <div className="min-w-0 max-w-60">
-                          <p className="m-0 truncate font-medium text-foreground">{charge.tenantName ?? 'Nova contratação'}</p>
-                          <p className="m-0 truncate text-xs text-muted-foreground">
-                            {accessText(charge.organizationId ? attention.data?.subscriptions.get(charge.organizationId) : undefined)}
-                          </p>
+                        <div className="flex min-w-0 items-center gap-3">
+                          <EntityAvatar
+                            name={charge.tenantName ?? 'Nova contratação'}
+                            color={colorOf(charge.organizationId)}
+                            size="sm"
+                          />
+                          <div className="min-w-0 max-w-60">
+                            <p className="m-0 truncate font-semibold text-foreground">{charge.tenantName ?? 'Nova contratação'}</p>
+                            <p className="m-0 truncate text-xs text-muted-foreground">
+                              {accessText(charge.organizationId ? attention.data?.subscriptions.get(charge.organizationId) : undefined)}
+                            </p>
+                          </div>
                         </div>
                       </Td>
                       <Td className="hidden md:table-cell">

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/admin-platform/ui/button'
 import { ErrorState } from '@/components/admin-platform/ui/empty-state'
+import { CARD_SURFACE } from '@/components/admin-platform/ui/tone'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -184,8 +185,11 @@ export function KpiSkeleton({ count = 4, className }: { count?: number; classNam
     <div role="status" aria-live="polite" aria-busy="true" className={cn('grid gap-4 sm:grid-cols-2 xl:grid-cols-4', className)}>
       <span className="sr-only">Carregando…</span>
       {Array.from({ length: count }, (_, index) => (
-        <div key={index} className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-6 py-5.5 shadow-sm">
-          <Skeleton className="h-3.5 w-28" />
+        <div key={index} className={cn('flex flex-col gap-3 px-6 py-5', CARD_SURFACE)}>
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-10 rounded-xl" />
+            <Skeleton className="h-3.5 w-28" />
+          </div>
           <Skeleton className="h-8 w-36 max-w-full" />
           <Skeleton className="h-3.5 w-40 max-w-full" />
         </div>
@@ -224,7 +228,8 @@ export function SuperadminOnly({
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="inline-flex cursor-not-allowed">
-            <span className="pointer-events-none inline-flex opacity-50">{children}</span>
+            {/* `inert`: sem foco por Tab nem Enter — o botão bloqueado não abre nada. */}
+            <span inert className="pointer-events-none inline-flex opacity-50">{children}</span>
           </span>
         </TooltipTrigger>
         <TooltipContent className="flex items-center gap-1.5">

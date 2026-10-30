@@ -4,25 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import type { Contract, ContractStatus, Invoice, InvoiceStatus } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { AttachDocumentDialog, DeclarePathologyDialog, RegisterPendencyDialog } from '@/components/admin-platform/forms/contract-dialogs'
 import { PageContainer } from '@/components/admin-platform/ui/page-container'
 import { BackLink, PageHeader } from '@/components/admin-platform/ui/page-header'
 import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
@@ -46,9 +28,6 @@ import {
   RefreshCw,
   Mail,
   CheckCircle2,
-  Paperclip,
-  Stethoscope,
-  AlertTriangle,
   CreditCard,
   ExternalLink,
   FileText,
@@ -120,8 +99,6 @@ export default function OperatorClienteDetailPage() {
   const [attachOpen, setAttachOpen] = useState(false)
   const [pathologyOpen, setPathologyOpen] = useState(false)
   const [pendencyOpen, setPendencyOpen] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [formError, setFormError] = useState('')
 
   const load = async (slug: string) => {
     setLoading(true)
@@ -274,68 +251,44 @@ export default function OperatorClienteDetailPage() {
             <AttachDocumentDialog
               open={attachOpen}
               onOpenChange={setAttachOpen}
-              submitting={submitting}
-              error={formError}
               onSubmit={async (fileName, fileUrl) => {
-                if (!tenantSlug) return
-                setSubmitting(true)
-                setFormError('')
+                if (!tenantSlug) return 'Clube não identificado. Recarregue a página e tente de novo.'
                 const result = await attachOperatorDocumentAction(tenantSlug, {
                   contractUpstreamCodigo: codigo,
                   fileName,
                   fileUrl,
                 })
-                setSubmitting(false)
-                if (!result.success) {
-                  setFormError(result.error)
-                  return
-                }
-                setAttachOpen(false)
+                if (!result.success) return result.error
                 setActionMessage('Documento anexado ao contrato.')
+                return null
               }}
             />
 
             <DeclarePathologyDialog
               open={pathologyOpen}
               onOpenChange={setPathologyOpen}
-              submitting={submitting}
-              error={formError}
               beneficiaries={contract.beneficiaries}
               onSubmit={async input => {
-                if (!tenantSlug) return
-                setSubmitting(true)
-                setFormError('')
+                if (!tenantSlug) return 'Clube não identificado. Recarregue a página e tente de novo.'
                 const result = await declareOperatorPathologyAction(tenantSlug, input)
-                setSubmitting(false)
-                if (!result.success) {
-                  setFormError(result.error)
-                  return
-                }
-                setPathologyOpen(false)
+                if (!result.success) return result.error
                 setActionMessage('Patologia declarada.')
+                return null
               }}
             />
 
             <RegisterPendencyDialog
               open={pendencyOpen}
               onOpenChange={setPendencyOpen}
-              submitting={submitting}
-              error={formError}
               onSubmit={async pendencyCode => {
-                if (!tenantSlug) return
-                setSubmitting(true)
-                setFormError('')
+                if (!tenantSlug) return 'Clube não identificado. Recarregue a página e tente de novo.'
                 const result = await registerOperatorPendencyAction(tenantSlug, {
                   contractCodigo: codigo,
                   pendencyCode,
                 })
-                setSubmitting(false)
-                if (!result.success) {
-                  setFormError(result.error)
-                  return
-                }
-                setPendencyOpen(false)
+                if (!result.success) return result.error
                 setActionMessage('Pendência registrada.')
+                return null
               }}
             />
           </div>
@@ -436,192 +389,5 @@ function Field({ label, value }: { label: string; value: string | null }) {
       <dt className="text-[13px] text-muted-foreground">{label}</dt>
       <dd className="m-0 wrap-break-word text-sm font-semibold text-foreground">{value ?? '—'}</dd>
     </div>
-  )
-}
-
-function AttachDocumentDialog({
-  open,
-  onOpenChange,
-  submitting,
-  error,
-  onSubmit,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  submitting: boolean
-  error: string
-  onSubmit: (fileName: string, fileUrl: string) => void
-}) {
-  const [fileName, setFileName] = useState('')
-  const [fileUrl, setFileUrl] = useState('')
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="h-10 justify-start">
-          <Paperclip aria-hidden="true" /> Anexar documento
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Anexar documento</DialogTitle>
-          <DialogDescription>Envia um link de arquivo já hospedado — a Digital Saúde não recebe upload direto.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label>Nome do arquivo</Label>
-            <Input className="h-10" value={fileName} onChange={e => setFileName(e.target.value)} placeholder="RG.pdf" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>URL do arquivo</Label>
-            <Input className="h-10" value={fileUrl} onChange={e => setFileUrl(e.target.value)} placeholder="https://..." />
-          </div>
-          {error && (
-            <p role="alert" className="m-0 text-sm font-medium text-[#B42318]">
-              {error}
-            </p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button
-            className="h-10"
-            onClick={() => onSubmit(fileName, fileUrl)}
-            disabled={submitting || !fileName || !fileUrl}
-          >
-            {submitting && <Loader2 className="animate-spin" aria-hidden="true" />}
-            Anexar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function DeclarePathologyDialog({
-  open,
-  onOpenChange,
-  submitting,
-  error,
-  beneficiaries,
-  onSubmit,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  submitting: boolean
-  error: string
-  beneficiaries: Contract['beneficiaries']
-  onSubmit: (input: { beneficiaryUpstreamCodigo: string; name: string; description?: string }) => void
-}) {
-  const [beneficiaryCodigo, setBeneficiaryCodigo] = useState('')
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="h-10 justify-start">
-          <Stethoscope aria-hidden="true" /> Declarar patologia
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Declarar patologia</DialogTitle>
-          <DialogDescription>Declaração de saúde do beneficiário, registrada no ERP.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label>Beneficiário</Label>
-            <Select value={beneficiaryCodigo} onValueChange={setBeneficiaryCodigo}>
-              <SelectTrigger className="h-10 w-full">
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {beneficiaries
-                  .filter(b => b.upstreamCodigo)
-                  .map(b => (
-                    <SelectItem key={b.upstreamCodigo!} value={b.upstreamCodigo!}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Nome da patologia</Label>
-            <Input className="h-10" value={name} onChange={e => setName(e.target.value)} placeholder="Hipertensão" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Descrição (opcional)</Label>
-            <Textarea value={description} onChange={e => setDescription(e.target.value)} />
-          </div>
-          {error && (
-            <p role="alert" className="m-0 text-sm font-medium text-[#B42318]">
-              {error}
-            </p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button
-            className="h-10"
-            onClick={() =>
-              onSubmit({ beneficiaryUpstreamCodigo: beneficiaryCodigo, name, description: description || undefined })
-            }
-            disabled={submitting || !beneficiaryCodigo || !name}
-          >
-            {submitting && <Loader2 className="animate-spin" aria-hidden="true" />}
-            Declarar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function RegisterPendencyDialog({
-  open,
-  onOpenChange,
-  submitting,
-  error,
-  onSubmit,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  submitting: boolean
-  error: string
-  onSubmit: (pendencyCode: string) => void
-}) {
-  const [pendencyCode, setPendencyCode] = useState('')
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="h-10 justify-start">
-          <AlertTriangle aria-hidden="true" /> Registrar pendência
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Registrar pendência</DialogTitle>
-          <DialogDescription>Código da pendência conforme cadastrado na Digital Saúde.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label>Código da pendência</Label>
-            <Input className="h-10" value={pendencyCode} onChange={e => setPendencyCode(e.target.value)} />
-          </div>
-          {error && (
-            <p role="alert" className="m-0 text-sm font-medium text-[#B42318]">
-              {error}
-            </p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button className="h-10" onClick={() => onSubmit(pendencyCode)} disabled={submitting || !pendencyCode}>
-            {submitting && <Loader2 className="animate-spin" aria-hidden="true" />}
-            Registrar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }

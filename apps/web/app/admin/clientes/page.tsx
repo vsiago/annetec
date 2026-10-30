@@ -13,12 +13,13 @@ import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { DataTable, TableLoading, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
 import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
 import { StatusPill, type StatusPillTone } from '@/components/admin-platform/ui/status-pill'
+import { NovaAdesaoButton } from '@/components/admin-platform/forms/enrollment-wizard'
 import {
   listOperatorContractsAction,
   searchOperatorContractByCpfAction,
   syncOperatorContractAction,
 } from '@/lib/actions/operator-api'
-import { Search, RefreshCw, Users, Loader2, CheckCircle2, Plus } from 'lucide-react'
+import { Search, RefreshCw, Users, Loader2, CheckCircle2 } from 'lucide-react'
 
 const STATUS_LABEL: Record<string, string> = {
   pendente: 'Pendente',
@@ -130,13 +131,7 @@ export default function OperatorClientesPage() {
         icon={Users}
         title="Clientes"
         description="Contratos do clube selecionado acima, direto da Digital Saúde — não misturado com os outros clubes."
-        actions={
-          <Button asChild className="h-10">
-            <Link href="/admin/clientes/nova-adesao">
-              <Plus aria-hidden="true" /> Nova adesão
-            </Link>
-          </Button>
-        }
+        actions={<NovaAdesaoButton className="h-10" onCreated={refreshContracts} />}
       />
 
       {operatorError && <ErrorState size="sm" description={operatorError} />}

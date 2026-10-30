@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
+import { CARD_SURFACE } from '@/components/admin-platform/ui/tone'
 import { cn } from '@/lib/utils'
 
 /**
@@ -19,9 +20,14 @@ import { cn } from '@/lib/utils'
  * - `TH` / `TD`: as mesmas classes, para quem precisa de `<th>`/`<td>` crus.
  */
 
+/**
+ * Cabeçalho leve: fundo cinza-azulado, rótulo pequeno em caixa alta. É
+ * `sticky` — fica preso no topo quando a caixa da tabela tem altura máxima
+ * (`TableCard className="max-h-[...]"`), sem efeito quando não tem.
+ */
 export const TH =
-  'whitespace-nowrap border-b border-border bg-[#F9FAFB] px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground'
-export const TD = 'border-b border-[#EEF0F3] px-5 py-4 align-middle group-last:border-b-0'
+  'sticky top-0 z-[1] whitespace-nowrap border-b border-border bg-[#F6F8FB] px-5 py-3 text-left text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[#475467]'
+export const TD = 'border-b border-[#EDF1F6] px-5 py-3.5 align-middle group-last:border-b-0'
 
 /** Caixa da tabela: cantos arredondados, borda suave e rolagem horizontal. */
 export function TableCard({
@@ -34,13 +40,7 @@ export function TableCard({
   className?: string
 }) {
   return (
-    <div
-      className={cn(
-        'max-w-full overflow-x-auto',
-        framed && 'rounded-2xl border border-border bg-card shadow-sm',
-        className,
-      )}
-    >
+    <div className={cn('max-w-full overflow-x-auto', framed && CARD_SURFACE, className)}>
       {children}
     </div>
   )
@@ -83,6 +83,7 @@ export function Th({
   )
 }
 
+/** Célula. `align="right"` é para números: alinha à direita com algarismos de largura fixa. */
 export function Td({
   align = 'left',
   className,
@@ -90,14 +91,14 @@ export function Td({
 }: ComponentProps<'td'> & { align?: 'left' | 'right' | 'center' }) {
   return (
     <td
-      className={cn(TD, align === 'right' && 'text-right', align === 'center' && 'text-center', className)}
+      className={cn(TD, align === 'right' && 'text-right tabular-nums', align === 'center' && 'text-center', className)}
       {...props}
     />
   )
 }
 
 export function Tr({ className, ...props }: ComponentProps<'tr'>) {
-  return <tr className={cn('group transition-colors hover:bg-accent/30', className)} {...props} />
+  return <tr className={cn('group transition-colors duration-150 hover:bg-[#F6F9FC]', className)} {...props} />
 }
 
 /** Esqueleto de tabela (carregando): cabeçalho + linhas, na mesma caixa. */
@@ -116,12 +117,13 @@ export function TableLoading({
       role="status"
       aria-live="polite"
       aria-busy="true"
-      className={cn('overflow-hidden', framed && 'rounded-2xl border border-border bg-card shadow-sm')}
+      className={cn('overflow-hidden', framed && CARD_SURFACE)}
     >
       <span className="sr-only">{label}</span>
-      <div className="h-11 border-b border-border bg-[#F9FAFB]" />
+      <div className="h-11 border-b border-border bg-[#F6F8FB]" />
       {Array.from({ length: rows }, (_, index) => (
-        <div key={index} className="flex items-center gap-6 border-b border-[#EEF0F3] px-5 py-4 last:border-b-0">
+        <div key={index} className="flex items-center gap-4 border-b border-[#EDF1F6] px-5 py-4 last:border-b-0">
+          <div className="size-10 shrink-0 animate-pulse rounded-xl bg-[#EEF0F3]" />
           <div className="flex flex-1 flex-col gap-2">
             <div className="h-4 w-44 max-w-full animate-pulse rounded bg-[#EEF0F3]" />
             <div className="h-3 w-32 max-w-full animate-pulse rounded bg-[#F2F4F7]" />

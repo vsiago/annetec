@@ -84,12 +84,17 @@ function PlatformLayoutContent({ children }: { children: React.ReactNode }) {
         <PlatformSidebar />
         <main
           className={cn(
-            'transition-[padding] duration-300 ease-in-out min-h-screen pt-16 lg:pt-0 pb-24 lg:pb-0',
+            'relative transition-[padding] duration-300 ease-in-out min-h-screen pt-16 lg:pt-0 pb-24 lg:pb-0',
             isCollapsed ? 'lg:pl-20' : 'lg:pl-64'
           )}
         >
+          {/* Faixa sutil no topo (azul-claro da marca se dissolvendo no fundo): dá profundidade ao cabeçalho. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-[linear-gradient(180deg,#E1E9F4_0%,rgba(239,243,248,0)_100%)]"
+          />
           {mostraEscopo && (
-            <div className="border-b border-border bg-card/60 px-4 py-3 lg:px-6">
+            <div className="relative border-b border-border bg-card/60 px-4 py-3 lg:px-6">
               <ScopeSwitcher />
             </div>
           )}
@@ -98,7 +103,7 @@ function PlatformLayoutContent({ children }: { children: React.ReactNode }) {
             sem largura máxima. Cada página começa com <PageContainer> (ui/page-container)
             e não define largura própria.
           */}
-          <div className="p-4 lg:p-6">{children}</div>
+          <div className="relative p-4 lg:p-6 lg:pt-7">{children}</div>
         </main>
       </div>
     </PlatformSidebarContext.Provider>

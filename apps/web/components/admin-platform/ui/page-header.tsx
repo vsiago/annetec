@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils'
  *
  * - `title`: o nome da tela (h1, 26–30px). Só um h1 por página.
  * - `description`: uma frase em cinza que diz para que serve a tela.
- * - `icon`: ícone opcional num chip suave à esquerda do título (decorativo).
+ * - `icon`: ícone da seção num selo marinho à esquerda do título (decorativo).
+ *   Use o mesmo ícone do item do menu, para a pessoa reconhecer onde está.
  * - `badge`: selo de situação ao lado do título (ex.: `StatusPill`).
  * - `breadcrumb`: o que vem acima do título, normalmente `<BackLink>`.
  * - `actions` (ou `children`): botões à direita; no celular quebram para baixo
@@ -42,19 +43,19 @@ export function PageHeader({
   return (
     <header className={cn('flex flex-col gap-3', className)}>
       {breadcrumb ? <div className="flex flex-wrap items-center gap-2 text-sm">{breadcrumb}</div> : null}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3.5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-4">
           {Icon ? (
             <span
-              className="mt-0.5 hidden size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-secondary sm:inline-flex"
+              className="mt-0.5 inline-flex size-11 shrink-0 items-center justify-center rounded-2xl bg-secondary text-white shadow-[0_1px_2px_rgba(16,24,40,0.12),0_6px_14px_-6px_rgba(30,42,74,0.55)] ring-1 ring-inset ring-white/10 sm:size-12"
               aria-hidden="true"
             >
-              <Icon className="size-5" />
+              <Icon className="size-5 sm:size-5.5" strokeWidth={2} />
             </span>
           ) : null}
-          <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex min-w-0 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <h1 className="m-0 text-[26px] font-bold leading-tight tracking-tight text-foreground sm:text-3xl">
+              <h1 className="m-0 text-[24px] font-bold leading-tight tracking-tight text-foreground sm:text-[30px]">
                 {title}
               </h1>
               {badge}
@@ -69,7 +70,7 @@ export function PageHeader({
             ) : null}
           </div>
         </div>
-        {right ? <div className="flex flex-wrap items-center gap-3 sm:justify-end">{right}</div> : null}
+        {right ? <div className="flex flex-wrap items-center gap-3 sm:shrink-0 sm:justify-end">{right}</div> : null}
       </div>
     </header>
   )

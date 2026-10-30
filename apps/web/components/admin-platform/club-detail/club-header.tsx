@@ -16,7 +16,7 @@ import { OpenClubPanelButton } from '@/components/admin-platform/club-detail/ope
 import { CLUB_STATUS_LABEL, CLUB_STATUS_TONE, clubSinceLabel } from '@/components/admin-platform/club-detail/club-model'
 import type { Tenant } from '@/lib/types'
 import { useSiteAddress } from '@/lib/site-address'
-import { getInitials } from '@/lib/utils'
+import { EntityAvatar } from '@/components/admin-platform/ui/entity-avatar'
 
 /**
  * Cabeçalho do detalhe do clube (PageHeader do console): "Voltar para Clubes",
@@ -46,24 +46,27 @@ export function ClubHeader({
       breadcrumb={<BackLink href="/admin/inquilinos">Voltar para Clubes</BackLink>}
       title={
         <span className="flex min-w-0 items-center gap-3.5">
-          <span
-            className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-base font-bold text-white"
-            style={{ backgroundColor: showLogo ? '#FFFFFF' : tenant.branding.primaryColor }}
-            aria-hidden="true"
-          >
-            {showLogo ? (
-              // Logo público do clube (URL livre, cadastrada na Aparência); next/image não se aplica.
-              // eslint-disable-next-line @next/next/no-img-element
+          {showLogo ? (
+            <span
+              className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06)]"
+              aria-hidden="true"
+            >
+              {/* Logo público do clube (URL livre, cadastrada na Aparência); next/image não se aplica. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={logoUrl}
                 alt=""
-                className="size-full rounded-xl border border-border object-contain p-1"
+                className="size-full rounded-2xl border border-border object-contain p-1"
                 onError={() => setLogoFailed(true)}
               />
-            ) : (
-              getInitials(tenant.name)
-            )}
-          </span>
+            </span>
+          ) : (
+            <EntityAvatar
+              name={tenant.name}
+              color={tenant.branding.primaryColor}
+              className="size-12 rounded-2xl text-base shadow-[0_1px_2px_rgba(16,24,40,0.12),0_6px_14px_-6px_rgba(16,24,40,0.35)]"
+            />
+          )}
           <span className="min-w-0 wrap-break-word">{tenant.name}</span>
         </span>
       }

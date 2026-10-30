@@ -10,21 +10,12 @@ import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/sec
 import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
 import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 import { useAdminScope } from '@/contexts/admin-scope-context'
 import { listOperatorSellersAction } from '@/lib/actions/operator-api'
-import { listOperatorLeadsAction, createOperatorLeadAction, updateOperatorLeadAction } from '@/lib/actions/operator-crm-api'
-import { Search, Loader2, Plus, UserPlus, Phone, Mail, Funnel } from 'lucide-react'
+import { listOperatorLeadsAction, updateOperatorLeadAction } from '@/lib/actions/operator-crm-api'
+import { NewLeadWizard } from '@/components/admin-platform/forms/lead-wizards'
+import { Search, Plus, UserPlus, Phone, Mail, Funnel } from 'lucide-react'
 
 const COLUMNS: { status: LeadStatus; label: string }[] = [
   { status: 'new', label: 'Novo' },
@@ -104,13 +95,18 @@ export default function OperatorLeadsPage() {
         description="Funil comercial do clube selecionado acima — antes de virar contrato."
         actions={
           tenantSlug ? (
-            <AddLeadDialog
-              open={addOpen}
-              onOpenChange={setAddOpen}
-              tenantSlug={tenantSlug}
-              sellers={sellers}
-              onCreated={() => refresh(tenantSlug)}
-            />
+            <>
+              <Button className="h-11 rounded-[10px] px-4 font-semibold" onClick={() => setAddOpen(true)}>
+                <Plus aria-hidden="true" /> Novo lead
+              </Button>
+              <NewLeadWizard
+                open={addOpen}
+                onOpenChange={setAddOpen}
+                tenantSlug={tenantSlug}
+                sellers={sellers}
+                onCreated={() => refresh(tenantSlug)}
+              />
+            </>
           ) : undefined
         }
       />
@@ -251,135 +247,5 @@ export default function OperatorLeadsPage() {
         </>
       )}
     </PageContainer>
-  )
-}
-
-function AddLeadDialog({
-  open,
-  onOpenChange,
-  tenantSlug,
-  sellers,
-  onCreated,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  tenantSlug: string
-  sellers: TenantUser[]
-  onCreated: () => void
-}) {
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [source, setSource] = useState('')
-  const [estimatedValue, setEstimatedValue] = useState('')
-  const [sellerId, setSellerId] = useState('')
-  const [notes, setNotes] = useState('')
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    if (!name) {
-      setError('Informe o nome')
-      return
-    }
-    setSubmitting(true)
-    const result = await createOperatorLeadAction(tenantSlug, {
-      name,
-      email: email || null,
-      phone: phone || null,
-      source: source || null,
-      status: 'new',
-      notes: notes || null,
-      estimatedValue: estimatedValue ? Number(estimatedValue) : null,
-      sellerId: sellerId || null,
-    })
-    setSubmitting(false)
-    if (!result.success) {
-      setError(result.error)
-      return
-    }
-    setName('')
-    setEmail('')
-    setPhone('')
-    setSource('')
-    setEstimatedValue('')
-    setSellerId('')
-    setNotes('')
-    onOpenChange(false)
-    onCreated()
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button className="h-11 rounded-[10px] px-4 font-semibold">
-          <Plus aria-hidden="true" /> Novo lead
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Novo lead</DialogTitle>
-          <DialogDescription>Entra no funil como "Novo".</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label>Nome *</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label>E-mail</Label>
-              <Input type="email" value={email} onChange={e => setEmail(e.target.value)} />
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Telefone</Label>
-              <Input value={phone} onChange={e => setPhone(e.target.value)} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label>Origem</Label>
-              <Input value={source} onChange={e => setSource(e.target.value)} placeholder="Indicação, site..." />
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Valor estimado</Label>
-              <Input
-                type="number"
-                value={estimatedValue}
-                onChange={e => setEstimatedValue(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Vendedor responsável</Label>
-            <Select value={sellerId} onValueChange={setSellerId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sem vendedor" />
-              </SelectTrigger>
-              <SelectContent>
-                {sellers.map(s => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Observações</Label>
-            <Input value={notes} onChange={e => setNotes(e.target.value)} />
-          </div>
-          {error && <p className="text-sm text-[#B42318]">{error}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Criar lead
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }

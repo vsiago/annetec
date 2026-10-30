@@ -312,14 +312,30 @@ export function NotificationBell({ variant = 'topbar' }: { variant?: Variant }) 
     unread > 0 ? (
       <span
         className={cn(
-          'absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white tabular-nums',
-          variant === 'sidebar' || variant === 'sidebar-collapsed' ? 'ring-2 ring-secondary' : 'ring-2 ring-card',
+          'absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none text-white tabular-nums',
+          // No menu escuro do console: vermelho mais fechado (texto branco com contraste ≥ 4,5:1).
+          variant === 'sidebar' || variant === 'sidebar-collapsed' ? 'bg-[#D92D20] ring-2 ring-secondary' : 'bg-red-500 ring-2 ring-card',
           variant === 'sidebar' ? 'static ml-auto' : '-right-1 -top-1',
         )}
       >
         {badgeText(unread)}
       </span>
     ) : null
+
+  /** Selo do sino no menu do console (mesmo desenho dos itens do menu). */
+  const bellSeal = (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'relative inline-flex size-8 shrink-0 items-center justify-center rounded-[10px] transition-colors duration-150 [&_svg]:size-[18px]',
+        panelOpen
+          ? 'bg-white text-primary'
+          : 'bg-white/[0.07] text-white/80 ring-1 ring-inset ring-white/10 group-hover/bell:bg-white/[0.13] group-hover/bell:text-white',
+      )}
+    >
+      {bellIcon}
+    </span>
+  )
 
   let trigger: ReactNode
   if (variant === 'sidebar') {
@@ -328,11 +344,11 @@ export function NotificationBell({ variant = 'topbar' }: { variant?: Variant }) 
         type="button"
         aria-label={label}
         className={cn(
-          'mb-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-          panelOpen ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white',
+          'group/bell flex min-h-11 w-full items-center gap-3 rounded-xl px-1.5 py-1.5 text-sm font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-white/60',
+          panelOpen ? 'bg-white/[0.09] text-white' : 'text-white/75 hover:bg-white/[0.06] hover:text-white',
         )}
       >
-        {bellIcon}
+        {bellSeal}
         <span className="truncate">Notificações</span>
         {badge}
       </button>
@@ -343,12 +359,12 @@ export function NotificationBell({ variant = 'topbar' }: { variant?: Variant }) 
         type="button"
         aria-label={label}
         className={cn(
-          'relative mb-2 flex w-full items-center justify-center rounded-lg p-2.5 transition-colors',
-          panelOpen ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white',
+          'group/bell relative mx-auto flex size-11 items-center justify-center rounded-xl outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-white/60',
+          panelOpen ? 'bg-white/[0.09] text-white' : 'text-white/75 hover:bg-white/[0.06] hover:text-white',
         )}
       >
-        {bellIcon}
-        {badge && <span className="absolute right-2 top-1.5">{badge}</span>}
+        {bellSeal}
+        {badge && <span className="absolute -right-0.5 -top-0.5">{badge}</span>}
       </button>
     )
   } else if (variant === 'mobile') {

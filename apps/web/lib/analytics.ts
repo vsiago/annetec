@@ -2,6 +2,7 @@
 // report page reads from here, so a brand-new tenant shows honest zeros
 // instead of invented figures.
 
+import { leadSourceLabel } from '@/lib/lead-sources'
 import type { Sale, Lead, Client, LeadStatus } from './types'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -112,7 +113,7 @@ export function planDistribution(clients: Client[], palette: string[]) {
 export function leadsBySource(leads: Lead[]) {
   const counts = new Map<string, number>()
   leads.forEach(l => {
-    const key = l.source || 'Outros'
+    const key = leadSourceLabel(l.source) || 'Outros'
     counts.set(key, (counts.get(key) ?? 0) + 1)
   })
   return Array.from(counts.entries())

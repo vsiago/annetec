@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import Link from 'next/link'
-import { Building2, LayoutDashboard, Plus, TrendingUp, Users, Wallet } from 'lucide-react'
-import { Button } from '@/components/admin-platform/ui/button'
+import { Building2, LayoutDashboard, TrendingUp, Users, Wallet } from 'lucide-react'
+import { ClubWizardButton } from '@/components/admin-platform/clubs/club-wizard'
 import { PageContainer } from '@/components/admin-platform/ui/page-container'
 import { PageHeader } from '@/components/admin-platform/ui/page-header'
 import { SectionHeading } from '@/components/admin-platform/ui/section-card'
@@ -23,6 +22,7 @@ import { HomeError, HomeLoading } from '@/components/admin-platform/home/home-st
 import { RevenueChartCard } from '@/components/admin-platform/home/revenue-chart'
 import { useHomeData, type HomeData, type HomeExtras } from '@/components/admin-platform/home/use-home-data'
 import { KpiCard } from '@/components/admin-platform/ui/kpi-card'
+import type { ConsoleTone } from '@/components/admin-platform/ui/tone'
 
 /** Ícone de cada número do mês (a chave vem de `buildMonthKpis`). */
 const KPI_ICONS: Record<string, ReactNode> = {
@@ -30,6 +30,14 @@ const KPI_ICONS: Record<string, ReactNode> = {
   receivable: <Wallet />,
   clubs: <Building2 />,
   lives: <Users />,
+}
+
+/** Cor do selo de cada número, pelo assunto (`ui/tone`). */
+const KPI_ACCENTS: Record<string, ConsoleTone> = {
+  revenue: 'green',
+  receivable: 'blue',
+  clubs: 'navy',
+  lives: 'coral',
 }
 
 /**
@@ -72,14 +80,7 @@ export default function PlatformDashboard() {
           )
         }
         icon={LayoutDashboard}
-        actions={
-          <Button asChild className="h-11 rounded-[10px] px-4 text-sm font-semibold">
-            <Link href="/admin/inquilinos/novo">
-              <Plus aria-hidden="true" />
-              Cadastrar clube
-            </Link>
-          </Button>
-        }
+        actions={<ClubWizardButton className="h-11" onCreated={() => void reload()} />}
       />
 
       {state.status === 'error' ? (
@@ -125,6 +126,8 @@ function HomeContent({
               delta={kpi.delta}
               href={kpi.href}
               icon={KPI_ICONS[kpi.key]}
+              accent={KPI_ACCENTS[kpi.key]}
+              trend={kpi.key === 'revenue' ? bars.map(bar => bar.value) : undefined}
             />
           ))}
         </div>

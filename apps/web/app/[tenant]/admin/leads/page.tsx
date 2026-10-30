@@ -51,13 +51,14 @@ import { formatPhone, leadSchema } from '@/lib/form-schemas'
 import { FOLLOW_UP_STATUSES, leadStatusMeta } from '@/lib/lead-status'
 import type { Interaction, Lead, LeadStatus } from '@/lib/types'
 import { useZodForm } from '@/lib/use-zod-form'
+import { leadSourceLabel, leadSourceOptions, DEFAULT_LEAD_SOURCE } from '@/lib/lead-sources'
 import { cn, getInitials } from '@/lib/utils'
 
 const EMPTY_LEAD = {
   name: '',
   email: '',
   phone: '',
-  source: 'Site',
+  source: DEFAULT_LEAD_SOURCE,
   status: 'new',
   interest: '',
   value: '',
@@ -99,7 +100,7 @@ export default function AdminLeadsPage() {
     [sellers],
   )
   const sources = useMemo(
-    () => [...new Set(leads.map(lead => lead.source).filter(Boolean))].sort(),
+    () => [...new Set(leads.map(lead => leadSourceLabel(lead.source)).filter(Boolean))].sort(),
     [leads],
   )
 
@@ -108,7 +109,7 @@ export default function AdminLeadsPage() {
     return leads
       .filter(lead => {
         if (status !== 'all' && lead.status !== status) return false
-        if (source !== 'all' && lead.source !== source) return false
+        if (source !== 'all' && leadSourceLabel(lead.source) !== source) return false
         if (seller !== 'all' && lead.sellerId !== seller) return false
         if (!term) return true
         return [lead.name, lead.email, lead.phone, lead.source].some(field =>
@@ -167,10 +168,12 @@ export default function AdminLeadsPage() {
       name: lead.name,
       email: lead.email,
       phone: lead.phone,
-      source: lead.source,
+      // Sem origem gravada: a pessoa escolhe (não grava "Site" por conta própria).
+      source: leadSourceLabel(lead.source),
       status: lead.status,
       interest: lead.interest ?? '',
-      value: String(lead.value ?? ''),
+      // Vírgula decimal: o schema `currency` lê "." como milhar (49.9 viraria 499).
+      value: String(lead.value ?? '').replace('.', ','),
       sellerId: lead.sellerId,
       notes: lead.notes ?? '',
     })
@@ -207,9 +210,6 @@ export default function AdminLeadsPage() {
     value,
     label: meta.label,
   }))
-  const sourceOptions = ['Site', 'Indicação', 'Campanha', 'Evento', 'Redes Sociais', 'Parceiro'].map(
-    item => ({ value: item, label: item }),
-  )
 
   if (isLoading) return null
 
@@ -362,7 +362,7 @@ export default function AdminLeadsPage() {
                       <p className="text-foreground">{lead.phone}</p>
                       <p className="text-xs text-muted-foreground">{lead.email}</p>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{lead.source}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{leadSourceLabel(lead.source) || '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{lead.interest ?? '—'}</td>
                     <td className="px-4 py-3">
                       <StatusPill {...leadStatusMeta[lead.status]} />
@@ -487,7 +487,7 @@ export default function AdminLeadsPage() {
               value={form.values.source}
               onChange={value => form.setField('source', value)}
               placeholder="Selecione a origem"
-              options={sourceOptions}
+              options={leadSourceOptions}
               invalid={!!form.errors.source}
             />
           </FormField>

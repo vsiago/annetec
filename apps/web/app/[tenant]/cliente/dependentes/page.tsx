@@ -1,14 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/auth-context'
-import { useTenantData } from '@/contexts/tenant-data-context'
 import { getInitials } from '@/lib/utils'
-import type { Client, Dependent } from '@/lib/types'
+import type { Client } from '@/lib/types'
 import {
   Plus,
   User,
@@ -19,6 +17,7 @@ import {
   Heart,
   Edit,
   Trash2,
+  HeadphonesIcon,
 } from 'lucide-react'
 import {
   Dialog,
@@ -34,13 +33,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -91,42 +83,9 @@ export default function DependentesPage() {
 function LegacyDependentes() {
   const { user } = useAuth()
   const client = user as Client
-  const { updateUser } = useTenantData()
+  const { tenant } = useTenant()
   const [isAddOpen, setIsAddOpen] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newCpf, setNewCpf] = useState('')
-  const [newBirthDate, setNewBirthDate] = useState('')
-  const [newRelationship, setNewRelationship] = useState('Filho(a)')
-  const [erro, setErro] = useState<string | null>(null)
-
-  const handleAddDependent = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newName || !client) return
-    const dependent: Dependent = {
-      id: `dep-${Date.now()}`,
-      name: newName,
-      cpf: newCpf,
-      relationship: newRelationship,
-      birthDate: newBirthDate ? new Date(newBirthDate) : new Date(),
-    }
-    // Dependente é beneficiário do CONTRATO, não campo da conta: quem o
-    // inclui é a Digital Saúde. Enquanto essa rota não existe, o diálogo
-    // continua aberto com o aviso — fechar aqui daria a entender que o
-    // dependente entrou na apólice.
-    const result = await updateUser(client.id, {
-      dependents: [...(client.dependents || []), dependent],
-    })
-    if (!result.success) {
-      setErro(result.error ?? 'Não foi possível incluir o dependente.')
-      return
-    }
-    setErro(null)
-    setIsAddOpen(false)
-    setNewName('')
-    setNewCpf('')
-    setNewBirthDate('')
-    setNewRelationship('Filho(a)')
-  }
+  const base = `/${tenant?.slug ?? ''}/cliente`
 
   const calculateAge = (birthDate: Date) => {
     const today = new Date()
@@ -158,58 +117,27 @@ function LegacyDependentes() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Adicionar Dependente</DialogTitle>
+              <DialogTitle>Incluir um dependente</DialogTitle>
               <DialogDescription>
-                Preencha os dados do novo dependente
+                Fale com o clube para incluir um novo dependente
               </DialogDescription>
             </DialogHeader>
-            <form className="space-y-4" onSubmit={handleAddDependent}>
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome Completo</Label>
-                <Input id="name" placeholder="Nome do dependente" value={newName} onChange={e => setNewName(e.target.value)} required />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cpf">CPF</Label>
-                  <Input id="cpf" placeholder="000.000.000-00" value={newCpf} onChange={e => setNewCpf(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="birthDate">Data de Nascimento</Label>
-                  <Input id="birthDate" type="date" value={newBirthDate} onChange={e => setNewBirthDate(e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="relationship">Parentesco</Label>
-                <Select value={newRelationship} onValueChange={setNewRelationship}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Filho(a)">Filho(a)</SelectItem>
-                    <SelectItem value="Cônjuge">Cônjuge</SelectItem>
-                    <SelectItem value="Pai">Pai</SelectItem>
-                    <SelectItem value="Mãe">Mãe</SelectItem>
-                    <SelectItem value="Outro">Outro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {erro && (
-                <p
-                  role="alert"
-                  className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-                >
-                  {erro}
-                </p>
-              )}
-              <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
-                  Cancelar
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                A inclusão de dependentes é feita pelo atendimento do clube, que confere os dados com você e emite a carteirinha. Ter em mãos: nome completo, data de nascimento, CPF (se tiver) e grau de parentesco.
+              </p>
+              <div className="flex flex-col gap-2">
+                <Button asChild className="h-11 bg-primary hover:opacity-90 text-white">
+                  <Link href={`${base}/suporte`} onClick={() => setIsAddOpen(false)}>
+                    <HeadphonesIcon />
+                    Falar com o atendimento
+                  </Link>
                 </Button>
-                <Button type="submit" className="bg-primary hover:opacity-90 text-white">
-                  Adicionar
+                <Button type="button" variant="outline" className="h-11" onClick={() => setIsAddOpen(false)}>
+                  Fechar
                 </Button>
               </div>
-            </form>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

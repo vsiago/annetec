@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { AlertCircle, Check, ChevronRight, ExternalLink } from 'lucide-react'
 import { HOLDING_RECEIVING_ISSUE_LABELS } from '@annetec/contracts'
 import { DataTable, Td, Th, Tr } from '@/components/admin-platform/ui/data-table'
+import { EntityAvatar } from '@/components/admin-platform/ui/entity-avatar'
+import { useClubColors } from '@/components/admin-platform/ui/use-club-colors'
 import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { formatNumber } from '@/lib/adapters/contratacao'
 import { useSiteAddress } from '@/lib/site-address'
@@ -44,7 +46,7 @@ function LivesCell({ row }: { row: ClubListRow }) {
   if (!m) return EMPTY
   const delta = m.activeMembersDelta30
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col items-end gap-0.5">
       <strong
         className="font-semibold text-foreground"
         title="Vidas: titulares mais dependentes com assinatura em dia ou em atraso"
@@ -111,8 +113,12 @@ function HealthCell({ row }: { row: ClubListRow }) {
   if (row.status === 'suspended' || row.status === 'cancelled') return <span className={SUB}>Não se aplica</span>
   const health = HEALTH_DISPLAY[m.healthBand]
   return (
-    <span className="inline-flex items-center gap-2 text-foreground">
-      <span aria-hidden="true" className="inline-block size-2.5 shrink-0 rounded-full" style={{ backgroundColor: health.dot }} />
+    <span className="inline-flex items-center gap-2 font-medium text-foreground">
+      <span
+        aria-hidden="true"
+        className="inline-block size-2.5 shrink-0 rounded-full ring-[3px]"
+        style={{ backgroundColor: health.dot, ['--tw-ring-color' as string]: `${health.dot}33` }}
+      />
       {health.label}
     </span>
   )
@@ -123,13 +129,14 @@ const focusRing =
 
 export function ClubsTable({ rows }: { rows: ClubListRow[] }) {
   const siteAddress = useSiteAddress()
+  const colorOf = useClubColors()
   return (
     <DataTable caption="Clubes cadastrados" minWidth="min-w-[960px]">
       <thead>
         <tr>
           <Th>Clube</Th>
           <Th>Situação</Th>
-          <Th>Vidas</Th>
+          <Th align="right">Vidas</Th>
           <Th>Recebimento</Th>
           <Th>Mensalidade ANNETEC</Th>
           <Th>Saúde</Th>
@@ -142,29 +149,32 @@ export function ClubsTable({ rows }: { rows: ClubListRow[] }) {
         {rows.map(row => (
           <Tr key={row.id}>
             <Td>
-              <div className="flex flex-col gap-0.5">
-                <Link
-                  href={`/admin/inquilinos/${row.id}`}
-                  className={cn('w-fit rounded text-[15px] font-semibold text-foreground hover:underline', focusRing)}
-                >
-                  {row.name}
-                </Link>
-                <a
-                  href={`/${row.slug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Abrir o site de ${row.name} em nova aba (${siteAddress(row.slug)})`}
-                  className={cn('inline-flex w-fit items-center gap-1 rounded text-[13px] text-muted-foreground hover:text-secondary hover:underline', focusRing)}
-                >
-                  {siteAddress(row.slug)}
-                  <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
-                </a>
+              <div className="flex items-center gap-3">
+                <EntityAvatar name={row.name} color={colorOf(row.id)} />
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <Link
+                    href={`/admin/inquilinos/${row.id}`}
+                    className={cn('w-fit rounded text-[15px] font-semibold text-foreground hover:underline', focusRing)}
+                  >
+                    {row.name}
+                  </Link>
+                  <a
+                    href={`/${row.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Abrir o site de ${row.name} em nova aba (${siteAddress(row.slug)})`}
+                    className={cn('inline-flex w-fit items-center gap-1 rounded text-[13px] text-muted-foreground hover:text-secondary hover:underline', focusRing)}
+                  >
+                    {siteAddress(row.slug)}
+                    <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
+                  </a>
+                </div>
               </div>
             </Td>
             <Td>
               <SituationCell row={row} />
             </Td>
-            <Td>
+            <Td align="right">
               <LivesCell row={row} />
             </Td>
             <Td>
@@ -180,7 +190,10 @@ export function ClubsTable({ rows }: { rows: ClubListRow[] }) {
               <Link
                 href={`/admin/inquilinos/${row.id}`}
                 aria-label={`Abrir ${row.name}`}
-                className={cn('inline-flex size-10 items-center justify-center rounded-[10px] text-[#344054] hover:bg-[#F2F4F7]', focusRing)}
+                className={cn(
+                  'inline-flex size-10 items-center justify-center rounded-[10px] text-[#667085] transition-colors duration-150 hover:bg-white hover:text-secondary hover:shadow-[0_1px_3px_rgba(16,24,40,0.1)] group-hover:text-secondary',
+                  focusRing,
+                )}
               >
                 <ChevronRight className="size-[18px]" aria-hidden="true" />
               </Link>

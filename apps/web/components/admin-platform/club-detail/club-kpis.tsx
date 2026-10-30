@@ -87,6 +87,7 @@ export function ClubKpis({
         delta={lives.delta}
         hint={lives.hint}
         icon={<Users />}
+        accent="coral"
       />
       <KpiCard
         label="Recebido pelo clube nos últimos 30 dias"
@@ -94,6 +95,8 @@ export function ClubKpis({
         delta={received.delta}
         hint={received.hint}
         icon={<Wallet />}
+        accent="green"
+        trend={detail.monthly.slice(-6).map(month => month.gmv)}
       />
       <KpiCard
         label="Em atraso"
@@ -101,6 +104,7 @@ export function ClubKpis({
         tone={delinquencyHigh ? 'danger' : 'default'}
         hint={`do valor cobrado dos associados nos últimos 90 dias · há 30 dias: ${formatPercent(row.memberDelinquencyRatePrev)}`}
         icon={<CalendarClock />}
+        accent="red"
       />
       <KpiCard
         label="Mensalidade da ANNETEC"
@@ -108,6 +112,7 @@ export function ClubKpis({
         tone={fee.tone}
         hint={fee.hint}
         icon={<Receipt />}
+        accent="navy"
         href={row.managed ? `/admin/inquilinos/${encodeURIComponent(tenantId)}?tab=plano` : undefined}
       />
     </div>

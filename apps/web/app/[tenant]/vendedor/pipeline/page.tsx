@@ -23,6 +23,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { FormField, FormSelect } from '@/components/dashboard/form-dialog'
+import { formatPhone, leadSchema } from '@/lib/form-schemas'
+import { useZodForm } from '@/lib/use-zod-form'
+import { leadSourceLabel, leadSourceOptions, DEFAULT_LEAD_SOURCE } from '@/lib/lead-sources'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -50,33 +54,27 @@ export default function PipelinePage() {
   const { tenant } = useTenant()
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null)
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [newPhone, setNewPhone] = useState('')
-  const [newSource, setNewSource] = useState('website')
-  const [newValue, setNewValue] = useState('')
-  const [newNotes, setNewNotes] = useState('')
+  const form = useZodForm(
+    leadSchema.pick({ name: true, email: true, phone: true, source: true, value: true, notes: true }),
+    { name: '', email: '', phone: '', source: DEFAULT_LEAD_SOURCE, value: '0', notes: '' },
+  )
 
   const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newName || !newEmail || !tenant || !seller) return
+    const data = form.validate()
+    if (!data || !tenant || !seller) return
     await createLead({
-      name: newName,
-      email: newEmail,
-      phone: newPhone,
-      source: newSource,
+      name: data.name,
+      email: data.email,
+      phone: formatPhone(data.phone),
+      source: data.source,
       status: 'new',
-      notes: newNotes,
-      value: Number(newValue) || 0,
+      notes: data.notes ?? '',
+      value: data.value,
       sellerId: seller.id,
     })
     setIsNewLeadOpen(false)
-    setNewName('')
-    setNewEmail('')
-    setNewPhone('')
-    setNewSource('website')
-    setNewValue('')
-    setNewNotes('')
+    form.reset()
   }
 
   const handleDragStart = (e: React.DragEvent, lead: Lead) => {
@@ -127,47 +125,35 @@ export default function PipelinePage() {
                 Preencha as informações do novo lead
               </DialogDescription>
             </DialogHeader>
-            <form className="space-y-4" onSubmit={handleAddLead}>
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome</Label>
-                <Input id="name" placeholder="Nome completo" value={newName} onChange={e => setNewName(e.target.value)} required />
+            <form className="space-y-4" onSubmit={handleAddLead} noValidate>
+              <FormField label="Nome" htmlFor="name" error={form.errors.name} required>
+                <Input id="name" placeholder="Nome completo" value={form.values.name} onChange={e => form.setField('name', e.target.value)} aria-invalid={!!form.errors.name} />
+              </FormField>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="E-mail" htmlFor="email" error={form.errors.email} required>
+                  <Input id="email" type="email" placeholder="email@exemplo.com" value={form.values.email} onChange={e => form.setField('email', e.target.value)} aria-invalid={!!form.errors.email} />
+                </FormField>
+                <FormField label="Telefone" htmlFor="phone" error={form.errors.phone} required hint="Com DDD">
+                  <Input id="phone" placeholder="(11) 99999-9999" value={form.values.phone} onChange={e => form.setField('phone', e.target.value)} aria-invalid={!!form.errors.phone} />
+                </FormField>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="email@exemplo.com" value={newEmail} onChange={e => setNewEmail(e.target.value)} required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Telefone</Label>
-                  <Input id="phone" placeholder="(11) 99999-9999" value={newPhone} onChange={e => setNewPhone(e.target.value)} />
-                </div>
+                <FormField label="Origem" error={form.errors.source} required>
+                  <FormSelect
+                    value={form.values.source}
+                    onChange={value => form.setField('source', value)}
+                    placeholder="Selecione a origem"
+                    options={leadSourceOptions}
+                    invalid={!!form.errors.source}
+                  />
+                </FormField>
+                <FormField label="Valor Estimado (R$)" htmlFor="value" error={form.errors.value} required>
+                  <Input id="value" inputMode="decimal" placeholder="0,00" value={form.values.value} onChange={e => form.setField('value', e.target.value)} aria-invalid={!!form.errors.value} />
+                </FormField>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="source">Origem</Label>
-                  <Select value={newSource} onValueChange={setNewSource}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="website">Website</SelectItem>
-                      <SelectItem value="indicacao">Indicação</SelectItem>
-                      <SelectItem value="instagram">Instagram</SelectItem>
-                      <SelectItem value="linkedin">LinkedIn</SelectItem>
-                      <SelectItem value="evento">Evento</SelectItem>
-                      <SelectItem value="outro">Outro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="value">Valor Estimado (R$)</Label>
-                  <Input id="value" type="number" placeholder="0,00" value={newValue} onChange={e => setNewValue(e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="notes">Observações</Label>
-                <Textarea id="notes" placeholder="Informações adicionais sobre o lead..." value={newNotes} onChange={e => setNewNotes(e.target.value)} />
-              </div>
+              <FormField label="Observações" htmlFor="notes" error={form.errors.notes}>
+                <Textarea id="notes" placeholder="Informações adicionais sobre o lead..." value={form.values.notes} onChange={e => form.setField('notes', e.target.value)} />
+              </FormField>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setIsNewLeadOpen(false)}>
                   Cancelar
@@ -234,7 +220,7 @@ export default function PipelinePage() {
                             </div>
                             <div className="flex items-center justify-between mt-3 pt-2 border-t border-border">
                               <Badge variant="outline" className="text-xs">
-                                {lead.source}
+                                {leadSourceLabel(lead.source)}
                               </Badge>
                               <span className="text-xs font-medium text-secondary">
                                 R$ {lead.value.toLocaleString('pt-BR')}

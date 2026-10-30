@@ -331,12 +331,14 @@ export default function CompliancePage() {
         <section aria-label="Resumo das aprovações" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
             icon={<Inbox />}
+            accent="amber"
             value={formatCount(s.queue)}
             label="Para analisar"
             hint={s.unassigned > 0 ? `${formatCount(s.unassigned)} ainda sem responsável` : 'Todos já têm responsável'}
           />
           <KpiCard
             icon={<AlarmClock />}
+            accent="red"
             value={formatCount(s.slaBreached)}
             label={`Esperando há mais de ${REVIEW_DEADLINE_DAYS} dias`}
             hint={
@@ -348,12 +350,14 @@ export default function CompliancePage() {
           />
           <KpiCard
             icon={<Wallet />}
+            accent="blue"
             value={formatCount(s.awaitingPayment)}
             label="Aguardando pagamento"
             hint={`${formatCount(s.awaitingApplicant)} esperando o clube preencher ou corrigir`}
           />
           <KpiCard
             icon={<CircleCheckBig />}
+            accent="green"
             value={formatCount(s.provisionedThisMonth)}
             label="Liberados no mês"
             hint="Clubes que pagaram a ativação e já entraram no ar"

@@ -9,40 +9,11 @@ import { BackLink, PageHeader } from '@/components/admin-platform/ui/page-header
 import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
 import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
 import { StatusPill, type StatusPillTone } from '@/components/admin-platform/ui/status-pill'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 import { getOperatorAction, listOperatorSellersAction } from '@/lib/actions/operator-api'
-import {
-  getOperatorLeadAction,
-  updateOperatorLeadAction,
-  addOperatorLeadInteractionAction,
-  createOperatorSaleAction,
-} from '@/lib/actions/operator-crm-api'
-import {
-  Loader2,
-  Phone,
-  Mail,
-  MessageSquare,
-  StickyNote,
-  Users as MeetingIcon,
-  Plus,
-  CheckCircle2,
-  Trophy,
-  Target,
-  Contact,
-  History,
-} from 'lucide-react'
+import { AddInteractionWizard, ConvertToSaleWizard } from '@/components/admin-platform/forms/lead-wizards'
+import { getOperatorLeadAction, updateOperatorLeadAction } from '@/lib/actions/operator-crm-api'
+import { Phone, Mail, MessageSquare, StickyNote, Users as MeetingIcon, Plus, Trophy, Target, Contact, History } from 'lucide-react'
 
 const STATUS_LABEL: Record<LeadStatus, string> = {
   new: 'Novo',
@@ -183,17 +154,23 @@ export default function LeadDetailPage() {
               </SelectContent>
             </Select>
             {lead.status !== 'closed' && tenantSlug && (
-              <ConvertToSaleDialog
-                open={saleOpen}
-                onOpenChange={setSaleOpen}
-                tenantSlug={tenantSlug}
-                lead={lead}
-                sellers={sellers}
-                onConverted={() => {
-                  setSaleOpen(false)
-                  router.push('/admin/leads')
-                }}
-              />
+              <>
+                <Button className="h-11 rounded-[10px] px-4 font-semibold" onClick={() => setSaleOpen(true)}>
+                  <Trophy aria-hidden="true" /> Converter em venda
+                </Button>
+                <ConvertToSaleWizard
+                  open={saleOpen}
+                  onOpenChange={setSaleOpen}
+                  tenantSlug={tenantSlug}
+                  lead={lead}
+                  sellers={sellers}
+                  onConverted={() => {
+                    setSaleOpen(false)
+                    router.push('/admin/leads')
+                  }}
+                  onRegistered={() => load(tenantSlug)}
+                />
+              </>
             )}
           </>
         }
@@ -225,13 +202,20 @@ export default function LeadDetailPage() {
           className="lg:col-span-2"
           actions={
             tenantSlug ? (
-              <AddInteractionDialog
-                open={interactionOpen}
-                onOpenChange={setInteractionOpen}
-                tenantSlug={tenantSlug}
-                leadId={lead.id}
-                onAdded={updated => setLead(updated)}
-              />
+              <>
+                <Button variant="outline" className="h-10 rounded-[10px] px-4 font-semibold" onClick={() => setInteractionOpen(true)}>
+                  <Plus aria-hidden="true" /> Registrar
+                </Button>
+                <AddInteractionWizard
+                  open={interactionOpen}
+                  onOpenChange={setInteractionOpen}
+                  tenantSlug={tenantSlug}
+                  leadId={lead.id}
+                  onAdded={updated => setLead(updated)}
+                  labels={INTERACTION_LABEL}
+                  icons={INTERACTION_ICON}
+                />
+              </>
             ) : undefined
           }
         >
@@ -266,198 +250,5 @@ export default function LeadDetailPage() {
         </SectionCard>
       </div>
     </PageContainer>
-  )
-}
-
-function AddInteractionDialog({
-  open,
-  onOpenChange,
-  tenantSlug,
-  leadId,
-  onAdded,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  tenantSlug: string
-  leadId: string
-  onAdded: (lead: Lead) => void
-}) {
-  const [type, setType] = useState<Interaction['type']>('call')
-  const [description, setDescription] = useState('')
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    if (!description) {
-      setError('Descreva a interação')
-      return
-    }
-    setSubmitting(true)
-    const result = await addOperatorLeadInteractionAction(tenantSlug, leadId, {
-      type,
-      description,
-      occurredAt: new Date().toISOString(),
-    })
-    setSubmitting(false)
-    if (!result.success) {
-      setError(result.error)
-      return
-    }
-    setDescription('')
-    onOpenChange(false)
-    onAdded(result.data)
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="h-10 rounded-[10px] px-4 font-semibold">
-          <Plus aria-hidden="true" /> Registrar
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Registrar interação</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label>Tipo</Label>
-            <Select value={type} onValueChange={v => setType(v as Interaction['type'])}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(INTERACTION_LABEL).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Descrição *</Label>
-            <Textarea value={description} onChange={e => setDescription(e.target.value)} />
-          </div>
-          {error && <p className="text-sm text-[#B42318]">{error}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function ConvertToSaleDialog({
-  open,
-  onOpenChange,
-  tenantSlug,
-  lead,
-  sellers,
-  onConverted,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  tenantSlug: string
-  lead: Lead
-  sellers: TenantUser[]
-  onConverted: () => void
-}) {
-  const [sellerId, setSellerId] = useState(lead.sellerId ?? '')
-  const [value, setValue] = useState(lead.estimatedValue ? String(lead.estimatedValue) : '')
-  const [planCodigo, setPlanCodigo] = useState('')
-  const [planName, setPlanName] = useState('')
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    if (!sellerId || !value) {
-      setError('Selecione o vendedor e informe o valor')
-      return
-    }
-    setSubmitting(true)
-    const result = await createOperatorSaleAction(tenantSlug, {
-      leadId: lead.id,
-      clientUserId: null,
-      clientName: lead.name,
-      sellerId,
-      planCodigo: planCodigo || null,
-      planName: planName || null,
-      value: Number(value),
-      status: 'confirmed',
-      soldAt: new Date().toISOString(),
-      contractUpstreamCodigo: null,
-    })
-    setSubmitting(false)
-    if (!result.success) {
-      setError(result.error)
-      return
-    }
-    onConverted()
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button className="h-11 rounded-[10px] px-4 font-semibold">
-          <Trophy aria-hidden="true" /> Converter em venda
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Converter em venda</DialogTitle>
-          <DialogDescription>
-            Registra a venda e fecha o lead. Isso não cria o contrato na Digital Saúde — depois use "Nova adesão"
-            para isso.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label>Vendedor *</Label>
-            <Select value={sellerId} onValueChange={setSellerId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {sellers.map(s => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Valor *</Label>
-            <Input type="number" value={value} onChange={e => setValue(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label>Código do plano</Label>
-              <Input value={planCodigo} onChange={e => setPlanCodigo(e.target.value)} />
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Nome do plano</Label>
-              <Input value={planName} onChange={e => setPlanName(e.target.value)} />
-            </div>
-          </div>
-          {error && <p className="text-sm text-[#B42318]">{error}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-              Confirmar venda
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }

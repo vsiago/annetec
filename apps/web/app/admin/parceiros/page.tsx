@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { Benefit, BenefitCategory, Partner, PartnerCategory, UF } from '@annetec/contracts'
-import { UFS } from '@annetec/contracts'
+import type { Benefit, BenefitCategory, Partner, PartnerCategory } from '@annetec/contracts'
 import { useAdminScope } from '@/contexts/admin-scope-context'
 import { Button } from '@/components/admin-platform/ui/button'
 import { PageContainer } from '@/components/admin-platform/ui/page-container'
@@ -10,30 +9,15 @@ import { PageHeader } from '@/components/admin-platform/ui/page-header'
 import { SectionCard, SectionSkeleton } from '@/components/admin-platform/ui/section-card'
 import { EmptyState, ErrorState } from '@/components/admin-platform/ui/empty-state'
 import { StatusPill } from '@/components/admin-platform/ui/status-pill'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { BenefitWizard, PartnerWizard } from '@/components/admin-platform/forms/partner-wizards'
 import {
   listOperatorPartnersAction,
-  createOperatorPartnerAction,
-  updateOperatorPartnerAction,
   deleteOperatorPartnerAction,
   listOperatorBenefitsAction,
-  createOperatorBenefitAction,
-  updateOperatorBenefitAction,
   deleteOperatorBenefitAction,
 } from '@/lib/actions/operator-network-api'
-import { Plus, Loader2, Handshake, Gift, Trash2, MapPin, Phone, Pencil } from 'lucide-react'
+import { Handshake, Gift, Trash2, MapPin, Phone, Pencil } from 'lucide-react'
 
 const PARTNER_CATEGORY_LABEL: Record<PartnerCategory, string> = {
   health: 'Saúde',
@@ -119,7 +103,7 @@ function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex justify-end">
-        <AddPartnerDialog
+        <PartnerWizard
           open={addOpen}
           onOpenChange={aberto => {
             setAddOpen(aberto)
@@ -200,169 +184,6 @@ function PartnersTab({ tenantSlug }: { tenantSlug: string }) {
   )
 }
 
-/** Cria ou edita — `editing` decide qual. */
-function AddPartnerDialog({
-  open,
-  onOpenChange,
-  tenantSlug,
-  editing,
-  onCreated,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  tenantSlug: string
-  editing: Partner | null
-  onCreated: () => void
-}) {
-  const [name, setName] = useState('')
-  const [category, setCategory] = useState<PartnerCategory>('health')
-  const [discountPercent, setDiscountPercent] = useState('')
-  const [address, setAddress] = useState('')
-  const [phone, setPhone] = useState('')
-  const [city, setCity] = useState('')
-  const [state, setState] = useState<UF | ''>('')
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  // Repõe o formulário sempre que o diálogo abre, para não carregar resíduo
-  // de um parceiro editado antes.
-  useEffect(() => {
-    if (!open) return
-    setError('')
-    setName(editing?.name ?? '')
-    setCategory(editing?.category ?? 'health')
-    setDiscountPercent(editing ? String(editing.discountPercent) : '')
-    setAddress(editing?.address ?? '')
-    setPhone(editing?.phone ?? '')
-    setCity(editing?.city ?? '')
-    setState((editing?.state as UF | null) ?? '')
-  }, [open, editing])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    if (!name || !discountPercent) {
-      setError('Preencha nome e desconto')
-      return
-    }
-    // Esta é a visão da equipe Annetec, que cadastra o essencial do parceiro.
-    // Vitrine (frase, site, especialidades, início do credenciamento) é do
-    // painel do inquilino — aqui os campos são preservados na edição em vez de
-    // zerados, senão salvar daqui apagaria o que o inquilino escreveu.
-    const payload = {
-      name,
-      tagline: editing?.tagline ?? null,
-      category,
-      discountPercent: Number(discountPercent),
-      address: address || null,
-      phone: phone || null,
-      email: editing?.email ?? null,
-      website: editing?.website ?? null,
-      city: city || null,
-      state: state || null,
-      specialties: editing?.specialties ?? [],
-      since: editing?.since ?? null,
-      status: editing?.status ?? ('active' as const),
-    }
-
-    setSubmitting(true)
-    const result = editing
-      ? await updateOperatorPartnerAction(tenantSlug, editing.id, payload)
-      : await createOperatorPartnerAction(tenantSlug, payload)
-    setSubmitting(false)
-    if (!result.success) {
-      setError(result.error)
-      return
-    }
-    setName('')
-    setDiscountPercent('')
-    setAddress('')
-    setPhone('')
-    setCity('')
-    setState('')
-    onOpenChange(false)
-    onCreated()
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button className="h-11 rounded-[10px] px-4 font-semibold">
-          <Plus aria-hidden="true" /> Novo parceiro
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{editing ? 'Editar parceiro' : 'Novo parceiro'}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label>Nome *</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label>Categoria</Label>
-              <Select value={category} onValueChange={v => setCategory(v as PartnerCategory)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(PARTNER_CATEGORY_LABEL).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Desconto (%) *</Label>
-              <Input type="number" min={0} max={100} value={discountPercent} onChange={e => setDiscountPercent(e.target.value)} />
-            </div>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Endereço</Label>
-            <Input value={address} onChange={e => setAddress(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="grid gap-1.5 col-span-2">
-              <Label>Telefone</Label>
-              <Input value={phone} onChange={e => setPhone(e.target.value)} />
-            </div>
-            <div className="grid gap-1.5">
-              <Label>UF</Label>
-              <Select value={state} onValueChange={v => setState(v as UF)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="UF" />
-                </SelectTrigger>
-                <SelectContent>
-                  {UFS.map(uf => (
-                    <SelectItem key={uf} value={uf}>
-                      {uf}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Cidade</Label>
-            <Input value={city} onChange={e => setCity(e.target.value)} />
-          </div>
-          {error && <p className="text-sm text-[#B42318]">{error}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editing ? 'Salvar parceiro' : 'Criar parceiro'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
   const [editing, setEditing] = useState<Benefit | null>(null)
   const [benefits, setBenefits] = useState<Benefit[]>([])
@@ -388,7 +209,7 @@ function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex justify-end">
-        <AddBenefitDialog
+        <BenefitWizard
           open={addOpen}
           onOpenChange={aberto => {
             setAddOpen(aberto)
@@ -460,128 +281,5 @@ function BenefitsTab({ tenantSlug }: { tenantSlug: string }) {
         </div>
       )}
     </div>
-  )
-}
-
-/** Cria ou edita — `editing` decide qual. */
-function AddBenefitDialog({
-  open,
-  onOpenChange,
-  tenantSlug,
-  editing,
-  onCreated,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  tenantSlug: string
-  editing: Benefit | null
-  onCreated: () => void
-}) {
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [category, setCategory] = useState<BenefitCategory>('discount')
-  const [discountPercent, setDiscountPercent] = useState('')
-  const [provider, setProvider] = useState('')
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    setError('')
-    setName(editing?.name ?? '')
-    setDescription(editing?.description ?? '')
-    setCategory(editing?.category ?? 'discount')
-    setDiscountPercent(editing?.discountPercent != null ? String(editing.discountPercent) : '')
-    setProvider(editing?.provider ?? '')
-  }, [open, editing])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    if (!name || !description) {
-      setError('Preencha nome e descrição')
-      return
-    }
-    const payload = {
-      name,
-      description,
-      category,
-      discountPercent: discountPercent ? Number(discountPercent) : null,
-      provider: provider || null,
-      locations: editing?.locations ?? [],
-    }
-
-    setSubmitting(true)
-    const result = editing
-      ? await updateOperatorBenefitAction(tenantSlug, editing.id, payload)
-      : await createOperatorBenefitAction(tenantSlug, payload)
-    setSubmitting(false)
-    if (!result.success) {
-      setError(result.error)
-      return
-    }
-    setName('')
-    setDescription('')
-    setDiscountPercent('')
-    setProvider('')
-    onOpenChange(false)
-    onCreated()
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button className="h-11 rounded-[10px] px-4 font-semibold">
-          <Plus aria-hidden="true" /> Novo benefício
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{editing ? 'Editar benefício' : 'Novo benefício'}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label>Nome *</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Descrição *</Label>
-            <Textarea value={description} onChange={e => setDescription(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label>Categoria</Label>
-              <Select value={category} onValueChange={v => setCategory(v as BenefitCategory)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(BENEFIT_CATEGORY_LABEL).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Desconto (%)</Label>
-              <Input type="number" min={0} max={100} value={discountPercent} onChange={e => setDiscountPercent(e.target.value)} />
-            </div>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Fornecedor</Label>
-            <Input value={provider} onChange={e => setProvider(e.target.value)} />
-          </div>
-          {error && <p className="text-sm text-[#B42318]">{error}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editing ? 'Salvar benefício' : 'Criar benefício'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }

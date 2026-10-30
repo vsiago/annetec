@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowRight, CircleCheck, ClipboardCheck, Landmark, Receipt, type LucideIcon } from 'lucide-react'
 import { EmptyState } from '@/components/admin-platform/ui/empty-state'
 import { SectionHeading } from '@/components/admin-platform/ui/section-card'
+import { CARD_SURFACE } from '@/components/admin-platform/ui/tone'
 import { cn } from '@/lib/utils'
 import type { ActionItem } from './derive'
 
@@ -32,6 +33,7 @@ export function ActionSection({ items }: { items: ActionItem[] }) {
           tone="success"
           size="md"
           icon={CircleCheck}
+          satellites={[ClipboardCheck, Receipt]}
           title="Tudo em dia por aqui."
           description="Nenhum clube esperando aprovação, nenhuma fatura em atraso e todos os clubes recebem as mensalidades."
           className="py-10"
@@ -43,11 +45,11 @@ export function ActionSection({ items }: { items: ActionItem[] }) {
             return (
               <li
                 key={item.key}
-                className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-card px-6 pb-3 pt-[22px] shadow-sm"
+                className={cn('flex min-w-0 flex-col gap-3 px-5 pb-3 pt-5 sm:px-6', CARD_SURFACE)}
               >
                 <div className="flex items-center gap-3">
                   <span
-                    className={cn('inline-flex size-11 shrink-0 items-center justify-center rounded-full', CHIP_TONES[item.tone])}
+                    className={cn('inline-flex size-10 shrink-0 items-center justify-center rounded-xl', CHIP_TONES[item.tone])}
                     aria-hidden="true"
                   >
                     <Icon className="size-5" />
@@ -55,15 +57,17 @@ export function ActionSection({ items }: { items: ActionItem[] }) {
                   <p className="m-0 text-[13px] font-medium text-muted-foreground">{item.area}</p>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <strong className="text-[19px] leading-snug text-foreground">{item.title}</strong>
+                  <strong className="text-lg font-semibold leading-snug tracking-[-0.01em] text-foreground sm:text-[19px]">
+                    {item.title}
+                  </strong>
                   <span className="text-sm leading-relaxed text-muted-foreground">{item.detail}</span>
                 </div>
                 <Link
                   href={item.href}
-                  className="mt-auto inline-flex min-h-11 items-center gap-1.5 self-start rounded-md text-sm font-semibold text-secondary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2"
+                  className="group mt-auto inline-flex min-h-11 items-center gap-1.5 self-start rounded-md text-sm font-semibold text-secondary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2"
                 >
                   {item.cta}
-                  <ArrowRight className="size-4" aria-hidden="true" />
+                  <ArrowRight className="size-4 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
                 </Link>
               </li>
             )

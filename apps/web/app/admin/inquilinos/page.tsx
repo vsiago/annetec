@@ -1,9 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import { Building2, Plus, Search } from 'lucide-react'
+import { Building2, Search } from 'lucide-react'
 import { listClubsOverviewAction } from '@/lib/actions/tenants-api'
+import { ClubWizardButton } from '@/components/admin-platform/clubs/club-wizard'
 import { ClubsTable } from '@/components/admin-platform/clubs/clubs-table'
 import { Button } from '@/components/admin-platform/ui/button'
 import { TableLoading } from '@/components/admin-platform/ui/data-table'
@@ -101,14 +101,7 @@ export default function ClubesPage() {
         icon={Building2}
         description={state.phase === 'ready' ? clubsSummary(rows.length, attentionTotal) : 'Carregando clubes…'}
         live
-        actions={
-          <Button asChild className="min-h-11 rounded-[10px] px-4 text-sm font-semibold">
-            <Link href="/admin/inquilinos/novo">
-              <Plus aria-hidden="true" />
-              Cadastrar clube
-            </Link>
-          </Button>
-        }
+        actions={<ClubWizardButton onCreated={() => void load()} />}
       />
 
       {state.phase === 'error' ? (
@@ -121,14 +114,7 @@ export default function ClubesPage() {
           icon={Building2}
           title="Nenhum clube por aqui ainda"
           description="Cadastre o primeiro clube para começar a vender planos."
-          action={
-            <Button asChild className="min-h-11 rounded-[10px] px-4 text-sm font-semibold">
-              <Link href="/admin/inquilinos/novo">
-                <Plus aria-hidden="true" />
-                Cadastrar clube
-              </Link>
-            </Button>
-          }
+          action={<ClubWizardButton onCreated={() => void load()} />}
         />
       ) : (
         <>
