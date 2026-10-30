@@ -7,6 +7,7 @@ import {
   Handshake,
   KeyRound,
   Loader2,
+  PencilLine,
   Power,
   RefreshCw,
   Send,
@@ -40,6 +41,7 @@ import {
 } from '@/components/admin-platform/billing/console-kit'
 import { DebitNowDialog, TypedConfirmDialog } from '@/components/admin-platform/managed-accounts/managed-account-dialogs'
 import { DEBIT_TONE, GENERAL_TONE, Pill, REQUEST_TONE } from '@/components/admin-platform/managed-accounts/managed-bits'
+import { ManagedRequestCorrectionDialog } from '@/components/admin-platform/managed-accounts/managed-request-correction'
 import {
   approveManagedAccountAction,
   disconnectManagedAccountAction,
@@ -53,7 +55,7 @@ import {
 import { formatBRL, formatDateBR, formatDateTimeBR } from '@/lib/adapters/platform-console'
 import { cn } from '@/lib/utils'
 
-type DialogKind = 'approve' | 'refuse' | 'recover' | 'debit' | 'disconnect' | 'auto-debit' | null
+type DialogKind = 'approve' | 'refuse' | 'recover' | 'debit' | 'disconnect' | 'auto-debit' | 'correct' | null
 
 const OUTCOME_LABEL: Record<ManagedDebitResult['outcome'], string> = {
   concluida: 'Débito concluído',
@@ -166,6 +168,8 @@ export function ManagedAccountSheet({
   const managed = account?.managed ?? null
   const isManagedConnected = Boolean(account?.connected && account.source === 'subaccount')
   const canDecide = request?.status === 'pendente' || request?.status === 'falhou'
+  // Correção dos dados: só antes de existir subconta no Asaas (a API confere de novo).
+  const canCorrect = canDecide && !detail?.asaasAccountId
 
   function apply(next: ManagedAccountDetail | null): boolean {
     if (!next) return false
@@ -210,6 +214,14 @@ export function ManagedAccountSheet({
                     <Button className="gap-2" onClick={() => setDialog('approve')}>
                       <UserCheck className="h-4 w-4" aria-hidden="true" />
                       Aprovar e criar a conta
+                    </Button>
+                  </SuperadminOnly>
+                )}
+                {canCorrect && (
+                  <SuperadminOnly isSuperadmin={isSuperadmin}>
+                    <Button variant="outline" className="gap-2" onClick={() => setDialog('correct')}>
+                      <PencilLine className="h-4 w-4" aria-hidden="true" />
+                      Corrigir dados
                     </Button>
                   </SuperadminOnly>
                 )}
@@ -265,7 +277,7 @@ export function ManagedAccountSheet({
 
               {!isSuperadmin && (
                 <p className="m-0 text-xs text-muted-foreground">
-                  Você pode consultar. Aprovar, recusar e debitar é só com o superadmin.
+                  Você pode consultar. Aprovar, corrigir, recusar e debitar é só com o superadmin.
                 </p>
               )}
 
@@ -310,6 +322,20 @@ export function ManagedAccountSheet({
                       </span>
                     </div>
                     {request.refuseReason && <Field label="Motivo da recusa">{request.refuseReason}</Field>}
+                    {request.corrections.length > 0 && (
+                      <div className="space-y-1 rounded-xl border border-[#B2DDFF] bg-[#EFF8FF] px-4 py-3 text-sm text-[#175CD3]">
+                        <p className="m-0 font-semibold">Dados corrigidos pela ANNETEC antes da aprovação</p>
+                        <ul className="m-0 list-none space-y-0.5 p-0 text-[13px]">
+                          {request.corrections.map(item => (
+                            <li key={item.at}>
+                              {formatDateTimeBR(item.at)}
+                              {item.byName ? ` · ${item.byName}` : ''}: {item.fields.join(', ')}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="m-0 text-xs">O aceite do termo abaixo é o original, feito pelo clube.</p>
+                      </div>
+                    )}
                     <dl className="m-0 grid gap-4 sm:grid-cols-2">
                       <Field label="Nome">{request.name}</Field>
                       <Field label={request.personType === 'PF' ? 'CPF' : 'CNPJ'}>{request.cpfCnpj ?? '—'}</Field>
@@ -447,6 +473,17 @@ export function ManagedAccountSheet({
                 <DebitsTable debits={detail.debits} />
               </Block>
 
+              {request && canCorrect && (
+                <ManagedRequestCorrectionDialog
+                  open={dialog === 'correct'}
+                  onOpenChange={open => !open && setDialog(null)}
+                  orgId={detail.organizationId}
+                  request={request}
+                  onSaved={next => {
+                    apply(next)
+                  }}
+                />
+              )}
               <ConfirmDialog
                 open={dialog === 'approve'}
                 onOpenChange={open => !open && setDialog(null)}

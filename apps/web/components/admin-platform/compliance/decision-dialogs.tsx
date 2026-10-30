@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { BadgePercent, CircleCheck, CircleX, Loader2, Plus, ShieldAlert, Trash2 } from 'lucide-react'
 import {
   KYB_DOCUMENT_KIND_LABELS,
+  approvalsHref,
   ONBOARDING_SECTION_LABELS,
   PRECHECK_LABELS,
   kybDocumentKind,
@@ -96,7 +97,7 @@ export function DiscountPendingNotice({ proposalId, className }: { proposalId: s
         de aprovar o clube.
       </p>
       <Button asChild variant="outline" className="h-10 shrink-0 rounded-[10px] border-[#FEC84B] bg-white px-3 text-sm font-semibold text-[#93370D] hover:bg-[#FEF0C7]">
-        <Link href={`/admin/comercial/descontos?proposta=${proposalId}`}>Abrir o pedido de desconto</Link>
+        <Link href={approvalsHref('descontos', { proposta: proposalId })}>Abrir o pedido de desconto</Link>
       </Button>
     </div>
   )

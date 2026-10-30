@@ -6,8 +6,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { usePlatformAuth } from '@/contexts/platform-auth-context'
 import { usePlatformSidebarContext } from '@/app/admin/layout'
-import { getOnboardingQueueSummaryAction } from '@/lib/actions/platform-onboarding-api'
-import { listDiscountRequestsAction } from '@/lib/actions/comercial-api'
+import { APPROVAL_KIND_LABELS, type ApprovalsSummary } from '@annetec/contracts'
+import { getApprovalsSummaryAction } from '@/lib/actions/platform-approvals-api'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { initialsOf } from '@/components/admin-platform/ui/entity-avatar'
 import { cn } from '@/lib/utils'
@@ -31,7 +31,6 @@ import {
   Inbox,
   ScrollText,
   SlidersHorizontal,
-  BadgePercent,
   BriefcaseBusiness,
   ChartColumn,
   HandCoins,
@@ -67,8 +66,11 @@ interface NavItem {
   icon: LucideIcon
   /** Rotas que também acendem o item, além do próprio `href` e das subpáginas. */
   alsoActive?: string[]
-  /** Contador ao lado do item: clubes esperando análise (Aprovações) ou descontos esperando o superadmin. */
-  counter?: 'approvals' | 'discounts'
+  /**
+   * Contador ao lado do item: pedidos esperando a equipe em Aprovações (novos
+   * clubes + contas gerenciadas + descontos de vendedores).
+   */
+  counter?: 'approvals'
 }
 
 interface NavGroup {
@@ -103,7 +105,6 @@ const navGroups: NavGroup[] = [
     items: [
       { href: '/admin/comercial/vendedores', label: 'Vendedores', icon: BriefcaseBusiness },
       { href: '/admin/comercial/funil', label: 'Funil geral', icon: KanbanSquare },
-      { href: '/admin/comercial/descontos', label: 'Descontos', icon: BadgePercent, counter: 'discounts' },
       { href: '/admin/comercial/comissoes', label: 'Comissões', icon: HandCoins },
       { href: '/admin/comercial/regras', label: 'Regras de comissão', icon: Percent },
       { href: '/admin/comercial/relatorio', label: 'Relatório', icon: ChartColumn },
@@ -121,7 +122,7 @@ const navGroups: NavGroup[] = [
  */
 const mainLinks: NavItem[] = navGroups.flatMap(group =>
   group.label === 'Comercial'
-    ? [{ href: '/admin/comercial/vendedores', label: 'Comercial', icon: BriefcaseBusiness, alsoActive: ['/admin/comercial'], counter: 'discounts' as const }]
+    ? [{ href: '/admin/comercial/vendedores', label: 'Comercial', icon: BriefcaseBusiness, alsoActive: ['/admin/comercial'] }]
     : group.items,
 )
 
@@ -166,20 +167,21 @@ function isLinkActive(pathname: string | null, item: NavItem): boolean {
 }
 
 /**
- * Quantos clubes esperam análise (fila de Aprovações). Usa o resumo que a
- * própria tela de Aprovações já carrega — uma contagem, sem lista. Atualiza ao
- * navegar e a cada minuto; se falhar, o contador simplesmente não aparece.
+ * Quantos pedidos esperam a equipe em Aprovações — novos clubes, contas
+ * gerenciadas e descontos de vendedores (`GET /platform/aprovacoes/resumo`, só
+ * contagens). Atualiza ao navegar e a cada minuto; se falhar, o contador
+ * simplesmente não aparece.
  */
-function useWaitingApprovals(pathname: string | null): number | null {
-  const [count, setCount] = useState<number | null>(null)
+function useApprovalsSummary(pathname: string | null): ApprovalsSummary | null {
+  const [summary, setSummary] = useState<ApprovalsSummary | null>(null)
 
   useEffect(() => {
     let cancelled = false
     const load = async () => {
       if (document.visibilityState === 'hidden') return
       try {
-        const result = await getOnboardingQueueSummaryAction()
-        if (!cancelled && result.success) setCount(result.data.queue)
+        const result = await getApprovalsSummaryAction()
+        if (!cancelled && result.success) setSummary(result.data)
       } catch {
         // Sem o contador o menu continua funcionando.
       }
@@ -192,36 +194,20 @@ function useWaitingApprovals(pathname: string | null): number | null {
     }
   }, [pathname])
 
-  return count
+  return summary
 }
 
-/**
- * Pedidos de desconto aguardando o superadmin (Comercial › Descontos). Mesmo
- * ritmo do contador de Aprovações; se falhar, o contador não aparece.
- */
-function usePendingDiscounts(pathname: string | null): number | null {
-  const [count, setCount] = useState<number | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      if (document.visibilityState === 'hidden') return
-      try {
-        const result = await listDiscountRequestsAction({ status: 'pending', perPage: 1 })
-        if (!cancelled && result.success) setCount(result.data.meta.total)
-      } catch {
-        // Sem o contador o menu continua funcionando.
-      }
-    }
-    void load()
-    const timer = setInterval(load, 60_000)
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
-  }, [pathname])
-
-  return count
+/** "3 Novos clubes, 1 Contas gerenciadas" — só os tipos com pedido (dica do item recolhido). */
+function approvalsBreakdown(summary: ApprovalsSummary | null): string {
+  if (!summary) return ''
+  return [
+    [summary.clubs, APPROVAL_KIND_LABELS.clubes],
+    [summary.managedAccounts, APPROVAL_KIND_LABELS['contas-gerenciadas']],
+    [summary.discounts, APPROVAL_KIND_LABELS.descontos],
+  ]
+    .filter(([count]) => Number(count) > 0)
+    .map(([count, label]) => `${count} ${label}`)
+    .join(', ')
 }
 
 function countText(count: number): string {
@@ -283,13 +269,15 @@ export function PlatformSidebar() {
   const pathname = usePathname()
   const { user, logout } = usePlatformAuth()
   const { isCollapsed, toggleSidebar } = usePlatformSidebarContext()
-  const waiting = useWaitingApprovals(pathname)
-  const discounts = usePendingDiscounts(pathname)
+  const approvals = useApprovalsSummary(pathname)
 
   /** Contador do item (0 = não mostra). */
-  const countOf = (item: NavItem): number =>
-    item.counter === 'approvals' ? waiting ?? 0 : item.counter === 'discounts' ? discounts ?? 0 : 0
-  const countNoun = (item: NavItem): string => (item.counter === 'discounts' ? 'para decidir' : 'para analisar')
+  const countOf = (item: NavItem): number => (item.counter === 'approvals' ? (approvals?.total ?? 0) : 0)
+  const countNoun = (item: NavItem): string => {
+    const count = countOf(item)
+    const breakdown = approvalsBreakdown(approvals)
+    return `${count === 1 ? 'pedido aguardando' : 'pedidos aguardando'}${breakdown ? ` (${breakdown})` : ''}`
+  }
 
   const isSuperadmin = user?.platformRole === 'superadmin'
   const role = roleLabel(user?.platformRole)
@@ -324,6 +312,7 @@ export function PlatformSidebar() {
         href={item.href}
         aria-current={isActive ? 'page' : undefined}
         aria-label={isCollapsed ? waitingLabel(item) : undefined}
+        title={!isCollapsed && count > 0 ? waitingLabel(item) : undefined}
         className={cn(
           'group/item relative flex items-center rounded-xl text-sm transition-colors duration-150',
           focusDark,

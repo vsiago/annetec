@@ -29,6 +29,7 @@ const FULL_PRODUCTION: ProductionConfigInput = {
   WEB_BASE_URL: 'https://www.annetec.com.br',
   CORS_ORIGINS: 'https://www.annetec.com.br,https://annetec.com.br',
   TRUST_PROXY: true,
+  INTERNAL_PROXY_SECRET: 'segredo-interno-web-api-com-mais-de-32-caracteres',
 }
 
 describe('assertProductionConfig', () => {
@@ -157,6 +158,15 @@ describe('assertProductionConfig', () => {
     expect(String(log.warn.mock.calls[0]?.[1])).toMatch(/cron externo/)
   })
 
+  it('produção sem INTERNAL_PROXY_SECRET: sobe, mas avisa que o IP do navegador não chega à API', () => {
+    const log = { warn: vi.fn() }
+    const config = { ...FULL_PRODUCTION, INTERNAL_PROXY_SECRET: undefined }
+    expect(productionConfigViolations(config)).toEqual([])
+    expect(() => assertProductionConfig(config, log)).not.toThrow()
+    expect(log.warn).toHaveBeenCalledTimes(1)
+    expect(String(log.warn.mock.calls[0]?.[1])).toMatch(/INTERNAL_PROXY_SECRET ausente/)
+  })
+
   it('development/test com tudo simulado: ok, sem avisos', () => {
     const simulated: ProductionConfigInput = {
       PAYMENT_GATEWAY: 'simulated',
@@ -192,6 +202,7 @@ describe('assertProductionConfig', () => {
       API_BASE_URL: 'https://api.3-131-89-130.sslip.io',
       WEB_BASE_URL: 'https://www.3-131-89-130.sslip.io',
       CORS_ORIGINS: 'https://www.3-131-89-130.sslip.io',
+      INTERNAL_PROXY_SECRET: 'segredo-interno-web-api-com-mais-de-32-caracteres',
     }
 
     it('aceita Asaas sandbox, outbox e disco local — e avisa alto no boot', () => {

@@ -11,8 +11,9 @@ import type {
   SessionUser,
 } from '@annetec/contracts'
 import { revalidatePath } from 'next/cache'
-import { headers } from 'next/headers'
 import { ApiError, api } from '@/lib/api/client'
+// IP do navegador para o rate limit por IP do login (com o segredo interno: cada pessoa no seu balde).
+import { clientIpHeaders } from '@/lib/api/client-ip'
 import {
   beginImpersonation,
   clearSession,
@@ -31,17 +32,6 @@ import { run, type ActionResult } from './_api-result'
  * `lib/actions/*.ts` já usam, para que a troca do mock pela API real seja
  * trocar o import, não reescrever a tela.
  */
-
-/**
- * IP de quem está no navegador, para o rate limit por IP das rotas de login
- * da API — sem isso, toda chamada chegaria com o IP do servidor do Next e um
- * único balde valeria para todo mundo.
- */
-async function clientIpHeaders(): Promise<Record<string, string>> {
-  const incoming = await headers()
-  const forwardedFor = incoming.get('x-forwarded-for') ?? incoming.get('x-real-ip')
-  return forwardedFor ? { 'x-forwarded-for': forwardedFor } : {}
-}
 
 export async function loginAction(input: LoginInput): Promise<ActionResult<SessionUser>> {
   return run(async () => {

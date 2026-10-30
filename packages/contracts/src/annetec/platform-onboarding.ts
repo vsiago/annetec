@@ -245,6 +245,8 @@ export const cnpjLookupResult = z.object({
   /** 4 dígitos, ex.: `3999`. */
   legalNatureCode: z.string().nullable(),
   legalNatureName: z.string().nullable(),
+  /** Optante pelo MEI (SIMEI). `null`/ausente = a fonte não informou. */
+  mei: z.boolean().nullable().optional(),
   /** `ATIVA`, `BAIXADA`, `SUSPENSA`, `INAPTA`, `NULA`. */
   registrationStatus: z.string(),
   registrationStatusDate: dateOnly.nullable(),

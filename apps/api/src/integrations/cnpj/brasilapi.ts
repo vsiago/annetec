@@ -15,6 +15,7 @@ export interface BrasilApiCnpjBody {
   nome_fantasia?: string | null
   codigo_natureza_juridica?: string | number | null
   natureza_juridica?: string | null
+  opcao_pelo_mei?: boolean | null
   situacao_cadastral?: string | number | null
   descricao_situacao_cadastral?: string | null
   data_situacao_cadastral?: string | null
@@ -107,6 +108,7 @@ export function mapBrasilApiCnpj(
     tradeName: text(body.nome_fantasia),
     legalNatureCode: natureDigits ? natureDigits.padStart(4, '0').slice(0, 4) : null,
     legalNatureName: text(body.natureza_juridica),
+    mei: typeof body.opcao_pelo_mei === 'boolean' ? body.opcao_pelo_mei : null,
     registrationStatus,
     registrationStatusDate: isoDate(body.data_situacao_cadastral),
     registrationStatusReason: reason && reason.toUpperCase() !== 'SEM MOTIVO' ? reason : null,

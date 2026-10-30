@@ -1,3 +1,4 @@
+import { forwardedClientHeaders } from '@/lib/api/internal-proxy'
 import { getToken } from '@/lib/api/session'
 
 /**
@@ -35,7 +36,7 @@ export async function GET(
   let upstream: Response
   try {
     upstream = await fetch(url, {
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${token}`, ...forwardedClientHeaders(request.headers) },
       cache: 'no-store',
       signal: request.signal,
     })

@@ -1,4 +1,11 @@
-import { formatBRL, notificationTone, type AppNotification } from '@annetec/contracts'
+import {
+  APPROVAL_KIND_LABELS,
+  approvalsHref,
+  approvalsHrefFromLegacy,
+  formatBRL,
+  notificationTone,
+  type AppNotification,
+} from '@annetec/contracts'
 
 /** "agora", "há 2 min", "há 3 h", "ontem às 14:05", "03/10 às 09:12". */
 export function relativeTime(iso: string, now: number): string {
@@ -51,46 +58,55 @@ export function platformHeadline(notification: AppNotification): string {
     case 'platform_invoice_paid':
       return notification.title
     case 'sales_discount_requested':
-      return 'Pedido de desconto para aprovar'
+      return `Aprovações › ${APPROVAL_KIND_LABELS.descontos}`
     case 'sales_discount_approved':
       return 'Desconto aprovado'
     case 'sales_discount_rejected':
       return 'Desconto recusado'
     case 'managed_account_requested':
-      return 'Pedido de conta gerenciada'
+      return `Aprovações › ${APPROVAL_KIND_LABELS['contas-gerenciadas']}`
+    case 'onboarding_submitted':
+      return `Aprovações › ${APPROVAL_KIND_LABELS.clubes}`
     case 'managed_account_decided':
     case 'platform_auto_debit_failed':
       return notification.title
   }
 }
 
-/** Notificação das vendas da plataforma (pedido de desconto e decisão). */
+/**
+ * Notificação que não é "de um clube": vendas da plataforma (pedido de
+ * desconto e decisão) e o clube novo que enviou a contratação (ainda sem
+ * inquilino). O título já diz quem e o quê; o ícone diz o tipo.
+ */
 export function isSalesNotification(notification: Pick<AppNotification, 'kind'>): boolean {
   return (
     notification.kind === 'sales_discount_requested' ||
     notification.kind === 'sales_discount_approved' ||
-    notification.kind === 'sales_discount_rejected'
+    notification.kind === 'sales_discount_rejected' ||
+    notification.kind === 'onboarding_submitted'
   )
 }
 
 /**
  * Para onde a notificação leva ao clicar. As de vendas são montadas aqui a
  * partir dos ids do `payload` (a API também grava o mesmo link):
- *  - pedido de desconto (equipe) → Comercial › Descontos, com o pedido aberto;
+ *  - pedido de desconto (equipe) → Aprovações › Descontos de vendedores, com o pedido aberto;
  *  - aprovado/recusado (vendedor) → a proposta na área do vendedor.
- * As demais usam o `link` gravado pela API.
+ * As demais usam o `link` gravado pela API — os antigos, gravados antes das
+ * filas irem para Aprovações (`/admin/financeiro/contas-gerenciadas`,
+ * `/admin/comercial/descontos`), são traduzidos para a aba e o foco novos.
  */
 export function notificationHref(notification: Pick<AppNotification, 'kind' | 'link' | 'payload'>): string | null {
   const { payload } = notification
   switch (notification.kind) {
     case 'sales_discount_requested':
-      return payload.discountRequestId
-        ? `/admin/comercial/descontos?pedido=${encodeURIComponent(payload.discountRequestId)}`
-        : '/admin/comercial/descontos'
+      return approvalsHref('descontos', { pedido: payload.discountRequestId ?? null })
     case 'sales_discount_approved':
     case 'sales_discount_rejected':
       return payload.proposalId ? `/vendas/propostas/${encodeURIComponent(payload.proposalId)}` : '/vendas/propostas'
+    case 'onboarding_submitted':
+      return payload.proposalId ? `/admin/compliance/${encodeURIComponent(payload.proposalId)}` : approvalsHref('clubes')
     default:
-      return notification.link
+      return approvalsHrefFromLegacy(notification.link)
   }
 }

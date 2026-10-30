@@ -69,7 +69,7 @@ const { AppError } = await import('@/http/errors')
 const { AsaasApiError } = await import('@/integrations/asaas/client')
 const { logger } = await import('@/lib/logger')
 const { decryptSecret, encryptSecret } = await import('@/lib/crypto')
-const { MANAGED_ACCOUNT_TERMS_TEXT, MANAGED_ACCOUNT_TERMS_VERSION, ERROR_CODES } = await import('@annetec/contracts')
+const { MANAGED_ACCOUNT_TERMS_TEXT, MANAGED_ACCOUNT_TERMS_VERSION, ERROR_CODES, companyTypeFromLegalNature } = await import('@annetec/contracts')
 const { ASAAS_WEBHOOK_EVENTS } = await import('@/integrations/asaas/webhook-events')
 
 type Memory = import('./helpers/memory-db').MemoryDb
@@ -280,6 +280,26 @@ describe('regras', () => {
 // Pedido do clube
 // ---------------------------------------------------------------------------
 
+describe('tipo de empresa pela natureza jurídica (Receita)', () => {
+  it('correspondências inequívocas pelo código ou pelo nome', () => {
+    expect(companyTypeFromLegalNature({ code: '3999', name: 'Associação Privada' })).toBe('ASSOCIATION')
+    expect(companyTypeFromLegalNature({ code: '206-2', name: 'Sociedade Empresária Limitada' })).toBe('LIMITED')
+    expect(companyTypeFromLegalNature({ code: '2240' })).toBe('LIMITED')
+    expect(companyTypeFromLegalNature({ code: '2135', name: 'Empresário (Individual)' })).toBe('INDIVIDUAL')
+    expect(companyTypeFromLegalNature({ code: '2135', name: 'Empresário (Individual)', mei: true })).toBe('MEI')
+    expect(companyTypeFromLegalNature({ name: 'Associação Privada' })).toBe('ASSOCIATION')
+    expect(companyTypeFromLegalNature({ name: 'Sociedade Empresária Limitada' })).toBe('LIMITED')
+  })
+
+  it('sem correspondência (sindicato, fundação, S.A., nada informado): null — a tela pede escolha e confirmação', () => {
+    expect(companyTypeFromLegalNature({ code: '3131', name: 'Entidade Sindical' })).toBeNull()
+    expect(companyTypeFromLegalNature({ code: '3069', name: 'Fundação Privada' })).toBeNull()
+    expect(companyTypeFromLegalNature({ code: '2054', name: 'Sociedade Anônima Fechada' })).toBeNull()
+    expect(companyTypeFromLegalNature({})).toBeNull()
+    expect(companyTypeFromLegalNature({ name: 'Associação de qualquer coisa' })).toBeNull()
+  })
+})
+
 describe('pedido do clube', () => {
   it('grava os dados e o aceite (texto, versão, usuário, data, IP) e avisa a equipe; outro pedido fica bloqueado', async () => {
     const before = await managedAccountService.clubStatus(ORG)
@@ -300,7 +320,15 @@ describe('pedido do clube', () => {
     const [row] = requests()
     expect(row).toMatchObject({ acceptedByUserId: 'u-admin-clube', acceptedUserAgent: 'Mozilla/5.0 teste', termsText: MANAGED_ACCOUNT_TERMS_TEXT })
     expect(row!.acceptedAt).toBeInstanceOf(Date)
-    expect(notified).toEqual([expect.objectContaining({ audience: 'platform', kind: 'managed_account_requested', organizationId: ORG })])
+    expect(notified).toEqual([
+      expect.objectContaining({
+        audience: 'platform',
+        kind: 'managed_account_requested',
+        organizationId: ORG,
+        // O pedido abre direto na central de Aprovações, na aba e no clube certos.
+        link: `/admin/compliance?tipo=contas-gerenciadas&clube=${ORG}`,
+      }),
+    ])
 
     const again = await rejection(managedAccountService.submitRequest(ORG, REQUEST_INPUT, CLUB_ADMIN))
     expect(again.code).toBe(ERROR_CODES.CONFLICT)
@@ -549,6 +577,74 @@ describe('aprovação pelo superadmin', () => {
 // ---------------------------------------------------------------------------
 // Documentos/status e travas do recebimento
 // ---------------------------------------------------------------------------
+
+describe('correção do pedido pelo superadmin (antes de aprovar)', () => {
+  const SUPERADMIN = { userId: 'u-superadmin', name: 'Sara Superadmin' }
+
+  it('corrige tipo de empresa, faturamento, contatos e endereço; mantém o aceite original; a aprovação usa os dados novos', async () => {
+    await managedAccountService.submitRequest(ORG, { ...REQUEST_INPUT, companyType: 'MEI' }, CLUB_ADMIN)
+    const before = requests()[0]!
+    const { detail, changes, requestId } = await managedAccountService.updateRequest(
+      ORG,
+      {
+        companyType: 'ASSOCIATION',
+        incomeValue: 40_000.456,
+        mobilePhone: '21988887777',
+        phone: null,
+        address: { ...REQUEST_INPUT.address, number: '52', state: 'rj' },
+      },
+      SUPERADMIN,
+    )
+    expect(requestId).toBe(before.id)
+    expect(changes).toEqual({
+      companyType: { de: 'MEI', para: 'ASSOCIATION' },
+      incomeValue: { de: 25_000, para: 40_000.46 },
+      phone: { de: '2133334444', para: null },
+      mobilePhone: { de: '21999998888', para: '21988887777' },
+      address: { de: expect.objectContaining({ number: '50' }), para: expect.objectContaining({ number: '52', state: 'RJ' }) },
+    })
+    // Console: CNPJ completo e o histórico da correção; o aceite (quem, quando, IP) é o original.
+    expect(detail.request).toMatchObject({
+      cpfCnpj: '11.222.333/0001-81',
+      companyType: 'ASSOCIATION',
+      incomeValue: 40_000.46,
+      phone: null,
+      terms: { acceptedByName: 'Ana Admin', acceptedIp: '200.100.50.25' },
+      corrections: [{ byName: 'Sara Superadmin', fields: ['Tipo de empresa', 'Faturamento mensal', 'Telefone fixo', 'Celular', 'Endereço'] }],
+    })
+    const after = requests()[0]!
+    expect(after.acceptedAt).toEqual(before.acceptedAt)
+    expect(after.acceptedByUserId).toBe('u-admin-clube')
+
+    // O clube continua vendo o documento mascarado.
+    expect((await managedAccountService.clubStatus(ORG)).request?.cpfCnpj).toBe('11.222.333/****-**')
+
+    await managedAccountService.approve(ORG, ACTOR)
+    expect(fakeAsaas.createdPayloads[0]).toMatchObject({ companyType: 'ASSOCIATION', incomeValue: 40_000.46, mobilePhone: '21988887777', addressNumber: '52' })
+    expect(fakeAsaas.createdPayloads[0]).not.toHaveProperty('phone')
+
+    // Depois de aprovado não corrige mais.
+    const late = await rejection(managedAccountService.updateRequest(ORG, { incomeValue: 1 }, SUPERADMIN))
+    expect(late.code).toBe(ERROR_CODES.CONFLICT)
+  })
+
+  it('sem mudança real não grava correção; CNPJ não aceita data de nascimento', async () => {
+    await managedAccountService.submitRequest(ORG, REQUEST_INPUT, CLUB_ADMIN)
+    const same = await managedAccountService.updateRequest(ORG, { companyType: 'ASSOCIATION', email: REQUEST_INPUT.email }, SUPERADMIN)
+    expect(same.changes).toEqual({})
+    expect((requests()[0]!.data as { corrections?: unknown }).corrections).toBeUndefined()
+
+    const wrong = await rejection(managedAccountService.updateRequest(ORG, { birthDate: '1990-01-01' }, SUPERADMIN))
+    expect(wrong.code).toBe(ERROR_CODES.VALIDATION_ERROR)
+  })
+
+  it('sem pedido em aberto, ou recusado → 409', async () => {
+    expect((await rejection(managedAccountService.updateRequest(ORG, { incomeValue: 10 }, SUPERADMIN))).code).toBe(ERROR_CODES.CONFLICT)
+    await managedAccountService.submitRequest(ORG, REQUEST_INPUT, CLUB_ADMIN)
+    await managedAccountService.refuse(ORG, 'CNPJ não confere', ACTOR)
+    expect((await rejection(managedAccountService.updateRequest(ORG, { incomeValue: 10 }, SUPERADMIN))).code).toBe(ERROR_CODES.CONFLICT)
+  })
+})
 
 describe('documentos e situação da subconta', () => {
   it('atualizar status grava o retrato e o DTO mostra documentos pendentes com links', async () => {

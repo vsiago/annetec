@@ -51,6 +51,11 @@ export interface ManagedAccountRequestData {
   mobilePhone: string
   site: string | null
   address: ManagedAccountAddress
+  /**
+   * Correções do superadmin antes da aprovação (`PATCH …/pedido`). O aceite do
+   * termo segue o original; o antes/depois de cada campo vai para a auditoria.
+   */
+  corrections?: { at: string; byUserId: string | null; byName: string | null; fields: string[] }[]
 }
 
 /**

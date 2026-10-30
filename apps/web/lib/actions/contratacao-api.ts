@@ -19,6 +19,7 @@ import type {
   StartOnboardingResult,
 } from '@annetec/contracts'
 import { ApiError } from '@/lib/api/client'
+import { forwardedClientHeaders } from '@/lib/api/internal-proxy'
 import type { ActionResult } from './_api-result'
 import { run } from './_api-result'
 
@@ -46,10 +47,9 @@ interface PublicRequest {
 
 async function clientHeaders(): Promise<Record<string, string>> {
   const incoming = await headers()
-  const out: Record<string, string> = {}
-  const forwardedFor = incoming.get('x-forwarded-for') ?? incoming.get('x-real-ip')
+  // IP do navegador (com o segredo interno, ver `lib/api/internal-proxy.ts`) + user-agent do aceite.
+  const out: Record<string, string> = forwardedClientHeaders(incoming)
   const userAgent = incoming.get('user-agent')
-  if (forwardedFor) out['x-forwarded-for'] = forwardedFor
   if (userAgent) out['user-agent'] = userAgent
   return out
 }

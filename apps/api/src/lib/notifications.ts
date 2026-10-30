@@ -1,7 +1,9 @@
 import {
+  APPROVAL_KIND_LABELS,
   CARD_BRAND_LABELS,
   CLUB_PAYMENT_METHOD_LABELS,
   NOTIFICATION_SIGNUP_VIA_LABELS,
+  approvalsHref,
   formatBRL,
   type CardBrand,
   type ClubPaymentMethod,
@@ -365,8 +367,35 @@ export function discountRequestedNotification(facts: DiscountNoticeFacts): Notif
     title: `${facts.sellerName} pediu desconto para ${facts.customerName}`,
     body: joinParts([facts.summary, `proposta ${facts.proposalCode}`]),
     payload: { proposalId: facts.proposalId, discountRequestId: facts.requestId, personName: facts.sellerName },
-    link: `/admin/comercial/descontos?pedido=${facts.requestId}`,
+    link: approvalsHref('descontos', { pedido: facts.requestId }),
     dedupeKey: `sales_discount_requested:${facts.requestId}`,
+  }
+}
+
+export interface ProposalSubmittedFacts {
+  proposalId: string
+  code: string
+  /** Nome do clube (ou razão social) como veio na proposta. */
+  clubName: string
+  /** `true` = reenvio depois de uma correção pedida pela equipe. */
+  resubmission: boolean
+  /** Momento do envio — entra na chave de deduplicação (cada envio avisa uma vez). */
+  submittedAt: Date
+}
+
+/** Clube enviou a contratação para análise: sino da equipe → Aprovações › Novos clubes. Puro. */
+export function proposalSubmittedNotification(facts: ProposalSubmittedFacts): NotifyInput {
+  return {
+    audience: 'platform',
+    kind: 'onboarding_submitted',
+    organizationId: null,
+    title: facts.resubmission
+      ? `${facts.clubName} reenviou a contratação com as correções`
+      : `${facts.clubName} enviou a contratação para análise`,
+    body: joinParts([`proposta ${facts.code}`, `Aprovações › ${APPROVAL_KIND_LABELS.clubes}`]),
+    payload: { proposalId: facts.proposalId },
+    link: `/admin/compliance/${encodeURIComponent(facts.proposalId)}`,
+    dedupeKey: `onboarding_submitted:${facts.proposalId}:${facts.submittedAt.toISOString()}`,
   }
 }
 

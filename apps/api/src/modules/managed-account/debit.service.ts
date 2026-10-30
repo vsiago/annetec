@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   ERROR_CODES,
   MANAGED_AUTO_DEBIT_FAILURE_LABELS,
+  approvalsHref,
   formatBRL,
   type ManagedAutoDebitFailureCode,
   type ManagedDebitResult,
@@ -306,7 +307,8 @@ async function flagDoublePayment(debit: DebitRow, charge: PlatformChargeRow | nu
       body: reason,
       amount: Number(row.amount),
       payload: charge ? { platformChargeId: charge.id } : {},
-      link: `/admin/financeiro/contas-gerenciadas?clube=${encodeURIComponent(row.organizationId)}`,
+      // A gaveta da conta gerenciada (débitos, saldo) mora em Aprovações › Contas gerenciadas.
+      link: approvalsHref('contas-gerenciadas', { clube: row.organizationId, situacao: 'todas' }),
       dedupeKey: `auto_debit_refund:${row.id}`,
     })
   } catch (error) {

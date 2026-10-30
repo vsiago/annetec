@@ -53,6 +53,7 @@ cp deploy/.env.prod.example deploy/.env.prod && chmod 600 deploy/.env.prod
 openssl rand -base64 48   # → BETTER_AUTH_SECRET
 openssl rand -hex 32      # → POSTGRES_PASSWORD (hex: entra na DATABASE_URL sem escape)
 openssl rand -hex 32      # → ASAAS_WEBHOOK_TOKEN
+openssl rand -hex 32      # → INTERNAL_PROXY_SECRET (web ↔ API; obrigatório)
 nano deploy/.env.prod
 ```
 
@@ -69,6 +70,7 @@ Variáveis novas do deploy:
 | `WEB_DOMAIN`, `API_DOMAIN`, `APEX_DOMAIN`, `ACME_EMAIL` | Caddy | sites HTTPS e e-mail da conta ACME |
 | `DEPLOY_STAGE=preview` | API | `NODE_ENV=production` aceitando Asaas **sandbox** (e recusando chave de produção), `EMAIL_PROVIDER=outbox` e `STORAGE_DRIVER=local`; superadmin pode revelar senhas provisórias na caixa de saída. Vazio = produção estrita. Aviso grande no log a cada boot. |
 | `ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true` | API | aceite explícito de `STORAGE_DRIVER=local` em produção estrita (documentos no disco do servidor). Sem ele a API recusa subir. Avisa no log a cada boot. Exige o backup diário (seção 6). |
+| `INTERNAL_PROXY_SECRET` | web + API | **obrigatório** (o compose recusa subir sem ele). Segredo interno (`openssl rand -hex 32`, mín. 32 caracteres) que o compose entrega aos dois serviços: a web repassa o IP do navegador nas chamadas das server actions (`x-annetec-client-ip` + `x-annetec-proxy-secret`) e a API só usa esse IP quando o segredo confere (tempo constante). Sem ele, quem passa pela web aparece com o IP do container da web (rate limit compartilhado por todos, IP errado no aceite do termo). Trocar: edite o `.env.prod` e rode `dc up -d web api`. |
 | `TRUST_PROXY` | API | usa `X-Forwarded-For` (1º salto) como IP do cliente — rate limit, auditoria, `remoteIp` do Asaas. O compose fixa `true` (o Caddy sobrescreve o cabeçalho e a porta da API não é publicada). Sem a env: ligado na Vercel e fora de produção, desligado em produção. |
 
 ## 3. Deploy

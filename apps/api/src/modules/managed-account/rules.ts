@@ -1,6 +1,7 @@
 import {
   MANAGED_ACCOUNT_DOCUMENT_STATUS_LABELS,
   MANAGED_ACCOUNT_GENERAL_STATUS_LABELS,
+  MANAGED_ACCOUNT_REQUEST_FIELD_LABELS,
   MANAGED_AUTO_DEBIT_STATUS_LABELS,
   onlyDigits,
   roundCents,
@@ -10,6 +11,7 @@ import {
   type ManagedAccountRequestStatus,
   type ManagedAutoDebit,
   type ManagedAutoDebitFailureCode,
+  type UpdateManagedAccountRequestInput,
 } from '@annetec/contracts'
 import type { AsaasAccountStatusSnapshot, ManagedAccountDocumentsSnapshot, ManagedAccountRequestData } from '@/db/schema'
 import type { AsaasAccountDocuments, AsaasCreateSubaccountInput, AsaasTransferStatus } from '@/integrations/asaas/types'
@@ -69,6 +71,69 @@ export function subaccountPayload(data: ManagedAccountRequestData): AsaasCreateS
   if (data.site) payload.site = data.site
   if (data.address.complement) payload.complement = data.address.complement
   return payload
+}
+
+export interface RequestCorrection {
+  /** Dados do pedido depois da correção (sem o histórico `corrections`, que o serviço acrescenta). */
+  next: ManagedAccountRequestData
+  /** Só o que mudou: campo → antes/depois (vai para a auditoria). */
+  changes: Partial<Record<keyof UpdateManagedAccountRequestInput, { de: unknown; para: unknown }>>
+  /** Rótulos dos campos alterados, na ordem do formulário. */
+  fields: string[]
+}
+
+/**
+ * Correção do superadmin nos dados do pedido (antes da aprovação). Pura: devolve
+ * os dados novos e o antes/depois do que mudou. Nome e CPF/CNPJ nunca mudam
+ * aqui (vêm do cadastro do clube). `companyType` só vale para CNPJ e
+ * `birthDate` só para CPF — o contrário é erro de validação.
+ */
+export function correctRequestData(
+  data: ManagedAccountRequestData,
+  input: UpdateManagedAccountRequestInput,
+): { ok: true; correction: RequestCorrection } | { ok: false; path: string; message: string } {
+  const person = personTypeOf(data.cpfCnpj) ?? 'PJ'
+  if (input.companyType !== undefined && person !== 'PJ') {
+    return { ok: false, path: 'companyType', message: 'O tipo de empresa só vale para clube com CNPJ' }
+  }
+  if (input.birthDate !== undefined && person !== 'PF') {
+    return { ok: false, path: 'birthDate', message: 'A data de nascimento só vale para clube com CPF' }
+  }
+  const candidate: ManagedAccountRequestData = {
+    ...data,
+    ...(input.companyType !== undefined ? { companyType: input.companyType } : {}),
+    ...(input.birthDate !== undefined ? { birthDate: input.birthDate } : {}),
+    ...(input.incomeValue !== undefined ? { incomeValue: roundCents(input.incomeValue) } : {}),
+    ...(input.email !== undefined ? { email: input.email } : {}),
+    ...(input.loginEmail !== undefined ? { loginEmail: input.loginEmail } : {}),
+    ...(input.phone !== undefined ? { phone: input.phone ?? null } : {}),
+    ...(input.mobilePhone !== undefined ? { mobilePhone: input.mobilePhone } : {}),
+    ...(input.site !== undefined ? { site: input.site ?? null } : {}),
+    ...(input.address !== undefined
+      ? {
+          address: {
+            postalCode: input.address.postalCode,
+            street: input.address.street,
+            number: input.address.number,
+            complement: input.address.complement ?? null,
+            province: input.address.province,
+            city: input.address.city ?? null,
+            state: input.address.state ? input.address.state.toUpperCase() : null,
+          },
+        }
+      : {}),
+  }
+  const changes: RequestCorrection['changes'] = {}
+  const fields: string[] = []
+  for (const key of Object.keys(MANAGED_ACCOUNT_REQUEST_FIELD_LABELS) as (keyof UpdateManagedAccountRequestInput)[]) {
+    if (input[key] === undefined) continue
+    const before = data[key] ?? null
+    const after = candidate[key] ?? null
+    if (JSON.stringify(before) === JSON.stringify(after)) continue
+    changes[key] = { de: before, para: after }
+    fields.push(MANAGED_ACCOUNT_REQUEST_FIELD_LABELS[key])
+  }
+  return { ok: true, correction: { next: candidate, changes, fields } }
 }
 
 // ---------------------------------------------------------------------------

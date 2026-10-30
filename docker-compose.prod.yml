@@ -61,6 +61,9 @@ services:
       HOSTNAME: 0.0.0.0
       # Chamadas server-side vão direto à API pela rede interna, sem passar pela internet.
       API_BASE_URL: http://api:3333
+      # Segredo web ↔ API: a web repassa o IP do navegador (x-annetec-client-ip) e a
+      # API só confia nele com este segredo. O MESMO valor vai para a API (abaixo).
+      INTERNAL_PROXY_SECRET: ${INTERNAL_PROXY_SECRET:?defina INTERNAL_PROXY_SECRET em deploy/.env.prod (openssl rand -hex 32)}
       NODE_OPTIONS: --max-old-space-size=512
     depends_on:
       api:
@@ -88,6 +91,9 @@ services:
       # Só o Caddy chega na API (porta não publicada) e ele sobrescreve o
       # X-Forwarded-For vindo da internet: o 1º salto é o IP real do cliente.
       TRUST_PROXY: "true"
+      # Chamadas da web (rede interna) trazem o IP do navegador em x-annetec-client-ip;
+      # a API só usa esse IP quando o x-annetec-proxy-secret confere com este valor.
+      INTERNAL_PROXY_SECRET: ${INTERNAL_PROXY_SECRET:?defina INTERNAL_PROXY_SECRET em deploy/.env.prod (openssl rand -hex 32)}
       STORAGE_LOCAL_DIR: /data/storage
       NODE_OPTIONS: --max-old-space-size=384
     volumes:

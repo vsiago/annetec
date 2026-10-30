@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, CircleAlert, LoaderCircle, Send } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CircleAlert, Info, LoaderCircle, Send } from 'lucide-react'
 import {
   ASAAS_COMPANY_TYPE_LABELS,
   MANAGED_ACCOUNT_TERMS_TEXT,
@@ -11,13 +11,14 @@ import {
   requestManagedAccountInput,
   type AsaasCompanyType,
   type ClubManagedAccountStatus,
+  type ManagedAccountLegalNature,
 } from '@annetec/contracts'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { FormField, FormRow, FormSelect } from '@/components/dashboard/form-dialog'
-import { requestManagedAccountAction } from '@/lib/actions/faturamento-api'
+import { getManagedAccountLegalNatureAction, requestManagedAccountAction } from '@/lib/actions/faturamento-api'
 import { formatPhone } from '@/lib/form-schemas'
 import { cn } from '@/lib/utils'
 
@@ -25,7 +26,7 @@ const STEPS = ['Empresa', 'Contato e endereço', 'Termo', 'Revisão'] as const
 
 /** Etapa em que cada campo da API aparece (para levar a pessoa ao erro certo). */
 function stepOfField(path: string): number {
-  if (path === 'companyType' || path === 'birthDate' || path === 'incomeValue') return 0
+  if (path === 'companyType' || path === 'companyTypeConfirmed' || path === 'birthDate' || path === 'incomeValue') return 0
   if (path === 'acceptTerms' || path === 'termsVersion') return 2
   return 1
 }
@@ -44,6 +45,12 @@ function maskPhone(value: string): string {
 
 interface FormState {
   companyType: string
+  /**
+   * A pessoa confirmou o tipo de empresa. Exigido quando ele não veio da
+   * natureza jurídica na Receita (sem correspondência, consulta indisponível
+   * ou escolha diferente da sugerida) — nunca um tipo silencioso.
+   */
+  companyTypeConfirmed: boolean
   birthDate: string
   income: string
   email: string
@@ -66,6 +73,7 @@ function initialState(defaults: ClubManagedAccountStatus['defaults']): FormState
   const address = defaults.address ?? {}
   return {
     companyType: '',
+    companyTypeConfirmed: false,
     birthDate: '',
     income: '',
     email: defaults.email ?? '',
@@ -110,10 +118,21 @@ function buildPayload(form: FormState, personType: 'PJ' | 'PF' | null, termsVers
   }
 }
 
+/** "3999" → "399-9" (como a Receita escreve o código da natureza jurídica). */
+function natureCode(code: string | null): string {
+  return code && code.length === 4 ? `${code.slice(0, 3)}-${code.slice(3)}` : (code ?? '')
+}
+
 /**
  * Assistente do pedido de conta de recebimento gerenciada: Empresa → Contato e
  * endereço → Termo (aceite obrigatório) → Revisão e envio. Erros da API
  * aparecem no campo; se o campo está em outra etapa, a pessoa volta até ele.
+ *
+ * Tipo de empresa (CNPJ): vem PRÉ-SELECIONADO pela natureza jurídica do CNPJ na
+ * Receita (consulta de CNPJ do projeto: "Associação Privada" → Associação,
+ * "Sociedade Empresária Limitada" → LTDA…). Sem correspondência, com a
+ * consulta indisponível ou escolhendo outro tipo, a pessoa precisa confirmar —
+ * nunca fica um padrão silencioso (ex.: MEI para uma associação).
  */
 export function ManagedAccountWizard({
   open,
@@ -135,6 +154,8 @@ export function ManagedAccountWizard({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [nature, setNature] = useState<ManagedAccountLegalNature | null>(null)
+  const [natureLoading, setNatureLoading] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -145,6 +166,34 @@ export function ManagedAccountWizard({
     // Reabrir recomeça com os dados do cadastro.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  // Natureza jurídica do CNPJ na Receita → tipo de empresa pré-selecionado.
+  useEffect(() => {
+    if (!open || personType === 'PF') return
+    let cancelled = false
+    setNatureLoading(true)
+    void getManagedAccountLegalNatureAction(tenantSlug)
+      .then(result => {
+        if (cancelled) return
+        const value = result.success ? result.data : null
+        setNature(value)
+        const suggested = value?.suggestedCompanyType
+        if (suggested) setForm(current => (current.companyType ? current : { ...current, companyType: suggested }))
+      })
+      .catch(() => {
+        if (!cancelled) setNature(null)
+      })
+      .finally(() => {
+        if (!cancelled) setNatureLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, personType, tenantSlug])
+
+  const suggestedType = nature?.suggestedCompanyType ?? null
+  /** Precisa confirmar: tipo escolhido sem respaldo da Receita (ou diferente do sugerido). */
+  const needsTypeConfirmation = personType !== 'PF' && !!form.companyType && form.companyType !== suggestedType
 
   const termsVersion = status.terms.version || MANAGED_ACCOUNT_TERMS_VERSION
   const termsText = status.terms.text || MANAGED_ACCOUNT_TERMS_TEXT
@@ -171,6 +220,9 @@ export function ManagedAccountWizard({
     }
     // Campos que o schema deixa opcionais mas a API exige conforme o tipo de pessoa.
     if (personType !== 'PF' && !form.companyType) found.companyType = 'Escolha o tipo de empresa'
+    if (needsTypeConfirmation && !form.companyTypeConfirmed) {
+      found.companyTypeConfirmed = 'Confirme que este é o tipo de empresa do clube'
+    }
     if (personType === 'PF' && !form.birthDate) found.birthDate = 'Informe a data de nascimento'
     if (parseBRL(form.income) === null) found.incomeValue = 'Informe o faturamento mensal estimado'
     return found
@@ -224,7 +276,14 @@ export function ManagedAccountWizard({
       ['CPF/CNPJ', defaults.cpfCnpj ?? '—'],
       personType === 'PF'
         ? ['Data de nascimento', form.birthDate ? form.birthDate.split('-').reverse().join('/') : '—']
-        : ['Tipo de empresa', ASAAS_COMPANY_TYPE_LABELS[form.companyType as AsaasCompanyType] ?? '—'],
+        : [
+            'Tipo de empresa',
+            ASAAS_COMPANY_TYPE_LABELS[form.companyType as AsaasCompanyType]
+              ? `${ASAAS_COMPANY_TYPE_LABELS[form.companyType as AsaasCompanyType]} (${
+                  form.companyType === suggestedType ? 'pela natureza jurídica na Receita' : 'confirmado por você'
+                })`
+              : '—',
+          ],
       ['Faturamento mensal estimado', parseBRL(form.income) === null ? '—' : formatBRL(parseBRL(form.income) ?? 0)],
       ['E-mail de contato', form.email],
       ['E-mail de acesso à conta', form.loginEmail],
@@ -238,7 +297,7 @@ export function ManagedAccountWizard({
         }`,
       ],
     ],
-    [defaults.name, defaults.cpfCnpj, personType, form],
+    [defaults.name, defaults.cpfCnpj, personType, form, suggestedType],
   )
 
   const last = step === STEPS.length - 1
@@ -297,15 +356,60 @@ export function ManagedAccountWizard({
                   />
                 </FormField>
               ) : (
-                <FormField label="Tipo de empresa" required error={errors.companyType}>
-                  <FormSelect
-                    value={form.companyType}
-                    onChange={value => set('companyType', value, ['companyType'])}
-                    placeholder="Escolha o tipo"
-                    invalid={!!errors.companyType}
-                    options={Object.entries(ASAAS_COMPANY_TYPE_LABELS).map(([value, label]) => ({ value, label }))}
-                  />
-                </FormField>
+                <div className="space-y-2">
+                  <FormField label="Tipo de empresa" required error={errors.companyType}>
+                    <FormSelect
+                      value={form.companyType}
+                      onChange={value => {
+                        set('companyType', value, ['companyType', 'companyTypeConfirmed'])
+                        set('companyTypeConfirmed', false)
+                      }}
+                      placeholder={natureLoading ? 'Consultando a Receita…' : 'Escolha o tipo'}
+                      invalid={!!errors.companyType}
+                      options={Object.entries(ASAAS_COMPANY_TYPE_LABELS).map(([value, label]) => ({ value, label }))}
+                    />
+                  </FormField>
+                  {natureLoading ? (
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      Consultando a natureza jurídica do CNPJ na Receita…
+                    </p>
+                  ) : nature?.status === 'encontrada' && suggestedType && form.companyType === suggestedType ? (
+                    <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      Pré-selecionado pela natureza jurídica na Receita: {nature.name ?? 'sem nome'}
+                      {nature.code ? ` (${natureCode(nature.code)})` : ''}.
+                    </p>
+                  ) : (
+                    <p className="flex items-start gap-1.5 rounded-lg border border-[#FEDF89] bg-[#FFFAEB] px-3 py-2 text-xs text-[#93370D]">
+                      <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>
+                        {nature?.status === 'encontrada'
+                          ? suggestedType
+                            ? `A Receita indica "${nature.name ?? natureCode(nature.code)}" (${ASAAS_COMPANY_TYPE_LABELS[suggestedType]}). Você escolheu outro tipo: confira antes de continuar.`
+                            : `A natureza jurídica na Receita é "${nature.name ?? natureCode(nature.code)}", sem tipo equivalente direto no Asaas. Escolha o tipo que melhor descreve o clube e confirme.`
+                          : 'Não conseguimos consultar a natureza jurídica do CNPJ agora. Escolha o tipo de empresa com atenção e confirme.'}
+                      </span>
+                    </p>
+                  )}
+                  {needsTypeConfirmation ? (
+                    <div className="flex items-start gap-2.5">
+                      <Checkbox
+                        id="mg-tipo-confirma"
+                        checked={form.companyTypeConfirmed}
+                        onCheckedChange={value => set('companyTypeConfirmed', value === true, ['companyTypeConfirmed'])}
+                        aria-invalid={!!errors.companyTypeConfirmed}
+                        className="mt-0.5"
+                      />
+                      <label htmlFor="mg-tipo-confirma" className="text-sm leading-snug text-foreground">
+                        Confirmo que o clube é{' '}
+                        <strong>{ASAAS_COMPANY_TYPE_LABELS[form.companyType as AsaasCompanyType] ?? form.companyType}</strong>, de acordo com o
+                        CNPJ.
+                      </label>
+                    </div>
+                  ) : null}
+                  {errors.companyTypeConfirmed ? <p className="text-xs text-destructive">{errors.companyTypeConfirmed}</p> : null}
+                </div>
               )}
               <FormField
                 label="Faturamento mensal estimado (R$)"

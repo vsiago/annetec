@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Building2, Handshake, LayoutDashboard, ReceiptText, SlidersHorizontal, Wallet } from 'lucide-react'
+import { ArrowUpRight, Building2, Handshake, LayoutDashboard, ReceiptText, SlidersHorizontal, Wallet } from 'lucide-react'
+import { approvalsHref } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
 import { PageContainer } from '@/components/admin-platform/ui/page-container'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
@@ -19,7 +20,6 @@ import {
   getPlatformBillingSummaryAction,
   listPlatformPlanPricingAction,
 } from '@/lib/actions/platform-billing-api'
-import { listManagedAccountsAction } from '@/lib/actions/platform-managed-accounts-api'
 import { canSimulatePayments } from '@/lib/adapters/platform-console'
 
 /**
@@ -57,8 +57,6 @@ function FinanceiroPlataforma() {
   const settings = useConsoleData(() => getPlatformBillingSettingsAction(), [])
   const plans = useConsoleData(() => listPlatformPlanPricingAction(), [])
   // Pedidos de conta gerenciada aguardando aprovação (contador do botão).
-  const managedPending = useConsoleData(() => listManagedAccountsAction({ status: 'pendente' }), [version])
-  const pendingRequests = managedPending.data?.length ?? 0
 
   // "Simular pagamento" só aparece quando o servidor diz que é demonstração (gateway simulado ou ambiente de testes).
   const canSimulate = settings.data ? canSimulatePayments(settings.data.gateway, settings.data.sandbox) : false
@@ -88,16 +86,13 @@ function FinanceiroPlataforma() {
         actions={
           <>
             <RefreshButton loading={summary.loading} onClick={() => setVersion(value => value + 1)} />
+            {/* Pedidos e contas gerenciadas moram em Aprovações (com o contador de pendentes). */}
             <Button variant="outline" asChild className="min-h-10 gap-2 rounded-[10px] px-4 font-semibold">
-              <Link href="/admin/financeiro/contas-gerenciadas">
+              <Link href={approvalsHref('contas-gerenciadas', { situacao: 'todas' })}>
                 <Handshake className="h-4 w-4" aria-hidden="true" />
                 Contas gerenciadas
-                {pendingRequests > 0 && (
-                  <span className="rounded-full bg-[#FEF3DC] px-2 py-0.5 text-xs font-semibold text-[#B54708]">
-                    {pendingRequests}
-                    <span className="sr-only"> {pendingRequests === 1 ? 'pedido aguardando' : 'pedidos aguardando'}</span>
-                  </span>
-                )}
+                <span className="sr-only"> (em Aprovações)</span>
+                <ArrowUpRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               </Link>
             </Button>
             <Button variant="outline" asChild className="min-h-10 gap-2 rounded-[10px] px-4 font-semibold">

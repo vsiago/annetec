@@ -1,4 +1,5 @@
 import 'server-only'
+import { forwardedClientHeaders } from '@/lib/api/internal-proxy'
 import { getToken } from '@/lib/api/session'
 
 /**
@@ -33,7 +34,11 @@ export async function proxyNotificationStream(request: Request, apiPath: string)
   const after = incoming.searchParams.get('after')
   if (after && after.length <= 64) url.searchParams.set('after', after)
 
-  const headers: Record<string, string> = { authorization: `Bearer ${token}`, accept: 'text/event-stream' }
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${token}`,
+    accept: 'text/event-stream',
+    ...forwardedClientHeaders(request.headers),
+  }
   const lastEventId = request.headers.get('last-event-id')
   if (lastEventId && lastEventId.length <= 64) headers['last-event-id'] = lastEventId
 

@@ -1,4 +1,5 @@
 import { NextResponse, type NextFetchEvent, type NextRequest } from 'next/server'
+import { forwardedClientHeaders } from '@/lib/api/internal-proxy'
 
 /**
  * Rastreabilidade — uma linha por navegação, enviada pra API real (não é
@@ -35,7 +36,7 @@ export function proxy(request: NextRequest, event: NextFetchEvent) {
 
   const token = request.cookies.get('annetec.token')?.value
   // IP do navegador (o proxy da borda grava em `x-forwarded-for`), para a API registrar o cliente e não o Next.
-  const forwardedFor = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip')
+  const clientIp = forwardedClientHeaders(request.headers)
 
   event.waitUntil(
     fetch(`${API_BASE_URL}/api/v1/activity/events`, {
@@ -43,7 +44,7 @@ export function proxy(request: NextRequest, event: NextFetchEvent) {
       headers: {
         'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...(forwardedFor ? { 'x-forwarded-for': forwardedFor } : {}),
+        ...clientIp,
       },
       body: JSON.stringify({
         kind: 'page_view',

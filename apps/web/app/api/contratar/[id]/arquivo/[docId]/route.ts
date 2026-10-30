@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server'
+import { forwardedClientHeaders } from '@/lib/api/internal-proxy'
 
 /**
  * Proxy de leitura de um documento da proposta (`GET …/documentos/:docId/arquivo`),
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
   let upstream: Response
   try {
-    upstream = await fetch(target, { cache: 'no-store' })
+    upstream = await fetch(target, { cache: 'no-store', headers: forwardedClientHeaders(request.headers) })
   } catch (error) {
     console.error('[contratar/arquivo] API indisponível:', error)
     return plain(502, 'A API não respondeu. Tente novamente em instantes.')

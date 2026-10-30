@@ -39,6 +39,7 @@ export type ProductionConfigInput = Partial<
     | 'WEB_BASE_URL'
     | 'CORS_ORIGINS'
     | 'TRUST_PROXY'
+    | 'INTERNAL_PROXY_SECRET'
     | 'EMAIL_PROVIDER'
     | 'RESEND_API_KEY'
     | 'SENDGRID_API_KEY'
@@ -285,6 +286,14 @@ export function productionConfigWarnings(e: ProductionConfigInput): string[] {
     warnings.push(
       'STORAGE_DRIVER=local em PRODUÇÃO (ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true): documentos dos clubes ficam no disco do ' +
         'servidor (volume api_storage). Garanta o backup diário (deploy/install-backup-cron.sh) e os snapshots do EBS.',
+    )
+  }
+  // Sem o segredo web↔API, as chamadas das server actions chegam com o IP do
+  // container da web: rate limit compartilhado por todos e IP errado no aceite.
+  if (!e.INTERNAL_PROXY_SECRET) {
+    warnings.push(
+      'INTERNAL_PROXY_SECRET ausente: as chamadas da web chegam com o IP do container da web (todos os usuários no mesmo ' +
+        'balde de rate limit e IP errado no aceite do termo). Gere com "openssl rand -hex 32" e defina o MESMO valor para a web e a API.',
     )
   }
   // Mesma regra de `config/env.ts`: sem env explícita, desligada em produção.

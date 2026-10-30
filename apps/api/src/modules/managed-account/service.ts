@@ -4,6 +4,8 @@ import {
   MANAGED_ACCOUNT_REQUEST_STATUS_LABELS,
   MANAGED_ACCOUNT_TERMS_TEXT,
   MANAGED_ACCOUNT_TERMS_VERSION,
+  approvalsHref,
+  companyTypeFromLegalNature,
   formatPhone,
   onlyDigits,
   roundCents,
@@ -11,10 +13,12 @@ import {
   type ClubReceivingAccount,
   type ListManagedAccountsQuery,
   type ManagedAccountDetail,
+  type ManagedAccountLegalNature,
   type ManagedAccountListItem,
   type ManagedAccountRequest,
   type RequestManagedAccountInput,
   type TenantAddress,
+  type UpdateManagedAccountRequestInput,
 } from '@annetec/contracts'
 import { and, desc, eq, inArray, isNull, lt, ne, or } from 'drizzle-orm'
 import { allowedClubAsaasEnvironments } from '@/config/assert-production'
@@ -30,6 +34,7 @@ import {
 } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { AsaasApiError, type AsaasClient } from '@/integrations/asaas/client'
+import { lookupCnpj } from '@/integrations/cnpj'
 import type { AsaasSubaccount } from '@/integrations/asaas/types'
 import { decryptSecret, encryptSecret } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
@@ -50,6 +55,7 @@ import { debitDto, listDebitsOf, type DebitRow } from './queries'
 import {
   APPROVABLE_REQUEST_STATUSES,
   OPEN_REQUEST_STATUSES,
+  correctRequestData,
   documentsSnapshotOf,
   formatCpfCnpj,
   generalStatusOf,
@@ -170,7 +176,11 @@ async function latestRequest(orgId: string): Promise<RequestRow | null> {
   return row ?? null
 }
 
-export function requestDto(row: RequestRow): ManagedAccountRequest {
+/**
+ * `revealDocument`: CPF/CNPJ completo (console da plataforma, quem aprova
+ * precisa conferir). Na visão do clube ele vem mascarado.
+ */
+export function requestDto(row: RequestRow, options: { revealDocument?: boolean } = {}): ManagedAccountRequest {
   const data = row.data
   const person = personTypeOf(data.cpfCnpj) ?? 'PJ'
   return {
@@ -178,7 +188,7 @@ export function requestDto(row: RequestRow): ManagedAccountRequest {
     status: row.status,
     statusLabel: MANAGED_ACCOUNT_REQUEST_STATUS_LABELS[row.status],
     name: data.name,
-    cpfCnpj: maskCpfCnpj(data.cpfCnpj),
+    cpfCnpj: options.revealDocument ? formatCpfCnpj(data.cpfCnpj) : maskCpfCnpj(data.cpfCnpj),
     personType: person,
     companyType: data.companyType ?? null,
     birthDate: data.birthDate ?? null,
@@ -200,6 +210,7 @@ export function requestDto(row: RequestRow): ManagedAccountRequest {
     decidedAt: row.decidedAt ? row.decidedAt.toISOString() : null,
     refuseReason: row.refuseReason ?? null,
     lastError: row.lastError ?? null,
+    corrections: (data.corrections ?? []).map(item => ({ at: item.at, byName: item.byName, fields: item.fields })),
   }
 }
 
@@ -533,11 +544,31 @@ export const managedAccountService = {
       kind: 'managed_account_requested',
       organizationId: orgId,
       title: `${basics.name} pediu a conta gerenciada`,
-      body: 'Aprovar ou recusar em Financeiro → Contas gerenciadas',
-      link: `/admin/financeiro/contas-gerenciadas?clube=${encodeURIComponent(orgId)}`,
+      body: 'Aprovar ou recusar em Aprovações › Contas gerenciadas',
+      link: approvalsHref('contas-gerenciadas', { clube: orgId }),
       dedupeKey: `managed_account_requested:${inserted.id}`,
     })
     return this.clubStatus(orgId)
+  },
+
+  /**
+   * Natureza jurídica do CNPJ do clube na Receita (consulta de CNPJ do projeto)
+   * e o tipo de empresa sugerido para o pedido. Nunca lança por falha da
+   * consulta: `indisponivel` e a tela pede a escolha manual.
+   */
+  async legalNature(orgId: string): Promise<ManagedAccountLegalNature> {
+    const basics = await tenantBasics(orgId)
+    const empty = { code: null, name: null, mei: null, suggestedCompanyType: null }
+    if (personTypeOf(basics.document) !== 'PJ') return { status: 'nao_se_aplica', ...empty }
+    try {
+      const lookup = await lookupCnpj(onlyDigits(basics.document))
+      if (!lookup.result) return { status: lookup.unavailable ? 'indisponivel' : 'nao_encontrada', ...empty }
+      const nature = { code: lookup.result.legalNatureCode, name: lookup.result.legalNatureName, mei: lookup.result.mei ?? null }
+      return { status: 'encontrada', ...nature, suggestedCompanyType: companyTypeFromLegalNature(nature) }
+    } catch (error) {
+      logger.warn({ tenantId: orgId, err: errorText(error) }, 'Conta gerenciada: consulta da natureza jurídica indisponível')
+      return { status: 'indisponivel', ...empty }
+    }
   },
 
   /**
@@ -654,7 +685,7 @@ export const managedAccountService = {
       organizationId: orgId,
       tenantName: basics.name,
       tenantSlug: basics.slug,
-      request: request ? requestDto(request) : null,
+      request: request ? requestDto(request, { revealDocument: true }) : null,
       account: await receivingAccountDto(row, orgId),
       asaasAccountId: (managed ? row!.asaasAccountId : null) ?? request?.asaasAccountId ?? null,
       walletId: (managed ? row!.walletId : null) ?? request?.walletId ?? null,
@@ -776,6 +807,48 @@ export const managedAccountService = {
     await afterConnected(orgId, previous)
     await notifyDecision(orgId, true, null)
     return this.detail(orgId, { withBalance: false })
+  },
+
+  /**
+   * Correção dos dados do pedido pelo superadmin ANTES da aprovação (pendente
+   * ou com falha, sem subconta criada no Asaas). O aceite do termo não muda.
+   * Devolve o antes/depois para a auditoria; sem mudança real, não grava.
+   */
+  async updateRequest(
+    orgId: string,
+    input: UpdateManagedAccountRequestInput,
+    actor: { userId: string | null; name: string | null },
+  ): Promise<{ detail: ManagedAccountDetail; requestId: string; changes: Record<string, { de: unknown; para: unknown }> }> {
+    const request = await latestRequest(orgId)
+    if (!request || !APPROVABLE_REQUEST_STATUSES.includes(request.status)) {
+      throw AppError.conflict('Só dá para corrigir um pedido que ainda aguarda aprovação.')
+    }
+    if (request.asaasAccountId) {
+      throw AppError.conflict('A subconta deste pedido já existe no Asaas: os dados não podem mais ser corrigidos por aqui.')
+    }
+    const result = correctRequestData(request.data, input)
+    if (!result.ok) throw AppError.validation([{ path: result.path, message: result.message }])
+    const { next, changes, fields } = result.correction
+    if (fields.length === 0) return { detail: await this.detail(orgId, { withBalance: false }), requestId: request.id, changes: {} }
+
+    const now = new Date()
+    const data: ManagedAccountRequestData = {
+      ...next,
+      corrections: [...(request.data.corrections ?? []), { at: now.toISOString(), byUserId: actor.userId, byName: actor.name, fields }],
+    }
+    const [updated] = await db
+      .update(managedAccountRequests)
+      .set({ data, updatedAt: now })
+      .where(
+        and(
+          eq(managedAccountRequests.id, request.id),
+          inArray(managedAccountRequests.status, APPROVABLE_REQUEST_STATUSES),
+          isNull(managedAccountRequests.asaasAccountId),
+        ),
+      )
+      .returning({ id: managedAccountRequests.id })
+    if (!updated) throw AppError.conflict('O pedido mudou enquanto você corrigia (aprovado, recusado ou em criação). Recarregue.')
+    return { detail: await this.detail(orgId, { withBalance: false }), requestId: request.id, changes }
   },
 
   /** Recusa (pendente ou falhou) com motivo. */

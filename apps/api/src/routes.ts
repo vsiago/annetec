@@ -22,6 +22,7 @@ import { holdingController } from '@/modules/holding/controller'
 import { managedAccountsPlatformController } from '@/modules/managed-account/platform-controller'
 import { transferValidationController } from '@/modules/managed-account/transfer-validation'
 import { platformAccessGuard } from '@/http/middleware/platform-access'
+import { platformApprovalsController } from '@/modules/platform-approvals/controller'
 import { platformUsersController } from '@/modules/platform-users/controller'
 import { platformSellerController } from '@/modules/platform-sales/seller-controller'
 import { platformSalesTeamController } from '@/modules/platform-sales/team-controller'
@@ -58,6 +59,8 @@ export const routes = new Hono<AppEnv>()
   .route('/api/v1/public/contratacao', onboardingPublicController)
   .route('/api/v1/public/arquivos', publicFilesController)
   .route('/api/v1/platform/onboarding', onboardingPlatformController)
+  // Central de Aprovações do console: contagem das três filas (clubes, contas gerenciadas, descontos).
+  .route('/api/v1/platform/aprovacoes', platformApprovalsController)
   .route('/api/v1/platform/emails', platformEmailsController)
   // Cobrança da plataforma, guard de restrição e holding (Q2). O guard vem ANTES
   // de toda rota de inquilino; `/public`, `/cliente` e `/assinatura-annetec` passam sempre.

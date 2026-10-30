@@ -1,7 +1,7 @@
 'use client'
 
 import type { CSSProperties } from 'react'
-import { ArrowRight, BadgeCheck, BadgePercent, BellRing, CircleDollarSign, CircleX, UserPlus, X, type LucideIcon } from 'lucide-react'
+import { ArrowRight, BadgeCheck, BadgePercent, BellRing, CircleDollarSign, CircleX, ClipboardCheck, UserPlus, X, type LucideIcon } from 'lucide-react'
 import { NOTIFICATION_KIND_LABELS, NOTIFICATION_SIGNUP_VIA_LABELS, type AppNotification } from '@annetec/contracts'
 import { amountLabel, initialsOf, isPayment, platformHeadline } from '@/lib/notifications/format'
 import { cn } from '@/lib/utils'
@@ -248,6 +248,7 @@ export function SummaryToast({ count, onOpen, onClose }: { count: number; onOpen
 export function salesNotificationLook(notification: Pick<AppNotification, 'kind'>): { icon: LucideIcon; className: string } {
   if (notification.kind === 'sales_discount_approved') return { icon: BadgeCheck, className: 'bg-[#ECFDF3] text-[#067647]' }
   if (notification.kind === 'sales_discount_rejected') return { icon: CircleX, className: 'bg-[#FEF3F2] text-[#B42318]' }
+  if (notification.kind === 'onboarding_submitted') return { icon: ClipboardCheck, className: 'bg-[#EEF4FF] text-[#1E2A4A]' }
   return { icon: BadgePercent, className: 'bg-[#FFFAEB] text-[#B54708]' }
 }
 

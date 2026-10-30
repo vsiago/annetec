@@ -8,6 +8,9 @@
 #
 # X-Forwarded-For: o Caddy DESCARTA o valor que vem da internet (nenhum proxy
 # confiável configurado) e grava o IP real — é nisso que o TRUST_PROXY da API confia.
+# A web repassa esse IP à API (rede interna) em x-annetec-client-ip, provado pelo
+# INTERNAL_PROXY_SECRET; um x-annetec-client-ip vindo da internet direto para a
+# API não tem o segredo e é ignorado.
 
 {
 	email {$ACME_EMAIL}

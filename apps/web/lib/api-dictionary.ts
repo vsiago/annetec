@@ -468,6 +468,7 @@ export const annetecModules: ApiModule[] = [
           { method: 'DELETE', route: '/configuracoes/recebimento', description: 'Desconecta a conta de recebimento; 409 enquanto houver assinaturas vinculadas a ela.', access: 'admin' },
           { method: 'GET', route: '/configuracoes/recebimento/gerenciada', description: 'Conta de recebimento gerenciada pela ANNETEC: último pedido, conta atual, se pode pedir (canRequest/blockedReason), dados pré-preenchidos e o termo de aceite.', access: 'admin' },
           { method: 'POST', route: '/configuracoes/recebimento/gerenciada', description: 'Pede a conta gerenciada com o aceite do termo (versão atual). Só o administrador do clube; conta própria com assinaturas vinculadas ou pedido em aberto 409; 30/h por clube (429).', access: 'admin' },
+          { method: 'GET', route: '/configuracoes/recebimento/gerenciada/natureza', description: 'Natureza jurídica do CNPJ do clube na Receita e o tipo de empresa sugerido para o pedido (null = sem correspondência: a tela pede escolha e confirmação). 60/h por clube.', access: 'admin' },
           { method: 'POST', route: '/configuracoes/recebimento/gerenciada/atualizar-status', description: 'Reconsulta no Asaas a situação da conta gerenciada e dos documentos.', access: 'admin' },
           { method: 'GET', route: '/configuracoes/recebimento/gerenciada/debitos', description: 'Histórico do débito automático das faturas da ANNETEC no saldo da conta gerenciada (até 100).', access: 'admin' },
         ],
@@ -706,12 +707,28 @@ export const annetecModules: ApiModule[] = [
           { method: 'GET', route: '/?status=&q=', description: 'Clubes com pedido ou conta gerenciada: situação, documentos pendentes, débito automático e último débito.', access: 'superadmin · platform_admin' },
           { method: 'GET', route: '/:orgId', description: 'Detalhe: pedido com aceite, conta, saldo da subconta, débitos e keyRecoveryNeeded.', access: 'superadmin · platform_admin' },
           { method: 'POST', route: '/:orgId/aprovar', description: 'Aprova o pedido e cria a subconta Asaas em nome do clube.', access: 'superadmin' },
+          { method: 'PATCH', route: '/:orgId/pedido', description: 'Corrige os dados do pedido antes da aprovação (tipo de empresa, faturamento, contatos, endereço). O aceite do termo continua o original; o antes/depois vai para a auditoria.', access: 'superadmin' },
           { method: 'POST', route: '/:orgId/recusar', description: 'Recusa o pedido com motivo (notifica o clube).', access: 'superadmin' },
           { method: 'POST', route: '/:orgId/recuperar-chave', description: 'Recupera a chave da subconta já criada quando não chegou a ser gravada.', access: 'superadmin' },
           { method: 'POST', route: '/:orgId/atualizar-status', description: 'Reconsulta situação e documentos da subconta no Asaas.', access: 'superadmin' },
           { method: 'PATCH', route: '/:orgId/debito-automatico', description: 'Liga ou desliga o débito automático das faturas da ANNETEC no saldo.', access: 'superadmin' },
           { method: 'POST', route: '/:orgId/debitar-agora', description: 'Tenta o débito agora (chargeId opcional; sem ele, a fatura vencida mais antiga) e devolve o resultado.', access: 'superadmin' },
           { method: 'POST', route: '/:orgId/desconectar', description: 'Desconecta a conta gerenciada do clube (a subconta e o saldo continuam no Asaas).', access: 'superadmin' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Plataforma — Aprovações',
+    prefix: '/api/v1/platform/aprovacoes',
+    controllerRef: 'platformApprovalsController',
+    summary:
+      'Central de Aprovações do console (/admin/compliance): quantos pedidos esperam a equipe em cada fila — novos clubes, contas gerenciadas e descontos de vendedores. Alimenta o contador do menu e as pílulas das abas.',
+    sections: [
+      {
+        heading: 'Resumo',
+        items: [
+          { method: 'GET', route: '/resumo', description: 'Pendentes por tipo (clubs, managedAccounts, discounts) e o total.', access: 'superadmin · platform_admin' },
         ],
       },
     ],

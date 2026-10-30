@@ -1,4 +1,10 @@
-import { forceManagedDebitInput, listManagedAccountsQuery, refuseManagedAccountInput, updateManagedAutoDebitInput } from '@annetec/contracts'
+import {
+  forceManagedDebitInput,
+  listManagedAccountsQuery,
+  refuseManagedAccountInput,
+  updateManagedAccountRequestInput,
+  updateManagedAutoDebitInput,
+} from '@annetec/contracts'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { requireAuth, requirePlatformRole } from '@/http/middleware/auth'
@@ -46,6 +52,28 @@ export const managedAccountsPlatformController = new Hono<AppEnv>()
       organizationId: orgId,
       metadata: { subconta: detail.asaasAccountId, carteira: detail.walletId, webhook: detail.account.webhookStatus },
     })
+    return ok(c, detail)
+  })
+
+  // Correção dos dados do pedido antes de aprovar (tipo de empresa, faturamento,
+  // contatos, endereço). O aceite do termo continua o original; o antes/depois
+  // de cada campo vai para a auditoria.
+  .patch('/:orgId/pedido', superadmin, param(orgParam), json(updateManagedAccountRequestInput), async c => {
+    const { orgId } = c.req.valid('param')
+    const session = c.get('auth')
+    const { detail, requestId, changes } = await managedAccountService.updateRequest(orgId, c.req.valid('json'), {
+      userId: session?.user.id ?? null,
+      name: session?.user.name ?? null,
+    })
+    if (Object.keys(changes).length > 0) {
+      await recordAudit(c, {
+        action: 'managed_account.request_corrected',
+        resource: 'managed_account',
+        resourceId: orgId,
+        organizationId: orgId,
+        metadata: { pedido: requestId, alteracoes: changes },
+      })
+    }
     return ok(c, detail)
   })
 

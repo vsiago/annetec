@@ -83,6 +83,14 @@ const managedRateLimit = rateLimit({
   keyOf: c => c.get('tenant')?.id ?? null,
 })
 
+/** Consulta da natureza jurídica (Receita) ao abrir o assistente: 60 por hora por clube. */
+const legalNatureRateLimit = rateLimit({
+  key: 'clube:conta-gerenciada:natureza',
+  limit: 60,
+  windowMs: 60 * 60 * 1000,
+  keyOf: c => c.get('tenant')?.id ?? null,
+})
+
 export const clubBillingAdminController = new Hono<AppEnv>()
   .use('*', resolveTenant, requireAuth, requireTenantRole('admin'))
 
@@ -281,6 +289,11 @@ export const clubBillingAdminController = new Hono<AppEnv>()
 
   // ---- Conta gerenciada pela ANNETEC (subconta Asaas do clube) -------------
   .get('/configuracoes/recebimento/gerenciada', async c => ok(c, await managedAccountService.clubStatus(tenantOf(c).id)))
+
+  // Natureza jurídica do CNPJ na Receita → tipo de empresa sugerido no assistente do pedido.
+  .get('/configuracoes/recebimento/gerenciada/natureza', legalNatureRateLimit, async c =>
+    ok(c, await managedAccountService.legalNature(tenantOf(c).id)),
+  )
 
   // Pedido + aceite do termo: só o ADMIN DO CLUBE (o aceite é do clube; a equipe ANNETEC não pede por ele).
   .post('/configuracoes/recebimento/gerenciada', managedRateLimit, limitBody(8), json(requestManagedAccountInput), async c => {

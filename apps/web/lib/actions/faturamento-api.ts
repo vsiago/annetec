@@ -21,6 +21,7 @@ import type {
   ListPaymentEventsQuery,
   ManualChargePreview,
   ManualChargeResult,
+  ManagedAccountLegalNature,
   ManagedAutoDebit,
   ManualPaymentInput,
   PageMeta,
@@ -443,6 +444,14 @@ export async function requestManagedAccountAction(
       base(tenantSlug, '/configuracoes/recebimento/gerenciada'),
       { method: 'POST', body: input },
     )
+    return data
+  })
+}
+
+/** Natureza jurídica do CNPJ (Receita) e o tipo de empresa sugerido para o assistente do pedido. */
+export async function getManagedAccountLegalNatureAction(tenantSlug: string): Promise<ActionResult<ManagedAccountLegalNature>> {
+  return run(async () => {
+    const { data } = await apiFetch<ManagedAccountLegalNature>(base(tenantSlug, '/configuracoes/recebimento/gerenciada/natureza'))
     return data
   })
 }

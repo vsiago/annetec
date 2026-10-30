@@ -42,6 +42,7 @@ import {
 import { AppError } from '@/http/errors'
 import { lookupCnpj } from '@/integrations/cnpj'
 import { logger } from '@/lib/logger'
+import { notify, proposalSubmittedNotification } from '@/lib/notifications'
 import { checkUpload, discardFile, findFile, publicFileUrl, sanitizeFileName, storeFile } from '@/lib/storage'
 import type { PlatformFileRow } from '@/lib/storage/files'
 import { cancelActivationCharge, getActivationCharge } from '@/modules/platform-billing/activation'
@@ -785,6 +786,16 @@ export async function submitProposal(id: string): Promise<void> {
     }).catch(() => {})
   }
   await notifyApplicant(row, 'onboarding_submitted')
+  // Sino da equipe: o pedido aparece em Aprovações › Novos clubes (notify nunca lança).
+  await notify(
+    proposalSubmittedNotification({
+      proposalId: row.id,
+      code: row.code,
+      clubName: row.brand?.clubName || row.tradeName || row.legalName || row.company?.legalName || 'Um clube',
+      resubmission,
+      submittedAt: now,
+    }),
+  )
 }
 
 /** Cancelamento pelo candidato (`actor` nulo) ou pelo console. */

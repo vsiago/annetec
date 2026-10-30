@@ -1,5 +1,6 @@
 import 'server-only'
 import type { Envelope, ErrorCode, FieldIssue, PageMeta } from '@annetec/contracts'
+import { clientIpHeaders } from './client-ip'
 import { getToken } from './session'
 
 /**
@@ -49,7 +50,10 @@ export interface RequestOptions {
   /** Repassado ao `fetch` do Next para controle de cache/revalidação. */
   next?: { revalidate?: number | false; tags?: string[] }
   cache?: RequestCache
-  /** Cabeçalhos extras (ex.: `x-forwarded-for` com o IP do navegador, para o rate limit da API). */
+  /**
+   * Cabeçalhos extras. O IP do navegador (`clientIpHeaders`) já vai em toda
+   * chamada sem cache; o que vier aqui tem precedência.
+   */
   headers?: Record<string, string>
 }
 
@@ -72,6 +76,9 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   const token = options.token !== undefined ? options.token : await getToken()
+  // IP do navegador para a API (rate limit por pessoa, auditoria, aceite do termo).
+  // Leitura cacheada (`next.revalidate`) é compartilhada entre pessoas: não leva IP.
+  const clientIp = options.next ? {} : await clientIpHeaders()
 
   const response = await fetch(url, {
     method: options.method ?? 'GET',
@@ -79,6 +86,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       accept: 'application/json',
       ...(options.body ? { 'content-type': 'application/json' } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...clientIp,
       ...options.headers,
     },
     body: options.body ? JSON.stringify(options.body) : undefined,

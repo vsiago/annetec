@@ -39,11 +39,60 @@ export const MANAGED_ACCOUNT_TERMS_TEXT =
 export const asaasCompanyType = z.enum(['MEI', 'LIMITED', 'INDIVIDUAL', 'ASSOCIATION'])
 export type AsaasCompanyType = z.infer<typeof asaasCompanyType>
 
+/** Ordem = ordem das opções nas telas (associação primeiro: é o caso comum dos clubes). */
 export const ASAAS_COMPANY_TYPE_LABELS: Record<AsaasCompanyType, string> = {
-  MEI: 'MEI',
+  ASSOCIATION: 'Associação',
   LIMITED: 'Sociedade limitada (LTDA)',
   INDIVIDUAL: 'Empresário individual',
-  ASSOCIATION: 'Associação',
+  MEI: 'MEI (microempreendedor individual)',
+}
+
+/** Naturezas jurídicas (código da Receita, 4 dígitos) com correspondência direta no Asaas. */
+const COMPANY_TYPE_BY_LEGAL_NATURE: Record<string, AsaasCompanyType> = {
+  /** Associação Privada. */
+  '3999': 'ASSOCIATION',
+  /** Sociedade Empresária Limitada. */
+  '2062': 'LIMITED',
+  /** Sociedade Simples Limitada. */
+  '2240': 'LIMITED',
+  /** EIRELI (natureza empresária / simples) — hoje SLU, limitada. */
+  '2305': 'LIMITED',
+  '2313': 'LIMITED',
+  /** Empresário (Individual) — MEI quando optante do SIMEI. */
+  '2135': 'INDIVIDUAL',
+}
+
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+}
+
+/**
+ * Tipo de empresa do Asaas a partir da natureza jurídica da Receita (consulta
+ * de CNPJ). Só devolve quando a correspondência é inequívoca: "Associação
+ * Privada" → ASSOCIATION, "Sociedade Empresária Limitada" → LIMITED, empresário
+ * individual → INDIVIDUAL (ou MEI, se optante do SIMEI). Sindicato, fundação,
+ * S.A., cooperativa etc. não têm tipo equivalente: `null` — a tela pede para a
+ * pessoa escolher e confirmar (nunca um padrão silencioso).
+ */
+export function companyTypeFromLegalNature(nature: {
+  code?: string | null
+  name?: string | null
+  mei?: boolean | null
+}): AsaasCompanyType | null {
+  const code = (nature.code ?? '').replace(/\D/g, '')
+  const name = normalizeText(nature.name ?? '')
+  if (nature.mei === true || /microempreendedor|\bmei\b/.test(name)) return 'MEI'
+  const byCode = code.length === 4 ? COMPANY_TYPE_BY_LEGAL_NATURE[code] : undefined
+  if (byCode) return byCode
+  if (code.length === 4) return null
+  // Sem código: só o nome, e só os casos sem ambiguidade.
+  if (name === 'associacao privada') return 'ASSOCIATION'
+  if (/^sociedade (empresaria|simples) limitada$/.test(name)) return 'LIMITED'
+  if (/^empresario( \(?individual\)?)?$/.test(name)) return 'INDIVIDUAL'
+  return null
 }
 
 /**
@@ -107,7 +156,7 @@ export const managedAccountRequest = z.object({
   statusLabel: z.string(),
   /** Razão social/nome do cadastro do clube. */
   name: z.string(),
-  /** CPF/CNPJ mascarado. */
+  /** CPF/CNPJ: mascarado na visão do clube; completo (formatado) no console da plataforma. */
   cpfCnpj: z.string().nullable(),
   personType: z.enum(['PJ', 'PF']),
   companyType: asaasCompanyType.nullable(),
@@ -132,8 +181,73 @@ export const managedAccountRequest = z.object({
   refuseReason: z.string().nullable(),
   /** Erro da criação/gravação (status `falhou`). */
   lastError: z.string().nullable(),
+  /**
+   * Correções feitas pelo superadmin antes da aprovação (o aceite do termo
+   * continua o original). Mais antiga primeiro; o antes/depois fica na auditoria.
+   */
+  corrections: z.array(
+    z.object({
+      at: z.string().datetime(),
+      byName: z.string().nullable(),
+      /** Rótulos dos campos alterados ("Tipo de empresa", "Endereço"…). */
+      fields: z.array(z.string()),
+    }),
+  ),
 })
 export type ManagedAccountRequest = z.infer<typeof managedAccountRequest>
+
+/**
+ * `PATCH /platform/contas-gerenciadas/:orgId/pedido` (só superadmin): corrige os
+ * dados do pedido ANTES da aprovação (pedido pendente ou com falha, sem subconta
+ * criada). Nome e CPF/CNPJ vêm do cadastro do clube e não mudam aqui; o aceite
+ * do termo (quem, quando, IP) fica o original. Só os campos enviados mudam.
+ */
+export const updateManagedAccountRequestInput = z
+  .object({
+    companyType: asaasCompanyType,
+    birthDate: dateOnly,
+    incomeValue: z.number().positive('Informe o faturamento mensal').max(1_000_000_000),
+    email,
+    loginEmail: email,
+    /** `null` apaga o telefone fixo. */
+    phone: telefone.nullable(),
+    mobilePhone: telefone,
+    /** `null` apaga o site. */
+    site: z.string().trim().url('Site inválido').max(200).nullable(),
+    address: managedAccountAddress,
+  })
+  .partial()
+  .refine(value => Object.values(value).some(item => item !== undefined), { message: 'Nada para corrigir' })
+export type UpdateManagedAccountRequestInput = z.infer<typeof updateManagedAccountRequestInput>
+
+/** Rótulo de cada campo corrigível (auditoria e histórico de correções). */
+export const MANAGED_ACCOUNT_REQUEST_FIELD_LABELS: Record<keyof UpdateManagedAccountRequestInput, string> = {
+  companyType: 'Tipo de empresa',
+  birthDate: 'Data de nascimento',
+  incomeValue: 'Faturamento mensal',
+  email: 'E-mail de contato',
+  loginEmail: 'E-mail de acesso',
+  phone: 'Telefone fixo',
+  mobilePhone: 'Celular',
+  site: 'Site',
+  address: 'Endereço',
+}
+
+/**
+ * `GET /t/:slug/faturamento/configuracoes/recebimento/gerenciada/natureza`:
+ * natureza jurídica do CNPJ do clube na Receita e o tipo de empresa sugerido
+ * para o pedido. `suggestedCompanyType = null` = sem correspondência (ou
+ * consulta indisponível): a tela pede escolha e confirmação.
+ */
+export const managedAccountLegalNature = z.object({
+  /** `encontrada` (Receita respondeu), `nao_encontrada`, `indisponivel` ou `nao_se_aplica` (CPF). */
+  status: z.enum(['encontrada', 'nao_encontrada', 'indisponivel', 'nao_se_aplica']),
+  code: z.string().nullable(),
+  name: z.string().nullable(),
+  mei: z.boolean().nullable(),
+  suggestedCompanyType: asaasCompanyType.nullable(),
+})
+export type ManagedAccountLegalNature = z.infer<typeof managedAccountLegalNature>
 
 /** Pré-preenchimento do formulário a partir do cadastro do clube. */
 export const managedAccountRequestDefaults = z.object({

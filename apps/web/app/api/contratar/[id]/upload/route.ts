@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { BRAND_LOGO_MAX_BYTES, KYB_MAX_FILE_BYTES } from '@annetec/contracts'
+import { forwardedClientHeaders } from '@/lib/api/internal-proxy'
 
 /**
  * Proxy do upload da contratação: browser → aqui → API.
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   )
   target.searchParams.set('chave', chave)
 
-  const forwardedFor = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip')
+  const clientIp = forwardedClientHeaders(request.headers)
   const userAgent = request.headers.get('user-agent')
 
   let upstream: Response
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       body: form,
       headers: {
         accept: 'application/json',
-        ...(forwardedFor ? { 'x-forwarded-for': forwardedFor } : {}),
+        ...clientIp,
         ...(userAgent ? { 'user-agent': userAgent } : {}),
       },
       cache: 'no-store',

@@ -164,6 +164,63 @@ describe('textos', () => {
     expect(notificationsLib.paymentMethodLabel('credit_card', 'visa', '4242')).toBe('Cartão Visa •••• 4242')
     expect(notificationsLib.paymentMethodLabel('pix')).toBe('Pix')
   })
+
+  it('pedidos que esperam decisão levam à central de Aprovações, na aba e no detalhe certos', () => {
+    const discount = notificationsLib.discountRequestedNotification({
+      requestId: 'req-1',
+      proposalId: 'prop-1',
+      proposalCode: 'ANN-0001',
+      customerName: 'Clube X',
+      sellerUserId: 'seller-1',
+      sellerName: 'Vera Vendas',
+      summary: 'adesão 50%',
+    })
+    expect(discount.link).toBe('/admin/compliance?tipo=descontos&pedido=req-1')
+
+    const submitted = notificationsLib.proposalSubmittedNotification({
+      proposalId: 'prop-1',
+      code: 'ANN-0001',
+      clubName: 'Clube X',
+      resubmission: false,
+      submittedAt: new Date('2026-10-30T12:00:00.000Z'),
+    })
+    expect(submitted).toMatchObject({
+      audience: 'platform',
+      kind: 'onboarding_submitted',
+      title: 'Clube X enviou a contratação para análise',
+      body: 'proposta ANN-0001 · Aprovações › Novos clubes',
+      link: '/admin/compliance/prop-1',
+      payload: { proposalId: 'prop-1' },
+    })
+    // Reenvio depois de correção é outro aviso (outra chave de dedupe).
+    const again = notificationsLib.proposalSubmittedNotification({
+      proposalId: 'prop-1',
+      code: 'ANN-0001',
+      clubName: 'Clube X',
+      resubmission: true,
+      submittedAt: new Date('2026-10-31T09:00:00.000Z'),
+    })
+    expect(again.title).toBe('Clube X reenviou a contratação com as correções')
+    expect(again.dedupeKey).not.toBe(submitted.dedupeKey)
+  })
+
+  it('links antigos gravados no banco são traduzidos para Aprovações, preservando o foco', async () => {
+    const { approvalsHrefFromLegacy, approvalsHref } = await import('@annetec/contracts')
+    expect(approvalsHrefFromLegacy('/admin/financeiro/contas-gerenciadas?clube=org-9')).toBe(
+      '/admin/compliance?tipo=contas-gerenciadas&clube=org-9',
+    )
+    expect(approvalsHrefFromLegacy('/admin/comercial/descontos?pedido=req-7')).toBe('/admin/compliance?tipo=descontos&pedido=req-7')
+    expect(approvalsHrefFromLegacy('/admin/comercial/descontos')).toBe('/admin/compliance?tipo=descontos')
+    expect(approvalsHrefFromLegacy('/admin/inquilinos/org-A')).toBe('/admin/inquilinos/org-A')
+    expect(approvalsHrefFromLegacy(null)).toBeNull()
+    expect(approvalsHref('contas-gerenciadas', { clube: 'org 1', situacao: 'todas', pedido: null })).toBe(
+      '/admin/compliance?tipo=contas-gerenciadas&situacao=todas&clube=org%201',
+    )
+    // Parâmetro antigo com "+" (espaço) e caractere especial: decodificado e recodificado.
+    expect(approvalsHrefFromLegacy('/admin/comercial/descontos?proposta=a+b&pedido=x%2Fy')).toBe(
+      '/admin/compliance?tipo=descontos&proposta=a%20b&pedido=x%2Fy',
+    )
+  })
 })
 
 // ---------------------------------------------------------------------------

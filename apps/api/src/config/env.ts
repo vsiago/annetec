@@ -62,6 +62,21 @@ const envSchema = z.object({
   TRUST_PROXY: z.preprocess(parseBooleanish, z.boolean().optional()),
 
   /**
+   * Segredo compartilhado entre a WEB (Next) e a API para repassar o IP do
+   * navegador nas chamadas server-side (server actions, route handlers): a web
+   * manda `x-annetec-client-ip` + `x-annetec-proxy-secret`, e a API só usa esse
+   * IP quando o segredo confere (comparação em tempo constante). Sem ele, as
+   * chamadas da web chegam com o IP do container da web — todo mundo no mesmo
+   * balde de rate limit e o IP errado no aceite do termo. Mín. 32 caracteres;
+   * o MESMO valor nos dois serviços (`openssl rand -hex 32`). Ver
+   * `lib/rate-limit.ts` (`internalClientIp`).
+   */
+  INTERNAL_PROXY_SECRET: z.preprocess(
+    emptyAsUndefined,
+    z.string().min(32, 'INTERNAL_PROXY_SECRET precisa de pelo menos 32 caracteres').max(256).optional(),
+  ),
+
+  /**
    * `preview` = deploy de DEMONSTRAÇÃO com `NODE_ENV=production`: a trava de
    * boot (`config/assert-production.ts`) aceita Asaas SANDBOX, e-mail na caixa
    * de saída (`outbox`) e disco local, e PROÍBE chave/ambiente de produção do

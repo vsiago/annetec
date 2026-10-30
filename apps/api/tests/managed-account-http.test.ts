@@ -167,6 +167,7 @@ describe('inventário', () => {
         'GET /api/v1/platform/contas-gerenciadas',
         'GET /api/v1/platform/contas-gerenciadas/:orgId',
         'PATCH /api/v1/platform/contas-gerenciadas/:orgId/debito-automatico',
+        'PATCH /api/v1/platform/contas-gerenciadas/:orgId/pedido',
         'POST /api/v1/platform/contas-gerenciadas/:orgId/aprovar',
         'POST /api/v1/platform/contas-gerenciadas/:orgId/atualizar-status',
         'POST /api/v1/platform/contas-gerenciadas/:orgId/debitar-agora',
@@ -175,7 +176,7 @@ describe('inventário', () => {
         'POST /api/v1/platform/contas-gerenciadas/:orgId/recusar',
       ].sort(),
     )
-    expect(CLUB).toHaveLength(4)
+    expect(CLUB).toHaveLength(5)
   })
 })
 
@@ -214,6 +215,30 @@ describe('superadmin', () => {
     const request = await call('POST', '/api/v1/t/clube-a/faturamento/configuracoes/recebimento/gerenciada', REQUEST_BODY)
     expect(request.status).toBe(403)
     expect(db().rows(schema.managedAccountRequests)).toHaveLength(0)
+  })
+
+  it('corrige o pedido antes de aprovar (só superadmin) e audita o antes/depois', async () => {
+    state.session = tenantSession('clube-a')
+    expect((await call('POST', '/api/v1/t/clube-a/faturamento/configuracoes/recebimento/gerenciada', { ...REQUEST_BODY, companyType: 'MEI' })).status).toBe(201)
+
+    state.session = platformSession('platform_admin')
+    expect((await call('PATCH', '/api/v1/platform/contas-gerenciadas/org-clube-a/pedido', { companyType: 'ASSOCIATION' })).status).toBe(403)
+
+    state.session = platformSession('superadmin')
+    expect((await call('PATCH', '/api/v1/platform/contas-gerenciadas/org-clube-a/pedido', {})).status).toBe(400)
+    const fixed = await call('PATCH', '/api/v1/platform/contas-gerenciadas/org-clube-a/pedido', { companyType: 'ASSOCIATION', incomeValue: 30000 })
+    expect(fixed.status).toBe(200)
+    expect(fixed.body?.data).toMatchObject({ request: { companyType: 'ASSOCIATION', incomeValue: 30000, cpfCnpj: '11.222.333/0001-81' } })
+    const { recordAudit } = await import('@/lib/audit')
+    expect(recordAudit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: 'managed_account.request_corrected',
+        metadata: expect.objectContaining({
+          alteracoes: { companyType: { de: 'MEI', para: 'ASSOCIATION' }, incomeValue: { de: 25000, para: 30000 } },
+        }),
+      }),
+    )
   })
 })
 

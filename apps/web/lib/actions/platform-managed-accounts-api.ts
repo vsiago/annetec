@@ -7,6 +7,7 @@ import type {
   ManagedAccountListItem,
   ManagedDebitResult,
   RefuseManagedAccountInput,
+  UpdateManagedAccountRequestInput,
 } from '@annetec/contracts'
 import { apiFetch } from '@/lib/api/client'
 import { run, type ActionResult } from './_api-result'
@@ -39,6 +40,17 @@ export async function getManagedAccountDetailAction(orgId: string): Promise<Acti
 export async function approveManagedAccountAction(orgId: string): Promise<ActionResult<ManagedAccountDetail>> {
   return run(async () => {
     const { data } = await apiFetch<ManagedAccountDetail>(`${BASE}/${id$(orgId)}/aprovar`, { method: 'POST', body: {} })
+    return data
+  })
+}
+
+/** Correção dos dados do pedido antes de aprovar (só superadmin; auditada). */
+export async function updateManagedAccountRequestAction(
+  orgId: string,
+  input: UpdateManagedAccountRequestInput,
+): Promise<ActionResult<ManagedAccountDetail>> {
+  return run(async () => {
+    const { data } = await apiFetch<ManagedAccountDetail>(`${BASE}/${id$(orgId)}/pedido`, { method: 'PATCH', body: input })
     return data
   })
 }

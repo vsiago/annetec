@@ -26,7 +26,11 @@ export type NotificationAudience = z.infer<typeof notificationAudience>
  *   com senha, admin cadastrou ou associado excluído que voltou);
  * - `platform_invoice_paid`: o clube pagou uma fatura da Annetec (só plataforma);
  * - `sales_discount_requested`: vendedor pediu desconto (equipe, decide o superadmin);
- * - `sales_discount_approved` / `sales_discount_rejected`: decisão (só o vendedor).
+ * - `sales_discount_approved` / `sales_discount_rejected`: decisão (só o vendedor);
+ * - `onboarding_submitted`: um clube enviou a contratação para análise (só a equipe).
+ *
+ * As que pedem decisão da equipe (`onboarding_submitted`, `managed_account_requested`,
+ * `sales_discount_requested`) levam a Aprovações (`approvalsHref`, em `./approvals`).
  */
 export const NOTIFICATION_KINDS = [
   'subscription_activated',
@@ -42,6 +46,8 @@ export const NOTIFICATION_KINDS = [
   'managed_account_decided',
   /** Débito automático da fatura ANNETEC não realizado (sino do clube). */
   'platform_auto_debit_failed',
+  /** Clube enviou a contratação para análise (sino da equipe → Aprovações › Novos clubes). */
+  'onboarding_submitted',
 ] as const
 export const notificationKind = z.enum(NOTIFICATION_KINDS)
 export type NotificationKind = z.infer<typeof notificationKind>
@@ -51,17 +57,18 @@ export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   payment_received: 'Pagamento recebido',
   client_signed_up: 'Novo cadastro',
   platform_invoice_paid: 'Fatura da Annetec paga',
-  sales_discount_requested: 'Pedido de desconto',
+  sales_discount_requested: 'Descontos de vendedores',
   sales_discount_approved: 'Desconto aprovado',
   sales_discount_rejected: 'Desconto recusado',
-  managed_account_requested: 'Pedido de conta gerenciada',
+  managed_account_requested: 'Contas gerenciadas',
   managed_account_decided: 'Conta gerenciada',
   platform_auto_debit_failed: 'Débito automático não realizado',
+  onboarding_submitted: 'Novos clubes',
 }
 
 /** Família visual/sonora: dinheiro entrando ou pessoa chegando. */
 export function notificationTone(kind: NotificationKind): 'payment' | 'signup' {
-  return kind === 'client_signed_up' ? 'signup' : 'payment'
+  return kind === 'client_signed_up' || kind === 'onboarding_submitted' ? 'signup' : 'payment'
 }
 
 /** Como o associado chegou (só `client_signed_up`). */
