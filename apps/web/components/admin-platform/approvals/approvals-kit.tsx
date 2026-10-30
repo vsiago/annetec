@@ -183,7 +183,7 @@ export function ApprovalsTabsRow<V extends string>({
   return (
     // wrap-reverse: a 2ª linha (o seletor) fica EM CIMA; `items-start` = rente à borda de baixo.
     <div className="flex flex-wrap-reverse items-start justify-between gap-x-6 gap-y-2 border-b border-border px-4 pt-3 sm:px-6">
-      <Tabs value={value} onValueChange={next => onChange(next as V)} className="min-w-0 max-w-full flex-auto gap-0">
+      <Tabs value={value} onValueChange={next => onChange(next as V)} className="min-w-0 max-w-full flex-initial gap-0">
         <SectionTabsList className="border-b-0">
           {situations.map(item => (
             <SectionTab key={item.value} value={item.value} badge={counts?.[item.value]}>
@@ -192,7 +192,8 @@ export function ApprovalsTabsRow<V extends string>({
           ))}
         </SectionTabsList>
       </Tabs>
-      <div className="min-w-0 max-w-full pb-1.5">{kindSwitcher}</div>
+      {/* ml-auto: mesmo quando quebra para a linha de cima, o seletor fica à direita. */}
+      <div className="ml-auto min-w-0 max-w-full pb-1.5">{kindSwitcher}</div>
     </div>
   )
 }

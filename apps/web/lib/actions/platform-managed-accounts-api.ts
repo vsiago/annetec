@@ -23,7 +23,7 @@ export async function listManagedAccountsAction(
   query: Partial<ListManagedAccountsQuery> = {},
 ): Promise<ActionResult<ManagedAccountListItem[]>> {
   return run(async () => {
-    const { data } = await apiFetch<ManagedAccountListItem[]>(`${BASE}/`, {
+    const { data } = await apiFetch<ManagedAccountListItem[]>(BASE, {
       query: { status: query.status, q: query.q?.trim().slice(0, 100) || undefined },
     })
     return data ?? []
