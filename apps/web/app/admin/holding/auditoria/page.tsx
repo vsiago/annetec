@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { ChevronLeft, ChevronRight, RefreshCw, ScrollText, Search, X } from 'lucide-react'
 import { Button } from '@/components/admin-platform/ui/button'
 import { PageContainer } from '@/components/admin-platform/ui/page-container'
@@ -17,6 +17,7 @@ import { useResource } from '@/components/holding/use-resource'
 import { useTenants } from '@/contexts/tenants-context'
 import { listHoldingAuditAction } from '@/lib/actions/holding-api'
 import { AUDIT_ACTION_FILTERS, describeError, formatInt, type HoldingAuditPage } from '@/lib/adapters/holding'
+import { replaceQuery } from '@/lib/replace-query'
 import { cn } from '@/lib/utils'
 
 const PER_PAGE = 25
@@ -99,7 +100,6 @@ export default function HoldingAuditPage() {
  * filtrada por `organizationId`). Fica em Avançado: serve ao suporte.
  */
 function AuditContent() {
-  const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { tenants } = useTenants()
@@ -131,8 +131,8 @@ function AuditContent() {
   // Filtros na URL — link compartilhável e "voltar" do navegador preservam a busca.
   useEffect(() => {
     const query = filtersToQuery(filters)
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
-  }, [filters, pathname, router])
+    replaceQuery(query ? `${pathname}?${query}` : pathname)
+  }, [filters, pathname])
 
   // Busca por texto com pequena espera, para não bater na API a cada tecla.
   useEffect(() => {

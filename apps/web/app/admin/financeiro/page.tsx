@@ -21,6 +21,7 @@ import {
   listPlatformPlanPricingAction,
 } from '@/lib/actions/platform-billing-api'
 import { canSimulatePayments } from '@/lib/adapters/platform-console'
+import { replaceQuery } from '@/lib/replace-query'
 
 /**
  * Financeiro da PLATAFORMA: o que os clubes pagam à ANNETEC pelo uso da
@@ -64,7 +65,7 @@ function FinanceiroPlataforma() {
   // Links antigos: régua e preços mudaram de lugar; linha do tempo virou histórico dentro de cada clube.
   useEffect(() => {
     if (requested && MOVED[requested]) router.replace(MOVED[requested]!)
-    else if (requested === 'eventos') router.replace(pathname, { scroll: false })
+    else if (requested === 'eventos') replaceQuery(pathname)
   }, [requested, router, pathname])
 
   const setTab = (value: string) => {
@@ -72,7 +73,7 @@ function FinanceiroPlataforma() {
     if (value === 'resumo') params.delete('aba')
     else params.set('aba', value)
     const query = params.toString()
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    replaceQuery(query ? `${pathname}?${query}` : pathname)
   }
 
   const overdue = summary.data?.overdueCharges ?? 0

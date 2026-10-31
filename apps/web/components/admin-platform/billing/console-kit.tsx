@@ -264,7 +264,7 @@ export function ConfirmDialog({
   confirmLabel: string
   destructive?: boolean
   /** Campo de motivo: `minLength` > 0 torna obrigatório. */
-  reason?: { label: string; placeholder?: string; minLength?: number; defaultValue?: string }
+  reason?: { label: string; placeholder?: string; minLength?: number; maxLength?: number; defaultValue?: string }
   onConfirm: (reason: string) => Promise<boolean>
   children?: ReactNode
 }) {
@@ -309,7 +309,7 @@ export function ConfirmDialog({
               onChange={event => setText(event.target.value)}
               placeholder={reason.placeholder}
               rows={3}
-              maxLength={2000}
+              maxLength={reason.maxLength ?? 2000}
             />
             {min > 0 && (
               <p className={cn('text-xs', invalid && trimmed.length > 0 ? 'text-[#B42318]' : 'text-muted-foreground')}>

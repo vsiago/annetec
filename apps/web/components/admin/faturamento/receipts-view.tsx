@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { Download, HandCoins, LoaderCircle, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -29,6 +29,7 @@ import {
   toneClass,
   todaySP,
 } from '@/lib/adapters/faturamento'
+import { replaceQuery } from '@/lib/replace-query'
 import { cn } from '@/lib/utils'
 import { LoadError, MethodLabel, MetricTile, TableSkeleton } from './billing-ui'
 import { ChargeDetailSheet } from './charge-detail-sheet'
@@ -147,7 +148,6 @@ export function ReceiptsView({ tenantSlug }: { tenantSlug: string }) {
   // Efeito, não só estado inicial: clicar em outra notificação com a tela já
   // aberta muda só a query.
   const searchParams = useSearchParams()
-  const router = useRouter()
   const pathname = usePathname()
   const linkedChargeId = searchParams.get('cobranca')
   useEffect(() => {
@@ -156,8 +156,8 @@ export function ReceiptsView({ tenantSlug }: { tenantSlug: string }) {
   const closeDetail = useCallback(() => {
     setDetailId(null)
     // Tira o `?cobranca=` da URL para o mesmo atalho poder abrir de novo.
-    if (linkedChargeId) router.replace(pathname, { scroll: false })
-  }, [linkedChargeId, pathname, router])
+    if (linkedChargeId) replaceQuery(pathname)
+  }, [linkedChargeId, pathname])
   const sequence = useRef(0)
 
   const range = periodRange(period, { from: customFrom, to: customTo })

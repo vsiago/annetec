@@ -225,7 +225,7 @@ export function ManagedAccountSheet({
                     </Button>
                   </SuperadminOnly>
                 )}
-                {request?.status === 'pendente' && (
+                {canDecide && (
                   <SuperadminOnly isSuperadmin={isSuperadmin}>
                     <Button variant="outline" className="gap-2" onClick={() => setDialog('refuse')}>
                       <UserX className="h-4 w-4" aria-hidden="true" />
@@ -514,7 +514,7 @@ export function ManagedAccountSheet({
                     O clube é avisado e vê o motivo. Ele pode enviar um novo pedido depois.
                   </p>
                 }
-                reason={{ label: 'Motivo da recusa (o clube vê)', placeholder: 'Ex.: o CNPJ não bate com o cadastro.', minLength: 3 }}
+                reason={{ label: 'Motivo da recusa (o clube vê)', placeholder: 'Ex.: o CNPJ não bate com o cadastro.', minLength: 3, maxLength: 500 }}
                 onConfirm={async reason =>
                   apply(await runCommand(refuseManagedAccountAction(detail.organizationId, { reason }), 'Pedido recusado'))
                 }

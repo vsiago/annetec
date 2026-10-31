@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useRef, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { RefreshCw, ShieldCheck } from 'lucide-react'
 import { isApprovalKind, type ApprovalKind } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
@@ -19,6 +19,7 @@ import {
 import { ClubProposalsPanel } from '@/components/admin-platform/approvals/club-proposals-panel'
 import { DiscountsPanel } from '@/components/admin-platform/approvals/discounts-panel'
 import { ManagedAccountsPanel } from '@/components/admin-platform/approvals/managed-accounts-panel'
+import { replaceQuery } from '@/lib/replace-query'
 
 /**
  * Aprovações — a central de tudo o que espera a decisão da equipe ANNETEC:
@@ -37,7 +38,6 @@ import { ManagedAccountsPanel } from '@/components/admin-platform/approvals/mana
 const DESCRIPTION = 'Tudo o que espera a sua decisão: novos clubes, contas gerenciadas e descontos de vendedores.'
 
 function ApprovalsCenter() {
-  const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const paramsRef = useRef(searchParams)
@@ -63,9 +63,9 @@ function ApprovalsCenter() {
         else params.delete(key)
       }
       const query = params.toString()
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+      replaceQuery(query ? `${pathname}?${query}` : pathname)
     },
-    [router, pathname],
+    [pathname],
   )
 
   const setKind = useCallback(

@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { Inbox, Mail, MailOpen, RefreshCw, Search, X } from 'lucide-react'
 import type { EmailStatus, EmailTemplate, PlatformEmailListItem } from '@annetec/contracts'
 import { Switch } from '@/components/ui/switch'
@@ -26,6 +26,7 @@ import {
   formatDateTimeBR,
   formatRelative,
 } from '@/lib/adapters/platform-console'
+import { replaceQuery } from '@/lib/replace-query'
 import { cn } from '@/lib/utils'
 
 /**
@@ -127,7 +128,6 @@ function PreviewPane({ emailId }: { emailId: string | null }) {
 }
 
 function EmailsEnviados() {
-  const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const selected = searchParams.get('email')
@@ -171,7 +171,7 @@ function EmailsEnviados() {
     if (value) params.set(key, value)
     else params.delete(key)
     const query = params.toString()
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    replaceQuery(query ? `${pathname}?${query}` : pathname)
   }
 
   const rows = list.data?.items ?? []
