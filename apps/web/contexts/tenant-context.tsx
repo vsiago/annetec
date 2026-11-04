@@ -8,6 +8,11 @@ import { getTenantPublicAction } from '@/lib/actions/tenant-public-api'
 interface TenantContextType {
   tenant: Tenant | null
   isLoading: boolean
+  /**
+   * Relê o clube SEM voltar ao spinner de tela cheia (o gate desmontaria a
+   * página aberta e apagaria o que a pessoa digitou). Usado depois de mexer
+   * na marca, para logo, ícone e cores aparecerem no menu e no tema na hora.
+   */
   refresh: () => Promise<void>
 }
 
@@ -23,12 +28,13 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const load = async () => {
+  const load = async (silent = false) => {
     if (!slug) return
-    setIsLoading(true)
+    if (!silent) setIsLoading(true)
     const result = await getTenantPublicAction(slug)
-    setTenant(result.success ? result.data : null)
-    setIsLoading(false)
+    // Releitura silenciosa que falha mantém o que já está na tela.
+    if (!silent || result.success) setTenant(result.success ? result.data : null)
+    if (!silent) setIsLoading(false)
   }
 
   useEffect(() => {
@@ -37,7 +43,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   }, [slug])
 
   return (
-    <TenantContext.Provider value={{ tenant, isLoading, refresh: load }}>
+    <TenantContext.Provider value={{ tenant, isLoading, refresh: () => load(true) }}>
       {children}
     </TenantContext.Provider>
   )

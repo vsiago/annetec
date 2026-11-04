@@ -15,11 +15,9 @@ import { run, type ActionResult } from './_api-result'
 function toLegacyTenant(tenant: Tenant): LegacyTenant {
   return {
     ...tenant,
-    branding: {
-      primaryColor: tenant.branding.primaryColor,
-      secondaryColor: tenant.branding.secondaryColor,
-      logoUrl: tenant.branding.logoUrl,
-    },
+    // Todos os campos da marca (logo, logo claro, ícones, origem do ícone): descartar algum
+    // faria o ícone sumir da tela e, no detalhe do clube, ser apagado no próximo salvamento.
+    branding: { ...tenant.branding },
     createdAt: new Date(tenant.createdAt),
     trialEndsAt: tenant.trialEndsAt ? new Date(tenant.trialEndsAt) : undefined,
   }

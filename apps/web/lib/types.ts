@@ -41,6 +41,16 @@ export interface TenantAddress {
 export interface TenantBranding {
   logoUrl?: string
   logoLightUrl?: string
+  /** Ícone 512×512 transparente (avatar, menu recolhido). */
+  iconUrl?: string
+  /** Ícone 192×192 (manifest do app). */
+  iconSmallUrl?: string
+  /** Ícone 180×180 opaco (tela inicial do iOS). */
+  appleTouchIconUrl?: string
+  /** Favicon 48×48. */
+  faviconUrl?: string
+  /** `auto` = ícones gerados do logo; `upload` = símbolo enviado à parte. */
+  iconSource?: 'auto' | 'upload'
   primaryColor: string
   secondaryColor: string
 }

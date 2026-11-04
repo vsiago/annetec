@@ -59,6 +59,15 @@ export async function readMultipart(c: Context<AppEnv>): Promise<{ file: File; f
   return { file, fields }
 }
 
+/**
+ * Logo/ícone público: URL com UUID — um envio novo gera URL nova, então pode
+ * ficar em cache para sempre. Demais arquivos públicos: 1 dia.
+ */
+function cacheControl(file: PlatformFileRow, cache: 'private' | 'public'): string {
+  if (cache !== 'public') return 'private, no-store'
+  return file.purpose === 'brand_logo' ? 'public, max-age=31536000, immutable' : 'public, max-age=86400'
+}
+
 /** Binário do Storage com cabeçalhos seguros. */
 export async function sendStoredFile(c: Context<AppEnv>, file: PlatformFileRow, cache: 'private' | 'public') {
   let content: Buffer
@@ -72,7 +81,7 @@ export async function sendStoredFile(c: Context<AppEnv>, file: PlatformFileRow, 
     'Content-Type': file.mimeType,
     'Content-Length': String(content.length),
     'Content-Disposition': contentDisposition('inline', file.fileName),
-    'Cache-Control': cache === 'public' ? 'public, max-age=86400' : 'private, no-store',
+    'Cache-Control': cacheControl(file, cache),
     'X-Content-Type-Options': 'nosniff',
   })
 }

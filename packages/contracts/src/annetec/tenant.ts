@@ -13,13 +13,57 @@ export const tenantAddress = z.object({
 })
 export type TenantAddress = z.infer<typeof tenantAddress>
 
+/** URL http(s) — em dev o logo vem de `http://localhost`, então não força https. */
+const brandAssetUrl = z
+  .string()
+  .url()
+  .refine(value => /^https?:\/\//i.test(value), 'A URL deve começar com http:// ou https://')
+
+/**
+ * Marca do clube. As URLs apontam para a rota pública de arquivos da API
+ * (`/api/v1/public/arquivos/:id`), nunca para o bucket. Os ícones são gerados
+ * a partir do logo (`iconSource: 'auto'`) ou do símbolo enviado à parte
+ * (`'upload'`).
+ */
 export const tenantBranding = z.object({
-  logoUrl: z.string().url().optional(),
-  logoLightUrl: z.string().url().optional(),
+  logoUrl: brandAssetUrl.optional(),
+  logoLightUrl: brandAssetUrl.optional(),
+  /** 512×512, transparente — ícone do app e avatar. */
+  iconUrl: brandAssetUrl.optional(),
+  /** 192×192, transparente — manifest/PWA. */
+  iconSmallUrl: brandAssetUrl.optional(),
+  /** 180×180, OPACO (fundo branco) — tela inicial do iOS. */
+  appleTouchIconUrl: brandAssetUrl.optional(),
+  /** 48×48, transparente — favicon. */
+  faviconUrl: brandAssetUrl.optional(),
+  iconSource: z.enum(['auto', 'upload']).optional(),
   primaryColor: hexColor,
   secondaryColor: hexColor,
 })
 export type TenantBranding = z.infer<typeof tenantBranding>
+
+/** Resposta do envio de logo/ícone: marca já mesclada + o que o sistema aprendeu da imagem. */
+export const logoUploadResult = z.object({
+  branding: tenantBranding,
+  /** Até 2 cores dominantes sugeridas (`#RRGGBB`); vazio no ícone. */
+  suggestedColors: z.array(hexColor),
+  warnings: z.array(z.string()),
+  width: z.number().int(),
+  height: z.number().int(),
+  hasTransparency: z.boolean(),
+})
+export type LogoUploadResult = z.infer<typeof logoUploadResult>
+
+/** Mesmo formato para o envio do ícone. */
+export const iconUploadResult = logoUploadResult
+export type IconUploadResult = LogoUploadResult
+
+/** `PATCH /t/:tenantSlug/marca` — só as cores; o logo não é tocado. */
+export const updateTenantBrandColorsInput = z.object({
+  primaryColor: hexColor,
+  secondaryColor: hexColor,
+})
+export type UpdateTenantBrandColorsInput = z.infer<typeof updateTenantBrandColorsInput>
 
 /**
  * Credenciais da integração Digital Saúde por inquilino. Cada inquilino é uma
@@ -110,7 +154,14 @@ export const createTenantInput = tenant
 export type CreateTenantInput = z.infer<typeof createTenantInput>
 
 export const updateTenantInput = createTenantInput
-  .omit({ ownerName: true, ownerEmail: true, slug: true })
+  .omit({ ownerName: true, ownerEmail: true, slug: true, branding: true })
+  .extend({
+    /**
+     * Só as cores: as imagens (logo, ícones) mudam apenas pelos endpoints de
+     * logo/ícone. Campos de imagem enviados aqui são descartados pelo parse.
+     */
+    branding: tenantBranding.pick({ primaryColor: true, secondaryColor: true }),
+  })
   .partial()
 export type UpdateTenantInput = z.infer<typeof updateTenantInput>
 

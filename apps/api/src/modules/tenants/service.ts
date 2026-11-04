@@ -4,6 +4,7 @@ import {
   type CreateTenantInput,
   type IntegrationDiscovery,
   type Tenant,
+  type TenantBranding,
   type TenantIntegration,
   type TenantIntegrationPublic,
   type UpdateTenantInput,
@@ -168,8 +169,8 @@ export const tenantsService = {
   },
 
   async update(id: string, input: UpdateTenantInput): Promise<Tenant> {
-    const row = await findByOrgId(id)
-    if (!row) throw AppError.notFound('Inquilino')
+    const stored = await storedBranding(id)
+    if (stored === undefined) throw AppError.notFound('Inquilino')
 
     if (input.name !== undefined) {
       // Atualização direta, não `auth.api.updateOrganization`: aquele
@@ -187,7 +188,7 @@ export const tenantsService = {
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
         ...(input.address !== undefined ? { address: input.address } : {}),
-        ...(input.branding !== undefined ? { branding: input.branding } : {}),
+        ...(input.branding !== undefined ? { branding: mergeBrandColors(stored, input.branding) } : {}),
         ...(input.planId !== undefined ? { planId: input.planId } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
         updatedAt: new Date(),
@@ -541,6 +542,27 @@ async function ok(operation: () => Promise<unknown>): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/**
+ * Atualização de marca pela plataforma: SÓ as cores vêm da entrada; toda
+ * imagem (logo, ícones, `iconSource`) fica como está guardada — as imagens
+ * mudam apenas pelos endpoints de logo/ícone.
+ */
+export function mergeBrandColors(
+  stored: TenantBranding | null | undefined,
+  input: Pick<TenantBranding, 'primaryColor' | 'secondaryColor'>,
+): TenantBranding {
+  return { ...(stored ?? {}), primaryColor: input.primaryColor, secondaryColor: input.secondaryColor } as TenantBranding
+}
+
+async function storedBranding(organizationId: string): Promise<TenantBranding | undefined> {
+  const [profile] = await db
+    .select({ branding: tenantProfiles.branding })
+    .from(tenantProfiles)
+    .where(eq(tenantProfiles.organizationId, organizationId))
+    .limit(1)
+  return profile?.branding
 }
 
 function findByOrgId(id: string) {

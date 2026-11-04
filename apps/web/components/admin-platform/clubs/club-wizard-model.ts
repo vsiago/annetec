@@ -30,7 +30,6 @@ export interface ClubValues {
   state: string
   primaryColor: string
   secondaryColor: string
-  logoUrl: string
   planId: string
   ownerName: string
   ownerEmail: string
@@ -57,7 +56,6 @@ export const EMPTY_CLUB: ClubValues = {
   state: '',
   primaryColor: DEFAULT_PRIMARY_COLOR,
   secondaryColor: DEFAULT_SECONDARY_COLOR,
-  logoUrl: '',
   planId: '',
   ownerName: '',
   ownerEmail: '',
@@ -66,7 +64,7 @@ export const EMPTY_CLUB: ClubValues = {
 export const CLUB_STEP_FIELDS = {
   clube: ['name', 'slug', 'document', 'legalName'],
   contato: ['email', 'phone', 'cep', 'street', 'number', 'complement', 'neighborhood', 'city', 'state'],
-  aparencia: ['primaryColor', 'secondaryColor', 'logoUrl'],
+  aparencia: ['primaryColor', 'secondaryColor'],
   plano: ['planId'],
   responsavel: ['ownerName', 'ownerEmail'],
 } as const satisfies Record<string, readonly ClubField[]>
@@ -157,17 +155,18 @@ export const validateContactStep = zodFields<ClubValues>(createTenantInput.pick(
   },
 })
 
+/**
+ * Só as cores: logo e ícone não são texto do formulário. Os arquivos escolhidos
+ * ficam à parte (estado do assistente) e são enviados depois que o clube existe.
+ */
 export const validateBrandStep = zodFields<ClubValues>(
-  tenantBranding.pick({ primaryColor: true, secondaryColor: true, logoUrl: true }),
+  tenantBranding.pick({ primaryColor: true, secondaryColor: true }),
   {
     input: v => ({
       primaryColor: trim(v.primaryColor) || DEFAULT_PRIMARY_COLOR,
       secondaryColor: trim(v.secondaryColor) || DEFAULT_SECONDARY_COLOR,
-      logoUrl: trim(v.logoUrl) || undefined,
     }),
-    messages: {
-      logoUrl: { invalid: 'Informe o link completo da imagem, começando com https://' },
-    },
+    messages: {},
   },
 )
 
@@ -183,7 +182,7 @@ export const validateOwnerStep = zodFields<ClubValues>(createTenantInput.pick({ 
   },
 })
 
-/** Corpo que a API recebe. Texto vazio de campo opcional some. */
+/** Corpo que a API recebe (logo e ícone vão depois, pelas rotas de envio). Texto vazio de campo opcional some. */
 export function toClubPayload(values: ClubValues) {
   return {
     name: trim(values.name),
@@ -204,7 +203,6 @@ export function toClubPayload(values: ClubValues) {
     branding: {
       primaryColor: trim(values.primaryColor) || DEFAULT_PRIMARY_COLOR,
       secondaryColor: trim(values.secondaryColor) || DEFAULT_SECONDARY_COLOR,
-      logoUrl: trim(values.logoUrl) || undefined,
     },
     planId: values.planId,
     status: 'trial' as const,

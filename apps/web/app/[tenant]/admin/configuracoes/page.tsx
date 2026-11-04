@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { BadgeCheck, ChevronRight, Landmark, Package, UserCog, Wallet } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { BrandIdentityCard } from '@/components/admin/brand-identity-card'
 import { PageHeader } from '@/components/dashboard/page-header'
 import { useTenant } from '@/contexts/tenant-context'
 
@@ -62,9 +63,9 @@ export default function AdminConfiguracoesPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Configurações" description="Dados do clube e onde ajustar cada parte da operação." />
+      <PageHeader title="Configurações" description="Dados do clube, identidade visual e onde ajustar cada parte da operação." />
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5">
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="text-base">Dados do clube</CardTitle>
@@ -86,28 +87,7 @@ export default function AdminConfiguracoesPage() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">Identidade visual</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Logo e cores aplicadas no site do clube, nos portais e na carteirinha.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex h-24 items-center justify-center rounded-xl bg-muted/50">
-              {tenant.branding.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={tenant.branding.logoUrl} alt={tenant.name} className="h-12 object-contain" />
-              ) : (
-                <span className="text-lg font-bold text-primary">{tenant.name}</span>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <ColorSwatch label="Cor primária" color={tenant.branding.primaryColor} />
-              <ColorSwatch label="Cor secundária" color={tenant.branding.secondaryColor} />
-            </div>
-          </CardContent>
-        </Card>
+        <BrandIdentityCard />
       </div>
 
       <Card className="shadow-sm">
@@ -145,18 +125,6 @@ function Field({ label, value }: { label: string; value: string }) {
     <div className="space-y-0.5">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="whitespace-pre-line text-sm font-medium text-foreground">{value}</p>
-    </div>
-  )
-}
-
-function ColorSwatch({ label, color }: { label: string; color: string }) {
-  return (
-    <div className="space-y-1">
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      <div className="flex items-center gap-2 rounded-lg border border-border/60 p-1.5">
-        <span className="h-5 w-5 shrink-0 rounded" style={{ backgroundColor: color }} />
-        <span className="truncate text-[11px] text-muted-foreground">{color.toUpperCase()}</span>
-      </div>
     </div>
   )
 }

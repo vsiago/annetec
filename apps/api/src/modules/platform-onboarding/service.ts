@@ -41,6 +41,7 @@ import {
 } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { lookupCnpj } from '@/integrations/cnpj'
+import { BrandImageError, processLogo } from '@/lib/branding/logo-pipeline'
 import { logger } from '@/lib/logger'
 import { notify, proposalSubmittedNotification } from '@/lib/notifications'
 import { checkUpload, discardFile, findFile, publicFileUrl, sanitizeFileName, storeFile } from '@/lib/storage'
@@ -715,11 +716,22 @@ export async function uploadLogo(id: string, file: File): Promise<UploadedFile> 
   const bytes = new Uint8Array(await file.arrayBuffer())
   const check = checkUpload('brand_logo', bytes)
   if (!check.ok) throw uploadError(check)
+  // O arquivo da proposta é o logo JÁ ADAPTADO (PNG ≤ 800×400, sem metadados):
+  // a prévia mostra o que o clube vai ter, e SVG nunca é guardado.
+  let adapted: Uint8Array
+  try {
+    adapted = (await processLogo(bytes, check.type.mime)).variants.logo
+  } catch (error) {
+    if (error instanceof BrandImageError) {
+      throw new AppError(ERROR_CODES.BUSINESS_RULE_VIOLATION, error.message, { issues: [{ path: 'file', message: error.message }] })
+    }
+    throw error
+  }
   const stored = await storeFile({
-    bytes,
-    fileName: sanitizeFileName(file.name, check.type.ext, 'logo'),
-    mimeType: check.type.mime,
-    ext: check.type.ext,
+    bytes: adapted,
+    fileName: sanitizeFileName(file.name, 'png', 'logo'),
+    mimeType: 'image/png',
+    ext: 'png',
     purpose: 'brand_logo',
     visibility: 'public',
     ownerType: 'proposal',

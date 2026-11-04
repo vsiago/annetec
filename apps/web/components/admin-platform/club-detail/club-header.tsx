@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ExternalLink, MoreHorizontal, ShieldAlert } from 'lucide-react'
 import type { PlatformAccessLevel } from '@annetec/contracts'
 import { Button } from '@/components/admin-platform/ui/button'
@@ -37,8 +37,11 @@ export function ClubHeader({
 }) {
   const siteAddress = useSiteAddress()
   const [logoFailed, setLogoFailed] = useState(false)
-  const logoUrl = tenant.branding.logoUrl?.trim()
+  // Avatar quadrado: o ícone (símbolo) cabe melhor que a logo horizontal.
+  const logoUrl = (tenant.branding.iconUrl ?? tenant.branding.logoUrl)?.trim()
   const showLogo = Boolean(logoUrl) && !logoFailed
+  // Imagem nova (envio/remoção): tenta de novo.
+  useEffect(() => setLogoFailed(false), [logoUrl])
   const since = clubSinceLabel(tenant.createdAt)
 
   return (
@@ -51,7 +54,7 @@ export function ClubHeader({
               className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06)]"
               aria-hidden="true"
             >
-              {/* Logo público do clube (URL livre, cadastrada na Aparência); next/image não se aplica. */}
+              {/* Ícone/logo do clube (arquivo enviado em Dados do clube); next/image não se aplica. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={logoUrl}

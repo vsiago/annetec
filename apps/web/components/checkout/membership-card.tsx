@@ -17,7 +17,9 @@ interface MembershipCardProps {
 /** Carteirinha digital emitida na ativação (titular e cada dependente). */
 export function MembershipCard({ tenant, name, cardNumber, planName, role, index = 0 }: MembershipCardProps) {
   const reduceMotion = useReducedMotion()
-  const logo = tenant.branding?.logoLightUrl
+  // Logo branca (só existe para logo transparente) cai direto no cartão; sem ela, a logo comum vai numa plaquinha clara.
+  const lightLogo = tenant.branding?.logoLightUrl
+  const logo = lightLogo ?? tenant.branding?.logoUrl
 
   return (
     <motion.div
@@ -35,7 +37,15 @@ export function MembershipCard({ tenant, name, cardNumber, planName, role, index
         <div className="flex items-start justify-between gap-3">
           {logo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt={tenant.name} className="h-7 w-auto max-w-[140px] object-contain" />
+            <img
+              src={logo}
+              alt={tenant.name}
+              className={
+                lightLogo
+                  ? 'h-7 w-auto max-w-[140px] object-contain'
+                  : 'h-8 w-auto max-w-[140px] rounded-md bg-white/95 object-contain px-1.5 py-0.5'
+              }
+            />
           ) : (
             <span className="font-display text-lg font-extrabold tracking-tight">{tenant.name}</span>
           )}

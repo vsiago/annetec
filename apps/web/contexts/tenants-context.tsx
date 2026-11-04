@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
-import type { CreatePlatformUserInput, CreateTenantInput, UpdateTenantInput } from '@annetec/contracts'
+import type { CreatePlatformUserInput, CreateTenantInput, TenantBranding, UpdateTenantInput } from '@annetec/contracts'
 import type { Tenant, TenantPlan, PlatformUser } from '@/lib/types'
 import {
   listTenantsAction,
@@ -17,6 +17,12 @@ interface TenantsContextType {
   plans: TenantPlan[]
   platformUsers: PlatformUser[]
   refresh: () => Promise<void>
+  /**
+   * Troca a marca de um clube na lista já carregada, sem nova leitura. Logo e
+   * ícone são gravados na hora pelas rotas de upload; a resposta delas traz a
+   * marca inteira e é ela que passa a valer na tela.
+   */
+  applyBranding: (id: string, branding: TenantBranding) => void
   createTenant: (
     input: CreateTenantInput,
   ) => Promise<{ success: boolean; error?: string; data?: Tenant; ownerPassword?: string }>
@@ -55,6 +61,8 @@ export function TenantsProvider({ children }: { children: ReactNode }) {
         plans,
         platformUsers,
         refresh,
+        applyBranding: (id, branding) =>
+          setTenants(current => current.map(item => (item.id === id ? { ...item, branding: { ...branding } } : item))),
         createTenant: async input => {
           const result = await createTenantAction(input)
           await refresh()

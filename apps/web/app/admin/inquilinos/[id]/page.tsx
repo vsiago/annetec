@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useParams, usePathname, useSearchParams } from 'next/navigation'
 import { AlertCircle, Building2, Info, Loader2, Lock, Save, ShieldAlert } from 'lucide-react'
-import type { UF } from '@annetec/contracts'
+import type { TenantBranding, UF } from '@annetec/contracts'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/admin-platform/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -121,7 +121,7 @@ function ClubDetailLoader() {
 }
 
 function ClubDetail({ tenant }: { tenant: Tenant }) {
-  const { plans, updateTenant } = useTenants()
+  const { plans, updateTenant, applyBranding } = useTenants()
   const { isSuperadmin } = usePlatformRole()
   const { isLoading: authLoading } = usePlatformAuth()
   const pathname = usePathname()
@@ -174,7 +174,9 @@ function ClubDetail({ tenant }: { tenant: Tenant }) {
       email: form.email,
       phone: form.phone,
       address: { ...form.address, state: form.address.state as UF },
-      branding: { ...form.branding, logoUrl: form.branding.logoUrl?.trim() || undefined },
+      // A API aplica só as cores e mantém as imagens guardadas (logo/ícone mudam apenas pelos
+      // endpoints de envio); mandar o objeto inteiro é inofensivo.
+      branding: { primaryColor: form.branding.primaryColor, secondaryColor: form.branding.secondaryColor },
       planId: form.planId,
     })
     setIsSaving(false)
@@ -184,6 +186,27 @@ function ClubDetail({ tenant }: { tenant: Tenant }) {
     }
     setEdits(null)
     setSalvo(true)
+  }
+
+  /**
+   * Logo/ícone são gravados na hora (rotas de upload). A resposta traz a marca
+   * inteira: ela vira a marca do clube na lista e, se há edições pendentes, entra
+   * nelas — menos as CORES, que seguem as que a pessoa digitou e ainda não salvou.
+   */
+  function handleBrandingChange(next: TenantBranding) {
+    applyBranding(tenant.id, next)
+    setEdits(current =>
+      current
+        ? {
+            ...current,
+            branding: {
+              ...next,
+              primaryColor: current.branding.primaryColor,
+              secondaryColor: current.branding.secondaryColor,
+            },
+          }
+        : current,
+    )
   }
 
   /** Grava só a situação do cadastro (os campos do formulário não vão junto). */
@@ -245,6 +268,7 @@ function ClubDetail({ tenant }: { tenant: Tenant }) {
           <ClubDataForm
             draft={{ ...tenant, ...form }}
             onChange={next => setEdits(formValues(next))}
+            onBrandingChange={handleBrandingChange}
             plans={plans}
           />
 

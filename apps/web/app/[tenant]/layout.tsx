@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { getTenantPublicAction } from '@/lib/actions/tenant-public-api'
 import TenantLayoutClient from './tenant-layout-client'
 
@@ -15,6 +15,13 @@ import TenantLayoutClient from './tenant-layout-client'
 const NEUTRAL_ICON = '/icon-neutral.svg'
 
 type Params = Promise<{ tenant: string }>
+
+/** Cor da barra do navegador no celular: a cor principal do clube. */
+export async function generateViewport({ params }: { params: Params }): Promise<Viewport> {
+  const { tenant: slug } = await params
+  const result = await getTenantPublicAction(slug)
+  return result.success ? { themeColor: result.data.branding.primaryColor } : {}
+}
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { tenant: slug } = await params
@@ -33,7 +40,11 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   }
 
   const tenant = result.data
-  const icon = tenant.branding?.logoUrl ?? NEUTRAL_ICON
+  const branding = tenant.branding
+  // Aba do navegador: favicon 48 px; sem ele, os ícones maiores; por último a logo.
+  const favicon = branding?.faviconUrl ?? branding?.iconSmallUrl ?? branding?.iconUrl ?? branding?.logoUrl ?? NEUTRAL_ICON
+  // iOS "adicionar à tela inicial": ícone 180 px OPACO (o transparente vira fundo preto).
+  const appleIcon = branding?.appleTouchIconUrl ?? branding?.iconUrl ?? branding?.logoUrl ?? NEUTRAL_ICON
   const description = `Portal de benefícios ${tenant.name}`
 
   return {
@@ -50,7 +61,9 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
       // plataforma) seja herdado no preview de link do inquilino.
       images: tenant.branding?.logoUrl ? [tenant.branding.logoUrl] : [],
     },
-    icons: { icon, apple: icon },
+    icons: { icon: favicon, apple: appleIcon },
+    // App instalável do clube (nome, cor e ícones da marca) — ver manifest.webmanifest/route.ts.
+    manifest: `/${slug}/manifest.webmanifest`,
   }
 }
 

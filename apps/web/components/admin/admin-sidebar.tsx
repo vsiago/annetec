@@ -155,6 +155,8 @@ export function AdminSidebar() {
   if (!tenant) return null
 
   const logo = tenant.branding.logoUrl
+  // Menu recolhido é um quadrado: o ícone (símbolo) cabe; a logo horizontal ficaria espremida.
+  const icon = tenant.branding.iconUrl ?? logo
 
   const helpCard = (
     <Link
@@ -257,9 +259,9 @@ export function AdminSidebar() {
           )}
         >
           <Link href={base} className="flex items-center gap-2 overflow-hidden">
-            {logo ? (
+            {(isCollapsed ? icon : logo) ? (
               <img
-                src={logo}
+                src={isCollapsed ? icon : logo}
                 alt={tenant.name}
                 className={cn('object-contain', isCollapsed ? 'h-8 w-8' : 'h-9')}
               />

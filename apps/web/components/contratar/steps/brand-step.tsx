@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { CircleCheck, CircleX, ImagePlus, Loader2, Palette, Trash2, UserRound, WandSparkles } from 'lucide-react'
 import {
-  BRAND_LOGO_MAX_BYTES,
   formatPhone,
   maskPhone,
   onboardingBrandInput,
@@ -11,11 +10,11 @@ import {
   type OnboardingApplicantView,
   type SlugAvailability,
 } from '@annetec/contracts'
+import { LOGO_GUIDANCE } from '@/components/branding/brand-upload'
 import { Button } from '@/components/ui/button'
 import { checkSlugAction, saveOnboardingBrandAction } from '@/lib/actions/contratacao-api'
 import {
   errorsUnder,
-  formatFileSize,
   isSectionComplete,
   orphanErrors,
   titleCaseName,
@@ -431,7 +430,7 @@ export function BrandStep({ ctx }: { ctx: StepContext }) {
 
           <SubPanel
             title="Logo"
-            description={`PNG ou JPEG de até ${formatFileSize(BRAND_LOGO_MAX_BYTES)}, de preferência com fundo transparente. Sem logo, a vitrine mostra as iniciais.`}
+            description={`${LOGO_GUIDANCE.lead} ${LOGO_GUIDANCE.detail} Sem logo, a vitrine mostra as iniciais.`}
           >
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
               <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-[repeating-conic-gradient(#f1f5f9_0%_25%,#fff_0%_50%)] bg-[length:16px_16px]">

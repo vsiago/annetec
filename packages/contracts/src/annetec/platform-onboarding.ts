@@ -981,9 +981,12 @@ export function kybChecklist(
 export const KYB_MAX_FILE_BYTES = 4 * 1024 * 1024
 export const KYB_ACCEPTED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'] as const
 export const KYB_MAX_DOCUMENTS_PER_PROPOSAL = 40
-/** Logo: PNG/JPEG até 1 MB (SVG fica de fora — pode carregar script). */
-export const BRAND_LOGO_MAX_BYTES = 1024 * 1024
-export const BRAND_LOGO_MIME_TYPES = ['image/png', 'image/jpeg'] as const
+/**
+ * Logo/ícone: PNG, JPEG, WebP ou SVG até 5 MB. O SVG só entra para ser
+ * rasterizado (após checagem de segurança) — nunca é guardado nem servido.
+ */
+export const BRAND_LOGO_MAX_BYTES = 5 * 1024 * 1024
+export const BRAND_LOGO_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'] as const
 
 export const storageDriver = z.enum(['local', 'supabase', 's3'])
 export type StorageDriver = z.infer<typeof storageDriver>

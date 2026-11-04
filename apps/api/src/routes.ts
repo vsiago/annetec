@@ -27,6 +27,7 @@ import { platformUsersController } from '@/modules/platform-users/controller'
 import { platformSellerController } from '@/modules/platform-sales/seller-controller'
 import { platformSalesTeamController } from '@/modules/platform-sales/team-controller'
 import { supportController } from '@/modules/support/controller'
+import { tenantBrandingController } from '@/modules/tenant-branding/controller'
 import { tenantPlansController } from '@/modules/tenant-plans/controller'
 import { tenantsController } from '@/modules/tenants/controller'
 import { tenantPublicController } from '@/modules/tenants/public-controller'
@@ -80,6 +81,7 @@ export const routes = new Hono<AppEnv>()
   .route('/api/v1/t/:tenantSlug/assinatura-annetec', tenantPlatformSubscriptionController)
   .route('/api/v1/t/:tenantSlug/public/checkout', clubCheckoutController)
   .route('/api/v1/t/:tenantSlug/public', tenantPublicController)
+  .route('/api/v1/t/:tenantSlug/marca', tenantBrandingController)
   .route('/api/v1/t/:tenantSlug/usuarios', usersController)
   .route('/api/v1/t/:tenantSlug/contratos', contractsController)
   .route('/api/v1/t/:tenantSlug/carteirinhas', membershipCardsController)

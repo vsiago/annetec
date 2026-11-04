@@ -1,8 +1,6 @@
 'use client'
 
 import {
-  BRAND_LOGO_MAX_BYTES,
-  BRAND_LOGO_MIME_TYPES,
   KYB_ACCEPTED_MIME_TYPES,
   KYB_MAX_FILE_BYTES,
   type KybDocumentKind,
@@ -10,6 +8,7 @@ import {
   type UploadedFile,
 } from '@annetec/contracts'
 import { formatFileSize, type UploadTarget } from '@/lib/adapters/contratacao'
+import { BRAND_ACCEPT, checkBrandImage } from '@/components/branding/brand-upload'
 
 /**
  * Upload da contratação com barra de progresso: XHR para o proxy
@@ -35,15 +34,7 @@ function mimeOf(file: File): string {
 /** `null` = pode enviar; senão, a frase do problema. */
 export function checkUploadFile(file: File, target: UploadTarget): string | null {
   const mime = mimeOf(file)
-  if (target === 'logo') {
-    if (!(BRAND_LOGO_MIME_TYPES as readonly string[]).includes(mime)) {
-      return 'O logo precisa ser PNG ou JPEG (SVG não é aceito por segurança).'
-    }
-    if (file.size > BRAND_LOGO_MAX_BYTES) {
-      return `O logo tem ${formatFileSize(file.size)}. O limite é ${formatFileSize(BRAND_LOGO_MAX_BYTES)} — exporte em tamanho menor.`
-    }
-    return null
-  }
+  if (target === 'logo') return checkBrandImage(file, 'logo')
   if (!(KYB_ACCEPTED_MIME_TYPES as readonly string[]).includes(mime)) {
     return 'Envie o documento em PDF, JPEG ou PNG.'
   }
@@ -55,7 +46,7 @@ export function checkUploadFile(file: File, target: UploadTarget): string | null
 }
 
 export const DOCUMENT_ACCEPT = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png'
-export const LOGO_ACCEPT = '.png,.jpg,.jpeg,image/png,image/jpeg'
+export const LOGO_ACCEPT = BRAND_ACCEPT
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: { message: string; code?: string } }
 

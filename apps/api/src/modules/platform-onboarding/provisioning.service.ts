@@ -30,7 +30,8 @@ import { AppError } from '@/http/errors'
 import { auth } from '@/lib/auth'
 import { sendEmail } from '@/lib/email'
 import { logger } from '@/lib/logger'
-import { publicFileUrl } from '@/lib/storage/files'
+import { findFile, publicFileUrl, readFileContent } from '@/lib/storage/files'
+import { storeOrganizationLogo } from '@/modules/tenant-branding/service'
 import { DEFAULT_BILLING_SETTINGS } from '@/modules/club-billing/settings.service'
 import { clubPlanColumns } from '@/modules/network/controller'
 import { cancelActivationCharge, createPlatformSubscription } from '@/modules/platform-billing/activation'
@@ -193,6 +194,9 @@ async function provision(
         .set({ organizationId, updatedAt: new Date() })
         .where(eq(platformOnboardingProposals.id, proposalId))
     }
+
+    // 1b. Logo adaptado (logo, versão clara e ícones) — nunca derruba o provisionamento
+    await ensureOrganizationLogo(organizationId, brand)
 
     // 2. Régua de cobrança do clube (padrões)
     await db.insert(clubBillingSettings).values({ organizationId, gateway: null }).onConflictDoNothing()
@@ -439,6 +443,34 @@ async function ensureOrganization(
   }
   const { tenant, ownerPassword } = await tenantsService.create(input)
   return { organizationId: tenant.id, ownerPassword }
+}
+
+/**
+ * O arquivo da proposta já é o logo adaptado (PNG); aqui ele vira todas as
+ * variantes do clube (`logoUrl`, `logoLightUrl`, ícones). Idempotente (pula se
+ * os ícones já existem) e resiliente: qualquer falha é registrada e o clube
+ * nasce com o logo simples de `brandingOf`.
+ */
+async function ensureOrganizationLogo(organizationId: string, brand: OnboardingBrandInput): Promise<void> {
+  if (!brand.logoFileId) return
+  try {
+    const [profile] = await db
+      .select({ branding: tenantProfiles.branding })
+      .from(tenantProfiles)
+      .where(eq(tenantProfiles.organizationId, organizationId))
+      .limit(1)
+    if (profile?.branding?.iconUrl) return
+    const file = await findFile(brand.logoFileId)
+    if (!file || file.deletedAt) return
+    await storeOrganizationLogo({
+      organizationId,
+      bytes: await readFileContent(file),
+      mime: file.mimeType,
+      uploadedBy: 'provisioning',
+    })
+  } catch (error) {
+    logger.warn({ err: error, organizationId }, 'Logo do clube não pôde ser adaptado; clube criado sem as variantes')
+  }
 }
 
 // ---------------------------------------------------------------------------

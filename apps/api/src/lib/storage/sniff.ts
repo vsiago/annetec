@@ -11,7 +11,10 @@ import {
  * para `.pdf` é recusado. Puro (testado).
  */
 
-export type SniffedType = { mime: 'application/pdf' | 'image/jpeg' | 'image/png'; ext: 'pdf' | 'jpg' | 'png' }
+export type SniffedType = {
+  mime: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/svg+xml'
+  ext: 'pdf' | 'jpg' | 'png' | 'webp' | 'svg'
+}
 
 const PDF = [0x25, 0x50, 0x44, 0x46, 0x2d] // %PDF-
 const JPEG = [0xff, 0xd8, 0xff]
@@ -22,10 +25,29 @@ function startsWith(bytes: Uint8Array, signature: number[]): boolean {
   return signature.every((byte, index) => bytes[index] === byte)
 }
 
+const RIFF = [0x52, 0x49, 0x46, 0x46] // RIFF
+const WEBP = [0x57, 0x45, 0x42, 0x50] // WEBP (a partir do byte 8)
+
+/** `RIFF....WEBP`. */
+function isWebp(bytes: Uint8Array): boolean {
+  return startsWith(bytes, RIFF) && bytes.length >= 12 && WEBP.every((byte, index) => bytes[8 + index] === byte)
+}
+
+/**
+ * SVG: após BOM UTF-8/espaços, aceita `<?xml …?>`, comentários e `<!DOCTYPE`
+ * (a segurança recusa o DOCTYPE depois) até chegar em `<svg`. Só olha o início.
+ */
+export function looksLikeSvg(bytes: Uint8Array): boolean {
+  const head = new TextDecoder('utf-8').decode(bytes.subarray(0, 4096)) // o TextDecoder já descarta o BOM
+  return /^\s*(?:<\?xml[\s\S]*?\?>\s*|<!--[\s\S]*?-->\s*|<!DOCTYPE[^>]*>\s*)*<svg[\s>/]/i.test(head)
+}
+
 export function sniffFileType(bytes: Uint8Array): SniffedType | null {
   if (startsWith(bytes, PDF)) return { mime: 'application/pdf', ext: 'pdf' }
   if (startsWith(bytes, PNG)) return { mime: 'image/png', ext: 'png' }
   if (startsWith(bytes, JPEG)) return { mime: 'image/jpeg', ext: 'jpg' }
+  if (isWebp(bytes)) return { mime: 'image/webp', ext: 'webp' }
+  if (looksLikeSvg(bytes)) return { mime: 'image/svg+xml', ext: 'svg' }
   return null
 }
 
@@ -33,7 +55,7 @@ export type UploadKind = 'kyb_document' | 'brand_logo'
 
 export const UPLOAD_RULES: Record<UploadKind, { maxBytes: number; mimeTypes: readonly string[]; label: string }> = {
   kyb_document: { maxBytes: KYB_MAX_FILE_BYTES, mimeTypes: KYB_ACCEPTED_MIME_TYPES, label: 'PDF, JPEG ou PNG' },
-  brand_logo: { maxBytes: BRAND_LOGO_MAX_BYTES, mimeTypes: BRAND_LOGO_MIME_TYPES, label: 'PNG ou JPEG' },
+  brand_logo: { maxBytes: BRAND_LOGO_MAX_BYTES, mimeTypes: BRAND_LOGO_MIME_TYPES, label: 'PNG, JPEG, WebP ou SVG' },
 }
 
 export type UploadCheck =

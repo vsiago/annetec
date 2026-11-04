@@ -39,7 +39,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return failure(
       413,
       'PAYLOAD_TOO_LARGE',
-      tipo === 'logo' ? 'O logo pode ter no máximo 1 MB.' : 'O arquivo pode ter no máximo 4 MB.',
+      tipo === 'logo' ? 'O logo pode ter no máximo 5 MB.' : 'O arquivo pode ter no máximo 4 MB.',
     )
   }
 

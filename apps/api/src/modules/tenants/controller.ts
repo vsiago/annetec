@@ -17,12 +17,17 @@ import { recordAudit } from '@/lib/audit'
 import { created, ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, param, query } from '@/http/validate'
+import { BRAND_LOGO_MAX_BYTES } from '@annetec/contracts'
+import { uploadBodyLimit } from '@/modules/platform-onboarding/http'
+import { brandHandlers, brandUploadLimit } from '@/modules/tenant-branding/controller'
 import { tenantMembersService } from './members.service'
 import { tenantsService } from './service'
 
 const idParam = z.object({ id: z.string().uuid() })
 const userParam = z.object({ id: z.string().uuid(), userId: z.string() })
 const papelParam = z.object({ id: z.string().uuid(), papel: tenantRole })
+const brand = brandHandlers(c => c.req.param('id') as string)
+const brandLimit = brandUploadLimit(c => c.req.param('id') ?? null)
 const listQuery = paginationQuery.extend({ status: tenantStatus.optional() })
 
 /**
@@ -93,6 +98,12 @@ export const tenantsController = new Hono<AppEnv>()
     })
     return ok(c, tenant)
   })
+
+  // Logo e ícone do clube pela plataforma (mesmo serviço do autoatendimento do admin).
+  .post('/:id/logo', requirePlatformRole('superadmin'), param(idParam), brandLimit, uploadBodyLimit(BRAND_LOGO_MAX_BYTES), c => brand.uploadLogo(c))
+  .delete('/:id/logo', requirePlatformRole('superadmin'), param(idParam), c => brand.deleteLogo(c))
+  .post('/:id/icone', requirePlatformRole('superadmin'), param(idParam), brandLimit, uploadBodyLimit(BRAND_LOGO_MAX_BYTES), c => brand.uploadIcon(c))
+  .delete('/:id/icone', requirePlatformRole('superadmin'), param(idParam), c => brand.deleteIcon(c))
 
   .get('/:id/integration', param(idParam), async c =>
     ok(c, await tenantsService.getIntegration(c.req.valid('param').id)),

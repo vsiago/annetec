@@ -42,6 +42,8 @@ import {
   useWizard,
   type WizardStep,
 } from '@/components/admin-platform/ui/wizard'
+import { BrandImageUploader } from '@/components/branding/brand-image-uploader'
+import { platformBrandUrl, uploadBrandFile } from '@/components/branding/brand-upload'
 import { useCnpjLookup, safeAction } from '@/components/contratar/hooks'
 import { useTenants } from '@/contexts/tenants-context'
 import { checkSlugAction } from '@/lib/actions/contratacao-api'
@@ -92,6 +94,8 @@ interface CreatedClub {
   ownerName: string
   ownerEmail: string
   ownerPassword: string
+  /** Logo/ícone que não subiram depois do cadastro (o clube existe; reenviar pelo detalhe). */
+  brandIssues: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -164,28 +168,20 @@ function BrandPreview({
   secondary,
   logoUrl,
   site,
-  onLogoError,
 }: {
   name: string
   primary: string
   secondary: string
-  logoUrl: string
+  /** Prévia local do arquivo escolhido (URL de objeto), se houver. */
+  logoUrl: string | null
   site: string
-  onLogoError: (failed: boolean) => void
 }) {
   const p = colorOr(primary, DEFAULT_PRIMARY_COLOR)
   const s = colorOr(secondary, DEFAULT_SECONDARY_COLOR)
   const onPrimary = readableTextColor(p)
   const onSecondary = readableTextColor(s)
-  const [failed, setFailed] = useState(false)
-  const url = logoUrl.trim()
-  const showLogo = /^https?:\/\/.+/i.test(url) && !failed
-
-  useEffect(() => {
-    setFailed(false)
-    onLogoError(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url])
+  const url = logoUrl
+  const showLogo = Boolean(url)
 
   return (
     <figure className="m-0 overflow-hidden rounded-2xl border border-border bg-white shadow-sm sm:col-span-12">
@@ -204,15 +200,7 @@ function BrandPreview({
         <div className="flex items-center justify-between gap-3 px-5 py-3" style={{ background: s, color: onSecondary }}>
           {showLogo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={url}
-              alt=""
-              className="h-8 max-w-[160px] object-contain"
-              onError={() => {
-                setFailed(true)
-                onLogoError(true)
-              }}
-            />
+            <img src={url ?? undefined} alt="" className="h-8 max-w-[160px] rounded bg-white/95 object-contain px-1" />
           ) : (
             <span className="truncate text-sm font-bold">{name.trim() || 'Nome do clube'}</span>
           )}
@@ -255,6 +243,26 @@ function receitaMessage(filled: string[]): string {
   return 'Os campos já estavam preenchidos, então nada foi trocado.'
 }
 
+/** Miniatura do arquivo escolhido (URL de objeto, liberada ao sair da tela). */
+function FileThumb({ file, wide }: { file: File; wide?: boolean }) {
+  const url = useMemo(() => URL.createObjectURL(file), [file])
+  useEffect(() => () => URL.revokeObjectURL(url), [url])
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span
+        className={cn(
+          'flex h-10 items-center justify-center overflow-hidden rounded-md border bg-white',
+          wide ? 'w-20' : 'w-10',
+        )}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt="" className="max-h-full max-w-full object-contain p-0.5" />
+      </span>
+      <span className="max-w-40 truncate text-xs text-muted-foreground">{file.name}</span>
+    </span>
+  )
+}
+
 function ColorSwatch({ color }: { color: string }) {
   return (
     <span className="inline-flex items-center gap-2 font-mono">
@@ -283,7 +291,16 @@ export function ClubWizard({
   const { plans, isLoading: plansLoading, refresh } = useTenants()
   const [created, setCreated] = useState<CreatedClub | null>(null)
   const [slugEdited, setSlugEdited] = useState(false)
-  const [logoFailed, setLogoFailed] = useState(false)
+  // Arquivos escolhidos: ficam à parte dos campos de texto e só sobem depois que o clube existe.
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [iconFile, setIconFile] = useState<File | null>(null)
+  const brandFiles = useRef({ logo: null as File | null, icon: null as File | null })
+  brandFiles.current = { logo: logoFile, icon: iconFile }
+  const logoPreview = useMemo(() => (logoFile ? URL.createObjectURL(logoFile) : null), [logoFile])
+  useEffect(() => {
+    if (!logoPreview) return
+    return () => URL.revokeObjectURL(logoPreview)
+  }, [logoPreview])
   const [receitaFilled, setReceitaFilled] = useState<string[]>([])
 
   const steps = useMemo<WizardStep<ClubValues>[]>(
@@ -308,7 +325,7 @@ export function ClubWizard({
         id: 'aparencia',
         title: 'Aparência',
         icon: Palette,
-        description: 'Cores e logo do site do clube. Dá para mudar depois — sem isso, o site usa as cores padrão.',
+        description: 'Cores, logo e ícone do clube. Dá para mudar depois — sem isso, o site usa as cores padrão.',
         fields: CLUB_STEP_FIELDS.aparencia,
         validate: validateBrandStep,
       },
@@ -343,13 +360,27 @@ export function ClubWizard({
         const explained = explainClubApiError(result.error, result.fieldErrors)
         return { ok: false, message: explained.message, fieldErrors: explained.fieldErrors }
       }
+      // Logo e ícone: o clube já existe, então um arquivo que falhar NÃO desfaz o cadastro —
+      // a tela de sucesso avisa e leva ao detalhe do clube para reenviar.
+      const brandIssues: string[] = []
+      const clubId = result.data.tenant.id
+      if (brandFiles.current.logo) {
+        const sent = await uploadBrandFile(platformBrandUrl(clubId, 'logo'), brandFiles.current.logo, () => {})
+        if (!sent.ok) brandIssues.push(`Logo: ${sent.error}`)
+      }
+      // O ícone vai depois da logo: a logo só preserva um ícone já enviado, não um que ainda não existe.
+      if (brandFiles.current.icon) {
+        const sent = await uploadBrandFile(platformBrandUrl(clubId, 'icon'), brandFiles.current.icon, () => {})
+        if (!sent.ok) brandIssues.push(`Ícone: ${sent.error}`)
+      }
       void refresh()
       setCreated({
-        id: result.data.tenant.id,
+        id: clubId,
         name: result.data.tenant.name,
         ownerName: parsed.data.ownerName,
         ownerEmail: parsed.data.ownerEmail,
         ownerPassword: result.data.ownerPassword,
+        brandIssues,
       })
       onCreated?.({ id: result.data.tenant.id, name: result.data.tenant.name })
       return { ok: true }
@@ -362,7 +393,8 @@ export function ClubWizard({
     if (!open) return
     setCreated(null)
     setSlugEdited(false)
-    setLogoFailed(false)
+    setLogoFile(null)
+    setIconFile(null)
     setReceitaFilled([])
   }, [open])
 
@@ -704,27 +736,29 @@ export function ClubWizard({
             As duas cores estão muito parecidas: os botões quase somem sobre o cabeçalho. Escolha tons mais diferentes.
           </Notice>
         ) : null}
-        <TextField
-          {...wizard.field('logoUrl')}
-          label="Link da logo"
-          optional
-          span={12}
-          type="url"
-          inputMode="url"
-          placeholder="https://…/logo.svg"
-          hint={
-            logoFailed
-              ? 'Não conseguimos abrir a imagem deste link. Confira se o endereço está certo e é público.'
-              : 'Cole o endereço de uma imagem que já esteja na internet (PNG ou SVG, de preferência com fundo transparente).'
-          }
-        />
+        <div className="grid gap-8 sm:col-span-12 lg:grid-cols-2">
+          <BrandImageUploader
+            kind="logo"
+            file={logoFile}
+            onFileChange={setLogoFile}
+            primaryColor={values.primaryColor}
+            clubName={values.name}
+          />
+          <BrandImageUploader
+            kind="icon"
+            file={iconFile}
+            onFileChange={setIconFile}
+            primaryColor={values.primaryColor}
+            clubName={values.name}
+            hasPendingLogo={Boolean(logoFile)}
+          />
+        </div>
         <BrandPreview
           name={values.name}
           primary={values.primaryColor}
           secondary={values.secondaryColor}
-          logoUrl={values.logoUrl}
+          logoUrl={logoPreview}
           site={site}
-          onLogoError={setLogoFailed}
         />
       </FieldGrid>
     )
@@ -843,9 +877,13 @@ export function ClubWizard({
           <ReviewItem label="Cor secundária" value={<ColorSwatch color={colorOr(values.secondaryColor, DEFAULT_SECONDARY_COLOR)} />} />
           <ReviewItem
             label="Logo"
-            wide
-            value={values.logoUrl.trim() ? <span className="break-all">{values.logoUrl.trim()}</span> : null}
+            value={logoFile ? <FileThumb file={logoFile} wide /> : null}
             empty="Sem logo — o site mostra o nome do clube"
+          />
+          <ReviewItem
+            label="Ícone"
+            value={iconFile ? <FileThumb file={iconFile} /> : null}
+            empty={logoFile ? 'Sem ícone — usamos a logo' : 'Sem ícone'}
           />
         </ReviewSection>
         <ReviewSection title="Plano" icon={Tags} onEdit={() => wizard.goToStep('plano')}>
@@ -878,7 +916,8 @@ export function ClubWizard({
   const startAnother = () => {
     setCreated(null)
     setSlugEdited(false)
-    setLogoFailed(false)
+    setLogoFile(null)
+    setIconFile(null)
     setReceitaFilled([])
     filledFor.current = ''
     autofill.current = {}
@@ -913,6 +952,15 @@ export function ClubWizard({
           </>
         }
       >
+        {created.brandIssues.length > 0 ? (
+          <Notice tone="warning" icon={TriangleAlert}>
+            O clube foi cadastrado, mas {created.brandIssues.length === 1 ? 'um arquivo da marca não subiu' : 'arquivos da marca não subiram'}:{' '}
+            {created.brandIssues.join(' ')} Abra o clube em “Dados do clube” para enviar de novo.{' '}
+            <Link href={`/admin/inquilinos/${created.id}?tab=dados`} className="font-semibold underline">
+              Ir para o clube
+            </Link>
+          </Notice>
+        ) : null}
         <SecretValue
           label={`Senha provisória de ${created.ownerName}`}
           value={created.ownerPassword}

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 /**
  * Rotas públicas de upload pela HTTP (Hono em memória, sem banco): chave
  * errada = 404, corpo > 4 MB = 413, tipo falso (magic bytes) = 422, logo
- * PDF = 422, logo > 1 MB = 413, proposta fora de edição = 422.
+ * PDF = 422, logo > 5 MB = 413, proposta fora de edição = 422.
  */
 
 const ID = '0b6f6c2e-3f1a-4c55-9d0e-1a2b3c4d5e6f'
@@ -101,8 +101,13 @@ describe('upload de documentos e logo', () => {
     expect(result.status).toBe(422)
   })
 
-  it('logo: PDF = 422; PNG acima de 1 MB = 413', async () => {
+  it('logo: PDF = 422; PNG acima de 5 MB = 413; imagem corrompida e SVG com script = 422', async () => {
     expect((await upload(`/c/propostas/${ID}/logo?chave=${KEY}`, file(PDF_HEADER, 100, 'logo.pdf', 'application/pdf'))).status).toBe(422)
-    expect((await upload(`/c/propostas/${ID}/logo?chave=${KEY}`, file(PNG_HEADER, 1024 * 1024 + 10, 'logo.png', 'image/png'))).status).toBe(413)
+    expect((await upload(`/c/propostas/${ID}/logo?chave=${KEY}`, file(PNG_HEADER, 5 * 1024 * 1024 + 10, 'logo.png', 'image/png'))).status).toBe(413)
+    expect((await upload(`/c/propostas/${ID}/logo?chave=${KEY}`, file(PNG_HEADER, 100, 'logo.png', 'image/png'))).status).toBe(422)
+    const evil = new File(['<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9"><script>1</script></svg>'], 'x.svg', { type: 'image/svg+xml' })
+    const refused = await upload(`/c/propostas/${ID}/logo?chave=${KEY}`, evil)
+    expect(refused.status).toBe(422)
+    expect(refused.body.error?.message).toMatch(/segurança/)
   })
 })

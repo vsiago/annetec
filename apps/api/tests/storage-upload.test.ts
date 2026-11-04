@@ -41,14 +41,28 @@ describe('tipo real pelo conteúdo (magic bytes)', () => {
     expect(checkUpload('kyb_document', new Uint8Array())).toMatchObject({ ok: false, reason: 'empty' })
   })
 
-  it('logo: só PNG/JPEG até 1 MB (PDF e SVG fora)', () => {
+  it('logo: PNG/JPEG/WebP/SVG até 5 MB (PDF fora)', () => {
+    const WEBP = new Uint8Array([0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50])
     expect(checkUpload('brand_logo', PNG)).toMatchObject({ ok: true, type: { mime: 'image/png' } })
-    expect(checkUpload('brand_logo', PDF)).toMatchObject({ ok: false, reason: 'unsupported_type' })
+    expect(checkUpload('brand_logo', WEBP)).toMatchObject({ ok: true, type: { mime: 'image/webp' } })
     expect(checkUpload('brand_logo', new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toMatchObject({
+      ok: true,
+      type: { mime: 'image/svg+xml' },
+    })
+    expect(checkUpload('brand_logo', PDF)).toMatchObject({ ok: false, reason: 'unsupported_type' })
+    expect(checkUpload('kyb_document', new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toMatchObject({
       ok: false,
       reason: 'unsupported_type',
     })
-    expect(checkUpload('brand_logo', sized(PNG, 1024 * 1024 + 1))).toMatchObject({ ok: false, reason: 'too_large' })
+    expect(checkUpload('brand_logo', sized(PNG, 5 * 1024 * 1024 + 1))).toMatchObject({ ok: false, reason: 'too_large' })
+  })
+
+  it('SVG: BOM, <?xml?>, comentário e espaços antes do <svg>; lixo aleatório não', () => {
+    const svg = (text: string) => new TextEncoder().encode(text)
+    expect(sniffFileType(svg('﻿  <?xml version="1.0"?>\n<!-- logo -->\n<svg width="1"/>'))).toMatchObject({ ext: 'svg' })
+    expect(sniffFileType(svg('<html><svg/></html>'))).toBeNull()
+    expect(sniffFileType(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]))).toBeNull()
+    expect(sniffFileType(new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45]))).toBeNull() // WAV
   })
 
   it('nome do arquivo: sem caminho, sem controle, extensão do tipo real', () => {

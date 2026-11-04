@@ -1,7 +1,10 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import type { TenantBranding } from '@annetec/contracts'
 import { Building2, MapPin, Palette, type LucideIcon } from 'lucide-react'
+import { BrandImageUploader } from '@/components/branding/brand-image-uploader'
+import { deleteBrandFile, platformBrandUrl, uploadBrandFile } from '@/components/branding/brand-upload'
 import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -86,10 +89,13 @@ function ColorField({
 export function ClubDataForm({
   draft,
   onChange,
+  onBrandingChange,
   plans,
 }: {
   draft: Tenant
   onChange: (next: Tenant) => void
+  /** Marca devolvida pela API depois de enviar/remover logo ou ícone (já gravada). */
+  onBrandingChange: (branding: TenantBranding) => void
   plans: TenantPlan[]
 }) {
   const setAddress = (patch: Partial<Tenant['address']>) => onChange({ ...draft, address: { ...draft.address, ...patch } })
@@ -187,7 +193,7 @@ export function ClubDataForm({
       <Section
         title="Aparência"
         icon={Palette}
-        description="Pinta o site do clube, a tela de login e o painel da equipe."
+        description="Cores, logo e ícone do clube. Logo e ícone são aplicados assim que enviados; as cores só valem depois de “Salvar alterações”."
       >
         <ColorField
           id="club-primary-color"
@@ -201,16 +207,33 @@ export function ClubDataForm({
           value={draft.branding.secondaryColor}
           onChange={value => setBranding({ secondaryColor: value })}
         />
-        <FormField id="club-logo" label="Endereço do logo (link da imagem)" className="sm:col-span-2">
-          <Input
-            id="club-logo"
-            type="url"
-            inputMode="url"
-            placeholder="https://"
-            value={draft.branding.logoUrl ?? ''}
-            onChange={event => setBranding({ logoUrl: event.target.value })}
+        <div className="grid gap-8 sm:col-span-2 lg:grid-cols-2">
+          <BrandImageUploader
+            kind="logo"
+            branding={draft.branding}
+            primaryColor={draft.branding.primaryColor}
+            clubName={draft.name}
+            upload={(file, onProgress) => uploadBrandFile(platformBrandUrl(draft.id, 'logo'), file, onProgress)}
+            remove={() => deleteBrandFile(platformBrandUrl(draft.id, 'logo'))}
+            onBranding={onBrandingChange}
+            onUseColors={colors => {
+              // Só preenche os campos; quem grava é o "Salvar alterações".
+              setBranding({
+                ...(colors[0] ? { primaryColor: colors[0] } : {}),
+                ...(colors[1] ? { secondaryColor: colors[1] } : {}),
+              })
+            }}
           />
-        </FormField>
+          <BrandImageUploader
+            kind="icon"
+            branding={draft.branding}
+            primaryColor={draft.branding.primaryColor}
+            clubName={draft.name}
+            upload={(file, onProgress) => uploadBrandFile(platformBrandUrl(draft.id, 'icon'), file, onProgress)}
+            remove={() => deleteBrandFile(platformBrandUrl(draft.id, 'icon'))}
+            onBranding={onBrandingChange}
+          />
+        </div>
       </Section>
     </div>
   )
