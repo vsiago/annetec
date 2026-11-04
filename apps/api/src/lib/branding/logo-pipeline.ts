@@ -8,8 +8,8 @@ import sharp from 'sharp'
  *
  * Segurança: SVG nunca é guardado nem servido — só é rasterizado depois de
  * passar por `assertSafeSvg`. Toda a saída é reencodada (sem EXIF/ICC/metadados).
- * Memória (container de 512 MB): entrada limitada a ~24 megapixels e trabalho
- * em no máximo 2400 px do lado maior.
+ * Memória (container de 512 MB): entrada limitada a ~100 megapixels (lida em
+ * streaming e reduzida logo de início) e trabalho em no máximo 2400 px do lado maior.
  */
 
 // Defensivo para o container pequeno: sem cache do libvips e uma thread só.
@@ -18,8 +18,11 @@ sharp.concurrency(1)
 
 const LIMIT_INPUT_PIXELS = 24_000_000
 const WORK_SIDE = 2400
-/** Lado maior (px) que o SVG rasterizado deve ter, no mínimo (pedido: ≥ 1024). */
-const SVG_MIN_RASTER_SIDE = 1536
+const LIMIT_NORMALIZE_PIXELS = 100_000_000
+/** Lado maior (px) do SVG rasterizado (reduz SVGs enormes e amplia os minúsculos). */
+const SVG_RASTER_SIDE = 2048
+const SVG_MAX_PIXELS = 50_000_000
+const SVG_MAX_SIDE = 30_000
 const MIN_LOGO_SIDE = 128
 const MIN_ICON_SIDE = 64
 const WARN_LOGO_SIDE = 512
@@ -71,7 +74,7 @@ export interface IconVariants {
 export interface LogoVariants extends IconVariants {
   /** Cabe em 800×400, sem ampliar. */
   logo: Buffer
-  /** Versão toda branca — só quando a imagem tem transparência. */
+  /** Versão toda branca — só quando a imagem tem transparência E é de traço (cobertura opaca ≤ 55%). */
   logoLight?: Buffer
 }
 
@@ -135,42 +138,105 @@ interface RawImage {
 
 const UNREADABLE = 'Não foi possível ler a imagem. Verifique se o arquivo não está corrompido e tente de novo.'
 
+/**
+ * Densidade (dpi) para o SVG sair com ~`SVG_RASTER_SIDE` px no lado maior, sem o
+ * lado menor sumir (SVG 1×100000 precisa de ≥ 1 px) e sem passar de ~50 MP.
+ */
+function svgDensity(width: number, height: number): number {
+  const longest = Math.max(width, height)
+  const shortest = Math.min(width, height)
+  let scale = Math.max(SVG_RASTER_SIDE / longest, 1 / shortest) // px por unidade do SVG
+  const pixels = width * scale * height * scale
+  if (pixels > SVG_MAX_PIXELS) scale *= Math.sqrt(SVG_MAX_PIXELS / pixels)
+  // librsvg não rasteriza lado > 32767 px.
+  scale = Math.min(scale, SVG_MAX_SIDE / longest)
+  return Math.min(10_000, Math.max(1, 72 * scale))
+}
+
+/** Dimensões intrínsecas do SVG: metadata do sharp (72 dpi) ou, sem width/height, o viewBox. */
+async function svgIntrinsicSize(input: Buffer, text: string): Promise<{ width: number; height: number }> {
+  let width = 0
+  let height = 0
+  try {
+    const meta = await sharp(input, { limitInputPixels: false, failOn: 'error' }).metadata()
+    width = meta.width ?? 0
+    height = meta.height ?? 0
+  } catch {
+    // cai no viewBox abaixo
+  }
+  if (!width || !height) {
+    // Tamanho declarado grande demais para o libvips (> 32767 px): lê width/height da raiz.
+    const root = /<svg[^>]*>/i.exec(text)?.[0] ?? ''
+    const attr = (name: string) =>
+      Number(new RegExp(String.raw`\s${name}\s*=\s*["']\s*([\d.]+)\s*(?:px)?\s*["']`, 'i').exec(root)?.[1] ?? 0)
+    width = attr('width')
+    height = attr('height')
+  }
+  if (!width || !height) {
+    const box = /viewBox\s*=\s*["']\s*[-\d.eE]+[\s,]+[-\d.eE]+[\s,]+([\d.eE]+)[\s,]+([\d.eE]+)\s*["']/i.exec(text)
+    width = Number(box?.[1] ?? 0)
+    height = Number(box?.[2] ?? 0)
+  }
+  if (!(width > 0) || !(height > 0)) throw new BrandImageError('O SVG não tem dimensões (width/height ou viewBox).')
+  return { width, height }
+}
+
+/**
+ * Etapa 1 — normaliza: lê a entrada (qualquer tamanho até ~100 MP; SVG por
+ * tamanho-alvo), aplica EXIF, primeira página e reduz para caber em
+ * `WORK_SIDE`. Devolve um PNG pequeno + o tamanho original.
+ */
+async function normalize(input: Buffer, mime: string): Promise<{ png: Buffer; originalWidth: number; originalHeight: number }> {
+  let pipeline: sharp.Sharp
+  let originalWidth: number
+  let originalHeight: number
+  if (mime === 'image/svg+xml') {
+    const text = new TextDecoder('utf-8').decode(input)
+    assertSafeSvg(text)
+    const size = await svgIntrinsicSize(input, text)
+    const density = svgDensity(size.width, size.height)
+    originalWidth = Math.max(1, Math.round((size.width * density) / 72))
+    originalHeight = Math.max(1, Math.round((size.height * density) / 72))
+    pipeline = sharp(input, { density, limitInputPixels: LIMIT_NORMALIZE_PIXELS, failOn: 'error' })
+  } else {
+    const meta = await sharp(input, { limitInputPixels: false, failOn: 'error', pages: 1 }).metadata()
+    const swapped = (meta.orientation ?? 1) >= 5
+    originalWidth = (swapped ? meta.height : meta.width) ?? 0
+    originalHeight = (swapped ? meta.width : meta.height) ?? 0
+    if (originalWidth * originalHeight > LIMIT_NORMALIZE_PIXELS) {
+      throw new BrandImageError(
+        `A imagem tem ${originalWidth} × ${originalHeight} px; o máximo é cerca de 100 megapixels.`,
+      )
+    }
+    pipeline = sharp(input, { sequentialRead: true, limitInputPixels: LIMIT_NORMALIZE_PIXELS, failOn: 'error', pages: 1 }).rotate()
+  }
+  const png = await pipeline
+    .toColourspace('srgb')
+    .ensureAlpha()
+    .resize(WORK_SIDE, WORK_SIDE, { fit: 'inside', withoutEnlargement: true })
+    .png({ compressionLevel: 1 })
+    .toBuffer()
+  return { png, originalWidth, originalHeight }
+}
+
 /** Decodifica para RGBA sRGB (EXIF aplicado), no máximo `WORK_SIDE` px, e devolve o tamanho original. */
 async function decode(bytes: Uint8Array, mime: string): Promise<{ raw: RawImage; originalWidth: number; originalHeight: number }> {
   const input = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   try {
-    let pipeline: sharp.Sharp
-    let originalWidth: number
-    let originalHeight: number
-    if (mime === 'image/svg+xml') {
-      assertSafeSvg(new TextDecoder('utf-8').decode(input))
-      const base = await sharp(input, { limitInputPixels: LIMIT_INPUT_PIXELS, failOn: 'error' }).metadata()
-      const longest = Math.max(base.width ?? 0, base.height ?? 0)
-      if (!longest) throw new BrandImageError('O SVG não tem dimensões (width/height ou viewBox).')
-      // Densidade para o lado maior sair com ≥ 1536 px.
-      const density = Math.min(20_000, Math.max(72, Math.ceil((72 * SVG_MIN_RASTER_SIDE) / longest)))
-      originalWidth = Math.round(((base.width ?? 0) * density) / 72)
-      originalHeight = Math.round(((base.height ?? 0) * density) / 72)
-      pipeline = sharp(input, { density, limitInputPixels: LIMIT_INPUT_PIXELS, failOn: 'error' })
-    } else {
-      const meta = await sharp(input, { limitInputPixels: LIMIT_INPUT_PIXELS, failOn: 'error' }).metadata()
-      const swapped = (meta.orientation ?? 1) >= 5
-      originalWidth = (swapped ? meta.height : meta.width) ?? 0
-      originalHeight = (swapped ? meta.width : meta.height) ?? 0
-      pipeline = sharp(input, { limitInputPixels: LIMIT_INPUT_PIXELS, failOn: 'error' }).rotate()
-    }
-    const { data, info } = await pipeline
-      .toColourspace('srgb')
-      .ensureAlpha()
-      .resize(WORK_SIDE, WORK_SIDE, { fit: 'inside', withoutEnlargement: true })
+    const { png, originalWidth, originalHeight } = await normalize(input, mime)
+    // Etapa 2: a partir daqui a imagem tem no máximo 2400 px (< 24 MP).
+    const { data, info } = await sharp(png, { limitInputPixels: LIMIT_INPUT_PIXELS, failOn: 'error' })
       .raw()
       .toBuffer({ resolveWithObject: true })
     return { raw: { data, width: info.width, height: info.height }, originalWidth, originalHeight }
   } catch (error) {
     if (error instanceof BrandImageError) throw error
     const message = error instanceof Error ? error.message : ''
+    if (mime === 'image/svg+xml' && /zero-sized|32767|pixel limit/i.test(message)) {
+      throw new BrandImageError('As dimensões do SVG são exageradas (muito largo/alto para rasterizar). Exporte o logo como PNG ou ajuste o tamanho do SVG.')
+    }
     if (/pixel limit/i.test(message)) {
-      throw new BrandImageError('A imagem é grande demais (máximo de cerca de 24 megapixels). Reduza as dimensões e tente de novo.')
+      throw new BrandImageError('A imagem é grande demais (máximo de cerca de 100 megapixels). Reduza as dimensões e tente de novo.')
     }
     throw new BrandImageError(UNREADABLE)
   }
@@ -212,7 +278,12 @@ export function trimUniformBorders(image: RawImage): RawImage {
       }
     }
   }
-  if (maxX < 0) throw new BrandImageError('A imagem parece estar em branco. Envie um arquivo com o logo visível.')
+  if (maxX < 0) {
+    // Totalmente transparente: não há nada para mostrar.
+    if (transparentBackground) throw new BrandImageError('A imagem é totalmente transparente. Envie um arquivo com o logo visível.')
+    // Cor uniforme (parece "em branco"): nunca recusa — usa a imagem inteira, sem cortar.
+    return image
+  }
 
   const outWidth = maxX - minX + 1
   const outHeight = maxY - minY + 1
@@ -303,6 +374,20 @@ async function logoVariant(image: RawImage): Promise<{ png: Buffer; raw: RawImag
   return { png: await sharpOf(raw).png(PNG_OPTIONS).toBuffer(), raw }
 }
 
+/**
+ * Proporção de pixels opacos dentro da caixa já aparada (a imagem inteira). Logos de
+ * traço/escrita ficam abaixo de ~0,55; blocos sólidos ficam bem acima.
+ */
+export function opaqueCoverage(image: RawImage): number {
+  const total = image.width * image.height
+  let opaque = 0
+  for (let i = 3; i < image.data.length; i += 4) if (image.data[i]! >= 128) opaque++
+  return total > 0 ? opaque / total : 0
+}
+
+/** Acima disto a silhueta branca viraria uma mancha sólida: a carteirinha usa o logo colorido sobre um fundo branco. */
+export const SILHOUETTE_MAX_COVERAGE = 0.55
+
 /** Versão monocromática branca (alpha preservado) — fundos escuros/coloridos. */
 async function whiteVariant(logoRaw: RawImage): Promise<Buffer> {
   const white = Buffer.from(logoRaw.data)
@@ -341,15 +426,23 @@ async function iconVariants(image: RawImage): Promise<IconVariants> {
 // API pública
 // ---------------------------------------------------------------------------
 
+const UPSCALED_WARNING = 'A imagem é pequena; ela foi ampliada e pode ficar menos nítida.'
+const UPSCALE_TARGET_SIDE = 512
+
 async function prepare(bytes: Uint8Array, mime: string, minSide: number) {
   const { raw, originalWidth, originalHeight } = await decode(bytes, mime)
-  const trimmed = trimUniformBorders(raw)
+  let trimmed = trimUniformBorders(raw)
+  let upscaled = false
+  // Nunca recusa por ser pequena: amplia até um tamanho útil.
   if (Math.max(trimmed.width, trimmed.height) < minSide) {
-    throw new BrandImageError(
-      `A imagem é pequena demais (${trimmed.width}×${trimmed.height} px). Envie uma com pelo menos ${minSide} px no lado maior.`,
-    )
+    const { data, info } = await sharpOf(trimmed)
+      .resize(UPSCALE_TARGET_SIDE, UPSCALE_TARGET_SIDE, { fit: 'inside', kernel: 'lanczos3' })
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+    trimmed = { data, width: info.width, height: info.height }
+    upscaled = true
   }
-  return { trimmed, originalWidth, originalHeight }
+  return { trimmed, originalWidth, originalHeight, upscaled }
 }
 
 /**
@@ -361,13 +454,14 @@ export function processLogo(bytes: Uint8Array, mime: string): Promise<ProcessedL
 }
 
 async function processLogoNow(bytes: Uint8Array, mime: string): Promise<ProcessedLogo> {
-  const { trimmed, originalWidth, originalHeight } = await prepare(bytes, mime, MIN_LOGO_SIDE)
+  const { trimmed, originalWidth, originalHeight, upscaled } = await prepare(bytes, mime, MIN_LOGO_SIDE)
   const hasTransparency = detectTransparency(trimmed)
   const logo = await logoVariant(trimmed)
-  const logoLight = hasTransparency ? await whiteVariant(logo.raw) : undefined
+  // Silhueta branca só para logos "de traço"; blocos preenchidos viram mancha branca.
+  const logoLight = hasTransparency && opaqueCoverage(trimmed) <= SILHOUETTE_MAX_COVERAGE ? await whiteVariant(logo.raw) : undefined
   const icons = await iconVariants(trimmed)
   const suggestedColors = await suggestColors(trimmed)
-  const warnings: string[] = []
+  const warnings: string[] = upscaled ? [UPSCALED_WARNING] : []
   if (Math.max(trimmed.width, trimmed.height) < WARN_LOGO_SIDE) {
     warnings.push('A imagem tem menos de 512 px; pode ficar borrada em telas grandes.')
   }
@@ -391,8 +485,8 @@ export function processIcon(bytes: Uint8Array, mime: string): Promise<ProcessedI
 }
 
 async function processIconNow(bytes: Uint8Array, mime: string): Promise<ProcessedIcon> {
-  const { trimmed, originalWidth, originalHeight } = await prepare(bytes, mime, MIN_ICON_SIDE)
-  const warnings: string[] = []
+  const { trimmed, originalWidth, originalHeight, upscaled } = await prepare(bytes, mime, MIN_ICON_SIDE)
+  const warnings: string[] = upscaled ? [UPSCALED_WARNING] : []
   const longest = Math.max(trimmed.width, trimmed.height)
   if (longest < WARN_ICON_SIDE) warnings.push('A imagem tem menos de 256 px; o ícone pode ficar borrado em telas grandes.')
   if (longest / Math.min(trimmed.width, trimmed.height) > NON_SQUARE_RATIO) {

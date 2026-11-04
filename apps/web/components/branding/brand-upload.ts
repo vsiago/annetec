@@ -14,19 +14,20 @@ export type BrandKind = 'logo' | 'icon'
 /** Segmento `tipo` das rotas (a API usa `logo` e `icone`). */
 export const BRAND_KIND_SEGMENT: Record<BrandKind, string> = { logo: 'logo', icon: 'icone' }
 
-export const BRAND_ACCEPT = '.png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml'
+/** Aceita qualquer imagem: o navegador a abre, recorta e converte para PNG antes de enviar. */
+export const BRAND_ACCEPT = 'image/*,.png,.jpg,.jpeg,.webp,.svg,.gif,.avif,.bmp'
 
 export const BRAND_FORMATS_LABEL = 'PNG, JPG, WebP ou SVG'
 
 /** Textos de orientação (envio de logo e de ícone), iguais em todas as telas. */
 export const LOGO_GUIDANCE = {
-  lead: 'Envie um arquivo só — a gente ajusta os tamanhos para o site, a carteirinha, os e-mails e os aplicativos.',
-  detail: `${BRAND_FORMATS_LABEL}, até ${formatFileSize(BRAND_LOGO_MAX_BYTES)}. Melhor com fundo transparente e pelo menos 512 px de largura.`,
+  lead: 'Envie um arquivo só: você ajusta o recorte e a gente adapta os tamanhos para o site, a carteirinha, os e-mails e os aplicativos.',
+  detail: `${BRAND_FORMATS_LABEL}, de qualquer tamanho — a gente reduz e adapta. Melhor com fundo transparente.`,
 } as const
 
 export const ICON_GUIDANCE = {
-  lead: 'Opcional. Só o símbolo da marca, de preferência quadrado (512 × 512 px ou maior). Aparece no ícone do app no celular, na aba do navegador e no menu recolhido. Sem ícone, usamos a logo.',
-  detail: `${BRAND_FORMATS_LABEL}, até ${formatFileSize(BRAND_LOGO_MAX_BYTES)}.`,
+  lead: 'Opcional. Só o símbolo da marca, de preferência quadrado. Aparece no ícone do app no celular, na aba do navegador e no menu recolhido. Sem ícone, usamos a logo. Você recorta em quadrado antes de enviar.',
+  detail: `${BRAND_FORMATS_LABEL}, de qualquer tamanho — a gente reduz e adapta.`,
 } as const
 
 export type UploadOutcome<T> = { ok: true; data: T } | { ok: false; error: string }
@@ -46,7 +47,22 @@ export function brandMimeOf(file: File): string {
   return EXTENSION_MIME[extension] ?? ''
 }
 
-/** `null` = pode enviar; senão, a frase do problema (a API confere de novo pelos bytes). */
+/**
+ * Arquivo ESCOLHIDO pelo usuário: aceita qualquer imagem, de qualquer tamanho
+ * (o navegador reduz antes de enviar). Só barra o que claramente não é imagem.
+ */
+export function checkPickedImage(file: File): string | null {
+  if (file.size === 0) return 'O arquivo está vazio.'
+  const mime = brandMimeOf(file)
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+  const known = ['gif', 'avif', 'bmp', 'ico', 'tif', 'tiff', 'heic', 'heif', 'jfif']
+  if (!mime.startsWith('image/') && !known.includes(extension)) {
+    return `Envie uma imagem: ${BRAND_FORMATS_LABEL}.`
+  }
+  return null
+}
+
+/** Confere o arquivo que VAI para a API (já processado no navegador): tipo e teto de 5 MB. */
 export function checkBrandImage(file: File, kind: BrandKind = 'logo'): string | null {
   const noun = kind === 'logo' ? 'A logo' : 'O ícone'
   if (!(BRAND_LOGO_MIME_TYPES as readonly string[]).includes(brandMimeOf(file))) {

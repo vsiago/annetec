@@ -10,7 +10,8 @@ import {
   type OnboardingApplicantView,
   type SlugAvailability,
 } from '@annetec/contracts'
-import { LOGO_GUIDANCE } from '@/components/branding/brand-upload'
+import { LOGO_GUIDANCE, checkPickedImage } from '@/components/branding/brand-upload'
+import { ImageAdjustDialog } from '@/components/branding/image-adjust-dialog'
 import { Button } from '@/components/ui/button'
 import { checkSlugAction, saveOnboardingBrandAction } from '@/lib/actions/contratacao-api'
 import {
@@ -154,6 +155,7 @@ export function BrandStep({ ctx }: { ctx: StepContext }) {
   const [busy, setBusy] = useState(false)
   const [logoProgress, setLogoProgress] = useState<number | null>(null)
   const [logoError, setLogoError] = useState<string | null>(null)
+  const [pendingLogo, setPendingLogo] = useState<File | null>(null)
   const [siteBase, setSiteBase] = useState('annetec.org.br')
   const logoInput = useRef<HTMLInputElement>(null)
   const initialJson = useRef(JSON.stringify(initialForm(view)))
@@ -452,7 +454,11 @@ export function BrandStep({ ctx }: { ctx: StepContext }) {
                   onChange={event => {
                     const file = event.target.files?.[0]
                     event.target.value = ''
-                    if (file) void uploadLogo(file)
+                    if (!file) return
+                    setLogoError(null)
+                    const problem = checkPickedImage(file)
+                    if (problem) setLogoError(problem)
+                    else setPendingLogo(file)
                   }}
                 />
                 <Button
@@ -484,6 +490,18 @@ export function BrandStep({ ctx }: { ctx: StepContext }) {
                 ) : null}
               </div>
             </div>
+            <ImageAdjustDialog
+              file={pendingLogo}
+              kind="logo"
+              primaryColor={form.primaryColor}
+              clubName={form.clubName}
+              applyLabel="Aplicar e enviar"
+              onCancel={() => setPendingLogo(null)}
+              onApply={ready => {
+                setPendingLogo(null)
+                void uploadLogo(ready)
+              }}
+            />
             {logoError ? (
               <p className="mt-2 text-[13px] text-destructive" role="alert">
                 {logoError}

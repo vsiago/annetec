@@ -78,8 +78,9 @@ const IMAGE_BLUE = { r: 30, g: 136, b: 229 }
 
 /** Logo transparente (retângulo azul furado, 800×400 de conteúdo). */
 async function transparentLogo(): Promise<Buffer> {
+  // Moldura fina (cobertura opaca < 55%): só assim a versão branca (logoLight) é gerada.
   const block = await sharp({ create: { width: 800, height: 400, channels: 4, background: { ...IMAGE_BLUE, alpha: 1 } } }).png().toBuffer()
-  const hole = await sharp({ create: { width: 300, height: 150, channels: 4, background: '#fff' } }).png().toBuffer()
+  const hole = await sharp({ create: { width: 700, height: 330, channels: 4, background: '#fff' } }).png().toBuffer()
   const holed = await sharp(block).composite([{ input: hole, gravity: 'centre', blend: 'dest-out' }]).png().toBuffer()
   return sharp({ create: { width: 1000, height: 600, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite([{ input: holed, gravity: 'centre' }])
@@ -194,7 +195,7 @@ describe('logo — admin do clube', () => {
     expect(refused.body!.error!.message).toMatch(/segurança/)
   })
 
-  it('acima de 5 MB = 413; tipo não aceito (PDF) = 422; imagem pequena = 422', async () => {
+  it('acima de 5 MB = 413; tipo não aceito (PDF) = 422; imagem pequena é ampliada', async () => {
     const big = new Uint8Array(5 * 1024 * 1024 + 10)
     big.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     expect((await upload(LOGO, big)).status).toBe(413)
@@ -204,8 +205,7 @@ describe('logo — admin do clube', () => {
       .png()
       .toBuffer()
     const small = await upload(LOGO, tiny)
-    expect(small.status).toBe(422)
-    expect(small.body!.error!.message).toMatch(/pequena demais/)
+    expect(small.status).toBeLessThan(300)
   })
 
   it('sem arquivo = 400', async () => {

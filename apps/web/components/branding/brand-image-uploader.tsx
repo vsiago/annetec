@@ -18,7 +18,8 @@ import { Button } from '@/components/ui/button'
 import { formatFileSize } from '@/lib/adapters/contratacao'
 import { readableTextColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
-import { BRAND_ACCEPT, ICON_GUIDANCE, LOGO_GUIDANCE, checkBrandImage, type BrandKind, type UploadOutcome } from './brand-upload'
+import { ImageAdjustDialog } from './image-adjust-dialog'
+import { BRAND_ACCEPT, ICON_GUIDANCE, LOGO_GUIDANCE, checkPickedImage, type BrandKind, type UploadOutcome } from './brand-upload'
 
 /**
  * Envio de logo ou ícone do clube com adaptação automática.
@@ -92,6 +93,7 @@ export function BrandImageUploader({
   const [suggested, setSuggested] = useState<string[]>([])
   const [dragging, setDragging] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pending, setPending] = useState<File | null>(null)
 
   const localUrl = useObjectUrl(deferred ? file : null)
   const busy = progress !== null || removing
@@ -108,27 +110,34 @@ export function BrandImageUploader({
   // Ícone gerado da logo não se remove: remover só faz sentido para o enviado à parte.
   const canRemove = deferred ? Boolean(file) : isLogo ? hasImage : branding?.iconSource === 'upload'
 
-  async function handleFile(picked: File | undefined) {
+  /** Escolheu ou soltou um arquivo: limpa o erro anterior e abre o editor "Ajustar imagem". */
+  function handleFile(picked: File | undefined) {
     if (!picked || locked) return
     setError(null)
-    const problem = checkBrandImage(picked, kind)
+    const problem = checkPickedImage(picked)
     if (problem) {
       setError(problem)
       return
     }
+    setPending(picked)
+  }
+
+  /** O editor devolveu o arquivo pronto (PNG/WebP do navegador): guarda (adiado) ou envia (imediato). */
+  async function handleReady(ready: File) {
+    setPending(null)
+    setError(null)
+    setWarnings([])
     if (deferred) {
-      setWarnings([])
-      onFileChange?.(picked)
+      onFileChange?.(ready)
       return
     }
     setProgress(0)
-    setWarnings([])
     setSuggested([])
-    const result = await upload(picked, setProgress)
+    const result = await upload(ready, setProgress)
     setProgress(null)
     if (!result.ok) {
+      // O erro aparece uma vez só, aqui embaixo (sem toast repetindo).
       setError(result.error)
-      toast.error(`Não foi possível enviar ${article} ${noun}`, { description: result.error })
       return
     }
     setWarnings(result.data.warnings)
@@ -150,7 +159,6 @@ export function BrandImageUploader({
     setRemoving(false)
     if (!result.ok) {
       setError(result.error)
-      toast.error(`Não foi possível remover ${article} ${noun}`, { description: result.error })
       return
     }
     setWarnings([])
@@ -169,7 +177,7 @@ export function BrandImageUploader({
   function onDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault()
     setDragging(false)
-    void handleFile(event.dataTransfer.files?.[0])
+    handleFile(event.dataTransfer.files?.[0])
   }
 
   const actionLabel = hasImage ? `Trocar ${noun}` : `Enviar ${noun}`
@@ -291,7 +299,7 @@ export function BrandImageUploader({
           onChange={event => {
             const picked = event.target.files?.[0]
             event.target.value = ''
-            void handleFile(picked)
+            handleFile(picked)
           }}
         />
       </div>
@@ -364,6 +372,16 @@ export function BrandImageUploader({
         hasPendingLogo={hasPendingLogo}
         primaryColor={primaryColor}
         clubName={clubName}
+      />
+
+      <ImageAdjustDialog
+        file={pending}
+        kind={kind}
+        primaryColor={primaryColor}
+        clubName={clubName}
+        applyLabel={deferred ? 'Aplicar' : 'Aplicar e enviar'}
+        onCancel={() => setPending(null)}
+        onApply={ready => void handleReady(ready)}
       />
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>

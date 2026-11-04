@@ -28,6 +28,8 @@ async function logoPng(opts: {
   color?: typeof BLUE
   /** Fura o retângulo no meio (transparência de verdade dentro do logo, que sobrevive ao corte). */
   hole?: boolean
+  /** Fração (0–1) de cada lado do furo; padrão 0,4. */
+  holeRatio?: number
 }) {
   let block = await sharp({
     create: { width: opts.box.width, height: opts.box.height, channels: 4, background: { ...(opts.color ?? BLUE), alpha: 1 } },
@@ -36,7 +38,7 @@ async function logoPng(opts: {
     .toBuffer()
   if (opts.hole) {
     const hole = await sharp({
-      create: { width: Math.round(opts.box.width * 0.4), height: Math.round(opts.box.height * 0.4), channels: 4, background: WHITE },
+      create: { width: Math.round(opts.box.width * (opts.holeRatio ?? 0.4)), height: Math.round(opts.box.height * (opts.holeRatio ?? 0.4)), channels: 4, background: WHITE },
     })
       .png()
       .toBuffer()
@@ -109,7 +111,7 @@ describe('processLogo — corte e tamanhos', () => {
   })
 
   it('logoLight só com transparência, e é branco com alpha preservado', async () => {
-    const transparent = await logoPng({ width: 800, height: 600, bg: TRANSPARENT, box: { width: 400, height: 200 }, hole: true })
+    const transparent = await logoPng({ width: 800, height: 600, bg: TRANSPARENT, box: { width: 400, height: 200 }, hole: true, holeRatio: 0.8 })
     const { variants } = await processLogo(transparent, 'image/png')
     expect(variants.logoLight).toBeDefined()
     const light = await stats(variants.logoLight!)
@@ -118,6 +120,15 @@ describe('processLogo — corte e tamanhos', () => {
     expect(pixel(light, 5, 5)).toEqual({ r: 255, g: 255, b: 255, a: 255 }) // parte opaca do logo vira branca
     expect(pixel(light, Math.floor(light.width / 2), Math.floor(light.height / 2)).a).toBe(0) // o furo continua transparente
     expect(light.data.some((v, i) => i % 4 !== 3 && v !== 255 && light.data[i - (i % 4) + 3] !== 0)).toBe(false)
+  })
+
+  it('logo de bloco preenchido (cobertura > 55%) não gera logoLight; traço fino gera', async () => {
+    const block = await logoPng({ width: 800, height: 600, bg: TRANSPARENT, box: { width: 400, height: 200 }, hole: true, holeRatio: 0.4 })
+    const filled = await processLogo(block, 'image/png')
+    expect(filled.meta.hasTransparency).toBe(true)
+    expect(filled.variants.logoLight).toBeUndefined()
+    const frame = await logoPng({ width: 800, height: 600, bg: TRANSPARENT, box: { width: 400, height: 200 }, hole: true, holeRatio: 0.8 })
+    expect((await processLogo(frame, 'image/png')).variants.logoLight).toBeDefined()
   })
 
   it('entrada JPEG (sem alpha) não gera logoLight e marca hasTransparency=false', async () => {
@@ -164,11 +175,31 @@ describe('processLogo — corte e tamanhos', () => {
 })
 
 describe('processLogo — limites e avisos', () => {
-  it('imagem pequena demais (< 128 px após o corte) é recusada com mensagem clara', async () => {
+  it('imagem pequena (< 128 px após o corte) é ampliada, com aviso, nunca recusada', async () => {
     const tiny = await logoPng({ width: 400, height: 400, bg: WHITE, box: { width: 100, height: 60 } })
-    await expect(processLogo(tiny, 'image/png')).rejects.toThrow(/A imagem é pequena demais/)
-    await expect(processLogo(tiny, 'image/png')).rejects.toBeInstanceOf(BrandImageError)
+    const { variants, meta } = await processLogo(tiny, 'image/png')
+    expect(meta.warnings.join(' ')).toMatch(/foi ampliada/)
+    expect(meta.trimmedWidth).toBeGreaterThanOrEqual(512)
+    const m = await sharp(variants.logo).metadata()
+    expect(m.width).toBeLessThanOrEqual(800)
+    expect(m.height).toBeLessThanOrEqual(400)
   })
+
+  it('PNG chato enorme (> 24 MP) é aceito e adaptado às variantes', async () => {
+    const big = await logoPng({ width: 6000, height: 5000, bg: TRANSPARENT, box: { width: 4000, height: 3000 }, hole: false })
+    const { variants, meta } = await processLogo(big, 'image/png')
+    expect(meta.width).toBe(6000)
+    const m = await sharp(variants.logo).metadata()
+    expect(m.width).toBeLessThanOrEqual(800)
+    expect(m.height).toBeLessThanOrEqual(400)
+    expect((await sharp(variants.icon).metadata()).width).toBe(512)
+  })
+
+  it('acima de ~100 MP é recusado com o tamanho real na mensagem', async () => {
+    const huge = await sharp({ create: { width: 12000, height: 9000, channels: 3, background: '#1E88E5' } }).png({ compressionLevel: 9 }).toBuffer()
+    await expect(processLogo(huge, 'image/png')).rejects.toThrow(/12000 × 9000 px; o máximo é cerca de 100 megapixels/)
+    await expect(processLogo(huge, 'image/png')).rejects.toBeInstanceOf(BrandImageError)
+  }, 30_000)
 
   it('avisa quando o lado maior tem menos de 512 px', async () => {
     const input = await logoPng({ width: 400, height: 300, bg: WHITE, box: { width: 300, height: 200 } })
@@ -183,9 +214,17 @@ describe('processLogo — limites e avisos', () => {
     await expect(processLogo(png.subarray(0, 60), 'image/png')).rejects.toBeInstanceOf(BrandImageError)
   })
 
-  it('imagem em branco é recusada', async () => {
+  it('imagem de cor uniforme não é recusada: processa a imagem inteira sem cortar', async () => {
     const blank = await sharp({ create: { width: 500, height: 500, channels: 3, background: WHITE } }).png().toBuffer()
-    await expect(processLogo(blank, 'image/png')).rejects.toThrow(/em branco/)
+    const { meta, variants } = await processLogo(blank, 'image/png')
+    expect(meta).toMatchObject({ trimmedWidth: 500, trimmedHeight: 500 })
+    expect(variants.logo.length).toBeGreaterThan(0)
+  })
+
+  it('imagem totalmente transparente é recusada com mensagem clara', async () => {
+    const empty = await sharp({ create: { width: 500, height: 500, channels: 4, background: TRANSPARENT } }).png().toBuffer()
+    await expect(processLogo(empty, 'image/png')).rejects.toThrow(/totalmente transparente/)
+    await expect(processLogo(empty, 'image/png')).rejects.toBeInstanceOf(BrandImageError)
   })
 })
 
@@ -213,6 +252,17 @@ describe('cores sugeridas', () => {
 describe('SVG', () => {
   const svg = (body: string, attrs = 'width="600" height="300" viewBox="0 0 600 300"') =>
     new TextEncoder().encode(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ${attrs}>${body}</svg>`)
+
+  it('SVG com viewBox enorme e sem width/height é aceito (raster ~2048 px)', async () => {
+    const { meta } = await processLogo(svg('<rect width="10000" height="10000" fill="#FFFFFF"/><circle cx="5000" cy="5000" r="3000" fill="#1E88E5"/>', 'viewBox="0 0 10000 10000"'), 'image/svg+xml')
+    expect(Math.max(meta.width, meta.height)).toBeLessThanOrEqual(2100)
+    expect(Math.max(meta.width, meta.height)).toBeGreaterThanOrEqual(2000)
+  })
+
+  it('SVG minúsculo (24×24) é rasterizado para cima', async () => {
+    const { meta } = await processIcon(svg('<circle cx="12" cy="12" r="10" fill="#1E88E5"/>', 'width="24" height="24" viewBox="0 0 24 24"'), 'image/svg+xml')
+    expect(Math.max(meta.width, meta.height)).toBeGreaterThanOrEqual(2000)
+  })
 
   it('SVG seguro é rasterizado com ≥ 1024 px no lado maior', async () => {
     const { variants, meta } = await processLogo(svg('<rect x="20" y="20" width="560" height="260" fill="#1E88E5"/>'), 'image/svg+xml')
@@ -260,13 +310,15 @@ describe('processIcon / deriveIconsFromLogo', () => {
     expect(pixel(await stats(variants.favicon), 0, 0).a).toBe(0)
   })
 
-  it('não quadrado avisa para enviar só o símbolo; < 256 px avisa; < 64 px recusa', async () => {
+  it('não quadrado avisa para enviar só o símbolo; < 256 px avisa; < 64 px amplia', async () => {
     const wide = await logoPng({ width: 900, height: 500, bg: TRANSPARENT, box: { width: 800, height: 300 } })
     expect((await processIcon(wide, 'image/png')).meta.warnings.join(' ')).toMatch(/só o símbolo/)
     const small = await logoPng({ width: 200, height: 200, bg: TRANSPARENT, box: { width: 150, height: 150 } })
     expect((await processIcon(small, 'image/png')).meta.warnings.join(' ')).toMatch(/menos de 256 px/)
     const tiny = await logoPng({ width: 200, height: 200, bg: TRANSPARENT, box: { width: 40, height: 40 } })
-    await expect(processIcon(tiny, 'image/png')).rejects.toThrow(/pequena demais/)
+    const up = await processIcon(tiny, 'image/png')
+    expect(up.meta.warnings.join(' ')).toMatch(/foi ampliada/)
+    expect((await sharp(up.variants.icon).metadata()).width).toBe(512)
   })
 
   it('deriveIconsFromLogo gera os mesmos 4 tamanhos a partir de um logo processado', async () => {
