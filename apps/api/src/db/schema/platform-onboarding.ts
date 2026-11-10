@@ -37,6 +37,7 @@ import { organization } from './auth'
 import { clubPaymentMethodEnum } from './club-billing'
 import { tenantPlans } from './platform'
 import { platformFiles } from './platform-infra'
+import { vendasAgentes, vendasLeads } from './vendas-rede'
 
 /**
  * Contratação pública da suboperadora + análise cadastral (KYB) — blueprint
@@ -191,6 +192,9 @@ export const platformOnboardingProposals = pgTable(
      * chave da comissão.
      */
     sellerUserId: text('seller_user_id'),
+    /** Rede Comercial: agente e lead de origem (o `sellerUserId` antigo segue preenchido por compatibilidade). */
+    vendasAgenteId: uuid('vendas_agente_id').references(() => vendasAgentes.id, { onDelete: 'set null' }),
+    vendasLeadId: uuid('vendas_lead_id').references(() => vendasLeads.id, { onDelete: 'set null' }),
     /** Código de indicação que vinculou a proposta (só quando válido). */
     referralCode: text('referral_code'),
     /** Desconto APROVADO pelo superadmin (cotação, ativação e assinatura leem daqui). */

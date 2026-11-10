@@ -32,6 +32,7 @@ import { tenantPlansController } from '@/modules/tenant-plans/controller'
 import { tenantsController } from '@/modules/tenants/controller'
 import { tenantPublicController } from '@/modules/tenants/public-controller'
 import { usersController } from '@/modules/users/controller'
+import { vendasRedePlatformRoutes, vendasRedePublicRoutes, vendasRedeTenantRoutes } from '@/modules/vendas-rede'
 import type { AppEnv } from '@/http/types'
 
 /**
@@ -77,6 +78,10 @@ export const routes = new Hono<AppEnv>()
   // nunca alcança as rotas do outro.
   .route('/api/v1/platform/vendas', platformSellerController)
   .route('/api/v1/platform/comercial', platformSalesTeamController)
+  // Rede Comercial (`vendas-rede`): mesmo conjunto de rotas nos dois escopos; o `salesContext`
+  // de cada um autentica (a equipe e o vendedor ANNETEC aqui; admin/seller do clube no tenant).
+  .route('/api/v1/vendas', vendasRedePlatformRoutes)
+  .route('/api/v1/public/vendas', vendasRedePublicRoutes)
   .use('/api/v1/t/:tenantSlug/*', platformAccessGuard)
   .route('/api/v1/t/:tenantSlug/assinatura-annetec', tenantPlatformSubscriptionController)
   .route('/api/v1/t/:tenantSlug/public/checkout', clubCheckoutController)
@@ -93,5 +98,6 @@ export const routes = new Hono<AppEnv>()
   .route('/api/v1/t/:tenantSlug/faturamento', clubBillingAdminController)
   .route('/api/v1/t/:tenantSlug/cliente', clubPortalController)
   .route('/api/v1/t/:tenantSlug/notificacoes', tenantNotificationsController)
+  .route('/api/v1/t/:tenantSlug/vendas', vendasRedeTenantRoutes)
 
 export type ApiRoutes = typeof routes

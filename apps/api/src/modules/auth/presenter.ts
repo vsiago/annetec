@@ -16,6 +16,8 @@ export function toSessionUser(session: AuthContext): SessionUser {
     tenantSlug: session.membership.tenantSlug,
     tenantRole: session.membership.tenantRole,
     impersonatedBy: session.membership.impersonatedBy,
+    salesRole: session.membership.salesRole ?? null,
+    salesAgentId: session.membership.salesAgentId ?? null,
   }
 }
 

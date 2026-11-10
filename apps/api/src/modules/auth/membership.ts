@@ -1,7 +1,8 @@
-import { isPlatformAccountRole, type PlatformRole } from '@annetec/contracts'
-import { and, eq } from 'drizzle-orm'
+import { isPlatformAccountRole, type PapelComercial, type PlatformRole } from '@annetec/contracts'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { member, organization } from '@/db/schema'
+import { member, organization, vendasAgentes } from '@/db/schema'
+import { logger } from '@/lib/logger'
 
 /**
  * O único lugar que traduz "usuário + sessão do Better Auth" para o
@@ -19,6 +20,46 @@ export interface ResolvedMembership {
   tenantRole: 'admin' | 'seller' | 'client' | null
   /** Id do superadmin dono da sessão real, quando esta é uma sessão de impersonação. */
   impersonatedBy: string | null
+  /**
+   * Rede Comercial: papel comercial do usuário neste escopo (`vendas_agentes`),
+   * ou `null` (equipe/admin são master IMPLÍCITO e não têm linha). Só é lido
+   * para `platform_seller` e `seller` de clube. Opcional no tipo para as
+   * sessões montadas à mão (testes, impersonação) continuarem válidas.
+   */
+  salesRole?: PapelComercial | null
+  /** `vendas_agentes.id` do usuário neste escopo, ou `null`. */
+  salesAgentId?: string | null
+}
+
+const NO_SALES = { salesRole: null, salesAgentId: null } as const
+
+/**
+ * Perfil comercial (`vendas_agentes`) do usuário no vínculo ativo: um `select`
+ * indexado por `(user_id, scope, tenant_id)`. Nunca derruba a sessão — sem
+ * tabela (migração pendente) ou sem linha, devolve `null`.
+ */
+export async function resolveSalesProfile(
+  userId: string,
+  scope: 'platform' | 'tenant',
+  tenantId: string | null,
+): Promise<{ salesRole: PapelComercial | null; salesAgentId: string | null }> {
+  try {
+    const [row] = await db
+      .select({ id: vendasAgentes.id, papel: vendasAgentes.papel })
+      .from(vendasAgentes)
+      .where(
+        and(
+          eq(vendasAgentes.userId, userId),
+          eq(vendasAgentes.scope, scope),
+          tenantId ? eq(vendasAgentes.tenantId, tenantId) : isNull(vendasAgentes.tenantId),
+        ),
+      )
+      .limit(1)
+    return row ? { salesRole: row.papel, salesAgentId: row.id } : NO_SALES
+  } catch (error) {
+    logger.warn({ userId, err: error instanceof Error ? error.message : String(error) }, 'Sessão sem perfil comercial: falha ao ler vendas_agentes')
+    return NO_SALES
+  }
 }
 
 /**
@@ -45,7 +86,7 @@ export async function resolveActiveMembership(
   // Conta desativada não tem papel nenhum — nem de plataforma, nem de
   // inquilino. Sem inquilino ativo, `requireAuth` responde 401.
   if (isUserBanned(authUser)) {
-    return { scope: 'tenant', platformRole: null, tenantId: null, tenantSlug: null, tenantRole: null, impersonatedBy }
+    return { scope: 'tenant', platformRole: null, tenantId: null, tenantSlug: null, tenantRole: null, impersonatedBy, ...NO_SALES }
   }
 
   if (isPlatformAccountRole(authUser.role)) {
@@ -56,6 +97,7 @@ export async function resolveActiveMembership(
       tenantSlug: null,
       tenantRole: null,
       impersonatedBy,
+      ...(authUser.role === 'platform_seller' ? await resolveSalesProfile(authUser.id, 'platform', null) : NO_SALES),
     }
   }
 
@@ -66,6 +108,7 @@ export async function resolveActiveMembership(
     tenantSlug: null,
     tenantRole: null,
     impersonatedBy,
+    ...NO_SALES,
   }
 
   if (!authSession.activeOrganizationId) return empty
@@ -95,5 +138,6 @@ export async function resolveActiveMembership(
     tenantSlug: row.slug,
     tenantRole: row.role as 'admin' | 'seller' | 'client',
     impersonatedBy,
+    ...(row.role === 'seller' ? await resolveSalesProfile(authUser.id, 'tenant', row.organizationId) : NO_SALES),
   }
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { cpf, email, slug } from '../common/primitives'
 import { platformRole, tenantRole } from './enums'
+import { papelComercial } from './vendas-rede'
 
 /**
  * Contratos de autenticação.
@@ -124,6 +125,14 @@ export const sessionUser = z.object({
   tenantRole: tenantRole.nullable(),
   /** Id do superadmin dono da sessão real, quando esta é uma sessão de impersonação. */
   impersonatedBy: z.string().nullable(),
+  /**
+   * Rede Comercial: papel comercial do usuário (`vendas_agentes.papel`) no escopo
+   * da sessão, ou `null` (equipe e `admin` do clube são master implícito). A web
+   * decide o redirecionamento pós-login por aqui (`balcao` → `/[tenant]/balcao`).
+   */
+  salesRole: papelComercial.nullable().optional(),
+  /** `vendas_agentes.id` do usuário no escopo da sessão, ou `null`. */
+  salesAgentId: z.string().nullable().optional(),
   /**
    * Só em sessão de associado (`tenantRole === 'client'`), em todo login
    * (senha, portal CPF, Google) e no `GET /auth/me`: `true` quando ele ainda

@@ -35,6 +35,21 @@ export const ERROR_CODES = {
    * na conta da ANNETEC.
    */
   RECEBIMENTO_NAO_CONFIGURADO: 'RECEBIMENTO_NAO_CONFIGURADO',
+  // Rede Comercial (`vendas-rede`)
+  /** Conta de vendedor sem perfil em `vendas_agentes` (403). */
+  VENDAS_SEM_PERFIL: 'VENDAS_SEM_PERFIL',
+  /** Agente inativo tentando escrever (403). */
+  VENDAS_PERFIL_INATIVO: 'VENDAS_PERFIL_INATIVO',
+  /** Outro agente reivindicou o lead antes (409). */
+  VENDAS_LEAD_JA_REIVINDICADO: 'VENDAS_LEAD_JA_REIVINDICADO',
+  /** Mudança de etapa fora da máquina de estados (422). */
+  VENDAS_TRANSICAO_INVALIDA: 'VENDAS_TRANSICAO_INVALIDA',
+  /** Ação fora da cadeia de visibilidade do papel (403). */
+  VENDAS_SEM_PERMISSAO_NA_REDE: 'VENDAS_SEM_PERMISSAO_NA_REDE',
+  /** Código de indicação inexistente ou inativo (404). */
+  VENDAS_CODIGO_INVALIDO: 'VENDAS_CODIGO_INVALIDO',
+  /** Atendimento de balcão inconsistente com o resultado informado (422). */
+  VENDAS_ATENDIMENTO_INVALIDO: 'VENDAS_ATENDIMENTO_INVALIDO',
   // 422
   BUSINESS_RULE_VIOLATION: 'BUSINESS_RULE_VIOLATION',
   // 429
@@ -72,6 +87,13 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   CONFLICT: 409,
   ALREADY_EXISTS: 409,
   RECEBIMENTO_NAO_CONFIGURADO: 409,
+  VENDAS_SEM_PERFIL: 403,
+  VENDAS_PERFIL_INATIVO: 403,
+  VENDAS_LEAD_JA_REIVINDICADO: 409,
+  VENDAS_TRANSICAO_INVALIDA: 422,
+  VENDAS_SEM_PERMISSAO_NA_REDE: 403,
+  VENDAS_CODIGO_INVALIDO: 404,
+  VENDAS_ATENDIMENTO_INVALIDO: 422,
   BUSINESS_RULE_VIOLATION: 422,
   RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,

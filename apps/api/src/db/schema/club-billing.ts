@@ -26,6 +26,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { organization, user } from './auth'
 import { clubPlans } from './business'
+import { vendasAgentes, vendasLeads } from './vendas-rede'
 
 /**
  * Clube de Benefícios — assinatura, cobrança e faturamento PRÓPRIOS da Annetec
@@ -221,10 +222,14 @@ export const clubSubscriptions = pgTable(
     cancelReason: text('cancel_reason'),
     /** `checkout` | `seed` | `admin`. */
     source: text('source').notNull().default('checkout'),
+    /** Rede Comercial: agente e lead que originaram a venda (base da comissão). */
+    vendasAgenteId: uuid('vendas_agente_id').references(() => vendasAgentes.id, { onDelete: 'set null' }),
+    vendasLeadId: uuid('vendas_lead_id').references(() => vendasLeads.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   table => [
+    index('club_subscriptions_vendas_agente_idx').on(table.vendasAgenteId),
     index('club_subscriptions_org_status_idx').on(table.organizationId, table.status),
     index('club_subscriptions_org_user_idx').on(table.organizationId, table.userId),
     index('club_subscriptions_org_next_due_idx').on(table.organizationId, table.nextDueDate),

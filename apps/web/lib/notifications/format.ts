@@ -69,6 +69,8 @@ export function platformHeadline(notification: AppNotification): string {
       return `Aprovações › ${APPROVAL_KIND_LABELS.clubes}`
     case 'managed_account_decided':
     case 'platform_auto_debit_failed':
+    case 'vendas_lead_novo':
+    case 'vendas_lead_atribuido':
       return notification.title
   }
 }

@@ -13,8 +13,11 @@ import { z } from 'zod'
 /**
  * `seller` = UM vendedor ANNETEC (`recipientUserId`): pedido de desconto
  * aprovado/recusado. Lido em `/api/v1/platform/vendas/notificacoes`.
+ * `sales` = UM agente da Rede Comercial (`recipientUserId` obrigatório;
+ * `organizationId` nulo no escopo platform, o clube no escopo tenant): lead
+ * novo no pool etc.
  */
-export const NOTIFICATION_AUDIENCES = ['tenant', 'platform', 'seller'] as const
+export const NOTIFICATION_AUDIENCES = ['tenant', 'platform', 'seller', 'sales'] as const
 export const notificationAudience = z.enum(NOTIFICATION_AUDIENCES)
 export type NotificationAudience = z.infer<typeof notificationAudience>
 
@@ -48,6 +51,10 @@ export const NOTIFICATION_KINDS = [
   'platform_auto_debit_failed',
   /** Clube enviou a contratação para análise (sino da equipe → Aprovações › Novos clubes). */
   'onboarding_submitted',
+  /** Lead novo no pool da Rede Comercial (público `sales`). */
+  'vendas_lead_novo',
+  /** Lead atribuído a um agente (público `sales`). */
+  'vendas_lead_atribuido',
 ] as const
 export const notificationKind = z.enum(NOTIFICATION_KINDS)
 export type NotificationKind = z.infer<typeof notificationKind>
@@ -64,11 +71,13 @@ export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   managed_account_decided: 'Conta gerenciada',
   platform_auto_debit_failed: 'Débito automático não realizado',
   onboarding_submitted: 'Novos clubes',
+  vendas_lead_novo: 'Novo lead no pool',
+  vendas_lead_atribuido: 'Lead atribuído a você',
 }
 
 /** Família visual/sonora: dinheiro entrando ou pessoa chegando. */
 export function notificationTone(kind: NotificationKind): 'payment' | 'signup' {
-  return kind === 'client_signed_up' || kind === 'onboarding_submitted' ? 'signup' : 'payment'
+  return kind === 'client_signed_up' || kind === 'onboarding_submitted' || kind === 'vendas_lead_novo' || kind === 'vendas_lead_atribuido' ? 'signup' : 'payment'
 }
 
 /** Como o associado chegou (só `client_signed_up`). */

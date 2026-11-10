@@ -1,4 +1,5 @@
 import type { auth } from '@/lib/auth'
+import type { VendasCtx } from '@/modules/vendas-rede/context'
 
 /**
  * Sujeito autenticado: exatamente o que `auth.api.getSession` devolve para
@@ -26,5 +27,7 @@ export type AppEnv = {
     requestId: string
     auth?: AuthContext
     tenant?: ResolvedTenant
+    /** Contexto comercial da Rede Comercial (`salesContext` em `modules/vendas-rede/context.ts`). */
+    vendas?: VendasCtx
   }
 }

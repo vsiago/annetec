@@ -293,6 +293,8 @@ export const clubPlans = pgTable(
     /** Taxa de adesão (R$), só na 1ª cobrança; `null`/0 = sem adesão. */
     enrollmentFee: numeric('enrollment_fee', { precision: 12, scale: 2 }),
     enrollmentFeeWaived: boolean('enrollment_fee_waived').notNull().default(false),
+    /** Rede Comercial: desconto médio (%) que o plano dá nos atendimentos; usado no simulador do balcão. */
+    balcaoDescontoPercentual: integer('balcao_desconto_percentual'),
     /** Idade mínima do titular; `null` = 18. */
     holderMinAge: integer('holder_min_age'),
     /** Idade máxima do titular (inclusive); `null` = sem limite. */

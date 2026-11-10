@@ -104,6 +104,8 @@ const SELF_OR_PUBLIC_PREFIXES = [
   '/healthz',
   '/readyz',
   '/api/v1/auth/',
+  // Rede Comercial (`vendas-rede`): guard próprio (`salesContext`) — equipe, vendedor ANNETEC com perfil de agente; coberto por vendas-rede-context.test.ts.
+  '/api/v1/vendas/',
   '/api/v1/public/',
   '/api/v1/webhooks/',
   '/api/v1/activity/events',
