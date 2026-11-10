@@ -78,7 +78,7 @@ const { createApp } = await import('@/app')
 const { routes } = await import('@/routes')
 const { fakeAsaas } = await import('./helpers/fake-asaas')
 const { encryptSecret } = await import('@/lib/crypto')
-const { MANAGED_ACCOUNT_TERMS_VERSION } = await import('@annetec/contracts')
+const { MANAGED_ACCOUNT_TERMS_VERSION, isCelular, celular } = await import('@annetec/contracts')
 
 type Memory = import('./helpers/memory-db').MemoryDb
 const db = () => memory.db as unknown as Memory
@@ -217,6 +217,15 @@ describe('superadmin', () => {
     expect(db().rows(schema.managedAccountRequests)).toHaveLength(0)
   })
 
+  it('correção com celular fixo é rejeitada (400) e não altera o pedido', async () => {
+    state.session = tenantSession('clube-a')
+    expect((await call('POST', '/api/v1/t/clube-a/faturamento/configuracoes/recebimento/gerenciada', REQUEST_BODY)).status).toBe(201)
+    state.session = platformSession('superadmin')
+    const res = await call('PATCH', '/api/v1/platform/contas-gerenciadas/org-clube-a/pedido', { mobilePhone: '2133829150' })
+    expect(res.status).toBe(400)
+    expect(db().rows(schema.managedAccountRequests)[0]).toMatchObject({ data: expect.objectContaining({ mobilePhone: '21999998888' }) })
+  })
+
   it('corrige o pedido antes de aprovar (só superadmin) e audita o antes/depois', async () => {
     state.session = tenantSession('clube-a')
     expect((await call('POST', '/api/v1/t/clube-a/faturamento/configuracoes/recebimento/gerenciada', { ...REQUEST_BODY, companyType: 'MEI' })).status).toBe(201)
@@ -239,6 +248,19 @@ describe('superadmin', () => {
         }),
       }),
     )
+  })
+})
+
+describe('isCelular / celular', () => {
+  it('aceita celular com DDD e rejeita fixo, 3º dígito != 9 e DDD com zero', () => {
+    expect(isCelular('(21) 99999-8888')).toBe(true)
+    expect(isCelular('21999998888')).toBe(true)
+    expect(isCelular('2133829150')).toBe(false)
+    expect(isCelular('21333344445')).toBe(false)
+    expect(isCelular('01999998888')).toBe(false)
+    expect(celular.safeParse('(21) 99999-8888')).toMatchObject({ success: true, data: '21999998888' })
+    expect(celular.safeParse('21999998888').success).toBe(true)
+    for (const bad of ['2133829150', '21333344445', '01999998888']) expect(celular.safeParse(bad).success).toBe(false)
   })
 })
 
@@ -270,6 +292,15 @@ describe('admin do clube', () => {
       state.session = tenantSession('clube-a', role)
       expect((await call('GET', '/api/v1/t/clube-a/faturamento/configuracoes/recebimento/gerenciada')).status).toBe(403)
     }
+  })
+
+  it('pedido do clube com celular fixo é rejeitado na validação (400), sem gravar', async () => {
+    state.session = tenantSession('clube-a')
+    for (const mobilePhone of ['2133829150', '21333344445', '01999998888']) {
+      const res = await call('POST', '/api/v1/t/clube-a/faturamento/configuracoes/recebimento/gerenciada', { ...REQUEST_BODY, mobilePhone })
+      expect(res.status).toBe(400)
+    }
+    expect(db().rows(schema.managedAccountRequests)).toHaveLength(0)
   })
 
   it('desconectar a conta gerenciada: admin do clube 403; superadmin 200', async () => {

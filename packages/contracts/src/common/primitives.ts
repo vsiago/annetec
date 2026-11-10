@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isCelular } from './br'
 
 /** Marca um campo de resposta de terceiros como tolerante: ausente ou null. */
 export function lenient<T extends z.ZodTypeAny>(schema: T) {
@@ -45,6 +46,12 @@ export const telefone = z
   .string()
   .transform(onlyDigits)
   .refine(v => v.length >= 10 && v.length <= 11, 'Telefone deve conter DDD + número')
+
+/** Celular com DDD (11 dígitos, começando em 9 após o DDD) — o Asaas recusa fixo em `mobilePhone`. */
+export const celular = z
+  .string()
+  .transform(onlyDigits)
+  .refine(isCelular, 'Informe um celular com DDD (ex.: (21) 99999-8888)')
 
 /** `yyyy-MM-dd`, formato aceito pela Digital Saúde em campos `format: date`. */
 export const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar no formato yyyy-MM-dd')

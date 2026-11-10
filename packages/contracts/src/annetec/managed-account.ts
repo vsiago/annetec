@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { cep, dateOnly, email, telefone, uuid } from '../common/primitives'
+import { cep, celular, dateOnly, email, telefone, uuid } from '../common/primitives'
 import {
   asaasEnvironment,
   clubReceivingAccount,
@@ -141,7 +141,7 @@ export const requestManagedAccountInput = z.object({
   /** E-mail de login da subconta no Asaas. */
   loginEmail: email,
   phone: telefone.optional(),
-  mobilePhone: telefone,
+  mobilePhone: celular,
   site: z.string().trim().url('Site inválido').max(200).optional(),
   address: managedAccountAddress,
   acceptTerms: z.literal(true, { errorMap: () => ({ message: 'É preciso aceitar o termo para continuar' }) }),
@@ -211,7 +211,7 @@ export const updateManagedAccountRequestInput = z
     loginEmail: email,
     /** `null` apaga o telefone fixo. */
     phone: telefone.nullable(),
-    mobilePhone: telefone,
+    mobilePhone: celular,
     /** `null` apaga o site. */
     site: z.string().trim().url('Site inválido').max(200).nullable(),
     address: managedAccountAddress,

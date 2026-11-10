@@ -153,6 +153,12 @@ export function maskPhone(value: string): string {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
 }
 
+/** Celular brasileiro: 11 dígitos, DDD sem zero (11–99) e 3º dígito `9`. */
+export function isCelular(value: string): boolean {
+  const d = onlyDigits(value)
+  return /^[1-9][1-9]9\d{8}$/.test(d)
+}
+
 /** `"21999987654"` → `"(21) 99998-7654"`; incompleto volta como veio. */
 export function formatPhone(value: string | null | undefined): string {
   const d = onlyDigits(value)
