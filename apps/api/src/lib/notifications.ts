@@ -420,3 +420,95 @@ export function discountDecidedNotification(
     dedupeKey: `sales_discount_decided:${facts.requestId}`,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Rede Comercial (público `sales` + sino da equipe/admin)
+// ---------------------------------------------------------------------------
+
+export interface VendasLeadNoticeFacts {
+  /** `null` = escopo platform. */
+  tenant: TenantRef | null
+  leadId: string
+  leadNome: string
+  /** Rótulo da origem ("Site", "Indicação"...). */
+  origemLabel: string
+  /** Momento em que o lead entrou no pool (entra na chave: cada entrada avisa uma vez). */
+  poolDesde: Date
+}
+
+/** Rota relativa do web para abrir o lead no funil do escopo. */
+export function vendasLeadLink(tenant: TenantRef | null, leadId: string): string {
+  return tenant ? `/${tenant.slug}/vendas/funil?lead=${encodeURIComponent(leadId)}` : `/vendas/funil?lead=${encodeURIComponent(leadId)}`
+}
+
+/**
+ * Lead novo no pool: uma linha `sales` por agente que deve ver (online e
+ * masters explícitos — quem resolve é o chamador) + o sino da gerência do
+ * escopo (equipe ANNETEC no platform, admin do clube no tenant). Puro.
+ */
+export function vendasLeadNoPoolNotifications(facts: VendasLeadNoticeFacts, recipientUserIds: string[]): NotifyInput[] {
+  const stamp = facts.poolDesde.toISOString()
+  const payload: NotificationPayload = { leadId: facts.leadId, personName: facts.leadNome }
+  const body = joinParts([facts.leadNome, facts.origemLabel])
+  const rows: NotifyInput[] = [...new Set(recipientUserIds)].map(userId => ({
+    audience: 'sales' as const,
+    kind: 'vendas_lead_novo' as const,
+    organizationId: facts.tenant?.id ?? null,
+    recipientUserId: userId,
+    title: 'Novo lead no pool',
+    body,
+    payload,
+    link: vendasLeadLink(facts.tenant, facts.leadId),
+    dedupeKey: `vendas_lead_novo:${facts.leadId}:${stamp}:${userId}`,
+  }))
+  if (facts.tenant) {
+    rows.push({
+      audience: 'tenant',
+      kind: 'vendas_lead_novo',
+      organizationId: facts.tenant.id,
+      title: 'Novo lead no funil',
+      body,
+      payload,
+      link: `/${facts.tenant.slug}/admin/comercial/funil?lead=${encodeURIComponent(facts.leadId)}`,
+      dedupeKey: `vendas_lead_novo:${facts.leadId}:${stamp}`,
+    })
+  } else {
+    rows.push({
+      audience: 'platform',
+      kind: 'vendas_lead_novo',
+      organizationId: null,
+      title: 'Novo lead no pool comercial',
+      body,
+      payload,
+      link: `/admin/comercial/funil?lead=${encodeURIComponent(facts.leadId)}`,
+      dedupeKey: `vendas_lead_novo:${facts.leadId}:${stamp}`,
+    })
+  }
+  return rows
+}
+
+export interface VendasLeadAtribuidoFacts {
+  tenant: TenantRef | null
+  leadId: string
+  leadNome: string
+  recipientUserId: string
+  /** Quem atribuiu ("Você recebeu de Maria", ou "distribuição automática"). */
+  porNome: string | null
+  /** Momento da atribuição (reatribuições repetidas avisam de novo). */
+  em: Date
+}
+
+/** Lead atribuído a um agente: sino só dele. Puro. */
+export function vendasLeadAtribuidoNotification(facts: VendasLeadAtribuidoFacts): NotifyInput {
+  return {
+    audience: 'sales',
+    kind: 'vendas_lead_atribuido',
+    organizationId: facts.tenant?.id ?? null,
+    recipientUserId: facts.recipientUserId,
+    title: 'Lead atribuído a você',
+    body: joinParts([facts.leadNome, facts.porNome ? `por ${facts.porNome}` : null]),
+    payload: { leadId: facts.leadId, personName: facts.leadNome },
+    link: vendasLeadLink(facts.tenant, facts.leadId),
+    dedupeKey: `vendas_lead_atribuido:${facts.leadId}:${facts.em.toISOString()}:${facts.recipientUserId}`,
+  }
+}

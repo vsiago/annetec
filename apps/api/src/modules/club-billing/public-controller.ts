@@ -53,7 +53,10 @@ export const clubCheckoutController = new Hono<AppEnv>()
       session.membership.tenantId === tenant.id
         ? { userId: session.user.id, email: session.user.email }
         : null
-    const result = await checkoutService.checkout(tenant, c.req.valid('json'), remoteIpOf(c), viewer)
+    const body = c.req.valid('json')
+    // Rede Comercial: `?ref=`/`?lead=` na própria URL valem quando o corpo não os traz.
+    const atribuicao = { ref: body.ref ?? c.req.query('ref'), lead: body.lead ?? c.req.query('lead') }
+    const result = await checkoutService.checkout(tenant, body, remoteIpOf(c), viewer, atribuicao)
     await recordAudit(c, {
       action: 'club_subscription.checkout',
       resource: 'club_subscription',

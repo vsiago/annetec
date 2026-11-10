@@ -124,15 +124,15 @@ vi.mock('@/lib/notifications', async importOriginal => ({
   },
 }))
 
-vi.mock('@/modules/platform-sales/commissions.service', () => ({
+vi.mock('@/modules/vendas-rede/comissoes.service', () => ({
   safely: async (tx: unknown, _label: string, work: (tx: unknown) => Promise<unknown>) => {
     await work(tx)
   },
-  recordCommissionsForPaidCharge: async (_tx: unknown, charge: { id: string }) => {
-    captured.commissions.push(charge.id)
+  registrarComissoesDaCobrancaPaga: async ({ cobranca }: { cobranca: { id: string } }) => {
+    captured.commissions.push(cobranca.id)
     return 1
   },
-  reverseCommissionsForCharge: async () => 0,
+  estornarComissoesDaCobranca: async () => 0,
 }))
 
 vi.mock('@/http/middleware/platform-access', () => ({ invalidatePlatformAccessCache: () => {} }))

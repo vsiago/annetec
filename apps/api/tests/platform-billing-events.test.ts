@@ -160,15 +160,15 @@ vi.mock('@/db/client', async () => {
 
 // Comissão do vendedor: o handler chama dentro da transação do pagamento (savepoint).
 const commissionCalls = vi.hoisted(() => ({ recorded: [] as unknown[], reversed: [] as unknown[][] }))
-vi.mock('@/modules/platform-sales/commissions.service', () => ({
+vi.mock('@/modules/vendas-rede/comissoes.service', () => ({
   safely: async (tx: unknown, _label: string, work: (tx: unknown) => Promise<unknown>) => {
     await work(tx)
   },
-  recordCommissionsForPaidCharge: async (_tx: unknown, charge: unknown) => {
+  registrarComissoesDaCobrancaPaga: async ({ cobranca: charge }: { cobranca: unknown }) => {
     commissionCalls.recorded.push(charge)
     return 1
   },
-  reverseCommissionsForCharge: async (_tx: unknown, chargeId: string, reason: string) => {
+  estornarComissoesDaCobranca: async (_origem: string, chargeId: string, reason: string) => {
     commissionCalls.reversed.push([chargeId, reason])
     return 1
   },

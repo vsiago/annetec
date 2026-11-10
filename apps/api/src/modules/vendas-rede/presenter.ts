@@ -1,5 +1,5 @@
-import type { VendasAgente } from '@annetec/contracts'
-import type { VendasAgenteRow } from '@/db/schema'
+import type { VendasAgente, VendasArvoreAgente, VendasCorretora, VendasEquipe, VendasUnidade } from '@annetec/contracts'
+import type { VendasAgenteRow, VendasCorretoraRow, VendasEquipeRow, VendasUnidadeRow } from '@/db/schema'
 import { estaOnline } from './rules'
 
 /** `vendas_agentes` (+ e-mail da conta) → contrato `VendasAgente`. */
@@ -31,5 +31,64 @@ export function toVendasAgente(
     online: row.ativo && estaOnline(row.ultimaPresencaEm, options.agora, options.presencaMinutos),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  }
+}
+
+/** `vendas_corretoras` → contrato `VendasCorretora`. */
+export function toVendasCorretora(row: VendasCorretoraRow): VendasCorretora {
+  return {
+    id: row.id,
+    nomeFantasia: row.nomeFantasia,
+    razaoSocial: row.razaoSocial,
+    cnpj: row.cnpj,
+    email: row.email ?? null,
+    telefone: row.telefone ?? null,
+    endereco: row.endereco ?? null,
+    gerenteAgenteId: row.gerenteAgenteId ?? null,
+    status: row.status,
+    comissaoOverrides: row.comissaoOverrides ?? null,
+    observacoes: row.observacoes ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }
+}
+
+/** `vendas_unidades` → contrato `VendasUnidade`. */
+export function toVendasUnidade(row: VendasUnidadeRow): VendasUnidade {
+  return {
+    id: row.id,
+    corretoraId: row.corretoraId ?? null,
+    nome: row.nome,
+    tipo: row.tipo,
+    endereco: row.endereco ?? null,
+    telefone: row.telefone ?? null,
+    responsavelAgenteId: row.responsavelAgenteId ?? null,
+    status: row.status,
+  }
+}
+
+/** `vendas_equipes` → contrato `VendasEquipe`. */
+export function toVendasEquipe(row: VendasEquipeRow): VendasEquipe {
+  return {
+    id: row.id,
+    corretoraId: row.corretoraId ?? null,
+    unidadeId: row.unidadeId ?? null,
+    nome: row.nome,
+    supervisorAgenteId: row.supervisorAgenteId ?? null,
+    status: row.status,
+  }
+}
+
+/** Nó de agente da árvore da rede (sem dados cadastrais). */
+export function toArvoreAgente(row: VendasAgenteRow, options: { agora: Date; presencaMinutos: number }): VendasArvoreAgente {
+  return {
+    id: row.id,
+    nome: row.nome,
+    papel: row.papel,
+    ativo: row.ativo,
+    online: row.ativo && estaOnline(row.ultimaPresencaEm, options.agora, options.presencaMinutos),
+    equipeId: row.equipeId ?? null,
+    unidadeId: row.unidadeId ?? null,
+    corretoraId: row.corretoraId ?? null,
   }
 }

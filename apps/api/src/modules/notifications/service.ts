@@ -1,5 +1,5 @@
 import type { AppNotification, NotificationAudience, NotificationList, NotificationPayload } from '@annetec/contracts'
-import { and, desc, eq, gt, inArray, notInArray, sql, type SQL } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNull, notInArray, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { notificationReads, notifications, organization, tenantProfiles } from '@/db/schema'
 import { logger } from '@/lib/logger'
@@ -13,7 +13,9 @@ import { logger } from '@/lib/logger'
  *    `requireTenantRole('admin')` já garantiu que a sessão é deste clube);
  *  - `platform`: linhas `audience = 'platform'` de todos os clubes;
  *  - `seller`: linhas `audience = 'seller'` destinadas ao PRÓPRIO vendedor
- *    (`recipient_user_id` = a pessoa da sessão).
+ *    (`recipient_user_id` = a pessoa da sessão);
+ *  - `sales`: linhas `audience = 'sales'` da PRÓPRIA pessoa no escopo da Rede
+ *    Comercial (`organization_id` = clube da rota; nulo na plataforma).
  * "Não lida" é por pessoa (`notification_reads`) e só conta os últimos
  * 30 dias — conta nova não nasce com um histórico inteiro "não lido".
  */
@@ -54,6 +56,15 @@ export function scopeCondition(scope: NotificationScope): SQL {
   if (scope.audience === 'seller') {
     if (!scope.userId) return sql`false`
     return and(eq(notifications.audience, 'seller'), eq(notifications.recipientUserId, scope.userId))!
+  }
+  if (scope.audience === 'sales') {
+    // Rede Comercial: só as destinadas à própria pessoa, no escopo da rota (clube ou plataforma).
+    if (!scope.userId) return sql`false`
+    return and(
+      eq(notifications.audience, 'sales'),
+      eq(notifications.recipientUserId, scope.userId),
+      scope.organizationId ? eq(notifications.organizationId, scope.organizationId) : isNull(notifications.organizationId),
+    )!
   }
   return eq(notifications.audience, 'platform')
 }

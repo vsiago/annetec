@@ -110,6 +110,8 @@ export const notificationPayload = z.object({
   /** Vendas: proposta e pedido de desconto envolvidos. */
   proposalId: z.string().optional(),
   discountRequestId: z.string().optional(),
+  /** Rede Comercial: lead envolvido (`vendas_lead_novo` / `vendas_lead_atribuido`). */
+  leadId: z.string().optional(),
 })
 export type NotificationPayload = z.infer<typeof notificationPayload>
 

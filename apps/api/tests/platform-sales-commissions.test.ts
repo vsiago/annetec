@@ -2,188 +2,193 @@ import { activationChargeItems, sumChargeItems } from '@annetec/contracts'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Comissão automática por fatura da plataforma PAGA (banco FALSO): ativação
- * separa adesão e 1ª mensalidade; 2ª/3ª pela escala; 4ª não gera; fatura
- * repetida não duplica (índice único fatura+parte); sem vendedor não gera;
- * estorno cancela a não repassada e marca "a descontar" a repassada.
+ * Comissão automática por fatura da plataforma PAGA, agora pelo serviço da Rede
+ * Comercial (`vendas-rede/comissoes.service`, banco FALSO em memória): ativação
+ * separa adesão e 1ª mensalidade; escala [100, 50, 25] (a 4ª não gera); hierarquia
+ * completa × solo; fatura repetida não duplica; pago a menor reparte na proporção;
+ * regra vigente (config gravada) vale no pagamento; estorno cancela a não
+ * repassada e marca "a descontar" a repassada. O vendedor vem da proposta
+ * (`vendas_agente_id`) ou, na falta, de `seller_user_id`.
  */
 
-const state = vi.hoisted(() => ({
-  seller: 'seller-joao' as string | null,
-  paidBefore: 0,
-  commissions: new Map<string, Record<string, unknown>>(),
-  audits: [] as Record<string, unknown>[],
-  updates: [] as Record<string, unknown>[],
-  settingsRow: null as Record<string, unknown> | null,
-  proposalLocks: [] as string[][],
-}))
+const memory = vi.hoisted(() => ({ instance: null as null | Record<string, any> }))
 
 vi.mock('@/db/client', async () => {
   const schema = await import('@/db/schema')
-  const { createFakeDb, argOf, whereValues } = await import('./helpers/fake-db')
-  let seq = 0
-  const db = createFakeDb(call => {
-    if (call.kind === 'select') {
-      if (call.table === schema.platformOnboardingProposals) {
-        state.proposalLocks.push(call.ops.filter(op => op.name === 'for').map(op => String(op.args[0])))
-        return state.seller ? [{ sellerUserId: state.seller, code: 'ANN-2610-ABCDE' }] : [{ sellerUserId: null, code: 'ANN-2610-ABCDE' }]
-      }
-      if (call.table === schema.platformSalesSettings) return state.settingsRow ? [state.settingsRow] : []
-      if (call.table === schema.platformCharges) return [{ value: state.paidBefore }]
-      if (call.table === schema.platformSalesCommissions) {
-        const chargeId = whereValues(argOf(call.ops, 'where'))[0]
-        return [...state.commissions.values()].filter(row => row.chargeId === chargeId)
-      }
-      return []
-    }
-    if (call.kind === 'insert') {
-      const values = argOf(call.ops, 'values') as unknown
-      const rows = (Array.isArray(values) ? values : [values]) as Record<string, unknown>[]
-      if (call.table === schema.auditLogs) {
-        state.audits.push(...rows)
-        return []
-      }
-      if (call.table === schema.platformSalesCommissions) {
-        const inserted: Record<string, unknown>[] = []
-        for (const row of rows) {
-          const key = `${row.chargeId}:${row.kind}`
-          if (state.commissions.has(key)) continue // onConflictDoNothing (índice único)
-          const saved = { ...row, id: `com-${++seq}` }
-          state.commissions.set(key, saved)
-          inserted.push(saved)
-        }
-        return inserted
-      }
-      return []
-    }
-    if (call.kind === 'update' && call.table === schema.platformSalesCommissions) {
-      const set = argOf(call.ops, 'set')
-      const [id, status] = whereValues(argOf(call.ops, 'where'))
-      const row = [...state.commissions.values()].find(r => r.id === id && r.status === status)
-      if (!row) return []
-      Object.assign(row, set)
-      state.updates.push({ id, ...set })
-      return [{ id }]
-    }
-    return []
+  const { createMemoryDb } = await import('./helpers/memory-db')
+  const instance = createMemoryDb({
+    tables: [
+      schema.vendasConfig,
+      schema.vendasCorretoras,
+      schema.vendasEquipes,
+      schema.vendasAgentes,
+      schema.vendasLeads,
+      schema.vendasLeadEventos,
+      schema.vendasComissoes,
+      schema.platformOnboardingProposals,
+      schema.platformCharges,
+      schema.auditLogs,
+    ],
+    uniques: [
+      {
+        table: schema.vendasComissoes,
+        keys: ['cobrancaOrigem', 'cobrancaRef', 'tipo', 'parte', 'beneficiarioAgenteId'],
+        where: row => row.parte !== 'corretora',
+      },
+      {
+        table: schema.vendasComissoes,
+        keys: ['cobrancaOrigem', 'cobrancaRef', 'tipo', 'parte', 'beneficiarioCorretoraId'],
+        where: row => row.parte === 'corretora',
+      },
+    ],
   })
-  return { db }
+  memory.instance = instance as unknown as Record<string, any>
+  return { db: instance.db }
 })
 
-const { recordCommissionsForPaidCharge, reverseCommissionsForCharge } = await import('@/modules/platform-sales/commissions.service')
-const { db } = await import('@/db/client')
+const schema = await import('@/db/schema')
+const { registrarComissoesDaCobrancaPaga, estornarComissoesDaCobranca } = await import('@/modules/vendas-rede/comissoes.service')
 
+const mem = () => memory.instance as unknown as ReturnType<typeof import('./helpers/memory-db').createMemoryDb>
+const insert = (table: object, values: Record<string, unknown>) => mem().insertRow(table, values) as Record<string, any>
+const comissoes = () => mem().rows(schema.vendasComissoes) as Record<string, any>[]
+
+const u = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+const ID = { corretora: u(1), equipe: u(2), gerente: u(3), supervisor: u(4), vendedor: u(5), solo: u(6), propCadeia: u(7), propSolo: u(8), propLegada: u(9) }
 const PROFISSIONAL = { name: 'Profissional', priceMonthly: 697 }
 const DISCOUNT = { setupFeePercent: 50, monthlyPercent: 20 }
 const PAID_AT = new Date('2026-10-30T14:00:00Z')
 
-function activation(id = 'ch-ativacao') {
+function agente(id: string, papel: string, extra: Record<string, unknown> = {}) {
+  insert(schema.vendasAgentes, { id, scope: 'platform', tenantId: null, userId: `user-${id.slice(-2)}`, papel, nome: `Agente ${id.slice(-2)}`, codigoIndicacao: `C${id.slice(-5)}`, ativo: true, ...extra })
+}
+
+function seed() {
+  insert(schema.vendasCorretoras, { id: ID.corretora, scope: 'platform', tenantId: null, nomeFantasia: 'Corretora', gerenteAgenteId: ID.gerente })
+  insert(schema.vendasEquipes, { id: ID.equipe, scope: 'platform', tenantId: null, corretoraId: ID.corretora, nome: 'Equipe', supervisorAgenteId: ID.supervisor })
+  agente(ID.gerente, 'gerente', { corretoraId: ID.corretora })
+  agente(ID.supervisor, 'supervisor', { corretoraId: ID.corretora, equipeId: ID.equipe })
+  agente(ID.vendedor, 'vendedor', { corretoraId: ID.corretora, equipeId: ID.equipe })
+  agente(ID.solo, 'vendedor')
+  insert(schema.platformOnboardingProposals, { id: ID.propCadeia, vendasAgenteId: ID.vendedor, sellerUserId: null })
+  insert(schema.platformOnboardingProposals, { id: ID.propSolo, vendasAgenteId: ID.solo, sellerUserId: null })
+}
+
+function activation(proposalId: string, extra: Record<string, unknown> = {}) {
   const items = activationChargeItems(PROFISSIONAL, { setupFee: 990 }, DISCOUNT)
-  const amount = sumChargeItems(items)
-  return {
-    id,
-    kind: 'activation' as const,
-    proposalId: 'prop-1',
-    organizationId: null,
-    subscriptionId: null,
-    amount: String(amount),
-    paidAmount: String(amount),
-    paidAt: PAID_AT,
-    items,
-  }
+  const amount = String(sumChargeItems(items))
+  return insert(schema.platformCharges, { proposalId, kind: 'activation', status: 'paid', amount, paidAmount: amount, paidAt: PAID_AT, items, organizationId: null, ...extra })
 }
 
-function monthly(id: string, amount = 557.6) {
-  return {
-    id,
-    kind: 'monthly' as const,
-    proposalId: 'prop-1',
+function monthly(proposalId: string, paidAt: Date, amount = '557.6') {
+  return insert(schema.platformCharges, {
+    proposalId,
+    kind: 'monthly',
+    status: 'paid',
+    amount,
+    paidAmount: amount,
+    paidAt,
     organizationId: 'org-1',
-    subscriptionId: 'sub-1',
-    amount: String(amount),
-    paidAmount: String(amount),
-    paidAt: PAID_AT,
-    items: [{ kind: 'plan_fee', amount: 697 }, { kind: 'discount', amount: -139.4, appliesTo: 'plan_fee' as const }],
-  }
+    items: [{ kind: 'plan_fee', amount: 697 }, { kind: 'discount', amount: -139.4, appliesTo: 'plan_fee' }],
+  })
 }
 
-const rows = () => [...state.commissions.values()]
+const registrar = (cobranca: unknown) => registrarComissoesDaCobrancaPaga({ origem: 'platform', cobranca: cobranca as never, agora: new Date('2026-11-02T12:00:00Z') })
+const resumo = (cobrancaRef: string) =>
+  comissoes()
+    .filter(c => c.cobrancaRef === cobrancaRef)
+    .map(c => [c.parte, c.tipo, c.parcela, c.percentual, c.base, c.valor, c.status, c.mesReferencia])
 
 beforeEach(() => {
-  state.seller = 'seller-joao'
-  state.paidBefore = 0
-  state.commissions = new Map()
-  state.audits = []
-  state.updates = []
-  state.settingsRow = null
-  state.proposalLocks = []
+  mem().reset()
+  seed()
 })
 
 describe('geração na fatura paga', () => {
-  it('ativação: dois lançamentos (adesão e 1ª mensalidade), competência do pagamento, auditados', async () => {
-    const count = await recordCommissionsForPaidCharge(db as never, activation())
-    expect(count).toBe(2)
-    expect(rows().map(r => [r.kind, r.installment, r.baseAmount, r.percent, r.amount, r.status, r.referenceMonth, r.sellerUserId])).toEqual([
-      ['setup_fee', null, '495', '50', '247.5', 'a_pagar', '2026-10', 'seller-joao'],
-      ['monthly', 1, '557.6', '50', '278.8', 'a_pagar', '2026-10', 'seller-joao'],
-    ])
-    expect(state.audits.map(a => a.action)).toEqual(['sales_commission.created', 'sales_commission.created'])
-  })
-
-  it('idempotente: a mesma fatura de novo não duplica nem audita de novo', async () => {
-    await recordCommissionsForPaidCharge(db as never, activation())
-    const again = await recordCommissionsForPaidCharge(db as never, activation())
-    expect(again).toBe(0)
-    expect(rows()).toHaveLength(2)
-    expect(state.audits).toHaveLength(2)
-  })
-
-  it('2ª e 3ª mensalidades pela escala; a 4ª não gera', async () => {
-    state.paidBefore = 1
-    await recordCommissionsForPaidCharge(db as never, monthly('ch-m2'))
-    state.paidBefore = 2
-    await recordCommissionsForPaidCharge(db as never, monthly('ch-m3'))
-    state.paidBefore = 3
-    const fourth = await recordCommissionsForPaidCharge(db as never, monthly('ch-m4', 697))
-    expect(fourth).toBe(0)
-    expect(rows().map(r => [r.chargeId, r.installment, r.percent, r.amount])).toEqual([
-      ['ch-m2', 2, '20', '111.52'],
-      ['ch-m3', 3, '10', '55.76'],
+  it('ativação com hierarquia completa: adesão (50%) e 1ª mensalidade (100%) + overrides 10/5/5, competência do pagamento', async () => {
+    const fatura = activation(ID.propCadeia)
+    expect(await registrar(fatura)).toBe(8)
+    expect(resumo(fatura.id)).toEqual([
+      ['vendedor', 'adesao', 1, '50', '495', '247.5', 'a_pagar', '2026-10'],
+      ['supervisor', 'adesao', 1, '10', '247.5', '24.75', 'a_pagar', '2026-10'],
+      ['gerente', 'adesao', 1, '5', '247.5', '12.38', 'a_pagar', '2026-10'],
+      ['corretora', 'adesao', 1, '5', '247.5', '12.38', 'a_pagar', '2026-10'],
+      ['vendedor', 'mensalidade', 1, '100', '557.6', '557.6', 'a_pagar', '2026-10'],
+      ['supervisor', 'mensalidade', 1, '10', '557.6', '55.76', 'a_pagar', '2026-10'],
+      ['gerente', 'mensalidade', 1, '5', '557.6', '27.88', 'a_pagar', '2026-10'],
+      ['corretora', 'mensalidade', 1, '5', '557.6', '27.88', 'a_pagar', '2026-10'],
     ])
   })
 
-  it('trava a proposta (FOR UPDATE) antes de contar as mensalidades — duas faturas pagas juntas não repetem o nº', async () => {
-    state.paidBefore = 1
-    await recordCommissionsForPaidCharge(db as never, monthly('ch-m2'))
-    expect(state.proposalLocks).toEqual([['update']])
+  it('vendedor solo: só a linha dele (100% da 1ª mensalidade), sem overrides', async () => {
+    const fatura = activation(ID.propSolo)
+    expect(await registrar(fatura)).toBe(2)
+    expect(resumo(fatura.id).map(l => [l[0], l[1], l[5]])).toEqual([
+      ['vendedor', 'adesao', '247.5'],
+      ['vendedor', 'mensalidade', '557.6'],
+    ])
   })
 
-  it('regra vigente no pagamento (configuração gravada) é a que vale', async () => {
-    state.settingsRow = { id: 'default', monthlySchedule: [40, 30, 20, 10], setupFeePercent: '30', updatedAt: new Date(), updatedByName: 'Super' }
-    state.paidBefore = 3
-    await recordCommissionsForPaidCharge(db as never, monthly('ch-m4', 697))
-    expect(rows().map(r => [r.installment, r.percent, r.amount])).toEqual([[4, '10', '69.7']])
+  it('escala [100, 50, 25] nas mensalidades; a 4ª não gera; fatura repetida não duplica', async () => {
+    await registrar(activation(ID.propSolo))
+    const m2 = monthly(ID.propSolo, new Date('2026-11-30T14:00:00Z'))
+    const m3 = monthly(ID.propSolo, new Date('2026-12-30T14:00:00Z'))
+    const m4 = monthly(ID.propSolo, new Date('2027-01-30T14:00:00Z'), '697')
+    expect(await registrar(m2)).toBe(1)
+    expect(await registrar(m3)).toBe(1)
+    expect(await registrar(m4)).toBe(0)
+    expect(await registrar(m2)).toBe(0)
+    expect(resumo(m2.id)).toEqual([['vendedor', 'mensalidade', 2, '50', '557.6', '278.8', 'a_pagar', '2026-11']])
+    expect(resumo(m3.id)).toEqual([['vendedor', 'mensalidade', 3, '25', '557.6', '139.4', 'a_pagar', '2026-12']])
+    expect(resumo(m4.id)).toEqual([])
+    expect(comissoes()).toHaveLength(4)
   })
 
-  it('clube sem vendedor atribuído e fatura avulsa não geram', async () => {
-    state.seller = null
-    expect(await recordCommissionsForPaidCharge(db as never, activation())).toBe(0)
-    state.seller = 'seller-joao'
-    expect(await recordCommissionsForPaidCharge(db as never, { ...monthly('ch-aj'), kind: 'adjustment' })).toBe(0)
-    expect(rows()).toHaveLength(0)
+  it('regra vigente no pagamento: a configuração gravada (ex.: 4 parcelas) é a que vale', async () => {
+    insert(schema.vendasConfig, { scope: 'platform', tenantId: null, escalaMensal: [40, 30, 20, 10], percentualAdesao: '30', overrides: { supervisor: 0, gerente: 0, corretora: 0 }, balcaoPercentual: null })
+    await registrar(activation(ID.propSolo))
+    await registrar(monthly(ID.propSolo, new Date('2026-11-30T14:00:00Z')))
+    await registrar(monthly(ID.propSolo, new Date('2026-12-30T14:00:00Z')))
+    const m4 = monthly(ID.propSolo, new Date('2027-01-30T14:00:00Z'), '697')
+    expect(await registrar(m4)).toBe(1)
+    expect(resumo(m4.id)).toEqual([['vendedor', 'mensalidade', 4, '10', '697', '69.7', 'a_pagar', '2027-01']])
+  })
+
+  it('pago a menor reparte na proporção (multa/juros e a diferença não entram)', async () => {
+    const fatura = activation(ID.propSolo, { paidAmount: String(sumChargeItems(activationChargeItems(PROFISSIONAL, { setupFee: 990 }, DISCOUNT)) / 2) })
+    await registrar(fatura)
+    expect(resumo(fatura.id).map(l => [l[1], l[4], l[5]])).toEqual([
+      ['adesao', '247.5', '123.75'],
+      ['mensalidade', '278.8', '278.8'],
+    ])
+  })
+
+  it('sem atribuição nova usa o vendedor legado (seller_user_id); proposta sem vendedor e fatura avulsa não geram', async () => {
+    insert(schema.platformOnboardingProposals, { id: ID.propLegada, vendasAgenteId: null, sellerUserId: `user-${ID.solo.slice(-2)}` })
+    expect(await registrar(activation(ID.propLegada))).toBe(2)
+    expect(new Set(comissoes().map(c => c.beneficiarioAgenteId))).toEqual(new Set([ID.solo]))
+
+    mem().reset()
+    seed()
+    insert(schema.platformOnboardingProposals, { id: ID.propLegada, vendasAgenteId: null, sellerUserId: null })
+    expect(await registrar(activation(ID.propLegada))).toBe(0)
+    expect(await registrar({ ...monthly(ID.propSolo, PAID_AT), kind: 'adjustment' })).toBe(0)
+    expect(comissoes()).toHaveLength(0)
   })
 })
 
 describe('estorno / chargeback', () => {
-  it('não repassada → cancelada; repassada → a descontar; já cancelada fica', async () => {
-    await recordCommissionsForPaidCharge(db as never, activation())
-    const [setup, first] = rows()
-    first!.status = 'paga'
-    state.commissions.set('ch-ativacao:extra', { id: 'com-x', chargeId: 'ch-ativacao', kind: 'extra', status: 'cancelada', amount: '1' })
-    const changed = await reverseCommissionsForCharge(db as never, 'ch-ativacao', 'Fatura estornada')
-    expect(changed).toBe(2)
-    expect(setup!.status).toBe('cancelada')
-    expect(first!.status).toBe('a_descontar')
-    expect(state.audits.slice(-2).map(a => a.action)).toEqual(['sales_commission.canceled', 'sales_commission.clawback'])
+  it('não repassada → cancelada; repassada → a descontar; já cancelada fica como está', async () => {
+    const fatura = activation(ID.propCadeia)
+    await registrar(fatura)
+    const repassada = comissoes().find(c => c.parte === 'vendedor' && c.tipo === 'mensalidade')!
+    repassada.status = 'paga'
+    comissoes().find(c => c.parte === 'gerente' && c.tipo === 'adesao')!.status = 'cancelada'
+
+    expect(await estornarComissoesDaCobranca('platform', fatura.id, 'Fatura estornada', new Date())).toBe(7)
+    expect(repassada.status).toBe('a_descontar')
+    expect(comissoes().filter(c => c.status === 'cancelada')).toHaveLength(7)
+    const acoes = (mem().rows(schema.auditLogs) as Record<string, any>[]).map(a => a.action)
+    expect(acoes.filter(a => a === 'vendas.comissao_a_descontar')).toHaveLength(1)
   })
 })

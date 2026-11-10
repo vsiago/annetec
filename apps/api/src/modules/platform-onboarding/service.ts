@@ -224,6 +224,7 @@ export async function startProposal(input: StartOnboardingInput, meta: RequestMe
       source: 'site',
       sellerUserId: seller?.userId ?? null,
       referralCode: seller?.referralCode ?? null,
+      vendasAgenteId: seller?.agenteId ?? null,
       applicantIp: meta.ip,
       applicantUserAgent: meta.userAgent?.slice(0, 400) ?? null,
       lastActivityAt: now,

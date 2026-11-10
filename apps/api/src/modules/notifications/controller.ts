@@ -16,6 +16,7 @@ import {
   runNotificationStream,
   type NotificationScope,
 } from './service'
+import { vendasOf } from '@/modules/vendas-rede/context'
 import { sendTestNotification } from './test-samples'
 
 /**
@@ -106,3 +107,16 @@ export const platformNotificationsController = new Hono<AppEnv>()
 export const sellerNotificationsController = new Hono<AppEnv>()
   .use('*', requireAuth, requirePlatformSeller)
   .route('/', buildController(sellerScope, { allowTest: false }))
+
+/** Agente da Rede Comercial: só as notificações `sales` endereçadas a ELE, no escopo da rota (clube ou plataforma). */
+function salesScope(c: Context<AppEnv>): NotificationScope {
+  const ctx = vendasOf(c)
+  return { audience: 'sales', organizationId: ctx.tenantId, userId: ctx.userId }
+}
+
+/**
+ * `/vendas/notificacoes` (platform) e `/t/:slug/vendas/notificacoes` (tenant), montado
+ * dentro do `leadsController` da Rede Comercial: o `salesContext` do escopo já autenticou
+ * e resolveu quem é a pessoa (sem rota de teste).
+ */
+export const salesNotificationsController = buildController(salesScope, { allowTest: false })

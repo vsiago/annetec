@@ -37,6 +37,12 @@ import { presentSessionUser } from '@/modules/auth/presenter'
 import { getSessionByToken, setActiveOrganization } from '@/modules/auth/service'
 import { accessUnavailable, admitLogin } from '@/modules/users/member-access'
 import { toClubPlan } from '@/modules/network/controller'
+import {
+  prepararAtribuicaoDoCheckout,
+  vincularAssinaturaAoLead,
+  type AtribuicaoDoCheckout,
+  type PedidoAtribuicao,
+} from '@/modules/vendas-rede/conversao-sync'
 import { checkoutAccessKey } from './access-key'
 import { assertCardAttemptsAllowed } from './card-attempts'
 import { assertCheckoutEligible, checkoutStartedMessage, firstChargeDescription } from './checkout-rules'
@@ -328,7 +334,14 @@ export const checkoutService = {
     }
   },
 
-  async checkout(tenant: ResolvedTenant, input: CheckoutInput, remoteIp?: string, viewer: CheckoutViewer | null = null): Promise<CheckoutResult> {
+  async checkout(
+    tenant: ResolvedTenant,
+    input: CheckoutInput,
+    remoteIp?: string,
+    viewer: CheckoutViewer | null = null,
+    /** Rede Comercial: `?ref=`/`?lead=` (padrão: os campos `ref`/`lead` do corpo). */
+    atribuicao: PedidoAtribuicao | null = null,
+  ): Promise<CheckoutResult> {
     const settings = await loadBillingSettings(tenant.id)
     const method = input.payment.method
     // Clube sem conta de recebimento: barra ANTES de criar conta/assinatura (409 RECEBIMENTO_NAO_CONFIGURADO).
@@ -400,6 +413,20 @@ export const checkoutService = {
     const dueDay = dueDayOf(today)
     const provider = effectiveProvider(settings.gatewayOverride)
 
+    // Rede Comercial: `ref`/`lead` viram agente/lead da venda (inválidos são ignorados; nunca recusam a compra).
+    let vendas: AtribuicaoDoCheckout | null = null
+    try {
+      vendas = await prepararAtribuicaoDoCheckout(
+        tenant.id,
+        atribuicao ?? { ref: input.ref, lead: input.lead },
+        { name: holder.name, email: holder.email, phone: holder.phone, cpf: holder.cpf },
+        { id: plan.id, name: plan.name },
+        now,
+      )
+    } catch (error) {
+      logger.warn({ tenantId: tenant.id, err: error instanceof Error ? error.message : String(error) }, 'Checkout: atribuição de vendas ignorada')
+    }
+
     const { subscriptionId, chargeId } = await db.transaction(async tx => {
       const [subscription] = await tx
         .insert(clubSubscriptions)
@@ -424,6 +451,8 @@ export const checkoutService = {
           holderBirthDate: holder.birthDate,
           gatewayProvider: provider,
           source: 'checkout',
+          vendasAgenteId: vendas?.agenteId ?? null,
+          vendasLeadId: vendas?.leadId ?? null,
         })
         .returning({ id: clubSubscriptions.id })
 
@@ -479,6 +508,10 @@ export const checkoutService = {
       })
       return { subscriptionId: subscription!.id, chargeId: charge!.id }
     })
+
+    if (vendas?.leadId) {
+      await vincularAssinaturaAoLead(vendas.leadId, { id: subscriptionId, status: 'pending_payment', planoId: plan.id, planoNome: plan.name }, now)
+    }
 
     await submitChargeToGateway(chargeId, { method, card: input.payment.card, remoteIp, source: 'checkout' })
 

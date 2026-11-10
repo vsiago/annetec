@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { platformDiscountRequests, platformProspectInteractions, platformProspects } from '@/db/schema'
 import { logger } from '@/lib/logger'
+import { sincronizarLeadComProposta } from '@/modules/vendas-rede/conversao-sync'
 import { prospectSyncPatch } from './rules'
 
 /**
@@ -17,11 +18,17 @@ export interface SyncedProposal {
   id: string
   status: OnboardingStatus
   sellerUserId: string | null
+  /** Rede Comercial: lead de origem da proposta. */
+  vendasLeadId?: string | null
   rejectionReason?: string | null
   cancelReason?: string | null
 }
 
 export async function syncProspectsWithProposal(executor: Executor, proposal: SyncedProposal, now = new Date()): Promise<void> {
+  // Rede Comercial: o lead acompanha a proposta (conversão + etapa). Nunca derruba a transição.
+  if (proposal.sellerUserId || proposal.vendasLeadId) {
+    await sincronizarLeadComProposta(executor, { id: proposal.id, status: proposal.status, vendasLeadId: proposal.vendasLeadId ?? null, rejectionReason: proposal.rejectionReason, cancelReason: proposal.cancelReason }, now)
+  }
   if (!proposal.sellerUserId) return
   try {
     const prospects = await executor

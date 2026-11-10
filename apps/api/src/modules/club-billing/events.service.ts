@@ -22,6 +22,7 @@ import {
 import { mapAsaasCardBrand } from '@/integrations/asaas/webhook'
 import { logger } from '@/lib/logger'
 import { notifyClubChargePaid } from '@/lib/notifications'
+import { estornarComissoesDaCobranca, registrarComissoesDaCobrancaPaga, safely } from '@/modules/vendas-rede/comissoes.service'
 import { cardPrefixFromSlug, dependentCardNumber, holderCardNumber, holderCardPattern } from './card-number'
 import { noonSP, todaySP, yearSP } from './dates'
 import { OPEN_CHARGE_STATUSES, type ChargeRow, type SubscriptionRow } from './presenter'
@@ -471,6 +472,10 @@ async function applyPaid(
   paidNotes.push({ chargeId: updated.id, firstPayment: sub?.status === 'pending_payment' })
   if (!sub) return true
 
+  // Comissão em cadeia da Rede Comercial e lead → ganho (1ª cobrança paga): mesma
+  // transação, savepoint próprio — falha na comissão nunca desfaz o pagamento.
+  await safely(tx, 'comissao.paga', sp => registrarComissoesDaCobrancaPaga({ origem: 'club', cobranca: updated, agora: now, tx: sp }))
+
   // Cartão aprovado: guarda token + bandeira/finais para a recorrência.
   if (card?.creditCardToken && last4.length === 4) {
     await tx
@@ -712,6 +717,7 @@ async function applyRefunded(
     .where(and(eq(clubCharges.id, charge.id), eq(clubCharges.status, 'paid')))
     .returning({ id: clubCharges.id })
   if (!updated) return false
+  await safely(tx, 'comissao.estorno', sp => estornarComissoesDaCobranca('club', charge.id, 'Cobrança estornada', now, sp))
   logger.warn(
     {
       alert: 'refund',
@@ -770,6 +776,7 @@ async function applyChargeback(
     return false
   }
   logger.error(logFields, 'Chargeback no pagamento de uma cobrança do clube — revisar (assinatura suspensa até reativação manual)')
+  await safely(tx, 'comissao.chargeback', sp => estornarComissoesDaCobranca('club', updated.id, 'Chargeback (contestação do cartão)', now, sp))
   // Avulsa não mexe na assinatura (mesma regra do vencimento).
   if (updated.kind === 'one_off') return true
 

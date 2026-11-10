@@ -10,12 +10,10 @@ import {
   type SalesCommissionTotals,
   type UpdateSalesCommissionSettingsInput,
 } from '@annetec/contracts'
-import { and, count, desc, eq, inArray, lt, ne, or, sql, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
 import {
-  auditLogs,
   organization,
-  platformCharges,
   platformOnboardingProposals,
   platformSalesCommissions,
   platformSalesSettings,
@@ -23,24 +21,15 @@ import {
   type PlatformSalesCommissionRow,
 } from '@/db/schema'
 import { AppError } from '@/http/errors'
-import { logger } from '@/lib/logger'
-import { toDateSP } from '@/modules/club-billing/dates'
-import { buildCommissionDrafts, reversedCommissionStatus, type CommissionSettingsShape } from './rules'
 
 /**
- * Comissões automáticas dos vendedores ANNETEC.
+ * Regra legada de comissão dos vendedores ANNETEC (`platform_sales_settings`) e
+ * leitura/repasse do histórico em `platform_sales_commissions`.
  *
- *  - geração: dentro da MESMA transação que marca a fatura da plataforma como
- *    paga (`events.service` → `applyPaid`), num savepoint — falha aqui nunca
- *    desfaz o pagamento. Idempotente pelo índice único (fatura, parte);
- *  - estorno/chargeback: não repassada → `cancelada`; repassada → `a_descontar`;
- *  - percentual e base ficam gravados: a regra vigente NO pagamento.
- *
- * Toda criação/mudança grava `audit_logs` (ator `null` = sistema).
+ * A GERAÇÃO e o ESTORNO de comissões passaram para a Rede Comercial
+ * (`vendas-rede/comissoes.service`, tabela `vendas_comissoes`); aqui só ficam
+ * as telas antigas de leitura até a migração das telas.
  */
-
-/** `db`, transação ou savepoint (o handler de eventos passa a própria `tx`). */
-type Executor = Pick<typeof db, 'select' | 'insert' | 'update'>
 
 // ---------------------------------------------------------------------------
 // Regra (linha única)
@@ -81,183 +70,6 @@ export async function updateCommissionSettings(
     .values({ id: 'default', ...values })
     .onConflictDoUpdate({ target: platformSalesSettings.id, set: values })
   return { before, after: await loadCommissionSettings() }
-}
-
-// ---------------------------------------------------------------------------
-// Geração (fatura paga) e estorno
-// ---------------------------------------------------------------------------
-
-export interface PaidChargeForCommission {
-  id: string
-  kind: 'activation' | 'monthly' | 'adjustment'
-  proposalId: string | null
-  organizationId: string | null
-  subscriptionId: string | null
-  amount: string
-  paidAmount: string | null
-  paidAt: Date | null
-  items: { kind: string; amount: number; appliesTo?: 'setup_fee' | 'plan_fee' }[] | null
-}
-
-/**
- * Nº desta mensalidade paga do clube: a ativação é a 1ª; numa mensal, conta as
- * faturas com mensalidade (ativação + mensais) da MESMA proposta já pagas
- * antes desta (pagamento > 0; estornada não conta).
- */
-export async function installmentOf(executor: Pick<typeof db, 'select'>, charge: PaidChargeForCommission): Promise<number> {
-  if (charge.kind === 'activation' || !charge.proposalId) return 1
-  const paidAt = charge.paidAt ?? new Date()
-  const [row] = await executor
-    .select({ value: count() })
-    .from(platformCharges)
-    .where(
-      and(
-        eq(platformCharges.proposalId, charge.proposalId),
-        inArray(platformCharges.kind, ['activation', 'monthly']),
-        eq(platformCharges.status, 'paid'),
-        ne(platformCharges.id, charge.id),
-        sql`coalesce(${platformCharges.paidAmount}, 0) > 0`,
-        or(lt(platformCharges.paidAt, paidAt), and(eq(platformCharges.paidAt, paidAt), lt(platformCharges.id, charge.id))),
-      ),
-    )
-  return Number(row?.value ?? 0) + 1
-}
-
-/**
- * Fatura que ACABOU de virar `paid`. Sem vendedor atribuído (na proposta de
- * origem) ou fatura avulsa: nada. Devolve quantos lançamentos entraram.
- */
-export async function recordCommissionsForPaidCharge(
-  executor: Executor,
-  charge: PaidChargeForCommission,
-  now = new Date(),
-  settingsOverride?: CommissionSettingsShape,
-): Promise<number> {
-  if (charge.kind === 'adjustment' || !charge.proposalId) return 0
-  // FOR UPDATE: serializa as faturas da MESMA proposta pagas ao mesmo tempo
-  // (webhook + sincronização, ou duas faturas quitadas juntas). Sem a trava,
-  // as duas transações contariam as mesmas "pagas antes" e gravariam o mesmo
-  // nº de mensalidade (dois lançamentos com o % maior da escala).
-  const [proposal] = await executor
-    .select({ sellerUserId: platformOnboardingProposals.sellerUserId, code: platformOnboardingProposals.code })
-    .from(platformOnboardingProposals)
-    .where(eq(platformOnboardingProposals.id, charge.proposalId))
-    .limit(1)
-    .for('update')
-  const sellerUserId = proposal?.sellerUserId
-  if (!sellerUserId) return 0
-
-  const settings = settingsOverride ?? (await loadCommissionSettings(executor))
-  const installment = await installmentOf(executor, charge)
-  const drafts = buildCommissionDrafts(
-    {
-      kind: charge.kind,
-      amount: Number(charge.amount),
-      paidAmount: charge.paidAmount === null ? null : Number(charge.paidAmount),
-      items: (charge.items ?? []).map(item => ({ kind: item.kind as never, amount: Number(item.amount), appliesTo: item.appliesTo })),
-    },
-    installment,
-    settings,
-  )
-  if (drafts.length === 0) return 0
-
-  const paidAt = charge.paidAt ?? now
-  const referenceMonth = toDateSP(paidAt).slice(0, 7)
-  const inserted = await executor
-    .insert(platformSalesCommissions)
-    .values(
-      drafts.map(draft => ({
-        sellerUserId,
-        proposalId: charge.proposalId,
-        organizationId: charge.organizationId,
-        chargeId: charge.id,
-        chargeKind: charge.kind,
-        kind: draft.kind,
-        installment: draft.installment,
-        baseAmount: String(draft.baseAmount),
-        percent: String(draft.percent),
-        amount: String(draft.amount),
-        status: 'a_pagar' as const,
-        referenceMonth,
-        chargePaidAt: paidAt,
-      })),
-    )
-    .onConflictDoNothing({ target: [platformSalesCommissions.chargeId, platformSalesCommissions.kind] })
-    .returning()
-  if (inserted.length > 0) {
-    await executor.insert(auditLogs).values(
-      inserted.map(row => ({
-        organizationId: charge.organizationId,
-        actorId: null,
-        actorScope: null,
-        action: 'sales_commission.created',
-        resource: 'sales_commission',
-        resourceId: row.id,
-        metadata: {
-          sellerUserId,
-          chargeId: charge.id,
-          proposalCode: proposal?.code ?? null,
-          parte: row.kind,
-          mensalidade: row.installment,
-          base: Number(row.baseAmount),
-          percentual: Number(row.percent),
-          valor: Number(row.amount),
-        },
-      })),
-    )
-  }
-  return inserted.length
-}
-
-/** Fatura estornada (ou com chargeback): comissões dela mudam de status. Devolve quantas. */
-export async function reverseCommissionsForCharge(
-  executor: Executor,
-  chargeId: string,
-  reason: string,
-  now = new Date(),
-): Promise<number> {
-  const rows = await executor.select().from(platformSalesCommissions).where(eq(platformSalesCommissions.chargeId, chargeId))
-  let changed = 0
-  for (const row of rows) {
-    const next = reversedCommissionStatus(row.status)
-    if (!next) continue
-    const [updated] = await executor
-      .update(platformSalesCommissions)
-      .set({ status: next, canceledAt: now, cancelReason: reason.slice(0, 500), updatedAt: now })
-      .where(and(eq(platformSalesCommissions.id, row.id), eq(platformSalesCommissions.status, row.status)))
-      .returning({ id: platformSalesCommissions.id })
-    if (!updated) continue
-    changed += 1
-    await executor.insert(auditLogs).values({
-      organizationId: row.organizationId,
-      actorId: null,
-      actorScope: null,
-      action: next === 'cancelada' ? 'sales_commission.canceled' : 'sales_commission.clawback',
-      resource: 'sales_commission',
-      resourceId: row.id,
-      metadata: { chargeId, antes: row.status, depois: next, motivo: reason, valor: Number(row.amount) },
-    })
-  }
-  return changed
-}
-
-/**
- * Embrulho usado pelo handler de eventos da cobrança: savepoint próprio e
- * erro só no log — a comissão nunca desfaz pagamento/estorno.
- */
-export async function safely(executor: Executor, label: string, work: (tx: Executor) => Promise<unknown>): Promise<void> {
-  try {
-    const runner = executor as Partial<Pick<typeof db, 'transaction'>>
-    if (typeof runner.transaction === 'function') {
-      await runner.transaction(async sp => {
-        await work(sp)
-      })
-    } else {
-      await work(executor)
-    }
-  } catch (error) {
-    logger.error({ err: error instanceof Error ? error.message : String(error), label }, 'Falha nas comissões de vendas (o pagamento segue)')
-  }
 }
 
 // ---------------------------------------------------------------------------

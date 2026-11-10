@@ -591,6 +591,10 @@ export function checkoutInputSchema(options: CardInputOptions) {
     dependents: z.array(checkoutDependentInput).max(20, 'Máximo de 20 dependentes').default([]),
     payment: checkoutPaymentSchema(options),
     acceptTerms: z.literal(true, { errorMap: () => ({ message: 'É preciso aceitar os termos para continuar' }) }),
+    /** Rede Comercial: código de indicação do agente (`?ref=`). Código inválido é ignorado, nunca recusa a compra. */
+    ref: z.string().trim().max(40).optional(),
+    /** Rede Comercial: lead que originou o link (`?lead=`). Inválido/de outro clube é ignorado. */
+    lead: z.string().trim().max(50).optional(),
   })
 }
 

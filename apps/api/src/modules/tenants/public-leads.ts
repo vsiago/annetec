@@ -1,7 +1,7 @@
 import { isValidCnpj, telefone } from '@annetec/contracts'
 import { z } from 'zod'
 import { logger } from '@/lib/logger'
-import { crmService } from '@/modules/crm/service'
+import { receberLead } from '@/modules/vendas-rede/intake.service'
 import { findPublicClubPlan, type PublicClubPlan } from './public-club-plans'
 
 /**
@@ -97,19 +97,36 @@ export async function capturePublicLead(
   // recusar o cadastro: perder o contato por causa de um link velho não vale.
   const plano = input.planId ? await findPublicClubPlan(tenantId, input.planId) : null
 
-  const lead = await crmService.createLead(tenantId, {
-    name: input.name,
+  // Rede Comercial: entra no POOL do clube (vendas_leads, origem "site"), com distribuição e aviso aos agentes online.
+  const empresa = input.origin === 'empresas' && input.company ? input.company : null
+  const lead = await receberLead({
+    scope: 'tenant',
+    tenantId,
+    tipo: empresa ? 'empresa' : 'pessoa',
+    nome: input.name,
     email: input.email ? input.email : null,
-    phone: telefoneFormatado(input.phone),
-    source: ORIGEM_NO_CRM[input.origin],
-    status: 'new',
-    notes: montarObservacoes(input, plano) || null,
-    estimatedValue: plano ? plano.priceMonthly : null,
-    sellerId: null,
+    telefone: input.phone,
+    documento: empresa?.document ? empresa.document.replace(/\D/g, '') : null,
+    origem: 'site',
+    origemDetalhe: input.origin,
+    interessePlanoId: plano?.id ?? null,
+    valorEstimado: plano ? plano.priceMonthly : null,
+    observacoes: montarObservacoes(input, plano) || null,
+    dados: {
+      ...(input.subject ? { assunto: input.subject } : {}),
+      ...(empresa
+        ? {
+            empresa: empresa.name,
+            ...(empresa.document ? { cnpj: empresa.document.replace(/\D/g, '') } : {}),
+            ...(empresa.employees ? { colaboradores: empresa.employees } : {}),
+            ...(empresa.role ? { cargo: empresa.role } : {}),
+          }
+        : {}),
+    },
   })
 
-  logger.info({ tenantId, leadId: lead.id, origin: input.origin }, 'Lead capturado pela vitrine')
-  return { leadId: lead.id }
+  logger.info({ tenantId, leadId: lead.leadId, origin: input.origin, duplicado: lead.duplicado }, 'Lead capturado pela vitrine')
+  return { leadId: lead.leadId }
 }
 
 /**

@@ -163,7 +163,7 @@ export async function transitionProposal(
     .set({ ...patch, updatedAt: new Date() })
     .where(and(eq(platformOnboardingProposals.id, id), inArray(platformOnboardingProposals.status, [...from])))
     .returning()
-  if (row && patch.status !== undefined && row.sellerUserId) await syncProspectsWithProposal(executor, row)
+  if (row && patch.status !== undefined && (row.sellerUserId || row.vendasLeadId)) await syncProspectsWithProposal(executor, row)
   return row ?? null
 }
 
