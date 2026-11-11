@@ -22,18 +22,24 @@ function whereConfig({ scope, tenantId }: Escopo) {
   return and(eq(vendasConfig.scope, scope), tenantId ? eq(vendasConfig.tenantId, tenantId) : isNull(vendasConfig.tenantId))!
 }
 
-async function lerConfig(escopo: Escopo): Promise<VendasConfigRow | null> {
-  const [row] = await db.select().from(vendasConfig).where(whereConfig(escopo)).limit(1)
+/** `db`, transação ou savepoint: quem roda dentro de uma transação (gancho de pagamento) passa o `tx`. */
+export type ExecutorConfig = Pick<typeof db, 'select' | 'insert'>
+
+async function lerConfig(escopo: Escopo, executor: ExecutorConfig): Promise<VendasConfigRow | null> {
+  const [row] = await executor.select().from(vendasConfig).where(whereConfig(escopo)).limit(1)
   return row ?? null
 }
 
-/** Config do escopo; cria com os padrões se ainda não existir (corrida: o índice único decide, quem perde só relê). */
-export async function getOrCreateConfig(scope: EscopoVendas, tenantId: string | null): Promise<VendasConfigRow> {
+/**
+ * Config do escopo; cria com os padrões se ainda não existir (corrida: o índice único decide, quem perde só relê).
+ * Dentro de uma transação, passe o `tx`: usar o `db` global ali pede uma 2ª conexão ao pool enquanto a 1ª segue presa.
+ */
+export async function getOrCreateConfig(scope: EscopoVendas, tenantId: string | null, executor: ExecutorConfig = db): Promise<VendasConfigRow> {
   const escopo = { scope, tenantId }
-  const existente = await lerConfig(escopo)
+  const existente = await lerConfig(escopo, executor)
   if (existente) return existente
 
-  await db
+  await executor
     .insert(vendasConfig)
     .values({
       scope,
@@ -51,7 +57,7 @@ export async function getOrCreateConfig(scope: EscopoVendas, tenantId: string | 
     })
     .onConflictDoNothing()
 
-  const criada = await lerConfig(escopo)
+  const criada = await lerConfig(escopo, executor)
   if (!criada) throw new Error('Falha ao criar a configuração da Rede Comercial')
   return criada
 }

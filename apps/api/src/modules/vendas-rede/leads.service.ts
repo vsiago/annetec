@@ -605,6 +605,10 @@ export async function mudarEtapa(ctx: VendasCtx, id: string, input: MudarEtapaLe
     throw AppError.validation([{ path: 'motivoPerda', message: 'Informe o motivo da perda' }])
   }
   const confirmado = para === 'ganho' && !lead.conversao
+  // Ganho manual (sem venda) infla ranking e metas: só master e gerente. O ganho automático pelo pagamento vale para todos.
+  if (confirmado && ctx.papel !== 'master' && ctx.papel !== 'gerente') {
+    throw new AppError(ERROR_CODES.VENDAS_TRANSICAO_INVALIDA, 'Só master e gerente marcam ganho sem venda: use o fluxo de venda (proposta/adesão).')
+  }
   if (confirmado && !input.confirmar) {
     throw AppError.businessRule(
       'O fechamento acontece pela proposta ou pela assinatura. Para marcar como ganho manualmente, confirme o fechamento.',
@@ -723,15 +727,30 @@ export async function reatribuir(ctx: VendasCtx, id: string, agenteId: string | 
   if (ETAPAS_FECHADAS.includes(lead.etapa) && !alvo) throw AppError.businessRule('Lead encerrado não volta ao pool.')
 
   const donoAtual = lead.agenteId ? eq(vendasLeads.agenteId, lead.agenteId) : isNull(vendasLeads.agenteId)
-  const [atualizado] = await db
-    .update(vendasLeads)
-    .set(
-      alvo
-        ? { agenteId: alvo.id, reivindicadoEm: agora, poolDesde: null, updatedAt: agora }
-        : { agenteId: null, reivindicadoEm: null, poolDesde: agora, updatedAt: agora },
-    )
-    .where(and(eq(vendasLeads.id, lead.id), donoAtual, whereEscopo(vendasLeads, ctx)))
-    .returning({ id: vendasLeads.id })
+  // Reatribuir muda o beneficiário das comissões AINDA NÃO geradas; as já registradas não mudam.
+  // Por isso o snapshot da cadeia é zerado (recalculado na 1ª cobrança paga) e as vendas em andamento
+  // do lead passam a apontar para o novo agente (o vendedor antigo só mantém o que já vendeu/gerou).
+  const atualizado = await db.transaction(async tx => {
+    const [linha] = await tx
+      .update(vendasLeads)
+      .set(
+        alvo
+          ? { agenteId: alvo.id, reivindicadoEm: agora, poolDesde: null, atribuicao: null, updatedAt: agora }
+          : { agenteId: null, reivindicadoEm: null, poolDesde: agora, atribuicao: null, updatedAt: agora },
+      )
+      .where(and(eq(vendasLeads.id, lead.id), donoAtual, whereEscopo(vendasLeads, ctx)))
+      .returning({ id: vendasLeads.id })
+    if (!linha) return null
+    await tx
+      .update(clubSubscriptions)
+      .set({ vendasAgenteId: alvo?.id ?? null })
+      .where(eq(clubSubscriptions.vendasLeadId, lead.id))
+    await tx
+      .update(platformOnboardingProposals)
+      .set(alvo ? { vendasAgenteId: alvo.id, sellerUserId: alvo.userId } : { vendasAgenteId: null })
+      .where(eq(platformOnboardingProposals.vendasLeadId, lead.id))
+    return linha
+  })
   if (!atualizado) throw AppError.conflict('O lead mudou de dono enquanto você editava. Atualize a tela e tente de novo.')
 
   if (alvo) {

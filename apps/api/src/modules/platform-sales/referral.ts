@@ -1,8 +1,18 @@
-import { and, eq, notInArray } from 'drizzle-orm'
+import { and, eq, isNull, notInArray } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { platformOnboardingProposals, platformProspectInteractions, platformProspects, user, vendasLeadEventos, vendasLeads } from '@/db/schema'
+import {
+  platformOnboardingProposals,
+  platformProspectInteractions,
+  platformProspects,
+  user,
+  vendasAgentes,
+  vendasLeadEventos,
+  vendasLeads,
+  type VendasAgenteRow,
+} from '@/db/schema'
 import { logger } from '@/lib/logger'
 import { atribuicaoDoAgente, buscarAgentePorCodigo } from '@/modules/vendas-rede/atribuicao'
+import { compradorEhOAgente, MOTIVO_AUTO_COMPRA, type DadosDePessoa } from '@/modules/vendas-rede/rules'
 import { findActiveSellerByCode, type ActiveSellerRef } from './seller-profile'
 
 /**
@@ -17,19 +27,48 @@ export interface ReferralRef extends ActiveSellerRef {
   agenteId?: string | null
 }
 
-export async function resolveReferral(code: string | null | undefined): Promise<ReferralRef | null> {
+/**
+ * Resolve o código de indicação da contratação pública.
+ *
+ * Regra de precedência: se o código (qualquer caixa) ou o usuário dono do código antigo tem linha em
+ * `vendas_agentes`, vale SÓ ela — agente inativo (ou conta banida) = sem atribuição, nunca cai no
+ * cadastro antigo (`platform_sellers`), que ainda marca o vendedor como ativo. O legado só vale quando
+ * NÃO existe agente da Rede Comercial.
+ *
+ * `comprador` (contato do responsável pela contratação): igual ao agente (e-mail/telefone) = auto-compra,
+ * sem atribuição. A contratação nunca falha por causa do código.
+ */
+export async function resolveReferral(code: string | null | undefined, comprador?: DadosDePessoa): Promise<ReferralRef | null> {
   if (!code) return null
   try {
-    const agente = await buscarAgentePorCodigo(code, { scope: 'platform', tenantId: null })
-    if (agente) {
-      const [conta] = await db.select({ banned: user.banned }).from(user).where(eq(user.id, agente.userId)).limit(1)
-      if (conta?.banned !== true) {
-        return { userId: agente.userId, name: agente.nome, referralCode: agente.codigoIndicacao, agenteId: agente.id }
+    let agente: VendasAgenteRow | null = await buscarAgentePorCodigo(code, { scope: 'platform', tenantId: null }, db, { incluirInativos: true })
+    let legado: ActiveSellerRef | null = null
+    if (!agente) {
+      legado = await findActiveSellerByCode(code)
+      if (legado) {
+        // O mesmo usuário pode ter agente novo sob outro código: a linha nova prevalece sobre o legado.
+        const [doUsuario] = await db
+          .select()
+          .from(vendasAgentes)
+          .where(and(eq(vendasAgentes.userId, legado.userId), eq(vendasAgentes.scope, 'platform'), isNull(vendasAgentes.tenantId)))
+          .limit(1)
+        agente = doUsuario ?? null
       }
     }
-    const seller = await findActiveSellerByCode(code)
-    if (!seller) logger.info({ referralCode: code.slice(0, 60) }, 'Código de indicação desconhecido ou de vendedor inativo — ignorado')
-    return seller
+    if (agente) {
+      const [conta] = await db.select({ banned: user.banned, email: user.email }).from(user).where(eq(user.id, agente.userId)).limit(1)
+      if (!agente.ativo || conta?.banned === true) {
+        logger.info({ referralCode: code.slice(0, 60) }, 'Código de indicação de agente inativo — ignorado')
+        return null
+      }
+      if (comprador && compradorEhOAgente({ cpf: agente.cpf, telefone: agente.telefone, email: conta?.email ?? null }, comprador)) {
+        logger.warn({ agenteId: agente.id, motivo: MOTIVO_AUTO_COMPRA }, 'Indicação ignorada: o comprador é o próprio agente')
+        return null
+      }
+      return { userId: agente.userId, name: agente.nome, referralCode: agente.codigoIndicacao, agenteId: agente.id }
+    }
+    if (!legado) logger.info({ referralCode: code.slice(0, 60) }, 'Código de indicação desconhecido ou de vendedor inativo — ignorado')
+    return legado
   } catch (error) {
     logger.warn({ err: error instanceof Error ? error.message : String(error) }, 'Falha ao resolver o código de indicação — ignorado')
     return null

@@ -116,6 +116,24 @@ export function platformMayAccess(
 }
 
 /**
+ * Barra o perfil de BALCÃO da Rede Comercial (`session.membership.salesRole === 'balcao'`)
+ * em rotas legadas do clube.
+ *
+ * O balcão autentica como `member.role = 'seller'` (não mudamos isso), e por isso passa em
+ * `requireTenantRole('admin', 'seller')`. As rotas que são de vendedor/admin de verdade
+ * (CRM, contratos, comissões, cotação, atendimentos de suporte) declaram este guard logo
+ * depois de `requireTenantRole`: balcão = 403 `VENDAS_SEM_PERMISSAO_NA_REDE`; vendedor
+ * comercial, admin e equipe da plataforma seguem. O papel vem da sessão, que o servidor
+ * recalcula a cada requisição a partir de `vendas_agentes`.
+ */
+export const bloquearBalcao = createMiddleware<AppEnv>(async (c, next) => {
+  if (c.get('auth')?.membership.salesRole === 'balcao') {
+    throw new AppError(ERROR_CODES.VENDAS_SEM_PERMISSAO_NA_REDE, 'O perfil de balcão não acessa este módulo.')
+  }
+  await next()
+})
+
+/**
  * Exige sessão de inquilino com um dos papéis informados E que o inquilino
  * ativo da sessão seja o mesmo resolvido pela rota. É esta segunda checagem
  * que impede um admin do inquilino A de ler dados do inquilino B trocando o

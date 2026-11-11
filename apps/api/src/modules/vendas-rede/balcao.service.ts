@@ -12,7 +12,7 @@ import {
   type VendasPessoaBalcao,
   type VendasPlanoBalcao,
 } from '@annetec/contracts'
-import { and, desc, eq, gte, inArray, lt, sql, type SQL } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lt, ne, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
 import {
   clubPlans,
@@ -21,6 +21,7 @@ import {
   vendasAtendimentosBalcao,
   vendasLeads,
   vendasUnidades,
+  type VendasAgenteRow,
   type VendasAtendimentoBalcaoRow,
   type VendasLeadRow,
 } from '@/db/schema'
@@ -29,8 +30,8 @@ import type { ResolvedTenant } from '@/http/types'
 import { getOrCreateConfig } from './config.service'
 import type { VendasCtx } from './context'
 import { assinar } from './conversao.service'
-import { atualizar, criar, mudarEtapa, obter, proximoPasso, registrarEventoLead, toVendasLead } from './leads.service'
-import { simularEconomiaBalcao } from './rules'
+import { atualizar, criar, obter, registrarEventoLead, toVendasLead } from './leads.service'
+import { simularEconomiaBalcao, transicaoPermitida } from './rules'
 
 /**
  * Balcão (`docs/rede-comercial.md`, 4.2 "Balcão"). Só escopo tenant; papel `balcao` ou master
@@ -262,24 +263,42 @@ export async function listarAtendimentos(
 // Pessoa
 // ---------------------------------------------------------------------------
 
-const ETAPAS_ABERTAS = new Set(['novo', 'em_contato', 'proposta', 'negociacao'])
+const ETAPAS_ABERTAS = ['novo', 'em_contato', 'proposta', 'negociacao'] as const
+const LIMITE_BUSCA = 20
 
+/**
+ * Lead aberto (qualquer dono) do clube com o mesmo CPF ou celular. Filtro em SQL com `limit`:
+ * `documento` e `telefone` são gravados só com dígitos (contrato `numeroDocumento`/`telefone` e
+ * `somenteDigitos` aqui), então a igualdade direta usa os índices. CPF tem prioridade sobre o celular.
+ */
 async function acharLeadAberto(tenantId: string, documento: string, telefone: string): Promise<VendasLeadRow | null> {
   if (!documento && !telefone) return null
   const rows = await db
     .select()
     .from(vendasLeads)
-    .where(and(eq(vendasLeads.scope, 'tenant'), eq(vendasLeads.tenantId, tenantId)))
+    .where(
+      and(
+        eq(vendasLeads.scope, 'tenant'),
+        eq(vendasLeads.tenantId, tenantId),
+        inArray(vendasLeads.etapa, [...ETAPAS_ABERTAS]),
+        or(documento ? eq(vendasLeads.documento, documento) : undefined, telefone ? eq(vendasLeads.telefone, telefone) : undefined),
+      ),
+    )
     .orderBy(desc(vendasLeads.createdAt))
-  const abertos = rows.filter(l => ETAPAS_ABERTAS.has(l.etapa))
+    .limit(LIMITE_BUSCA)
   return (
-    (documento ? abertos.find(l => somenteDigitos(l.documento) === documento) : undefined) ??
-    (telefone ? abertos.find(l => somenteDigitos(l.telefone) === telefone) : undefined) ??
+    (documento ? rows.find(l => l.documento === documento) : undefined) ??
+    (telefone ? rows.find(l => l.telefone === telefone) : undefined) ??
     null
   )
 }
 
-async function apresentarLeadDeOutro(row: VendasLeadRow, agora: Date): Promise<VendasLead> {
+/** Lead do próprio atendente (ou qualquer um, para o master, que enxerga todo o funil do clube). */
+function leadEhDoAtendente(ctx: VendasCtx, lead: Pick<VendasLeadRow, 'agenteId'>): boolean {
+  return ctx.papel === 'master' || (lead.agenteId !== null && lead.agenteId === ctx.agente?.id)
+}
+
+async function apresentarLeadProprio(row: VendasLeadRow, agora: Date): Promise<VendasLead> {
   let agenteNome: string | null = null
   if (row.agenteId) {
     const [a] = await db.select({ nome: vendasAgentes.nome }).from(vendasAgentes).where(eq(vendasAgentes.id, row.agenteId)).limit(1)
@@ -288,34 +307,47 @@ async function apresentarLeadDeOutro(row: VendasLeadRow, agora: Date): Promise<V
   return toVendasLead(row, { agenteNome, planoNome: null, agora })
 }
 
+/**
+ * Busca por CPF ou celular, devolvendo o MÍNIMO (um atendente de clínica parceira não pode virar
+ * oráculo de dados do clube):
+ *  - associado: só `jaAssociado` e `{ status, planoNome }`; o nome só quando a busca foi pelo CPF
+ *    do próprio titular (celular pode ser de um familiar);
+ *  - lead aberto de OUTRO atendente: só `leadAberto: { existe, etapa, proprio: false }` (sem nome,
+ *    observações, atribuição ou conversão);
+ *  - lead do próprio atendente: o lead completo, que a tela usa para pré-preencher.
+ */
 export async function buscarPessoa(ctx: VendasCtx, query: PessoaBalcaoQuery, agora: Date = new Date()): Promise<VendasPessoaBalcao> {
   const tenantId = exigeTenant(ctx)
   const documento = somenteDigitos(query.documento)
   const telefone = somenteDigitos(query.telefone)
+  if (!documento && !telefone) return { jaAssociado: false, assinatura: null, lead: null, leadAberto: null, nome: null }
 
-  const assinaturas = await db.select().from(clubSubscriptions).where(eq(clubSubscriptions.organizationId, tenantId))
-  const encontradas = assinaturas.filter(
-    s =>
-      s.status !== 'canceled' &&
-      ((documento && somenteDigitos(s.holderCpf) === documento) || (telefone && somenteDigitos(s.holderPhone) === telefone)),
-  )
+  const encontradas = await db
+    .select({
+      status: clubSubscriptions.status,
+      planName: clubSubscriptions.planName,
+      holderName: clubSubscriptions.holderName,
+      holderCpf: clubSubscriptions.holderCpf,
+    })
+    .from(clubSubscriptions)
+    .where(
+      and(
+        eq(clubSubscriptions.organizationId, tenantId),
+        ne(clubSubscriptions.status, 'canceled'),
+        or(documento ? eq(clubSubscriptions.holderCpf, documento) : undefined, telefone ? eq(clubSubscriptions.holderPhone, telefone) : undefined),
+      ),
+    )
+    .limit(LIMITE_BUSCA)
   const assinatura = encontradas.find(s => s.status === 'active' || s.status === 'past_due') ?? encontradas[0] ?? null
   const leadRow = await acharLeadAberto(tenantId, documento, telefone)
+  const proprio = leadRow ? leadEhDoAtendente(ctx, leadRow) : false
 
   return {
     jaAssociado: Boolean(assinatura && ['active', 'past_due', 'suspended'].includes(assinatura.status)),
-    assinatura: assinatura
-      ? {
-          id: assinatura.id,
-          status: assinatura.status,
-          planoNome: assinatura.planName,
-          proximoVencimento: assinatura.nextDueDate ?? null,
-        }
-      : null,
-    lead: leadRow ? await apresentarLeadDeOutro(leadRow, agora) : null,
-    nome: assinatura?.holderName ?? leadRow?.nome ?? null,
-    telefone: assinatura?.holderPhone ?? leadRow?.telefone ?? null,
-    email: assinatura?.holderEmail ?? leadRow?.email ?? null,
+    assinatura: assinatura ? { status: assinatura.status, planoNome: assinatura.planName } : null,
+    lead: leadRow && proprio ? await apresentarLeadProprio(leadRow, agora) : null,
+    leadAberto: leadRow ? { existe: true, etapa: leadRow.etapa, proprio } : null,
+    nome: assinatura ? (documento && assinatura.holderCpf === documento ? assinatura.holderName : null) : proprio ? (leadRow?.nome ?? null) : null,
   }
 }
 
@@ -329,20 +361,84 @@ export interface AtendimentoRegistrado {
   checkout: CheckoutResult | null
 }
 
+type Executor = Pick<typeof db, 'select' | 'insert' | 'update'>
+
+/** Janela em que o mesmo atendimento repetido (duplo clique, reenvio) devolve o já gravado. */
+const JANELA_IDEMPOTENCIA_MS = 60_000
+
 function invalido(issues: { path: string; message: string }[], mensagem: string): AppError {
   return new AppError(ERROR_CODES.VENDAS_ATENDIMENTO_INVALIDO, mensagem, { issues })
 }
 
-/** Contato no balcão: evento `atendimento_balcao` + `ultimo_contato_em` (+ `novo → em_contato` no lead do próprio atendente). */
+function transicaoInvalida(de: string, para: string): AppError {
+  return new AppError(ERROR_CODES.VENDAS_TRANSICAO_INVALIDA, `Não é possível mover o lead de "${de}" para "${para}".`)
+}
+
+/** Lead do balcão (dono = o atendente, etapa `novo`) + evento `criado`, no executor recebido. */
+async function inserirLeadBalcao(
+  executor: Executor,
+  ctx: VendasCtx,
+  agente: VendasAgenteRow,
+  tenantId: string,
+  dados: {
+    nome: string
+    documento: string | null
+    email: string | null
+    telefone: string | null
+    planoId: string | null
+    observacoes: string | null
+    nascimento: string | null
+  },
+  agora: Date,
+): Promise<VendasLeadRow> {
+  const [row] = await executor
+    .insert(vendasLeads)
+    .values({
+      scope: 'tenant',
+      tenantId,
+      tipo: 'pessoa',
+      nome: dados.nome,
+      documento: dados.documento,
+      email: dados.email,
+      telefone: dados.telefone,
+      origem: 'balcao',
+      interessePlanoId: dados.planoId,
+      observacoes: dados.observacoes,
+      etapa: 'novo',
+      agenteId: agente.id,
+      poolDesde: null,
+      reivindicadoEm: null,
+      dados: dados.nascimento ? { dataNascimento: dados.nascimento } : {},
+      createdByUserId: ctx.userId,
+    })
+    .returning()
+  if (!row) throw new Error('Falha ao criar o lead')
+  await registrarEventoLead(executor, {
+    leadId: row.id,
+    tipo: 'criado',
+    texto: `Lead cadastrado por ${agente.nome}.`,
+    dados: { origem: row.origem },
+    porUserId: ctx.userId,
+    porAgenteId: agente.id,
+    em: agora,
+  })
+  return row
+}
+
+/**
+ * Contato no balcão: evento `atendimento_balcao` + `ultimo_contato_em` (+ `novo → em_contato` no lead
+ * do próprio atendente). Devolve a etapa em que o lead ficou.
+ */
 async function registrarContatoBalcao(
+  executor: Executor,
   ctx: VendasCtx,
   lead: VendasLeadRow,
   texto: string,
   dados: Record<string, unknown>,
   agora: Date,
-): Promise<void> {
+): Promise<VendasLeadRow['etapa']> {
   const proprio = lead.agenteId !== null && lead.agenteId === ctx.agente?.id
-  await registrarEventoLead(db, {
+  await registrarEventoLead(executor, {
     leadId: lead.id,
     tipo: 'atendimento_balcao',
     texto,
@@ -352,12 +448,12 @@ async function registrarContatoBalcao(
     em: agora,
   })
   const avanca = proprio && lead.etapa === 'novo'
-  await db
+  await executor
     .update(vendasLeads)
     .set({ ultimoContatoEm: agora, updatedAt: agora, ...(avanca ? { etapa: 'em_contato' as const } : {}) })
     .where(and(eq(vendasLeads.id, lead.id), eq(vendasLeads.tenantId, ctx.tenantId!)))
   if (avanca) {
-    await registrarEventoLead(db, {
+    await registrarEventoLead(executor, {
       leadId: lead.id,
       tipo: 'etapa',
       texto: 'Etapa: novo → em_contato (atendimento no balcão).',
@@ -366,7 +462,55 @@ async function registrarContatoBalcao(
       porAgenteId: ctx.agente?.id ?? null,
       em: agora,
     })
+    return 'em_contato'
   }
+  return lead.etapa
+}
+
+/** `vai_pensar`: próximo passo "retomar contato" (mesmo efeito de `POST /leads/:id/proximo-passo`). */
+async function agendarRetomada(executor: Executor, ctx: VendasCtx, leadId: string, agora: Date): Promise<void> {
+  const em = new Date(agora.getTime() + DIAS_PARA_RETOMAR * 86_400_000)
+  const texto = 'Retomar contato do balcão'
+  await executor
+    .update(vendasLeads)
+    .set({ proximoPasso: texto, proximoPassoEm: em, updatedAt: agora })
+    .where(and(eq(vendasLeads.id, leadId), eq(vendasLeads.tenantId, ctx.tenantId!)))
+  await registrarEventoLead(executor, {
+    leadId,
+    tipo: 'proximo_passo',
+    texto,
+    dados: { em: em.toISOString() },
+    porUserId: ctx.userId,
+    porAgenteId: ctx.agente?.id ?? null,
+    em: agora,
+  })
+}
+
+/** `recusou`: lead → `perdido` com compare-and-swap na etapa; se mudou no meio, 422 e a transação desfaz tudo. */
+async function perderLead(
+  executor: Executor,
+  ctx: VendasCtx,
+  leadId: string,
+  de: VendasLeadRow['etapa'],
+  motivo: string,
+  agora: Date,
+): Promise<void> {
+  if (!transicaoPermitida(de, 'perdido', ctx.papel)) throw transicaoInvalida(de, 'perdido')
+  const [atualizado] = await executor
+    .update(vendasLeads)
+    .set({ etapa: 'perdido', perdidoEm: agora, motivoPerda: motivo, ganhoEm: null, updatedAt: agora })
+    .where(and(eq(vendasLeads.id, leadId), eq(vendasLeads.etapa, de), eq(vendasLeads.tenantId, ctx.tenantId!)))
+    .returning({ id: vendasLeads.id })
+  if (!atualizado) throw transicaoInvalida(de, 'perdido')
+  await registrarEventoLead(executor, {
+    leadId,
+    tipo: 'etapa',
+    texto: `Etapa: ${de} → perdido. Motivo: ${motivo}`,
+    dados: { de, para: 'perdido', motivoPerda: motivo },
+    porUserId: ctx.userId,
+    porAgenteId: ctx.agente?.id ?? null,
+    em: agora,
+  })
 }
 
 async function lerLead(id: string): Promise<VendasLeadRow> {
@@ -375,6 +519,65 @@ async function lerLead(id: string): Promise<VendasLeadRow> {
   return row
 }
 
+/** Atendimento igual (mesmo atendente, resultado e CPF/celular/lead) gravado há menos de 60 s. */
+async function atendimentoRecente(
+  executor: Executor,
+  tenantId: string,
+  agenteId: string,
+  resultado: VendasAtendimentoBalcaoRow['resultado'],
+  chaves: { documento: string; telefone: string; leadId: string | null },
+  agora: Date,
+): Promise<VendasAtendimentoBalcaoRow | null> {
+  const identidade = chaves.documento
+    ? [eq(vendasAtendimentosBalcao.documento, chaves.documento)]
+    : [
+        ...(chaves.telefone ? [eq(vendasAtendimentosBalcao.telefone, chaves.telefone)] : []),
+        ...(chaves.leadId ? [eq(vendasAtendimentosBalcao.leadId, chaves.leadId)] : []),
+      ]
+  if (identidade.length === 0) return null
+  const [row] = await executor
+    .select()
+    .from(vendasAtendimentosBalcao)
+    .where(
+      and(
+        eq(vendasAtendimentosBalcao.tenantId, tenantId),
+        eq(vendasAtendimentosBalcao.agenteId, agenteId),
+        eq(vendasAtendimentosBalcao.resultado, resultado),
+        gte(vendasAtendimentosBalcao.createdAt, new Date(agora.getTime() - JANELA_IDEMPOTENCIA_MS)),
+        or(...identidade),
+      ),
+    )
+    .orderBy(desc(vendasAtendimentosBalcao.createdAt))
+    .limit(1)
+  return row ?? null
+}
+
+/** Resposta do atendimento: o lead só volta quando é do próprio atendente (lead de outro dono não é exposto). */
+async function montarResposta(
+  ctx: VendasCtx,
+  atendimento: VendasAtendimentoBalcaoRow,
+  checkout: CheckoutResult | null,
+  agora: Date,
+): Promise<AtendimentoRegistrado> {
+  let lead: VendasLead | null = null
+  if (atendimento.leadId) {
+    const row = await lerLead(atendimento.leadId)
+    if (row.agenteId === atendimento.agenteId) lead = await obter(ctx, atendimento.leadId, agora)
+  }
+  const [apresentado] = await apresentarAtendimentos([atendimento])
+  return { atendimento: apresentado!, lead, checkout }
+}
+
+/**
+ * Registra o atendimento. Ordem:
+ *  1. valida TUDO antes de gravar (campos, plano, transição de etapa do lead próprio);
+ *  2. idempotência: mesmo atendente + resultado + CPF/celular/lead nos últimos 60 s devolve o atendimento
+ *     já gravado (duplo clique em "Vai pensar" não cria dois registros);
+ *  3. `vai_pensar`/`recusou`/`ja_associado`: lead + evento + próximo passo/perda + atendimento em UMA
+ *     transação (erro no meio desfaz tudo);
+ *  4. `assinou`: o lead e a assinatura nascem nos serviços de conversão (checkout externo, não cabe em
+ *     transação); o atendimento e o evento do lead são gravados juntos em seguida.
+ */
 export async function registrarAtendimento(
   ctx: VendasCtx,
   tenant: ResolvedTenant,
@@ -393,7 +596,9 @@ export async function registrarAtendimento(
 
   const existente = await acharLeadAberto(tenantId, documento, telefone)
   const dadosExistentes = (existente?.dados ?? {}) as Record<string, unknown>
+  const proprio = existente !== null && existente.agenteId === agente.id
 
+  // 1. Validação, antes de qualquer escrita.
   if (resultado === 'assinou') {
     const problemas: { path: string; message: string }[] = []
     if (!planoId) problemas.push({ path: 'planoId', message: 'Escolha o plano para registrar a adesão' })
@@ -408,6 +613,10 @@ export async function registrarAtendimento(
   }
   if (resultado === 'vai_pensar' && !telefone) {
     throw invalido([{ path: 'telefone', message: 'Informe o celular para retomar o contato' }], 'Informe o celular para retomar o contato')
+  }
+  // `recusou` perde o lead próprio: a etapa dele precisa permitir (ganho é final e só o master reabre).
+  if (resultado === 'recusou' && existente && proprio && !transicaoPermitida(existente.etapa, 'perdido', ctx.papel)) {
+    throw transicaoInvalida(existente.etapa, 'perdido')
   }
 
   // Plano e desconto.
@@ -425,33 +634,32 @@ export async function registrarAtendimento(
   const valorComPlano = planoId ? arredondar(input.valorTabela * (1 - descontoPercentual / 100)) : input.valorTabela
   const dadosEvento = { servico: input.servico, valorTabela: input.valorTabela, desconto: descontoPercentual, planoId }
 
-  const proprio = existente !== null && existente.agenteId === agente.id
-  let leadId: string | null = existente?.id ?? null
-  let checkout: CheckoutResult | null = null
+  // 2. Idempotência.
+  const repetido = await atendimentoRecente(db, tenantId, agente.id, resultado, { documento, telefone, leadId: existente?.id ?? null }, agora)
+  if (repetido) return montarResposta(ctx, repetido, null, agora)
 
-  /** Para mexer em lead de outro dono quando a venda fecha no balcão (o dono não muda). */
-  const ctxMaster: VendasCtx = { ...ctx, papel: 'master', visibilidade: { agenteId: agente.id, todos: true } }
+  const valoresAtendimento = (leadId: string | null, checkout: CheckoutResult | null) => ({
+    tenantId,
+    agenteId: agente.id,
+    unidadeId: agente.unidadeId ?? null,
+    leadId,
+    nome: input.nome,
+    documento: documento || null,
+    telefone: telefone || null,
+    servico: input.servico,
+    valorTabela: String(input.valorTabela),
+    descontoPercentual,
+    valorComPlano: String(valorComPlano),
+    planoId,
+    resultado,
+    observacoes: input.observacoes ?? null,
+    assinaturaId: checkout?.subscriptionId ?? null,
+  })
 
-  const novoLead = async (): Promise<VendasLeadRow> => {
-    const criado = await criar(
-      ctx,
-      {
-        tipo: 'pessoa',
-        nome: input.nome,
-        documento: documento || null,
-        email,
-        telefone: telefone || null,
-        origem: 'balcao',
-        interessePlanoId: planoId,
-        observacoes: input.observacoes ?? null,
-        dados: nascimento ? { dataNascimento: nascimento } : {},
-      },
-      agora,
-    )
-    return lerLead(criado.id)
-  }
-
+  // 4. Adesão: conversão fora da transação; atendimento + evento juntos depois.
   if (resultado === 'assinou') {
+    /** Para mexer em lead de outro dono quando a venda fecha no balcão (o dono não muda). */
+    const ctxMaster: VendasCtx = { ...ctx, papel: 'master', visibilidade: { agenteId: agente.id, todos: true } }
     const alvoCtx = existente && !proprio ? ctxMaster : ctx
     let lead: VendasLeadRow
     if (existente) {
@@ -465,69 +673,67 @@ export async function registrarAtendimento(
       }
       if (Object.keys(complemento).length > 0) await atualizar(alvoCtx, existente.id, complemento, agora)
     } else {
-      lead = await novoLead()
+      const criado = await criar(
+        ctx,
+        {
+          tipo: 'pessoa',
+          nome: input.nome,
+          documento: documento || null,
+          email,
+          telefone: telefone || null,
+          origem: 'balcao',
+          interessePlanoId: planoId,
+          observacoes: input.observacoes ?? null,
+          dados: nascimento ? { dataNascimento: nascimento } : {},
+        },
+        agora,
+      )
+      lead = await lerLead(criado.id)
     }
-    leadId = lead.id
-    checkout = await assinar(alvoCtx, tenant, lead.id, { planoId: planoId!, metodoPagamento: input.formaPagamento ?? 'pix' }, remoteIp)
-  } else if (resultado === 'vai_pensar' || resultado === 'recusou') {
-    const lead = existente ?? (await novoLead())
-    leadId = lead.id
-    const texto = `Atendimento no balcão: ${input.servico} (${RESULTADO_BALCAO_LABELS[resultado].toLowerCase()}).`
-    await registrarContatoBalcao(ctx, lead, texto, dadosEvento, agora)
-    // Lead de outro dono: só o registro no histórico; etapa, dono e próximo passo ficam como estão.
-    if (!existente || proprio) {
-      if (resultado === 'vai_pensar') {
-        await proximoPasso(
+    const checkout = await assinar(alvoCtx, tenant, lead.id, { planoId: planoId!, metodoPagamento: input.formaPagamento ?? 'pix' }, remoteIp)
+    const atendimento = await db.transaction(async tx => {
+      const [row] = await tx.insert(vendasAtendimentosBalcao).values(valoresAtendimento(lead.id, checkout)).returning()
+      if (!row) throw new Error('Falha ao registrar o atendimento')
+      await registrarEventoLead(tx, {
+        leadId: lead.id,
+        tipo: 'atendimento_balcao',
+        texto: `Atendimento no balcão: ${input.servico} (adesão).`,
+        dados: { ...dadosEvento, atendimentoId: row.id, assinaturaId: checkout.subscriptionId ?? null },
+        porUserId: ctx.userId,
+        porAgenteId: agente.id,
+        em: agora,
+      })
+      return row
+    })
+    return montarResposta(ctx, atendimento, checkout, agora)
+  }
+
+  // 3. Demais resultados: tudo na mesma transação.
+  const atendimento = await db.transaction(async tx => {
+    let leadId: string | null = existente?.id ?? null
+    if (resultado === 'vai_pensar' || resultado === 'recusou') {
+      const lead =
+        existente ??
+        (await inserirLeadBalcao(
+          tx,
           ctx,
-          lead.id,
-          { texto: 'Retomar contato do balcão', em: new Date(agora.getTime() + DIAS_PARA_RETOMAR * 86_400_000).toISOString() },
+          agente,
+          tenantId,
+          { nome: input.nome, documento: documento || null, email, telefone: telefone || null, planoId, observacoes: input.observacoes ?? null, nascimento },
           agora,
-        )
-      } else {
-        await mudarEtapa(ctx, lead.id, { etapa: 'perdido', motivoPerda: input.observacoes?.trim() || 'Não quis no balcão' }, agora)
+        ))
+      leadId = lead.id
+      const texto = `Atendimento no balcão: ${input.servico} (${RESULTADO_BALCAO_LABELS[resultado].toLowerCase()}).`
+      const etapa = await registrarContatoBalcao(tx, ctx, lead, texto, dadosEvento, agora)
+      // Lead de outro dono: só o registro no histórico; etapa, dono e próximo passo ficam como estão.
+      if (!existente || proprio) {
+        if (resultado === 'vai_pensar') await agendarRetomada(tx, ctx, lead.id, agora)
+        else await perderLead(tx, ctx, lead.id, etapa, input.observacoes?.trim() || 'Não quis no balcão', agora)
       }
     }
-  }
-
-  const [atendimento] = await db
-    .insert(vendasAtendimentosBalcao)
-    .values({
-      tenantId,
-      agenteId: agente.id,
-      unidadeId: agente.unidadeId ?? null,
-      leadId,
-      nome: input.nome,
-      documento: documento || null,
-      telefone: telefone || null,
-      servico: input.servico,
-      valorTabela: String(input.valorTabela),
-      descontoPercentual,
-      valorComPlano: String(valorComPlano),
-      planoId,
-      resultado,
-      observacoes: input.observacoes ?? null,
-      assinaturaId: checkout?.subscriptionId ?? null,
-    })
-    .returning()
-  if (!atendimento) throw new Error('Falha ao registrar o atendimento')
-
-  if (resultado === 'assinou' && leadId) {
-    await registrarEventoLead(db, {
-      leadId,
-      tipo: 'atendimento_balcao',
-      texto: `Atendimento no balcão: ${input.servico} (adesão).`,
-      dados: { ...dadosEvento, atendimentoId: atendimento.id, assinaturaId: checkout?.subscriptionId ?? null },
-      porUserId: ctx.userId,
-      porAgenteId: agente.id,
-      em: agora,
-    })
-  }
-
-  let leadFinal: VendasLead | null = null
-  if (leadId) {
-    const row = await lerLead(leadId)
-    leadFinal = row.agenteId === agente.id ? await obter(ctx, leadId, agora) : await apresentarLeadDeOutro(row, agora)
-  }
-  const [apresentado] = await apresentarAtendimentos([atendimento])
-  return { atendimento: apresentado!, lead: leadFinal, checkout }
+    const [row] = await tx.insert(vendasAtendimentosBalcao).values(valoresAtendimento(leadId, null)).returning()
+    if (!row) throw new Error('Falha ao registrar o atendimento')
+    return row
+  })
+  return montarResposta(ctx, atendimento, null, agora)
 }

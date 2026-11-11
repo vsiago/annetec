@@ -24,9 +24,10 @@ import { createDiscountRequest, getDiscountRequest } from '@/modules/platform-sa
 import { sendSellerInvite } from '@/modules/platform-sales/invite'
 import { getSellerProposal } from '@/modules/platform-sales/links.service'
 import { OPEN_PROPOSAL_STATUSES } from '@/modules/platform-sales/rules'
-import { atribuicaoDoAgente } from './atribuicao'
+import { atribuicaoDoAgente, compradorEhOAgenteNoBanco } from './atribuicao'
 import { whereEscopo, type VendasCtx } from './context'
 import { carregarEditavel, carregarLead, registrarEventoLead } from './leads.service'
+import { compradorEhOAgente, MOTIVO_AUTO_COMPRA } from './rules'
 
 /**
  * Conversão do lead em venda (ponte com a contratação e o checkout) —
@@ -90,6 +91,7 @@ export async function criarProposta(ctx: VendasCtx, leadId: string, input: Propo
   const { lead } = await carregarEditavel(ctx, leadId)
   const dono = await agenteDoLead(lead)
   if (!dono) throw AppError.businessRule('Atribua o lead a um vendedor antes de gerar a proposta.')
+  if (!dono.ativo) throw AppError.businessRule('O vendedor dono do lead está inativo: reatribua o lead antes de gerar a proposta.')
   const [conta] = await db.select({ email: user.email }).from(user).where(eq(user.id, dono.userId)).limit(1)
 
   // Proposta em andamento: reaproveita.
@@ -114,12 +116,25 @@ export async function criarProposta(ctx: VendasCtx, leadId: string, input: Propo
   if (!lead.vidasEstimadas || lead.vidasEstimadas < 1) problemas.push({ path: 'vidasEstimadas', message: 'Informe as vidas estimadas' })
   if (problemas.length > 0) faltando(problemas)
   const email = lead.email!.trim().toLowerCase()
-  if (conta && email === conta.email.trim().toLowerCase()) {
+  // Auto-compra: e-mail ou telefone do responsável iguais aos do vendedor dono (o CPF não entra: o cliente é CNPJ).
+  const mesmoEmail = Boolean(conta) && email === conta!.email.trim().toLowerCase()
+  if (mesmoEmail || compradorEhOAgente({ telefone: dono.telefone }, { telefone: lead.telefone })) {
+    await registrarEventoLead(db, {
+      leadId: lead.id,
+      tipo: 'sistema',
+      texto: 'Atribuição bloqueada: comprador é o próprio agente.',
+      dados: { motivoNaoComissionavel: MOTIVO_AUTO_COMPRA, agenteId: dono.id },
+      porUserId: ctx.userId,
+      porAgenteId: ctx.agente?.id ?? null,
+      em: agora,
+    })
     throw AppError.validation([
-      {
-        path: 'email',
-        message: 'Informe o e-mail do responsável no cliente: o link de contratação não pode ser enviado para o e-mail do vendedor',
-      },
+      mesmoEmail
+        ? {
+            path: 'email',
+            message: 'Informe o e-mail do responsável no cliente: o link de contratação não pode ser enviado para o e-mail do vendedor',
+          }
+        : { path: 'telefone', message: 'Informe o telefone do responsável no cliente: o contato não pode ser o do próprio vendedor' },
     ])
   }
 
@@ -275,6 +290,7 @@ export async function linkAdesao(ctx: VendasCtx, leadId: string, planoId: string
   const { lead } = await carregarEditavel(ctx, leadId)
   const plano = await planoDoClube(ctx.tenantId!, planoId)
   const dono = (await agenteDoLead(lead)) ?? ctx.agente
+  if (dono && !dono.ativo) throw AppError.businessRule('O vendedor dono do lead está inativo: reatribua o lead antes de gerar o link de adesão.')
   const params = new URLSearchParams({ plano: plano.id })
   if (dono?.codigoIndicacao) params.set('ref', dono.codigoIndicacao)
   params.set('lead', lead.id)
@@ -327,7 +343,21 @@ export async function assinar(
   if (!nascimento) problemas.push({ path: 'dados.dataNascimento', message: 'Informe a data de nascimento do titular' })
   if (problemas.length > 0) throw AppError.validation(problemas, 'Complete o cadastro do lead antes de assinar')
 
-  const dono = (await agenteDoLead(lead)) ?? ctx.agente
+  let dono = (await agenteDoLead(lead)) ?? ctx.agente
+  if (dono && !dono.ativo) throw AppError.businessRule('O vendedor dono do lead está inativo: reatribua o lead antes de assinar.')
+  // Auto-compra: o titular é o próprio agente → a venda segue, mas sem atribuição nem comissão.
+  const autoCompra = dono ? await compradorEhOAgenteNoBanco(dono, { cpf, email: lead.email, telefone: lead.telefone }) : false
+  if (autoCompra) {
+    await registrarEventoLead(db, {
+      leadId: lead.id,
+      tipo: 'sistema',
+      texto: 'Atribuição bloqueada: comprador é o próprio agente.',
+      dados: { motivoNaoComissionavel: MOTIVO_AUTO_COMPRA, agenteId: dono!.id },
+      porUserId: ctx.userId,
+      porAgenteId: ctx.agente?.id ?? null,
+    })
+    dono = null
+  }
   const resultado = await checkoutService.checkout(
     tenant,
     {
@@ -339,7 +369,7 @@ export async function assinar(
     },
     remoteIp,
     null,
-    { ref: dono?.codigoIndicacao ?? null, lead: lead.id },
+    autoCompra ? { ref: null, lead: null } : { ref: dono?.codigoIndicacao ?? null, lead: lead.id },
   )
   await registrarEventoLead(db, {
     leadId: lead.id,

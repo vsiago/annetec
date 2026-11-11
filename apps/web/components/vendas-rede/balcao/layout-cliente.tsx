@@ -13,6 +13,7 @@ import { BalcaoShell } from '../shell/balcao-shell'
 import { itensDoBalcao } from '../shell/itens'
 import { AcaoPrincipal } from '../ui/acao-principal'
 import { BalcaoContexto } from './contexto'
+import { limparRascunho } from './rascunho'
 
 /**
  * Dentro do `ProtectedRoute`: lê o perfil comercial (`/eu`) e a unidade
@@ -36,6 +37,8 @@ export function BalcaoLayoutCliente({ children }: { children: ReactNode }) {
       setErro(null)
       if (hoje.success) setUnidadeNome(hoje.data.agente?.unidade?.nome ?? null)
     } else if (r.unauthorized) {
+      // Sessão caiu: o rascunho (dados pessoais do atendimento) não fica para a próxima pessoa do balcão.
+      limparRascunho(slug)
       await endSession()
     } else {
       setErro(r.error)

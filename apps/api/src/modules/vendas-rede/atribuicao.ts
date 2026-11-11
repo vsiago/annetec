@@ -1,8 +1,8 @@
 import type { EscopoVendas } from '@annetec/contracts'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { vendasAgentes, vendasCorretoras, vendasEquipes, type VendasAgenteRow } from '@/db/schema'
-import { cadeiaDoAgente, type Atribuicao } from './rules'
+import { user, vendasAgentes, vendasCorretoras, vendasEquipes, type VendasAgenteRow } from '@/db/schema'
+import { cadeiaDoAgente, compradorEhOAgente, type Atribuicao, type DadosDePessoa } from './rules'
 
 /**
  * Snapshot da cadeia do agente (`vendas_leads.atribuicao`): lê equipe e corretora
@@ -44,16 +44,20 @@ export async function atribuicaoDeLinha(agente: VendasAgenteRow, executor: Execu
  * Agente ATIVO por código de indicação (sem diferenciar maiúsculas: o código é
  * gravado em maiúsculas, mas o migrado de `platform_sellers` pode estar em minúsculas).
  * `scope`/`tenantId` restringem o escopo; omitidos = qualquer escopo (consulta pública).
+ * `incluirInativos` devolve também o agente desativado (para saber que o código É de um
+ * agente e não cair no cadastro legado de vendedores).
  */
 export async function buscarAgentePorCodigo(
   codigo: string | null | undefined,
   escopo?: { scope: EscopoVendas; tenantId: string | null },
   executor: Executor = db,
+  opcoes: { incluirInativos?: boolean } = {},
 ): Promise<VendasAgenteRow | null> {
   const bruto = codigo?.trim()
   if (!bruto) return null
   const variantes = [...new Set([bruto, bruto.toUpperCase(), bruto.toLowerCase()])]
-  const filtros = [inArray(vendasAgentes.codigoIndicacao, variantes), eq(vendasAgentes.ativo, true)]
+  const filtros = [inArray(vendasAgentes.codigoIndicacao, variantes)]
+  if (!opcoes.incluirInativos) filtros.push(eq(vendasAgentes.ativo, true))
   if (escopo) {
     filtros.push(eq(vendasAgentes.scope, escopo.scope))
     filtros.push(escopo.tenantId ? eq(vendasAgentes.tenantId, escopo.tenantId) : isNull(vendasAgentes.tenantId))
@@ -64,4 +68,17 @@ export async function buscarAgentePorCodigo(
     .where(and(...filtros))
     .limit(1)
   return row ?? null
+}
+
+/**
+ * Auto-compra: o comprador (CPF, e-mail ou telefone) é o próprio agente? Usa o CPF e o telefone
+ * do cadastro do agente e o e-mail da conta (`user`). Nenhuma atribuição nem comissão nesse caso.
+ */
+export async function compradorEhOAgenteNoBanco(
+  agente: Pick<VendasAgenteRow, 'userId' | 'cpf' | 'telefone'>,
+  comprador: DadosDePessoa,
+  executor: Executor = db,
+): Promise<boolean> {
+  const [conta] = await executor.select({ email: user.email }).from(user).where(eq(user.id, agente.userId)).limit(1)
+  return compradorEhOAgente({ cpf: agente.cpf, telefone: agente.telefone, email: conta?.email ?? null }, comprador)
 }

@@ -2,23 +2,17 @@
 
 import type {
   ApproveDiscountInput,
-  CreateSellerInput,
   DiscountRequest,
   ListDiscountRequestsQuery,
   ListProspectsQuery,
   ListSalesCommissionsQuery,
-  MarkSalesCommissionsPaidInput,
   PlatformSeller,
   Prospect,
   ProspectDetail,
-  ReassignProspectInput,
   RejectDiscountInput,
-  SalesCommissionEntry,
   SalesCommissionList,
   SalesCommissionSettings,
   SalesReport,
-  UpdateSalesCommissionSettingsInput,
-  UpdateSellerInput,
 } from '@annetec/contracts'
 import { apiFetch } from '@/lib/api/client'
 import { pagedOf, type Paged } from '@/lib/adapters/platform-console'
@@ -26,9 +20,9 @@ import { run, type ActionResult } from './_api-result'
 
 /**
  * Gestão COMERCIAL da equipe — `/api/v1/platform/comercial/*`. Leitura:
- * superadmin e platform_admin. Escrita (vendedores, reatribuição, descontos,
- * repasse de comissão e regra): só superadmin — a tela desativa o botão para
- * quem não é, e a API recusa do mesmo jeito.
+ * superadmin e platform_admin. Escrita só em descontos (superadmin). Criar vendedor,
+ * reatribuir prospect, pagar comissão e editar a regra foram desativados na API (410):
+ * isso agora é feito pela Rede Comercial (`vendas-rede-api.ts`).
  */
 
 const BASE = '/api/v1/platform/comercial'
@@ -45,15 +39,6 @@ export async function listSellersAction(): Promise<ActionResult<PlatformSeller[]
 
 export async function getSellerAction(userId: string): Promise<ActionResult<PlatformSeller>> {
   return run(async () => (await apiFetch<PlatformSeller>(`${BASE}/vendedores/${enc(userId)}`)).data)
-}
-
-/** Cria a conta `platform_seller` E o perfil (código de indicação e meta). */
-export async function createSellerAction(input: CreateSellerInput): Promise<ActionResult<PlatformSeller>> {
-  return run(async () => (await apiFetch<PlatformSeller>(`${BASE}/vendedores`, { method: 'POST', body: input })).data)
-}
-
-export async function updateSellerAction(userId: string, input: UpdateSellerInput): Promise<ActionResult<PlatformSeller>> {
-  return run(async () => (await apiFetch<PlatformSeller>(`${BASE}/vendedores/${enc(userId)}`, { method: 'PATCH', body: input })).data)
 }
 
 // ---------------------------------------------------------------------------
@@ -78,12 +63,6 @@ export async function listTeamProspectsAction(query: Partial<ListProspectsQuery>
 
 export async function getTeamProspectAction(id: string): Promise<ActionResult<ProspectDetail>> {
   return run(async () => (await apiFetch<ProspectDetail>(`${BASE}/prospects/${enc(id)}`)).data)
-}
-
-export async function reassignProspectAction(id: string, input: ReassignProspectInput): Promise<ActionResult<ProspectDetail>> {
-  return run(
-    async () => (await apiFetch<ProspectDetail>(`${BASE}/prospects/${enc(id)}/reatribuir`, { method: 'POST', body: input })).data,
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -133,25 +112,8 @@ export async function listTeamCommissionsAction(query: Partial<ListSalesCommissi
   })
 }
 
-/** Marca `a_pagar` → `paga`. As que não estavam "a pagar" voltam em `skipped`. */
-export async function markCommissionsPaidAction(
-  input: MarkSalesCommissionsPaidInput,
-): Promise<ActionResult<{ paid: SalesCommissionEntry[]; skipped: string[] }>> {
-  return run(
-    async () =>
-      (await apiFetch<{ paid: SalesCommissionEntry[]; skipped: string[] }>(`${BASE}/comissoes/pagar`, { method: 'POST', body: input }))
-        .data,
-  )
-}
-
 export async function getCommissionSettingsAction(): Promise<ActionResult<SalesCommissionSettings>> {
   return run(async () => (await apiFetch<SalesCommissionSettings>(`${BASE}/configuracao`)).data)
-}
-
-export async function updateCommissionSettingsAction(
-  input: UpdateSalesCommissionSettingsInput,
-): Promise<ActionResult<SalesCommissionSettings>> {
-  return run(async () => (await apiFetch<SalesCommissionSettings>(`${BASE}/configuracao`, { method: 'PUT', body: input })).data)
 }
 
 /** Relatório por vendedor no mês (`aaaa-mm`; ausente = mês atual em São Paulo). */

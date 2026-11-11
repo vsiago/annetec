@@ -510,7 +510,17 @@ export const checkoutService = {
     })
 
     if (vendas?.leadId) {
-      await vincularAssinaturaAoLead(vendas.leadId, { id: subscriptionId, status: 'pending_payment', planoId: plan.id, planoNome: plan.name }, now)
+      await vincularAssinaturaAoLead(
+        vendas.leadId,
+        {
+          id: subscriptionId,
+          status: 'pending_payment',
+          planoId: plan.id,
+          planoNome: plan.name,
+          titular: { cpf: holder.cpf, email: holder.email, telefone: holder.phone },
+        },
+        now,
+      )
     }
 
     await submitChargeToGateway(chargeId, { method, card: input.payment.card, remoteIp, source: 'checkout' })

@@ -1,7 +1,7 @@
 import { quoteInput } from '@annetec/contracts'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { requireAuth, requireTenantRole } from '@/http/middleware/auth'
+import { bloquearBalcao, requireAuth, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
 import { ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
@@ -47,7 +47,7 @@ export const catalogController = new Hono<AppEnv>()
   )
 
   /** Cotação: liberada a admin e vendedor, que são quem vende. */
-  .post('/cotacao', requireTenantRole('admin', 'seller'), json(quoteInput), async c =>
+  .post('/cotacao', requireTenantRole('admin', 'seller'), bloquearBalcao, json(quoteInput), async c =>
     ok(c, await catalogService.quote(tenantOf(c).id, c.req.valid('json'))),
   )
 

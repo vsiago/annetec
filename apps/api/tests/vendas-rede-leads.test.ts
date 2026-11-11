@@ -300,7 +300,11 @@ describe('etapas e eventos', () => {
     await call('u-vendedor1', 'POST', `${P}/leads/${L.v1}/etapa`, { etapa: 'proposta' })
     const sem = await call('u-vendedor1', 'POST', `${P}/leads/${L.v1}/etapa`, { etapa: 'ganho' })
     expect(sem.status).toBe(422)
-    const com = await call('u-vendedor1', 'POST', `${P}/leads/${L.v1}/etapa`, { etapa: 'ganho', confirmar: true })
+    // M13: vendedor não marca ganho sem venda (nem com confirmar); o gerente da corretora marca.
+    const vendedor = await call('u-vendedor1', 'POST', `${P}/leads/${L.v1}/etapa`, { etapa: 'ganho', confirmar: true })
+    expect(vendedor.status).toBe(422)
+    expect(vendedor.body.error.code).toBe('VENDAS_TRANSICAO_INVALIDA')
+    const com = await call('u-gerente1', 'POST', `${P}/leads/${L.v1}/etapa`, { etapa: 'ganho', confirmar: true })
     expect(com.status).toBe(200)
     expect(com.body.data.atribuicao).toMatchObject({
       agenteId: ID.vendedor1,

@@ -9,7 +9,7 @@ import {
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { AppError } from '@/http/errors'
-import { requireAuth, requireClubSubscription, requireTenantRole } from '@/http/middleware/auth'
+import { bloquearBalcao, requireAuth, requireClubSubscription, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
 import { recordAudit } from '@/lib/audit'
 import { created, ok, paginate } from '@/http/respond'
@@ -52,7 +52,7 @@ export const contractsController = new Hono<AppEnv>()
     return ok(c, contract)
   })
 
-  .post('/:codigo/sync', param(codigoParam), requireTenantRole('admin', 'seller'), async c => {
+  .post('/:codigo/sync', param(codigoParam), requireTenantRole('admin', 'seller'), bloquearBalcao, async c => {
     const tenant = tenantOf(c)
     const { codigo } = c.req.valid('param')
     assertCanSee(c, await contractsService.getByCodigo(tenant.id, codigo))
@@ -66,7 +66,7 @@ export const contractsController = new Hono<AppEnv>()
     return ok(c, contract)
   })
 
-  .post('/', requireTenantRole('admin', 'seller'), json(createContractInput), async c => {
+  .post('/', requireTenantRole('admin', 'seller'), bloquearBalcao, json(createContractInput), async c => {
     const tenant = tenantOf(c)
     const auth = c.get('auth')
     const input = c.req.valid('json')
@@ -113,14 +113,14 @@ export const contractsController = new Hono<AppEnv>()
     return ok(c, { message })
   })
 
-  .post('/anexos', requireTenantRole('admin', 'seller'), json(attachDocumentInput), async c => {
+  .post('/anexos', requireTenantRole('admin', 'seller'), bloquearBalcao, json(attachDocumentInput), async c => {
     const tenant = tenantOf(c)
     const input = c.req.valid('json')
     assertCanSee(c, await contractsService.getByCodigo(tenant.id, input.contractUpstreamCodigo))
     return created(c, await contractsService.attachDocument(tenant.id, input))
   })
 
-  .post('/patologias', requireTenantRole('admin', 'seller'), json(declarePathologyInput), async c => {
+  .post('/patologias', requireTenantRole('admin', 'seller'), bloquearBalcao, json(declarePathologyInput), async c => {
     const tenant = tenantOf(c)
     const input = c.req.valid('json')
     if (isSeller(c)) {

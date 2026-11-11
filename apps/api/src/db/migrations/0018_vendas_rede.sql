@@ -392,15 +392,16 @@ WHERE NOT EXISTS (
 --> statement-breakpoint
 
 -- 4. Vendedores dos clubes (member.role = 'seller') -> vendas_agentes (tenant, vendedor solo, código gerado).
-INSERT INTO "vendas_agentes" ("scope", "tenant_id", "user_id", "papel", "codigo_indicacao", "ativo", "meta_mensal", "nome", "telefone", "created_at")
+-- `meta_mensal` fica NULL de propósito: `seller_profiles.sales_goal` é uma meta em R$ (valor vendido), enquanto
+-- `vendas_agentes.meta_mensal` conta vendas/mês. Converter R$ 50.000 em "50.000 vendas" seria um erro grosseiro;
+-- NULL cai em `vendas_config.meta_mensal_padrao`, e o gerente ajusta a meta de cada vendedor depois.
+INSERT INTO "vendas_agentes" ("scope", "tenant_id", "user_id", "papel", "codigo_indicacao", "ativo", "nome", "telefone", "created_at")
 SELECT
 	'tenant', m."organization_id", m."user_id", 'vendedor', vendas_gerar_codigo(),
 	(m."access_status" = 'active'),
-	CASE WHEN sp."sales_goal" IS NOT NULL AND sp."sales_goal" > 0 THEN round(sp."sales_goal")::int END,
 	u."name", u."phone", m."created_at"
 FROM "member" m
 JOIN "user" u ON u."id" = m."user_id"
-LEFT JOIN "seller_profiles" sp ON sp."user_id" = m."user_id" AND sp."organization_id" = m."organization_id"
 WHERE m."role" = 'seller'
 ON CONFLICT DO NOTHING;
 --> statement-breakpoint

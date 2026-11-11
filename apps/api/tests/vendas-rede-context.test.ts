@@ -45,6 +45,8 @@ vi.mock('@/lib/audit', () => ({
   }),
 }))
 vi.mock('@/modules/club-billing/access.service', () => ({ loadClubAccess: vi.fn() }))
+const PLANOS_ANNETEC = vi.hoisted(() => [{ id: 'plano-1', name: 'Plano Empresa', priceMonthly: 99 }])
+vi.mock('@/modules/platform-billing/pricing.service', () => ({ listPlanOffers: vi.fn(async () => PLANOS_ANNETEC) }))
 vi.mock('@/http/middleware/tenant', () => ({
   resolveTenant: createMiddleware(async (c, next) => {
     const tenant = [CLUB_A, CLUB_B].find(item => item.slug === c.req.param('tenantSlug'))
@@ -175,6 +177,36 @@ const CONFIG_BODY = {
   metaMensalPadrao: 10,
   modelosMensagem: [],
 }
+
+describe('GET /vendas/planos (catálogo ANNETEC para gerar proposta)', () => {
+  it('equipe (superadmin e platform_admin, master implícito) e vendedor ANNETEC leem os planos', async () => {
+    for (const [userId, role] of [
+      ['staff-super', 'superadmin'],
+      ['staff-admin', 'platform_admin'],
+      ['seller-ativo', 'platform_seller'],
+    ] as const) {
+      state.session = platformSession(userId, role)
+      const { status, body } = await call('GET', '/api/v1/vendas/planos')
+      expect(status, role).toBe(200)
+      expect(body.data).toEqual(PLANOS_ANNETEC)
+    }
+  })
+
+  it('platform_seller sem perfil = 403 VENDAS_SEM_PERFIL; sem sessão = 401', async () => {
+    state.session = platformSession('seller-sem-perfil', 'platform_seller')
+    const sem = await call('GET', '/api/v1/vendas/planos')
+    expect(sem.status).toBe(403)
+    expect(sem.body.error.code).toBe('VENDAS_SEM_PERFIL')
+    state.session = null
+    expect((await call('GET', '/api/v1/vendas/planos')).status).toBe(401)
+  })
+
+  it('usuário de clube não lê o catálogo ANNETEC; a rota não existe no escopo do clube', async () => {
+    state.session = tenantSession('seller-a', 'seller')
+    expect((await call('GET', '/api/v1/vendas/planos')).status).toBe(403)
+    expect((await call('GET', '/api/v1/t/clube-a/vendas/planos')).status).toBe(404)
+  })
+})
 
 describe('escopo platform', () => {
   it('sem sessão = 401', async () => {

@@ -18,6 +18,7 @@ vi.mock('@/db/client', async () => {
   const { createMemoryDb } = await import('./helpers/memory-db')
   const instance = createMemoryDb({
     tables: [
+      schema.user,
       schema.vendasConfig,
       schema.vendasCorretoras,
       schema.vendasEquipes,
@@ -291,7 +292,7 @@ describe('geração na cobrança paga (club)', () => {
     insert(schema.clubSubscriptions, { id: ID.assinaturaB, organizationId: CLUBE_B, vendasAgenteId: ID.agenteClubeA, vendasLeadId: null, enrollmentFee: '0' })
   }
   const cobrancaClube = (subscriptionId: string, organizationId: string, paidAt: Date, extra: Record<string, unknown> = {}) =>
-    insert(schema.clubCharges, { subscriptionId, organizationId, kind: 'cycle', amount: '200', paidAmount: '200', paidAt, status: 'paid', ...extra })
+    insert(schema.clubCharges, { subscriptionId, organizationId, kind: 'cycle', amount: '200', paidAmount: '200', paidAt, periodStart: paidAt.toISOString().slice(0, 10), status: 'paid', ...extra })
 
   it('mensalidade: parcela 1 (100%), lead ganho e tenant/scope corretos; adesão do clube com % padrão 0 não gera', async () => {
     seedClube()

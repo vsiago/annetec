@@ -1,29 +1,25 @@
 import {
   approveDiscountInput,
-  createSellerInput,
   listDiscountRequestsQuery,
   listProspectsQuery,
   listSalesCommissionsQuery,
-  markSalesCommissionsPaidInput,
-  reassignProspectInput,
   rejectDiscountInput,
   salesReportQuery,
-  updateSalesCommissionSettingsInput,
-  updateSellerInput,
 } from '@annetec/contracts'
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
 import { AppError } from '@/http/errors'
 import { requireAuth, requirePlatformRole } from '@/http/middleware/auth'
-import { created, ok, paginate } from '@/http/respond'
+import { ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, param, query } from '@/http/validate'
 import { recordAudit } from '@/lib/audit'
-import { listCommissions, loadCommissionSettings, markCommissionsPaid, updateCommissionSettings } from './commissions.service'
+import { listCommissions, loadCommissionSettings } from './commissions.service'
 import { currentMonthSP, salesReport } from './dashboard.service'
 import { approveDiscount, getDiscountRequest, listDiscountRequests, rejectDiscount } from './discounts.service'
-import { getProspectDetail, listProspects, reassignProspect } from './prospects.service'
-import { createSeller, getSeller, listSellers, updateSeller } from './sellers.service'
+import { legadoDesativado } from './legado-desativado'
+import { getProspectDetail, listProspects } from './prospects.service'
+import { getSeller, listSellers } from './sellers.service'
 
 /**
  * Gestão COMERCIAL da equipe — `/api/v1/platform/comercial`.
@@ -52,37 +48,13 @@ export const platformSalesTeamController = new Hono<AppEnv>()
 
   .get('/vendedores', async c => ok(c, await listSellers()))
 
-  .post('/vendedores', superadmin, json(createSellerInput), async c => {
-    const seller = await createSeller(c.req.valid('json'), actorOf(c).userId)
-    await recordAudit(c, {
-      action: 'sales_seller.created',
-      resource: 'sales_seller',
-      resourceId: seller.userId,
-      organizationId: null,
-      metadata: { email: seller.email, codigo: seller.referralCode, meta: seller.monthlyGoal },
-    })
-    return created(c, seller)
-  })
+  // Desativado (410): criaria `platform_sellers` sem `vendas_agentes` (sem atribuição nem comissão). Use /vendas/rede/agentes.
+  .post('/vendedores', superadmin, legadoDesativado)
 
   .get('/vendedores/:userId', param(userParam), async c => ok(c, await getSeller(c.req.valid('param').userId)))
 
-  .patch('/vendedores/:userId', superadmin, param(userParam), json(updateSellerInput), async c => {
-    const { userId } = c.req.valid('param')
-    const input = c.req.valid('json')
-    const { before, after } = await updateSeller(userId, input)
-    await recordAudit(c, {
-      action: input.active === false ? 'sales_seller.deactivated' : 'sales_seller.updated',
-      resource: 'sales_seller',
-      resourceId: userId,
-      organizationId: null,
-      metadata: {
-        campos: Object.keys(input),
-        antes: { codigo: before.referralCode, ativo: before.active, meta: before.monthlyGoal },
-        depois: { codigo: after.referralCode, ativo: after.active, meta: after.monthlyGoal },
-      },
-    })
-    return ok(c, after)
-  })
+  // Desativado (410): a fonte da verdade é `vendas_agentes`. Use /vendas/rede/agentes/:id/(ativar|desativar).
+  .patch('/vendedores/:userId', superadmin, legadoDesativado)
 
   // -------------------------------------------------------------------------
   // Funil de todos (leitura) e reatribuição
@@ -97,19 +69,8 @@ export const platformSalesTeamController = new Hono<AppEnv>()
 
   .get('/prospects/:id', param(idParam), async c => ok(c, await getProspectDetail(c.req.valid('param').id, { kind: 'staff' })))
 
-  .post('/prospects/:id/reatribuir', superadmin, param(idParam), json(reassignProspectInput), async c => {
-    const { id } = c.req.valid('param')
-    const input = c.req.valid('json')
-    const result = await reassignProspect(id, input, actorOf(c))
-    await recordAudit(c, {
-      action: 'sales_prospect.reassigned',
-      resource: 'sales_prospect',
-      resourceId: id,
-      organizationId: null,
-      metadata: { de: result.fromUserId, para: input.sellerUserId, motivo: input.reason ?? null, propostaMovida: result.proposalMoved },
-    })
-    return ok(c, result.detail)
-  })
+  // Desativado (410): mudaria só `seller_user_id`, mas o agente novo da proposta prevalece. Use /vendas/leads/:id/reatribuir.
+  .post('/prospects/:id/reatribuir', superadmin, legadoDesativado)
 
   // -------------------------------------------------------------------------
   // Descontos
@@ -165,36 +126,12 @@ export const platformSalesTeamController = new Hono<AppEnv>()
 
   .get('/comissoes', query(listSalesCommissionsQuery), async c => ok(c, await listCommissions(c.req.valid('query'))))
 
-  .post('/comissoes/pagar', superadmin, json(markSalesCommissionsPaidInput), async c => {
-    const input = c.req.valid('json')
-    const result = await markCommissionsPaid(input, actorOf(c))
-    for (const entry of result.paid) {
-      await recordAudit(c, {
-        action: 'sales_commission.paid',
-        resource: 'sales_commission',
-        resourceId: entry.id,
-        organizationId: entry.organizationId,
-        metadata: { vendedor: entry.sellerUserId, valor: entry.amount, data: input.payoutDate, nota: input.note ?? null },
-      })
-    }
-    return ok(c, result)
-  })
+  // Desativado (410): o repasse vive em `vendas_comissoes` (/vendas/comissoes/pagar); pagar aqui duplicaria o pagamento.
+  .post('/comissoes/pagar', superadmin, legadoDesativado)
 
   .get('/configuracao', async c => ok(c, await loadCommissionSettings()))
 
-  .put('/configuracao', superadmin, json(updateSalesCommissionSettingsInput), async c => {
-    const { before, after } = await updateCommissionSettings(c.req.valid('json'), actorOf(c))
-    await recordAudit(c, {
-      action: 'sales_commission_settings.updated',
-      resource: 'sales_commission_settings',
-      resourceId: 'default',
-      organizationId: null,
-      metadata: {
-        antes: { escala: before.monthlySchedule, adesao: before.setupFeePercent },
-        depois: { escala: after.monthlySchedule, adesao: after.setupFeePercent },
-      },
-    })
-    return ok(c, after)
-  })
+  // Desativado (410): a regra de comissão vigente é `vendas_config` (/vendas/config).
+  .put('/configuracao', superadmin, legadoDesativado)
 
   .get('/relatorio', query(salesReportQuery), async c => ok(c, await salesReport(c.req.valid('query').mes ?? currentMonthSP())))

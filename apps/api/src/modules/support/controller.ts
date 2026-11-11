@@ -14,7 +14,7 @@ import { z } from 'zod'
 import { db } from '@/db/client'
 import { appointmentMessages, appointments, user } from '@/db/schema'
 import { AppError } from '@/http/errors'
-import { requireAuth, requireTenantRole } from '@/http/middleware/auth'
+import { bloquearBalcao, requireAuth, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
 import { created, noContent, ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
@@ -138,6 +138,7 @@ export const supportController = new Hono<AppEnv>()
   .patch(
     '/:id',
     requireTenantRole('admin', 'seller'),
+    bloquearBalcao,
     param(idParam),
     json(updateAppointmentInput),
     async c => {

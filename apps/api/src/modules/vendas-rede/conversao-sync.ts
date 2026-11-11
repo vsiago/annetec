@@ -1,10 +1,11 @@
 import type { OnboardingStatus } from '@annetec/contracts'
 import { and, eq, notInArray, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { vendasLeadEventos, vendasLeads, type VendasLeadRow } from '@/db/schema'
+import { vendasAgentes, vendasLeadEventos, vendasLeads, type VendasAgenteRow, type VendasLeadRow } from '@/db/schema'
 import { logger } from '@/lib/logger'
-import { atribuicaoDoAgente, buscarAgentePorCodigo } from './atribuicao'
-import type { EtapaLead } from './rules'
+import { atribuicaoDoAgente, buscarAgentePorCodigo, compradorEhOAgenteNoBanco } from './atribuicao'
+import { MOTIVO_AUTO_COMPRA, type DadosDePessoa, type EtapaLead } from './rules'
+import { safely } from './savepoint'
 
 /**
  * Ponte entre as conversões (proposta da plataforma / assinatura do clube) e o lead.
@@ -26,7 +27,7 @@ const ETAPAS_ABERTAS_PARA_NEGOCIACAO: EtapaLead[] = ['novo', 'em_contato', 'prop
 async function evento(
   executor: Pick<typeof db, 'insert'>,
   leadId: string,
-  tipo: 'etapa' | 'conversao' | 'criado',
+  tipo: 'etapa' | 'conversao' | 'criado' | 'sistema',
   texto: string,
   dados: Record<string, unknown>,
   em: Date,
@@ -67,64 +68,63 @@ async function leadsDaProposta(executor: Executor, proposta: PropostaParaSync): 
  * `ganho` nunca é rebaixado por uma proposta posterior.
  */
 export async function sincronizarLeadComProposta(executor: Executor, proposta: PropostaParaSync, agora: Date = new Date()): Promise<void> {
-  try {
-    const leads = await leadsDaProposta(executor, proposta)
-    const alvo = etapaDoLeadParaProposta(proposta.status)
-    for (const lead of leads) {
-      const campos: Partial<typeof vendasLeads.$inferInsert> = {
-        conversao: { tipo: 'proposta', id: proposta.id, status: proposta.status, atualizadoEm: agora.toISOString() },
-        updatedAt: agora,
-      }
-      let novaEtapa: EtapaLead | null = null
-      if (alvo === 'ganho' && lead.etapa !== 'ganho') {
-        novaEtapa = 'ganho'
-        campos.etapa = 'ganho'
-        campos.ganhoEm = agora
-        campos.perdidoEm = null
-        campos.motivoPerda = null
-        if (!lead.atribuicao && lead.agenteId) campos.atribuicao = await atribuicaoDoAgente(lead.agenteId, executor)
-      } else if (alvo === 'perdido' && lead.etapa !== 'ganho' && lead.etapa !== 'perdido') {
-        novaEtapa = 'perdido'
-        const motivo =
-          proposta.status === 'rejected'
-            ? `Proposta reprovada na análise${proposta.rejectionReason ? `: ${proposta.rejectionReason}` : ''}`
-            : `Proposta cancelada${proposta.cancelReason ? `: ${proposta.cancelReason}` : ''}`
-        campos.etapa = 'perdido'
-        campos.perdidoEm = agora
-        campos.motivoPerda = motivo.slice(0, 500)
-      } else if (alvo === 'negociacao' && ETAPAS_ABERTAS_PARA_NEGOCIACAO.includes(lead.etapa)) {
-        novaEtapa = 'negociacao'
-        campos.etapa = 'negociacao'
-        if (!lead.atribuicao && lead.agenteId) campos.atribuicao = await atribuicaoDoAgente(lead.agenteId, executor)
-      }
-      const mesmaConversao = lead.conversao?.id === proposta.id && lead.conversao.status === proposta.status
-      if (!novaEtapa && mesmaConversao) continue
+  // Savepoint: o `executor` costuma ser a transação da proposta; um erro SQL aqui, sem savepoint, a deixaria
+  // "aborted" e a própria transição falharia em seguida. Erro vira log; a transição segue.
+  await safely(executor, `lead.sincronizar-proposta:${proposta.id}`, sp => sincronizar(sp, proposta, agora))
+}
 
-      const [atualizado] = await executor
-        .update(vendasLeads)
-        .set(campos)
-        .where(and(eq(vendasLeads.id, lead.id), eq(vendasLeads.etapa, lead.etapa)))
-        .returning({ id: vendasLeads.id })
-      if (!atualizado) continue
-      if (novaEtapa) {
-        await evento(
-          executor,
-          lead.id,
-          'etapa',
-          `Etapa atualizada automaticamente: ${lead.etapa} → ${novaEtapa} (proposta ${proposta.status}).`,
-          { de: lead.etapa, para: novaEtapa, automatico: true, propostaStatus: proposta.status },
-          agora,
-        )
-      }
-      if (novaEtapa === 'ganho') {
-        await evento(executor, lead.id, 'conversao', 'Contratação concluída: o clube foi ativado.', { propostaId: proposta.id }, agora)
-      }
+async function sincronizar(executor: Executor, proposta: PropostaParaSync, agora: Date): Promise<void> {
+  const leads = await leadsDaProposta(executor, proposta)
+  const alvo = etapaDoLeadParaProposta(proposta.status)
+  for (const lead of leads) {
+    const campos: Partial<typeof vendasLeads.$inferInsert> = {
+      conversao: { tipo: 'proposta', id: proposta.id, status: proposta.status, atualizadoEm: agora.toISOString() },
+      updatedAt: agora,
     }
-  } catch (error) {
-    logger.error(
-      { proposalId: proposta.id, err: error instanceof Error ? error.message : String(error) },
-      'Falha ao sincronizar o lead da Rede Comercial com a proposta (transição segue)',
-    )
+    let novaEtapa: EtapaLead | null = null
+    if (alvo === 'ganho' && lead.etapa !== 'ganho') {
+      novaEtapa = 'ganho'
+      campos.etapa = 'ganho'
+      campos.ganhoEm = agora
+      campos.perdidoEm = null
+      campos.motivoPerda = null
+      if (!lead.atribuicao && lead.agenteId) campos.atribuicao = await atribuicaoDoAgente(lead.agenteId, executor)
+    } else if (alvo === 'perdido' && lead.etapa !== 'ganho' && lead.etapa !== 'perdido') {
+      novaEtapa = 'perdido'
+      const motivo =
+        proposta.status === 'rejected'
+          ? `Proposta reprovada na análise${proposta.rejectionReason ? `: ${proposta.rejectionReason}` : ''}`
+          : `Proposta cancelada${proposta.cancelReason ? `: ${proposta.cancelReason}` : ''}`
+      campos.etapa = 'perdido'
+      campos.perdidoEm = agora
+      campos.motivoPerda = motivo.slice(0, 500)
+    } else if (alvo === 'negociacao' && ETAPAS_ABERTAS_PARA_NEGOCIACAO.includes(lead.etapa)) {
+      novaEtapa = 'negociacao'
+      campos.etapa = 'negociacao'
+      if (!lead.atribuicao && lead.agenteId) campos.atribuicao = await atribuicaoDoAgente(lead.agenteId, executor)
+    }
+    const mesmaConversao = lead.conversao?.id === proposta.id && lead.conversao.status === proposta.status
+    if (!novaEtapa && mesmaConversao) continue
+
+    const [atualizado] = await executor
+      .update(vendasLeads)
+      .set(campos)
+      .where(and(eq(vendasLeads.id, lead.id), eq(vendasLeads.etapa, lead.etapa)))
+      .returning({ id: vendasLeads.id })
+    if (!atualizado) continue
+    if (novaEtapa) {
+      await evento(
+        executor,
+        lead.id,
+        'etapa',
+        `Etapa atualizada automaticamente: ${lead.etapa} → ${novaEtapa} (proposta ${proposta.status}).`,
+        { de: lead.etapa, para: novaEtapa, automatico: true, propostaStatus: proposta.status },
+        agora,
+      )
+    }
+    if (novaEtapa === 'ganho') {
+      await evento(executor, lead.id, 'conversao', 'Contratação concluída: o clube foi ativado.', { propostaId: proposta.id }, agora)
+    }
   }
 }
 
@@ -151,11 +151,43 @@ export interface TitularDoCheckout {
   cpf: string
 }
 
+/** Digitos de um documento (CPF) para comparar titular × lead. */
+const digitos = (valor: string | null | undefined): string => (valor ?? '').replace(/\D/g, '')
+
+async function agenteDoClube(executor: Executor, tenantId: string, agenteId: string): Promise<VendasAgenteRow | null> {
+  const [row] = await executor
+    .select()
+    .from(vendasAgentes)
+    .where(and(eq(vendasAgentes.id, agenteId), eq(vendasAgentes.scope, 'tenant'), eq(vendasAgentes.tenantId, tenantId)))
+    .limit(1)
+  return row ?? null
+}
+
+/** Evento no lead quando a atribuição é barrada por auto-compra. */
+async function registrarAutoCompraBarrada(executor: Executor, leadId: string | null, agente: VendasAgenteRow, agora: Date): Promise<void> {
+  logger.warn({ agenteId: agente.id, motivo: MOTIVO_AUTO_COMPRA }, 'Atribuição bloqueada: o comprador é o próprio agente')
+  if (!leadId) return
+  await evento(
+    executor,
+    leadId,
+    'sistema',
+    'Atribuição bloqueada: comprador é o próprio agente.',
+    { motivoNaoComissionavel: MOTIVO_AUTO_COMPRA, agenteId: agente.id },
+    agora,
+  )
+}
+
 /**
  * Resolve `ref`/`lead` do checkout em (agente, lead) do PRÓPRIO clube — código ou lead de
  * outro clube é ignorado. Só `ref`: cria lead `negociacao` origem `link` com dono = agente
  * (reaproveita lead aberto do mesmo agente e CPF). Só `lead`: o dono do lead é o agente.
  * Sem nada válido → `null` (venda sem atribuição).
+ *
+ * O link é público e reaproveitável por quem receber o WhatsApp, então o `lead` só vale se:
+ *  - com `ref` junto, o `ref` for do dono do lead (senão ignora o `lead` e usa o `ref`);
+ *  - o lead tiver `documento` e ele bater com o CPF do titular (lead de outra pessoa é ignorado);
+ *  - o dono estiver ATIVO (agente desativado não recebe atribuição nova).
+ * E nunca há atribuição quando o titular é o próprio agente (auto-compra).
  */
 export async function prepararAtribuicaoDoCheckout(
   tenantId: string,
@@ -174,6 +206,22 @@ export async function prepararAtribuicaoDoCheckout(
       .where(and(eq(vendasLeads.id, pedido.lead), eq(vendasLeads.scope, 'tenant'), eq(vendasLeads.tenantId, tenantId)))
       .limit(1)
     lead = row ?? null
+  }
+  let dono: VendasAgenteRow | null = null
+  if (lead?.agenteId) {
+    dono = await agenteDoClube(executor, tenantId, lead.agenteId)
+    const refInformado = Boolean(pedido.ref?.trim())
+    if (!dono?.ativo) lead = null
+    else if (refInformado && agente?.id !== dono.id) lead = null
+    else if (digitos(lead.documento) && digitos(lead.documento) !== digitos(titular.cpf)) lead = null
+    if (!lead) dono = null
+  } else if (lead && digitos(lead.documento) && digitos(lead.documento) !== digitos(titular.cpf)) {
+    lead = null
+  }
+  const responsavel = lead ? (dono ?? agente) : agente
+  if (responsavel && (await compradorEhOAgenteNoBanco(responsavel, { cpf: titular.cpf, email: titular.email, telefone: titular.phone }, executor))) {
+    await registrarAutoCompraBarrada(executor, lead?.id ?? null, responsavel, agora)
+    return null
   }
   if (lead) return { agenteId: lead.agenteId ?? agente?.id ?? null, leadId: lead.id }
   if (!agente) return null
@@ -228,13 +276,21 @@ export async function prepararAtribuicaoDoCheckout(
 /** Assinatura criada: o lead passa a apontar para ela (`conversao`), vai a `negociacao` e ganha snapshot da cadeia. */
 export async function vincularAssinaturaAoLead(
   leadId: string,
-  assinatura: { id: string; status: string; planoId: string; planoNome: string },
+  assinatura: { id: string; status: string; planoId: string; planoNome: string; titular?: DadosDePessoa },
   agora: Date = new Date(),
   executor: Executor = db,
 ): Promise<void> {
   try {
     const [lead] = await executor.select().from(vendasLeads).where(eq(vendasLeads.id, leadId)).limit(1)
     if (!lead) return
+    // Auto-compra: o titular da assinatura é o agente dono do lead → sem snapshot de cadeia nem vínculo.
+    if (assinatura.titular && lead.agenteId) {
+      const dono = await agenteDoClube(executor, lead.tenantId ?? '', lead.agenteId)
+      if (dono && (await compradorEhOAgenteNoBanco(dono, assinatura.titular, executor))) {
+        await registrarAutoCompraBarrada(executor, lead.id, dono, agora)
+        return
+      }
+    }
     const campos: Partial<typeof vendasLeads.$inferInsert> = {
       conversao: { tipo: 'assinatura', id: assinatura.id, status: assinatura.status, atualizadoEm: agora.toISOString() },
       updatedAt: agora,

@@ -153,11 +153,15 @@ export async function getCarteiraAction(
 // Planos e conversão
 // ---------------------------------------------------------------------------
 
-/** Plataforma: planos ANNETEC (inclusive os fora da vitrine). Clube: planos ativos do clube. */
+/**
+ * Plataforma: planos ANNETEC (inclusive os fora da vitrine), por `GET /vendas/planos` do módulo novo
+ * (vale para equipe e vendedor). Clube: planos ativos do clube, com a taxa de adesão real
+ * (`enrollmentFee`, 0 quando isenta).
+ */
 export async function listarPlanosAction(escopo: EscopoVendas): Promise<ActionResult<PlanoVendavel[]>> {
   return run(async () => {
     if (escopo.kind === 'platform') {
-      const { data } = await apiFetch<PlatformPlanOffer[]>('/api/v1/platform/vendas/planos')
+      const { data } = await apiFetch<PlatformPlanOffer[]>('/api/v1/vendas/planos')
       return (data ?? []).map(normalizePlanOffer).map<PlanoVendavel>(p => ({
         id: p.id,
         nome: p.name,
@@ -171,7 +175,7 @@ export async function listarPlanosAction(escopo: EscopoVendas): Promise<ActionRe
       id: p.id,
       nome: p.name,
       precoMensal: p.priceMonthly,
-      adesao: 0,
+      adesao: p.enrollmentFeeWaived ? 0 : Math.max(0, p.enrollmentFee ?? 0),
       descricao: p.description || null,
     }))
   })

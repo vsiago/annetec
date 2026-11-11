@@ -77,6 +77,8 @@ vi.mock('@/db/client', async () => {
       schema.vendasLeads,
       schema.vendasLeadEventos,
       schema.vendasComissoes,
+      schema.platformSellers,
+      schema.auditLogs,
     ],
     uniques: [
       { table: schema.vendasAgentes, keys: ['codigoIndicacao'] },

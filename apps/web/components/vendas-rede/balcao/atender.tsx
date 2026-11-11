@@ -7,6 +7,7 @@ import type { AtendimentoBalcaoInput, ResultadoBalcao, VendasPessoaBalcao, Venda
 import { balcaoPlanosAction, balcaoRegistrarAtendimentoAction } from '@/lib/actions/vendas-balcao-api'
 import { BotaoTexto } from './campo'
 import { Concluido, type ConcluidoInfo } from './concluido'
+import { formatarCelular } from '../ui/mascaras'
 import { useBalcao } from './contexto'
 import { PassoDados } from './passo-dados'
 import { PassoOferta } from './passo-oferta'
@@ -188,7 +189,7 @@ export function AtenderPagina() {
     const res = await balcaoRegistrarAtendimentoAction(slug, {
       nome: pessoa.nome?.trim() || 'Associado',
       documento: doc.documento,
-      telefone: doc.telefone ?? (soDigitos(pessoa.telefone) || undefined),
+      telefone: doc.telefone,
       servico: 'Atendimento de associado',
       valorTabela: 0,
       resultado: 'ja_associado',
@@ -203,7 +204,7 @@ export function AtenderPagina() {
     setConcluido({
       resultado: 'ja_associado',
       nome: pessoa.nome ?? 'Associado',
-      telefone: pessoa.telefone ?? '',
+      telefone: doc.telefone ? formatarCelular(doc.telefone) : '',
       servico: 'Atendimento de associado',
       valorTabela: 0,
       checkout: null,

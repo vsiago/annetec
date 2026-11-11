@@ -6,13 +6,14 @@ import { comissoesController } from './controllers/comissoes.controller'
 import { configController } from './controllers/config.controller'
 import { leadsController } from './controllers/leads.controller'
 import { painelController } from './controllers/painel.controller'
+import { planosController } from './controllers/planos.controller'
 import { publicController } from './controllers/public.controller'
 import { redeController } from './controllers/rede.controller'
 
 /**
  * Rede Comercial (`vendas-rede`). O MESMO conjunto de sub-rotas serve dois escopos:
  *
- *   /api/v1/vendas/*                  platform (equipe ANNETEC + vendedores ANNETEC)
+ *   /api/v1/vendas/*                  platform (equipe ANNETEC + vendedores ANNETEC; `GET /planos` só aqui)
  *   /api/v1/t/:tenantSlug/vendas/*    tenant   (admin e seller do clube)
  *   /api/v1/public/vendas/*           entrada pública (sem login)
  *
@@ -29,7 +30,10 @@ const rotasComuns = new Hono<AppEnv>()
   .route('/', comissoesController)
   .route('/', painelController)
 
-export const vendasRedePlatformRoutes = new Hono<AppEnv>().use('*', salesContext('platform')).route('/', rotasComuns)
+export const vendasRedePlatformRoutes = new Hono<AppEnv>()
+  .use('*', salesContext('platform'))
+  .route('/', rotasComuns)
+  .route('/', planosController)
 
 export const vendasRedeTenantRoutes = new Hono<AppEnv>()
   .use('*', salesContext('tenant'))

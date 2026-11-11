@@ -701,3 +701,40 @@ export function rankingDeAgentes(
   )
   return linhas.map((l, i) => ({ posicao: i + 1, ...l }))
 }
+
+// ---------------------------------------------------------------------------
+// Auto-compra (o agente comprando de si mesmo)
+// ---------------------------------------------------------------------------
+
+/** Motivo gravado quando a venda não comissiona porque o comprador é o próprio agente. */
+export const MOTIVO_AUTO_COMPRA = 'auto_compra'
+
+export interface DadosDePessoa {
+  cpf?: string | null
+  email?: string | null
+  telefone?: string | null
+}
+
+const soDigitos = (valor: string | null | undefined): string => (valor ?? '').replace(/\D/g, '')
+
+/** Telefone só com dígitos e sem o DDI 55 (13/12 dígitos com 55 na frente viram 11/10). */
+function telefoneNormalizado(valor: string | null | undefined): string {
+  const digitos = soDigitos(valor)
+  return digitos.length > 11 && digitos.startsWith('55') ? digitos.slice(2) : digitos
+}
+
+/**
+ * O comprador é o próprio agente? CPF (só dígitos, 11), e-mail (sem diferenciar maiúsculas) ou
+ * telefone (só dígitos, mínimo 8) iguais. Campo vazio de qualquer lado nunca casa.
+ */
+export function compradorEhOAgente(agente: DadosDePessoa, comprador: DadosDePessoa): boolean {
+  const cpfAgente = soDigitos(agente.cpf)
+  const cpfComprador = soDigitos(comprador.cpf)
+  if (cpfAgente.length === 11 && cpfAgente === cpfComprador) return true
+  const emailAgente = (agente.email ?? '').trim().toLowerCase()
+  const emailComprador = (comprador.email ?? '').trim().toLowerCase()
+  if (emailAgente && emailAgente === emailComprador) return true
+  const telAgente = telefoneNormalizado(agente.telefone)
+  const telComprador = telefoneNormalizado(comprador.telefone)
+  return telAgente.length >= 8 && telAgente === telComprador
+}

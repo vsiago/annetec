@@ -50,6 +50,12 @@ export const ERROR_CODES = {
   VENDAS_CODIGO_INVALIDO: 'VENDAS_CODIGO_INVALIDO',
   /** Atendimento de balcão inconsistente com o resultado informado (422). */
   VENDAS_ATENDIMENTO_INVALIDO: 'VENDAS_ATENDIMENTO_INVALIDO',
+  // 410
+  /**
+   * Rota de escrita do módulo comercial antigo (vendedores, comissões, CRM de inquilino)
+   * desativada: o equivalente é a Rede Comercial (`/vendas`).
+   */
+  RECURSO_LEGADO_DESATIVADO: 'RECURSO_LEGADO_DESATIVADO',
   // 422
   BUSINESS_RULE_VIOLATION: 'BUSINESS_RULE_VIOLATION',
   // 429
@@ -94,6 +100,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   VENDAS_SEM_PERMISSAO_NA_REDE: 403,
   VENDAS_CODIGO_INVALIDO: 404,
   VENDAS_ATENDIMENTO_INVALIDO: 422,
+  RECURSO_LEGADO_DESATIVADO: 410,
   BUSINESS_RULE_VIOLATION: 422,
   RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,

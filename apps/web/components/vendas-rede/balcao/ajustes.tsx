@@ -9,7 +9,7 @@ import { AcaoPrincipal } from '../ui/acao-principal'
 import { formatarCelular, formatarCpf } from '../ui/mascaras'
 import { Campo } from './campo'
 import { useBalcao } from './contexto'
-import { soDigitos } from './rascunho'
+import { limparRascunho, soDigitos } from './rascunho'
 
 export function AjustesPagina() {
   const { slug, eu, unidade, recarregarEu } = useBalcao()
@@ -101,7 +101,17 @@ export function AjustesPagina() {
         </p>
       )}
 
-      <AcaoPrincipal tamanho="xl" bloco variante="secundaria" icone={<LogOut />} onClick={logout}>
+      <AcaoPrincipal
+        tamanho="xl"
+        bloco
+        variante="secundaria"
+        icone={<LogOut />}
+        onClick={() => {
+          // O rascunho guarda CPF, celular, e-mail e nascimento: não pode sobrar num balcão compartilhado.
+          limparRascunho(slug)
+          logout()
+        }}
+      >
         Sair
       </AcaoPrincipal>
     </div>

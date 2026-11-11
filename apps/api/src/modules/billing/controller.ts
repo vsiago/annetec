@@ -2,7 +2,7 @@ import { invoiceStatus, paginationQuery } from '@annetec/contracts'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { AppError } from '@/http/errors'
-import { requireAuth, requireTenantRole } from '@/http/middleware/auth'
+import { bloquearBalcao, requireAuth, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
 import { ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
@@ -65,6 +65,7 @@ export const billingController = new Hono<AppEnv>()
     param(codigoParam),
     query(detailQuery),
     requireTenantRole('admin', 'seller'),
+    bloquearBalcao,
     async c => {
       const tenant = tenantOf(c)
       const { codigo } = c.req.valid('param')
@@ -115,6 +116,7 @@ export const billingController = new Hono<AppEnv>()
   .get(
     '/comissoes',
     requireTenantRole('admin', 'seller'),
+    bloquearBalcao,
     query(z.object({ vendedorId: z.string().uuid().optional(), status: z.enum(['emitido', 'pago']).default('emitido') })),
     async c => {
       const tenant = tenantOf(c)
@@ -127,7 +129,7 @@ export const billingController = new Hono<AppEnv>()
   )
 
   /** Vendedor só abre recibo do PRÓPRIO produtor; admin abre qualquer um do inquilino. */
-  .get('/comissoes/:codigo', param(codigoParam), requireTenantRole('admin', 'seller'), async c => {
+  .get('/comissoes/:codigo', param(codigoParam), requireTenantRole('admin', 'seller'), bloquearBalcao, async c => {
     const tenant = tenantOf(c)
     const auth = c.get('auth')
     const { codigo } = c.req.valid('param')

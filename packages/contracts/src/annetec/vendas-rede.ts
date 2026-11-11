@@ -1113,15 +1113,20 @@ export const vendasPlanoBalcao = z.object({
 })
 export type VendasPlanoBalcao = z.infer<typeof vendasPlanoBalcao>
 
+/**
+ * Resposta MÍNIMA de `GET /balcao/pessoa` (o atendente de uma clínica parceira não pode virar oráculo de
+ * dados do clube):
+ *  - associado: só `{ planoNome, status }`; `nome` apenas quando a busca foi pelo CPF do próprio titular
+ *    (nunca telefone ou e-mail);
+ *  - `lead`: o lead completo só quando é do próprio atendente (ou do master, que vê todo o funil);
+ *  - `leadAberto`: aviso de que existe lead aberto (`proprio: false` = de outro atendente, sem nome,
+ *    observações, atribuição ou conversão).
+ */
 export const vendasPessoaBalcao = z.object({
   jaAssociado: z.boolean(),
-  assinatura: z
-    .object({ id: z.string(), planoNome: z.string(), status: z.string(), proximoVencimento: z.string().nullable() })
-    .nullable()
-    .optional(),
+  assinatura: z.object({ planoNome: z.string(), status: z.string() }).nullable().optional(),
   lead: vendasLead.nullable().optional(),
+  leadAberto: z.object({ existe: z.literal(true), etapa: etapaLead, proprio: z.boolean() }).nullable().optional(),
   nome: z.string().nullable().optional(),
-  telefone: z.string().nullable().optional(),
-  email: z.string().nullable().optional(),
 })
 export type VendasPessoaBalcao = z.infer<typeof vendasPessoaBalcao>

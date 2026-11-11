@@ -18,6 +18,7 @@ vi.mock('@/db/client', async () => {
   const { createMemoryDb } = await import('./helpers/memory-db')
   const instance = createMemoryDb({
     tables: [
+      schema.user,
       schema.vendasConfig,
       schema.vendasCorretoras,
       schema.vendasEquipes,

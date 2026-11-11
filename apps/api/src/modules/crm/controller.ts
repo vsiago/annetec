@@ -10,11 +10,12 @@ import {
 } from '@annetec/contracts'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { requireAuth, requireTenantRole } from '@/http/middleware/auth'
+import { bloquearBalcao, requireAuth, requireTenantRole } from '@/http/middleware/auth'
 import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
 import { created, noContent, ok, paginate } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, param, query } from '@/http/validate'
+import { bloquearEscritaLegada } from '@/modules/platform-sales/legado-desativado'
 import { crmService } from './service'
 
 const idParam = z.object({ id: z.string().uuid() })
@@ -27,7 +28,9 @@ const idParam = z.object({ id: z.string().uuid() })
  * do cliente.
  */
 export const crmController = new Hono<AppEnv>()
-  .use('*', resolveTenant, requireAuth, requireTenantRole('admin', 'seller'))
+  .use('*', resolveTenant, requireAuth, requireTenantRole('admin', 'seller'), bloquearBalcao)
+  // Escritas desativadas (410): o funil do clube é a Rede Comercial (`vendas_leads`); esta tabela antiga só serve de leitura.
+  .use('*', bloquearEscritaLegada)
 
   .get(
     '/leads',

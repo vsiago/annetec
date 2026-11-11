@@ -206,7 +206,7 @@ export async function startProposal(input: StartOnboardingInput, meta: RequestMe
   const receita = lookup.found ? lookup.result : null
   const now = new Date()
   // Código de vendedor ATIVO vincula a proposta; outro qualquer é ignorado.
-  const seller = await resolveReferral(input.referralCode)
+  const seller = await resolveReferral(input.referralCode, { email: input.applicant.email, telefone: input.applicant.phone })
 
   const proposal = await insertProposal(
     {

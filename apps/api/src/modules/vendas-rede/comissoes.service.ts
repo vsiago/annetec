@@ -28,6 +28,7 @@ import {
 import { AppError } from '@/http/errors'
 import { logger } from '@/lib/logger'
 import { commissionParts } from '@/modules/platform-sales/rules'
+import { compradorEhOAgenteNoBanco } from './atribuicao'
 import { getOrCreateConfig } from './config.service'
 import { whereEscopo, type VendasCtx } from './context'
 import { whereAgentesVisiveis } from './presenca.service'
@@ -37,8 +38,10 @@ import {
   comissoesDaCobranca,
   estornarComissao,
   mesReferenciaSaoPaulo,
+  MOTIVO_AUTO_COMPRA,
   type Atribuicao,
   type ConfigComissao,
+  type DadosDePessoa,
   type LinhaComissao,
   type OrigemCobranca,
   type OverridesComissao,
@@ -88,6 +91,8 @@ interface OrigemDaVenda {
   leadId: string | null
   /** Taxa de adesão da assinatura do clube (0 no platform: vem dos itens da fatura). */
   adesaoDoClube: number
+  /** Quem comprou (titular da assinatura / contato da proposta): barreira contra auto-compra. */
+  comprador: DadosDePessoa
 }
 
 const avulsaDe = (origem: OrigemCobranca, kind: string) => (origem === 'platform' ? kind === 'adjustment' : kind === 'one_off')
@@ -103,6 +108,7 @@ async function localizarOrigem(tx: Executor, origem: OrigemCobranca, cobranca: C
         vendasAgenteId: platformOnboardingProposals.vendasAgenteId,
         vendasLeadId: platformOnboardingProposals.vendasLeadId,
         sellerUserId: platformOnboardingProposals.sellerUserId,
+        applicant: platformOnboardingProposals.applicant,
       })
       .from(platformOnboardingProposals)
       .where(eq(platformOnboardingProposals.id, cobranca.proposalId))
@@ -110,7 +116,9 @@ async function localizarOrigem(tx: Executor, origem: OrigemCobranca, cobranca: C
       .for('update')
     if (!proposta) return null
     let agenteId = proposta.vendasAgenteId ?? null
-    if (!agenteId && proposta.sellerUserId) {
+    // Proposta ligada a um lead da rede usa SÓ o agente novo (reatribuir pode tê-lo zerado de propósito:
+    // o vendedor antigo não volta pela porta dos fundos). O vendedor legado só vale para proposta sem lead.
+    if (!agenteId && proposta.sellerUserId && !proposta.vendasLeadId) {
       const [legado] = await tx
         .select({ id: vendasAgentes.id })
         .from(vendasAgentes)
@@ -118,7 +126,14 @@ async function localizarOrigem(tx: Executor, origem: OrigemCobranca, cobranca: C
         .limit(1)
       agenteId = legado?.id ?? null
     }
-    return { scope: 'platform', tenantId: null, agenteId, leadId: proposta.vendasLeadId ?? null, adesaoDoClube: 0 }
+    return {
+      scope: 'platform',
+      tenantId: null,
+      agenteId,
+      leadId: proposta.vendasLeadId ?? null,
+      adesaoDoClube: 0,
+      comprador: { email: proposta.applicant?.email ?? null, telefone: proposta.applicant?.phone ?? null },
+    }
   }
 
   if (!cobranca.subscriptionId) return null
@@ -128,6 +143,9 @@ async function localizarOrigem(tx: Executor, origem: OrigemCobranca, cobranca: C
       vendasAgenteId: clubSubscriptions.vendasAgenteId,
       vendasLeadId: clubSubscriptions.vendasLeadId,
       enrollmentFee: clubSubscriptions.enrollmentFee,
+      holderCpf: clubSubscriptions.holderCpf,
+      holderEmail: clubSubscriptions.holderEmail,
+      holderPhone: clubSubscriptions.holderPhone,
     })
     .from(clubSubscriptions)
     .where(eq(clubSubscriptions.id, cobranca.subscriptionId))
@@ -141,6 +159,7 @@ async function localizarOrigem(tx: Executor, origem: OrigemCobranca, cobranca: C
     agenteId: assinatura.vendasAgenteId ?? null,
     leadId: assinatura.vendasLeadId ?? null,
     adesaoDoClube: Number(assinatura.enrollmentFee ?? 0),
+    comprador: { cpf: assinatura.holderCpf ?? null, email: assinatura.holderEmail ?? null, telefone: assinatura.holderPhone ?? null },
   }
 }
 
@@ -176,8 +195,25 @@ async function parcelaDaCobranca(tx: Executor, origem: OrigemCobranca, cobranca:
   return antes.length + 1
 }
 
+/**
+ * A cobrança do clube carrega a adesão? A taxa só entra na 1ª cobrança criada da assinatura
+ * (`checkout.service`: `firstChargeTotal`), seja qual for o status das outras. Não se infere pelo
+ * ordinal das PAGAS: se a 1ª fatura (com adesão) foi estornada, a 2ª não herda a adesão.
+ * No platform a adesão vem dos itens da fatura (`appliesTo: 'setup_fee'`), sem ordinal.
+ */
+async function clubeContemAdesao(tx: Executor, cobranca: CobrancaPaga): Promise<boolean> {
+  const todas = await tx
+    .select({ id: clubCharges.id, periodStart: clubCharges.periodStart, createdAt: clubCharges.createdAt })
+    .from(clubCharges)
+    .where(and(eq(clubCharges.subscriptionId, cobranca.subscriptionId!), eq(clubCharges.kind, 'cycle')))
+  const chave = (c: { id: string; periodStart: string | null; createdAt: Date | null }) =>
+    `${c.periodStart ?? ''}|${c.createdAt ? c.createdAt.toISOString() : ''}|${c.id}`
+  const primeira = [...todas].sort((a, b) => (chave(a) < chave(b) ? -1 : chave(a) > chave(b) ? 1 : 0))[0]
+  return primeira?.id === cobranca.id
+}
+
 /** Partes PAGAS da cobrança: adesão e mensalidade (pago a menor reparte na proporção; multa/juros não entra). */
-function partesPagas(origem: OrigemCobranca, cobranca: CobrancaPaga, parcela: number, adesaoDoClube: number) {
+function partesPagas(origem: OrigemCobranca, cobranca: CobrancaPaga, adesaoDoClube: number) {
   const amount = Number(cobranca.amount)
   const paidAmount = cobranca.paidAmount === null ? null : Number(cobranca.paidAmount)
   if (origem === 'platform') {
@@ -189,7 +225,7 @@ function partesPagas(origem: OrigemCobranca, cobranca: CobrancaPaga, parcela: nu
     })
   }
   if (!(amount > 0)) return { setupFee: 0, monthly: 0 }
-  const setup = parcela === 1 ? Math.min(amount, Math.max(0, adesaoDoClube)) : 0
+  const setup = Math.min(amount, Math.max(0, adesaoDoClube))
   const paid = paidAmount === null ? amount : Math.max(0, paidAmount)
   const fator = Math.min(1, paid / amount)
   return { setupFee: arredondarCentavos(setup * fator), monthly: arredondarCentavos(Math.max(0, amount - setup) * fator) }
@@ -231,9 +267,12 @@ async function marcarLeadGanho(tx: Executor, lead: VendasLeadRow, origem: Origem
   })
 }
 
-/** Snapshot do lead se existir; senão a cadeia ATUAL do agente (e grava no lead). */
+/**
+ * Snapshot do lead se existir E for deste agente; senão a cadeia ATUAL do agente (e grava no lead).
+ * Snapshot de outro agente é de uma atribuição antiga (o lead foi reatribuído): descarta e recalcula.
+ */
 async function atribuicaoDaVenda(tx: Executor, agente: VendasAgenteRow, lead: VendasLeadRow | null, venda: OrigemDaVenda): Promise<Atribuicao> {
-  if (lead?.atribuicao) return lead.atribuicao
+  if (lead?.atribuicao && lead.atribuicao.agenteId === agente.id) return lead.atribuicao
   const [equipe] = agente.equipeId
     ? await tx
         .select({ id: vendasEquipes.id, supervisorAgenteId: vendasEquipes.supervisorAgenteId })
@@ -256,6 +295,37 @@ async function atribuicaoDaVenda(tx: Executor, agente: VendasAgenteRow, lead: Ve
       .where(and(eq(vendasLeads.id, lead.id), whereEscopo(vendasLeads, venda)))
   }
   return atribuicao
+}
+
+/** Auto-compra: sem comissão; fica registrado na auditoria e na linha do tempo do lead. */
+async function bloquearAutoCompra(
+  tx: Executor,
+  dados: {
+    agente: VendasAgenteRow
+    lead: VendasLeadRow | null
+    origem: OrigemCobranca
+    cobranca: CobrancaPaga
+    venda: OrigemDaVenda
+    quando: Date
+  },
+): Promise<void> {
+  const { agente, lead, origem, cobranca, venda, quando } = dados
+  await auditarSistema(tx, [
+    {
+      organizationId: venda.tenantId ?? cobranca.organizationId ?? null,
+      action: 'vendas.comissao_bloqueada',
+      resourceId: cobranca.id,
+      metadata: { origem, cobrancaId: cobranca.id, agenteId: agente.id, motivoNaoComissionavel: MOTIVO_AUTO_COMPRA },
+    },
+  ])
+  if (!lead) return
+  await tx.insert(vendasLeadEventos).values({
+    leadId: lead.id,
+    tipo: 'sistema',
+    texto: 'Comissão não gerada: o comprador é o próprio agente (auto-compra).',
+    dados: { motivoNaoComissionavel: MOTIVO_AUTO_COMPRA, cobrancaId: cobranca.id, agenteId: agente.id },
+    em: quando,
+  })
 }
 
 /**
@@ -297,8 +367,15 @@ export async function registrarComissoesDaCobrancaPaga(input: {
     .limit(1)
   if (!agente) return 0
 
+  // Última barreira contra auto-compra: o comprador é o próprio agente (a atribuição já é barrada na entrada).
+  if (await compradorEhOAgenteNoBanco(agente, venda.comprador, tx)) {
+    await bloquearAutoCompra(tx, { agente, lead, origem, cobranca, venda, quando: pagoEm })
+    return 0
+  }
+
   const atribuicao = await atribuicaoDaVenda(tx, agente, lead, venda)
-  const configRow = await getOrCreateConfig(venda.scope, venda.tenantId)
+  // Tudo pelo `tx`: o `db` global aqui pediria uma 2ª conexão ao pool com esta transação ainda aberta.
+  const configRow = await getOrCreateConfig(venda.scope, venda.tenantId, tx)
   const config: ConfigComissao = {
     escalaMensal: configRow.escalaMensal,
     percentualAdesao: Number(configRow.percentualAdesao),
@@ -316,7 +393,8 @@ export async function registrarComissoesDaCobrancaPaga(input: {
   }
 
   const parcela = await parcelaDaCobranca(tx, origem, cobranca)
-  const partes = partesPagas(origem, cobranca, parcela, venda.adesaoDoClube)
+  const adesaoNaCobranca = origem === 'club' && (await clubeContemAdesao(tx, cobranca)) ? venda.adesaoDoClube : 0
+  const partes = partesPagas(origem, cobranca, adesaoNaCobranca)
   const linhas: { tipo: TipoComissao; parcela: number; linha: LinhaComissao }[] = []
   const tipos: [TipoComissao, number, number][] = [
     ['adesao', partes.setupFee, 1],
@@ -418,24 +496,7 @@ export async function estornarComissoesDaCobranca(
   return mudaram
 }
 
-/**
- * Embrulho dos ganchos de cobrança: savepoint próprio e erro só no log — a
- * comissão nunca desfaz pagamento/estorno.
- */
-export async function safely(executor: Executor, label: string, work: (tx: Executor) => Promise<unknown>): Promise<void> {
-  try {
-    const runner = executor as Partial<Pick<typeof db, 'transaction'>>
-    if (typeof runner.transaction === 'function') {
-      await runner.transaction(async sp => {
-        await work(sp)
-      })
-    } else {
-      await work(executor)
-    }
-  } catch (error) {
-    logger.error({ err: error instanceof Error ? error.message : String(error), label }, 'Falha nas comissões da Rede Comercial (o pagamento segue)')
-  }
-}
+export { safely } from './savepoint'
 
 // ---------------------------------------------------------------------------
 // Leitura por papel

@@ -281,9 +281,13 @@ export async function receberLeadPublicoPlatform(input: LeadPublicoInput, agora:
 
 /** `GET /public/vendas/ref/:codigo` → nome do vendedor. 404 `VENDAS_CODIGO_INVALIDO` quando o código não é de agente ativo. */
 export async function nomeDoVendedorPorCodigo(codigo: string): Promise<{ nomeVendedor: string }> {
-  const agente = await buscarAgentePorCodigo(codigo)
-  if (agente) return { nomeVendedor: agente.nome }
-  // Transição: vendedor antigo (platform_sellers) ainda não migrado.
+  const agente = await buscarAgentePorCodigo(codigo, undefined, db, { incluirInativos: true })
+  // Código de agente da Rede Comercial: vale só a linha nova (inativo = inválido, sem cair no cadastro antigo).
+  if (agente) {
+    if (agente.ativo) return { nomeVendedor: agente.nome }
+    throw new AppError(ERROR_CODES.VENDAS_CODIGO_INVALIDO, 'Código de indicação inválido ou inativo.')
+  }
+  // Transição: vendedor antigo (platform_sellers) ainda não migrado para a rede.
   try {
     const legado = await findActiveSellerByCode(codigo)
     if (legado) return { nomeVendedor: legado.name }

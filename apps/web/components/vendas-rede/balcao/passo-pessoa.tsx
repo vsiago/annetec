@@ -63,10 +63,12 @@ export function PassoPessoa({
       return
     }
     const lead = r.data.lead
-    const nome = lead?.nome ?? r.data.nome ?? ''
-    const telefone = lead?.telefone ?? r.data.telefone ?? (ehCpf ? '' : digitos)
-    const email = lead?.email ?? r.data.email ?? ''
+    // O servidor só devolve os dados do lead quando ele é do próprio atendente; de outro atendente vem só o aviso.
+    const nome = lead?.nome ?? ''
+    const telefone = lead?.telefone ?? (ehCpf ? '' : digitos)
+    const email = lead?.email ?? ''
     if (lead) toast.success('Esta pessoa já tem um contato em andamento. Dados preenchidos.')
+    else if (r.data.leadAberto) toast.info('Esta pessoa já tem um contato em andamento com outro atendente.')
     aoContinuar(
       {
         ...(ehCpf ? { documento: formatarCpf(digitos) } : lead?.documento ? { documento: cpfParaCampo(lead.documento) } : {}),

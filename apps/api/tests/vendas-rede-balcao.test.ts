@@ -12,6 +12,8 @@ import { AGENTES, CLUBE_A, CLUBE_B, ID, semearConfig, semearLead, semearRede, ui
 
 const state = vi.hoisted(() => ({ sessions: {} as Record<string, unknown> }))
 const memory = vi.hoisted(() => ({ db: null as null | Record<string, unknown> }))
+/** Falhas injetadas no banco em memória (atomicidade do atendimento). */
+const falha = vi.hoisted(() => ({ gravarAtendimento: false, mudarEtapaNoMeio: false }))
 
 vi.mock('@/db/client', async () => {
   const schema = await import('@/db/schema')
@@ -35,6 +37,14 @@ vi.mock('@/db/client', async () => {
       schema.notifications,
     ],
     uniques: [{ table: schema.notifications, keys: ['audience', 'dedupeKey'] }],
+    beforeWrite: (kind, table, values) => {
+      if (kind === 'insert' && table === schema.vendasAtendimentosBalcao && falha.gravarAtendimento) throw new Error('banco fora ao gravar o atendimento')
+      // Simula outro atendente fechando o lead (ganho) entre a leitura e a perda: o compare-and-swap da etapa tem de falhar.
+      if (kind === 'insert' && table === schema.vendasLeadEventos && falha.mudarEtapaNoMeio && (values as { tipo?: string }).tipo === 'atendimento_balcao') {
+        const leads = (memory.db as unknown as { rows: (t: unknown) => Record<string, unknown>[] }).rows(schema.vendasLeads)
+        for (const lead of leads) lead.etapa = 'ganho'
+      }
+    },
   })
   memory.db = instance as unknown as Record<string, unknown>
   return { db: instance.db, sql: { end: async () => {} }, schema }
@@ -138,6 +148,8 @@ const ASSINAR = {
 
 beforeEach(async () => {
   mem().reset()
+  falha.gravarAtendimento = false
+  falha.mudarEtapaNoMeio = false
   checkoutMock.checkout.mockReset()
   checkoutMock.checkout.mockResolvedValue({ subscriptionId: ASSINATURA, status: 'pending_payment', session: { token: 'x' } })
   state.sessions = {
@@ -243,24 +255,60 @@ describe('balcão: pessoa', () => {
     mem().insertRow(schema.clubSubscriptions, { id: ASSINATURA, organizationId: CLUBE_A.id, status: 'active', planName: 'Clube Plus', holderName: 'Maria da Silva', holderCpf: CPF, holderEmail: 'maria@exemplo.com', holderPhone: CEL, nextDueDate: '2026-12-05' })
     const res = await call('u-balcaoA', 'GET', `${B('clube-a')}/pessoa?documento=${CPF}`)
     expect(res.body.data.jaAssociado).toBe(true)
-    expect(res.body.data.assinatura).toEqual({ id: ASSINATURA, status: 'active', planoNome: 'Clube Plus', proximoVencimento: '2026-12-05' })
-    expect(res.body.data).toMatchObject({ nome: 'Maria da Silva', telefone: CEL, email: 'maria@exemplo.com' })
+    // Só status e plano (sem id, vencimento, telefone ou e-mail); o nome vem porque a busca foi pelo CPF do titular.
+    expect(res.body.data.assinatura).toEqual({ status: 'active', planoNome: 'Clube Plus' })
+    expect(res.body.data.nome).toBe('Maria da Silva')
+    expect(res.body.data).not.toHaveProperty('telefone')
+    expect(res.body.data).not.toHaveProperty('email')
+    expect(res.body.data.lead).toBeNull()
+    expect(res.body.data.leadAberto).toBeNull()
+    // Pelo celular o nome do titular não é revelado (pode ser de um familiar).
+    const porTelefone = await call('u-balcaoA', 'GET', `${B('clube-a')}/pessoa?telefone=${CEL}`)
+    expect(porTelefone.body.data.jaAssociado).toBe(true)
+    expect(porTelefone.body.data.assinatura).toEqual({ status: 'active', planoNome: 'Clube Plus' })
+    expect(porTelefone.body.data.nome).toBeNull()
     // assinatura de outro clube não conta
     const outro = await call('admin-b', 'GET', `${B('clube-b')}/pessoa?documento=${CPF}`)
     expect(outro.body.data.jaAssociado).toBe(false)
   })
 
-  it('lead aberto de qualquer dono aparece; lead perdido não', async () => {
-    semearLead(mem(), schema, { id: uid(6001), scope: 'tenant', tenantId: CLUBE_A.id, tipo: 'pessoa', nome: 'Joana', agenteId: ID.vendedorA, etapa: 'em_contato', telefone: CEL } as never)
-    semearLead(mem(), schema, { id: uid(6002), scope: 'tenant', tenantId: CLUBE_A.id, tipo: 'pessoa', nome: 'Perdida', agenteId: ID.vendedorA, etapa: 'perdido', documento: CPF2 } as never)
+  it('lead aberto do próprio atendente vem completo; lead perdido não aparece; outro clube não vê', async () => {
+    semearLead(mem(), schema, { id: uid(6001), scope: 'tenant', tenantId: CLUBE_A.id, tipo: 'pessoa', nome: 'Joana', agenteId: ID.balcaoA, etapa: 'em_contato', telefone: CEL } as never)
+    semearLead(mem(), schema, { id: uid(6002), scope: 'tenant', tenantId: CLUBE_A.id, tipo: 'pessoa', nome: 'Perdida', agenteId: ID.balcaoA, etapa: 'perdido', documento: CPF2 } as never)
     const res = await call('u-balcaoA', 'GET', `${B('clube-a')}/pessoa?telefone=${CEL}`)
     expect(res.body.data.jaAssociado).toBe(false)
-    expect(res.body.data.lead).toMatchObject({ id: uid(6001), nome: 'Joana', etapa: 'em_contato', agenteNome: 'Vendedor do Clube A' })
+    expect(res.body.data.lead).toMatchObject({ id: uid(6001), nome: 'Joana', etapa: 'em_contato', agenteNome: 'Balcão A' })
+    expect(res.body.data.leadAberto).toEqual({ existe: true, etapa: 'em_contato', proprio: true })
     expect(res.body.data.nome).toBe('Joana')
     const perdida = await call('u-balcaoA', 'GET', `${B('clube-a')}/pessoa?documento=${CPF2}`)
     expect(perdida.body.data.lead).toBeNull()
+    expect(perdida.body.data.leadAberto).toBeNull()
     const outroClube = await call('admin-b', 'GET', `${B('clube-b')}/pessoa?telefone=${CEL}`)
     expect(outroClube.body.data.lead).toBeNull()
+    expect(outroClube.body.data.leadAberto).toBeNull()
+  })
+
+  it('lead aberto de OUTRO atendente: só existe/etapa, sem nome, observações, atribuição ou conversão', async () => {
+    semearLead(mem(), schema, { id: uid(6006), scope: 'tenant', tenantId: CLUBE_A.id, tipo: 'pessoa', nome: 'Segredo da Silva', agenteId: ID.vendedorA, etapa: 'negociacao', documento: CPF, telefone: CEL, email: 'segredo@exemplo.com', observacoes: 'cliente VIP', atribuicao: { agenteId: ID.vendedorA }, conversao: { subscriptionId: 'x' } } as never)
+    for (const filtro of [`documento=${CPF}`, `telefone=${CEL}`]) {
+      const res = await call('u-balcaoA', 'GET', `${B('clube-a')}/pessoa?${filtro}`)
+      expect(res.status).toBe(200)
+      expect(res.body.data.lead).toBeNull()
+      expect(res.body.data.nome).toBeNull()
+      expect(res.body.data.leadAberto).toEqual({ existe: true, etapa: 'negociacao', proprio: false })
+      const texto = JSON.stringify(res.body.data)
+      for (const vazamento of ['Segredo', 'VIP', 'segredo@exemplo.com', ID.vendedorA, 'Vendedor do Clube A', CPF, CEL]) {
+        expect(texto, vazamento).not.toContain(vazamento)
+      }
+    }
+  })
+
+  it('a busca é filtrada em SQL: só casa CPF e celular exatos (dígitos), ignorando clubes e leads fechados', async () => {
+    semearLead(mem(), schema, { id: uid(6007), scope: 'tenant', tenantId: CLUBE_A.id, tipo: 'pessoa', nome: 'Outra', agenteId: ID.balcaoA, etapa: 'novo', documento: CPF2, telefone: '21911112222' } as never)
+    const mascarado = await call('u-balcaoA', 'GET', `${B('clube-a')}/pessoa?documento=529.982.247-25`)
+    expect(mascarado.body.data.lead).toBeNull()
+    const outro = await call('u-balcaoA', 'GET', `${B('clube-a')}/pessoa?documento=111.444.777-35`)
+    expect(outro.body.data.lead).toMatchObject({ id: uid(6007) })
   })
 })
 
@@ -369,7 +417,8 @@ describe('balcão: atendimentos', () => {
     const res = await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, { nome: 'Joana', telefone: CEL, servico: 'Consulta', valorTabela: 100, planoId: PLANO_PLUS, resultado: 'vai_pensar' })
     expect(res.status).toBe(201)
     expect(res.body.data.atendimento.leadId).toBe(uid(6004))
-    expect(res.body.data.lead).toMatchObject({ id: uid(6004), agenteId: ID.vendedorA })
+    // O lead de outro dono não volta na resposta.
+    expect(res.body.data.lead).toBeNull()
     expect(leadsDoTenant(CLUBE_A.id)).toHaveLength(1)
     expect(leadRow(uid(6004))).toMatchObject({ agenteId: ID.vendedorA, etapa: 'novo', proximoPasso: null })
     expect(eventosDe(uid(6004)).map(e => e.tipo)).toEqual(['atendimento_balcao'])
@@ -451,5 +500,76 @@ describe('balcão: hoje e histórico', () => {
     expect(ignora.body.meta.total).toBe(3)
     // clube B não enxerga
     expect((await call('admin-b', 'GET', `${B('clube-b')}/atendimentos`)).body.meta.total).toBe(0)
+  })
+})
+
+describe('balcão: atendimento atômico e idempotente', () => {
+  const PENSAR = { nome: 'Ana Souza', telefone: CEL, servico: 'Consulta', valorTabela: 100, planoId: PLANO_PLUS, resultado: 'vai_pensar' }
+
+  it('mesmo atendimento repetido em 60 s devolve o já gravado (duplo clique não duplica)', async () => {
+    const primeira = await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, PENSAR)
+    const segunda = await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, PENSAR)
+    expect(primeira.status).toBe(201)
+    expect(segunda.status).toBe(201)
+    expect(segunda.body.data.atendimento.id).toBe(primeira.body.data.atendimento.id)
+    expect(atendimentosDb()).toHaveLength(1)
+    expect(leadsDoTenant(CLUBE_A.id)).toHaveLength(1)
+    const eventos = eventosDe(primeira.body.data.atendimento.leadId).map(e => e.tipo)
+    expect(eventos.filter(t => t === 'atendimento_balcao')).toHaveLength(1)
+    // resultado diferente não é repetição
+    const recusou = await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, { ...PENSAR, resultado: 'recusou' })
+    expect(recusou.body.data.atendimento.id).not.toBe(primeira.body.data.atendimento.id)
+    expect(atendimentosDb()).toHaveLength(2)
+  })
+
+  it('depois de 60 s o mesmo atendimento é um registro novo', async () => {
+    await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, PENSAR)
+    atendimentosDb()[0]!.createdAt = new Date(Date.now() - 120_000)
+    const outra = await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, PENSAR)
+    expect(outra.status).toBe(201)
+    expect(atendimentosDb()).toHaveLength(2)
+  })
+
+  it('outro atendente não reaproveita o atendimento alheio', async () => {
+    await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, PENSAR)
+    const outro = await call('u-balcaoA2', 'POST', `${B('clube-a')}/atendimentos`, PENSAR)
+    expect(outro.status).toBe(201)
+    expect(atendimentosDb()).toHaveLength(2)
+  })
+
+  it('erro ao gravar o atendimento desfaz o lead e os eventos (tudo ou nada)', async () => {
+    falha.gravarAtendimento = true
+    const res = await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, PENSAR)
+    expect(res.status).toBe(500)
+    expect(atendimentosDb()).toHaveLength(0)
+    expect(leadsDoTenant(CLUBE_A.id)).toHaveLength(0)
+    expect(mem().rows(schema.vendasLeadEventos)).toHaveLength(0)
+    // sem a falha, a mesma chamada passa e grava tudo junto
+    falha.gravarAtendimento = false
+    const ok = await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, PENSAR)
+    expect(ok.status).toBe(201)
+    expect(atendimentosDb()).toHaveLength(1)
+    expect(leadsDoTenant(CLUBE_A.id)).toHaveLength(1)
+    expect(eventosDe(ok.body.data.atendimento.leadId).map(e => e.tipo)).toEqual(['criado', 'atendimento_balcao', 'etapa', 'proximo_passo'])
+  })
+
+  it('recusou num lead próprio que mudou de etapa no meio: 422 e nada fica gravado', async () => {
+    semearLead(mem(), schema, { id: uid(6010), scope: 'tenant', tenantId: CLUBE_A.id, tipo: 'pessoa', nome: 'Ana Souza', agenteId: ID.balcaoA, etapa: 'em_contato', telefone: CEL } as never)
+    falha.mudarEtapaNoMeio = true
+    const res = await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, { ...PENSAR, resultado: 'recusou' })
+    expect(res.status).toBe(422)
+    expect(res.body.error.code).toBe('VENDAS_TRANSICAO_INVALIDA')
+    expect(atendimentosDb()).toHaveLength(0)
+    expect(eventosDe(uid(6010))).toHaveLength(0)
+    expect(leadRow(uid(6010))).toMatchObject({ etapa: 'em_contato', ultimoContatoEm: null, motivoPerda: null })
+  })
+
+  it('recusou grava lead, evento, perda e atendimento juntos', async () => {
+    const res = await call('u-balcaoA', 'POST', `${B('clube-a')}/atendimentos`, { ...PENSAR, resultado: 'recusou', observacoes: 'Achou caro' })
+    expect(res.status).toBe(201)
+    const leadId = res.body.data.atendimento.leadId
+    expect(leadRow(leadId)).toMatchObject({ etapa: 'perdido', motivoPerda: 'Achou caro', agenteId: ID.balcaoA, origem: 'balcao' })
+    expect(res.body.data.lead).toMatchObject({ id: leadId, etapa: 'perdido' })
+    expect(eventosDe(leadId).map(e => e.tipo)).toEqual(['criado', 'atendimento_balcao', 'etapa', 'etapa'])
   })
 })

@@ -12,6 +12,7 @@ import {
   type ListEquipesQuery,
   type ListUnidadesQuery,
   type PapelComercial,
+  type RepasseVendas,
   type UpdateAgenteInput,
   type UpdateCorretoraInput,
   type UpdateEquipeInput,
@@ -29,6 +30,8 @@ import {
 import { and, asc, eq, gte, inArray, ne, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
 import {
+  auditLogs,
+  platformSellers,
   user,
   vendasAgentes,
   vendasComissoes,
@@ -43,6 +46,7 @@ import {
   type VendasUnidadeRow,
 } from '@/db/schema'
 import { AppError } from '@/http/errors'
+import { logger } from '@/lib/logger'
 import { getOrCreateConfig, toConfigPublica } from './config.service'
 import { enviarConvite, provisionarUsuario, reenviarConvite, type ResultadoConvite } from './convites.service'
 import { whereEscopo, type VendasCtx } from './context'
@@ -920,6 +924,14 @@ export async function atualizarAgente(
     throw semPermissao('A meta é definida pela gestão da rede.')
   }
 
+  // Dados de repasse (para onde vai o dinheiro): só o próprio agente e o master. Gerente/supervisor
+  // alterando a chave Pix de outro agente seria desvio de repasse. Reenviar o mesmo valor não é alteração.
+  const repasseAntes = alvo.repasse ?? null
+  const mudaRepasse = input.repasse !== undefined && JSON.stringify(input.repasse ?? null) !== JSON.stringify(repasseAntes)
+  if (mudaRepasse && !proprio && ctx.papel !== 'master') {
+    throw semPermissao('Só o próprio agente ou o master altera os dados de repasse.')
+  }
+
   let vinculo: VinculoResolvido | null = null
   if (mudaPapel || mudaVinculo) {
     autorizarPapelDoAlvo(ctx, novoPapel)
@@ -988,10 +1000,61 @@ export async function atualizarAgente(
     }
   }
 
+  if (mudaRepasse) await auditarRepasse(ctx, alvo.id, repasseAntes, linha.repasse ?? null)
+
   return { antes, depois: await apresentarAgente(ctx, linha, email) }
 }
 
-/** `POST /rede/agentes/:id/ativar|desativar`: só o `ativo` do agente (o login da conta não é tocado). */
+/** Mantém só o final do valor (`•••• 1234`): o suficiente para conferir, não para usar. */
+function mascarar(valor: string | null | undefined, visiveis: number): string | null {
+  if (!valor) return null
+  const limpo = valor.trim()
+  if (limpo.length <= visiveis) return '••••'
+  return `••••${limpo.slice(-visiveis)}`
+}
+
+/** Repasse sem segredo para a auditoria: Pix (4 últimos), conta e documento mascarados; banco e agência inteiros. */
+export function repasseMascarado(repasse: RepasseVendas | Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!repasse) return null
+  const r = repasse as Partial<Record<keyof RepasseVendas, string>>
+  return {
+    tipo: r.tipo ?? null,
+    chavePix: mascarar(r.chavePix, 4),
+    banco: r.banco ?? null,
+    agencia: r.agencia ?? null,
+    conta: mascarar(r.conta, 2),
+    titular: r.titular ?? null,
+    documento: mascarar(r.documento, 2),
+  }
+}
+
+/** Auditoria da troca de repasse (diff mascarado). Nunca derruba a edição. */
+async function auditarRepasse(ctx: VendasCtx, agenteId: string, antes: unknown, depois: unknown): Promise<void> {
+  try {
+    await db.insert(auditLogs).values({
+      organizationId: ctx.tenantId,
+      actorId: ctx.userId,
+      actorScope: ctx.scope === 'platform' ? 'platform' : 'tenant',
+      action: 'vendas.agente_repasse_alterado',
+      resource: 'vendas_agente',
+      resourceId: agenteId,
+      metadata: {
+        scope: ctx.scope,
+        papel: ctx.papel,
+        antes: repasseMascarado(antes as Record<string, unknown> | null),
+        depois: repasseMascarado(depois as Record<string, unknown> | null),
+      },
+    })
+  } catch (error) {
+    logger.error({ err: error instanceof Error ? error.message : String(error), agenteId }, 'Falha ao gravar a auditoria da troca de repasse')
+  }
+}
+
+/**
+ * `POST /rede/agentes/:id/ativar|desativar`: só o `ativo` do agente (o login da conta não é tocado).
+ * No escopo platform espelha `platform_sellers.active` (cadastro legado): sem isso o código antigo
+ * continuaria atribuindo propostas a um agente desativado.
+ */
 export async function definirAtivo(ctx: VendasCtx, id: string, ativo: boolean): Promise<VendasAgente> {
   const { agente: alvo, email } = await acharAgenteVisivel(ctx, id)
   if (ctx.agente?.id === alvo.id) throw regra('Você não pode alterar o próprio status')
@@ -1002,6 +1065,9 @@ export async function definirAtivo(ctx: VendasCtx, id: string, ativo: boolean): 
     .set({ ativo, updatedAt: new Date() })
     .where(and(whereEscopo(vendasAgentes, ctx), eq(vendasAgentes.id, id)))
     .returning()
+  if (ctx.scope === 'platform') {
+    await db.update(platformSellers).set({ active: ativo, updatedAt: new Date() }).where(eq(platformSellers.userId, alvo.userId))
+  }
   return apresentarAgente(ctx, linha ?? { ...alvo, ativo }, email)
 }
 
