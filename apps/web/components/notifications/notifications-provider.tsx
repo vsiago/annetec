@@ -103,11 +103,18 @@ export function NotificationsProvider({
   scope,
   children,
   onNotification,
+  resolveHref,
 }: {
   scope: NotificationsScope
   children: ReactNode
-  /** Efeito colateral por chegada (ex.: rebuscar a lista de usuários num cadastro novo). */
-  onNotification?: (notification: AppNotification) => void
+  /**
+   * Efeito colateral por chegada (ex.: rebuscar a lista de usuários num cadastro novo).
+   * Devolver true diz que a própria tela já mostrou o aviso: o toast padrão não aparece
+   * (o som continua).
+   */
+  onNotification?: (notification: AppNotification) => boolean | void
+  /** Destino do clique quando a área tem rotas próprias (Rede Comercial). */
+  resolveHref?: (notification: AppNotification) => string | null
 }) {
   const router = useRouter()
   const [items, setItems] = useState<AppNotification[]>([])
@@ -128,8 +135,10 @@ export function NotificationsProvider({
   const summaryCount = useRef(0)
   const onNotificationRef = useRef(onNotification)
   onNotificationRef.current = onNotification
+  const resolveHrefRef = useRef(resolveHref)
+  resolveHrefRef.current = resolveHref
 
-  const scopeKey = scope.kind === 'tenant' ? `tenant:${scope.slug}` : scope.kind
+  const scopeKey = scope.kind === 'tenant' ? `tenant:${scope.slug}` : scope.kind === 'seller' ? `seller:${scope.slug ?? ''}` : scope.kind
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableScope = useMemo(() => scope, [scopeKey])
 
@@ -169,7 +178,7 @@ export function NotificationsProvider({
         setUnread(count => Math.max(0, count - 1))
         markRead([notification.id])
       }
-      const href = notificationHref(notification)
+      const href = resolveHrefRef.current?.(notification) ?? notificationHref(notification)
       if (href) router.push(href)
     },
     [markRead, router, requestPanel],
@@ -244,12 +253,15 @@ export function NotificationsProvider({
       setItems(prev => [notification, ...prev.filter(item => item.id !== notification.id)].slice(0, MAX_ITEMS))
       if (!notification.read) setUnread(count => count + 1)
       setPulse(value => value + 1)
-      onNotificationRef.current?.(notification)
+      const handled = onNotificationRef.current?.(notification) === true
 
       const age = serverNow() - Date.parse(notification.createdAt)
-      if (age < FRESH_MS) showToast(notification)
+      if (age < FRESH_MS) {
+        if (!handled) showToast(notification)
+        else if (soundOnRef.current && claimSound(notification.id)) playNotificationSound(soundFor(stableScope, notification))
+      }
     },
-    [serverNow, showToast],
+    [serverNow, showToast, stableScope],
   )
   // O EventSource vive enquanto o escopo não muda; o handler mais recente entra por ref.
   const receiveRef = useRef(receive)

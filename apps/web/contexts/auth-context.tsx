@@ -163,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       router.push(
         getRoleRedirectPath(tenantSlug, result.data.tenantRole as UserRole, {
           needsSubscription: result.data.needsSubscription === true,
+          salesRole: result.data.salesRole ?? null,
         }),
       )
     }
@@ -257,6 +258,7 @@ function toLegacyUser(sessionUser: SessionUser): User {
     role: sessionUser.tenantRole as UserRole,
     avatar: sessionUser.avatarUrl ?? undefined,
     needsSubscription: sessionUser.needsSubscription,
+    salesRole: sessionUser.salesRole ?? null,
     subscriptionStatus: sessionUser.subscriptionStatus,
     // A sessão não carrega a data de criação da conta — nenhuma tela lê este
     // campo a partir do usuário logado (só da listagem de usuários, que vem

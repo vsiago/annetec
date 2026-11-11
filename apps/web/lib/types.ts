@@ -116,6 +116,8 @@ export interface User {
    * (sem assinatura ou pagamento pendente). Ver `SessionUser.needsSubscription`.
    */
   needsSubscription?: boolean
+  /** Vendedor (sessão `seller`): papel comercial na Rede Comercial do clube (`balcao` vai para o balcão). */
+  salesRole?: 'master' | 'gerente' | 'supervisor' | 'vendedor' | 'balcao' | null
   /** Situação que gerou `needsSubscription` (`pending_payment` = pagamento pendente). */
   subscriptionStatus?: 'subscribed' | 'contract' | 'pending_payment' | 'none'
 }

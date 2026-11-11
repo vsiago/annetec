@@ -85,7 +85,9 @@ export function isSalesNotification(notification: Pick<AppNotification, 'kind'>)
     notification.kind === 'sales_discount_requested' ||
     notification.kind === 'sales_discount_approved' ||
     notification.kind === 'sales_discount_rejected' ||
-    notification.kind === 'onboarding_submitted'
+    notification.kind === 'onboarding_submitted' ||
+    notification.kind === 'vendas_lead_novo' ||
+    notification.kind === 'vendas_lead_atribuido'
   )
 }
 
@@ -93,7 +95,7 @@ export function isSalesNotification(notification: Pick<AppNotification, 'kind'>)
  * Para onde a notificação leva ao clicar. As de vendas são montadas aqui a
  * partir dos ids do `payload` (a API também grava o mesmo link):
  *  - pedido de desconto (equipe) → Aprovações › Descontos de vendedores, com o pedido aberto;
- *  - aprovado/recusado (vendedor) → a proposta na área do vendedor.
+ *  - aprovado/recusado (vendedor) → o funil (a proposta vive no detalhe do lead).
  * As demais usam o `link` gravado pela API — os antigos, gravados antes das
  * filas irem para Aprovações (`/admin/financeiro/contas-gerenciadas`,
  * `/admin/comercial/descontos`), são traduzidos para a aba e o foco novos.
@@ -105,7 +107,7 @@ export function notificationHref(notification: Pick<AppNotification, 'kind' | 'l
       return approvalsHref('descontos', { pedido: payload.discountRequestId ?? null })
     case 'sales_discount_approved':
     case 'sales_discount_rejected':
-      return payload.proposalId ? `/vendas/propostas/${encodeURIComponent(payload.proposalId)}` : '/vendas/propostas'
+      return '/vendas/funil'
     case 'onboarding_submitted':
       return payload.proposalId ? `/admin/compliance/${encodeURIComponent(payload.proposalId)}` : approvalsHref('clubes')
     default:

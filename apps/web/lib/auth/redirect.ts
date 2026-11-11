@@ -10,13 +10,14 @@ import type { UserRole } from '@/lib/types'
 export function getRoleRedirectPath(
   tenantSlug: string,
   role: UserRole,
-  options: { needsSubscription?: boolean } = {},
+  options: { needsSubscription?: boolean; salesRole?: string | null } = {},
 ): string {
   switch (role) {
     case 'admin':
       return `/${tenantSlug}/admin`
     case 'seller':
-      return `/${tenantSlug}/vendedor`
+      // Rede Comercial: balcão tem casca própria; os demais papéis vão para a casca comercial.
+      return options.salesRole === 'balcao' ? `/${tenantSlug}/balcao` : `/${tenantSlug}/vendas`
     case 'client':
       return options.needsSubscription ? clientOnboardingPath(tenantSlug) : `/${tenantSlug}/cliente`
     default:

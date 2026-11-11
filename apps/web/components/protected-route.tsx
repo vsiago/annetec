@@ -31,7 +31,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       if (!isAuthenticated) {
         router.replace(tenantLoginPath(tenant.slug, { sessionEnded }))
       } else if (user && !allowedRoles.includes(user.role)) {
-        router.push(getRoleRedirectPath(tenant.slug, user.role, { needsSubscription: user.needsSubscription }))
+        router.push(getRoleRedirectPath(tenant.slug, user.role, { needsSubscription: user.needsSubscription, salesRole: user.salesRole ?? null }))
       }
     }
   }, [isLoading, isAuthenticated, user, allowedRoles, router, tenant, sessionEnded])

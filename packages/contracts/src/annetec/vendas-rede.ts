@@ -658,12 +658,18 @@ export const atendimentoBalcaoInput = z.object({
   planoId: uuid.nullable().optional(),
   resultado: resultadoBalcao,
   observacoes: textoOpcional(1000),
+  email: emailOpcional,
+  dataNascimento: z.preprocess(vazioParaNulo, dateOnly.nullable().optional()),
+  /** Só vale para `resultado = assinou` (padrão: `pix`). Cartão exige o link de adesão. */
+  formaPagamento: z.enum(['pix', 'boleto']).optional(),
 })
 export type AtendimentoBalcaoInput = z.infer<typeof atendimentoBalcaoInput>
 
 export const listAtendimentosBalcaoQuery = paginationQuery.extend({
   dia: dateOnly.optional(),
   resultado: resultadoBalcao.optional(),
+  /** Só o master: filtra por atendente. */
+  agente: uuid.optional(),
 })
 export type ListAtendimentosBalcaoQuery = z.infer<typeof listAtendimentosBalcaoQuery>
 
@@ -1062,6 +1068,7 @@ export const vendasAtendimentoBalcao = z.object({
   valorComPlano: z.number(),
   planoId: z.string().nullable(),
   resultado: resultadoBalcao,
+  resultadoLabel: z.string(),
   observacoes: z.string().nullable(),
   assinaturaId: z.string().nullable(),
   createdAt: iso,
@@ -1070,13 +1077,25 @@ export type VendasAtendimentoBalcao = z.infer<typeof vendasAtendimentoBalcao>
 
 export const vendasBalcaoHoje = z.object({
   dia: z.string(),
+  agente: z
+    .object({
+      id: uuid,
+      nome: z.string(),
+      unidade: z.object({ id: uuid, nome: z.string(), tipo: z.string() }).nullable(),
+    })
+    .nullable(),
   atendimentos: z.array(vendasAtendimentoBalcao),
   totais: z.object({
     atendimentos: z.number().int(),
     ofertas: z.number().int(),
     adesoes: z.number().int(),
+    vaiPensar: z.number().int(),
+    /** Média de `valorTabela − valorComPlano` das ofertas (mesmo valor de `ticketMedioEconomia`). */
+    economiaMedia: z.number(),
     ticketMedioEconomia: z.number(),
   }),
+  /** Meta mensal do agente / 22 dias úteis; `null` sem meta. */
+  metaDia: z.number().nullable(),
 })
 export type VendasBalcaoHoje = z.infer<typeof vendasBalcaoHoje>
 
@@ -1086,12 +1105,21 @@ export const vendasPlanoBalcao = z.object({
   precoMensal: z.number(),
   adesao: z.number(),
   descontoPercentual: z.number(),
+  destaque: z.boolean(),
+  resumo: z.array(z.string()),
+  vendavel: z.boolean(),
 })
 export type VendasPlanoBalcao = z.infer<typeof vendasPlanoBalcao>
 
 export const vendasPessoaBalcao = z.object({
   jaAssociado: z.boolean(),
-  assinatura: z.object({ id: z.string(), planoNome: z.string(), status: z.string() }).nullable().optional(),
-  lead: z.object({ id: uuid, nome: z.string(), etapa: etapaLead }).nullable().optional(),
+  assinatura: z
+    .object({ id: z.string(), planoNome: z.string(), status: z.string(), proximoVencimento: z.string().nullable() })
+    .nullable()
+    .optional(),
+  lead: vendasLead.nullable().optional(),
+  nome: z.string().nullable().optional(),
+  telefone: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
 })
 export type VendasPessoaBalcao = z.infer<typeof vendasPessoaBalcao>

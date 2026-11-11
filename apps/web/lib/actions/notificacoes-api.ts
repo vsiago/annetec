@@ -3,6 +3,7 @@
 import type { NotificationList, SendTestNotificationInput } from '@annetec/contracts'
 import { apiFetch, tenantPath } from '@/lib/api/client'
 import type { NotificationsScope } from '@/lib/notifications/types'
+import { prefixoApi } from '@/lib/vendas-rede/escopo'
 import { run, type ActionResult } from './_api-result'
 
 /**
@@ -15,8 +16,8 @@ import { run, type ActionResult } from './_api-result'
 
 function base(scope: NotificationsScope, path = ''): string {
   if (scope.kind === 'tenant') return tenantPath(scope.slug, `/notificacoes${path}`)
-  // Vendedor ANNETEC: só as notificações dele (pedido de desconto aprovado/recusado).
-  if (scope.kind === 'seller') return `/api/v1/platform/vendas/notificacoes${path}`
+  // Rede Comercial (plataforma ou clube): as notificações do agente (lead novo no pool, desconto decidido).
+  if (scope.kind === 'seller') return `${prefixoApi(scope.slug ? { kind: 'tenant', slug: scope.slug } : { kind: 'platform' })}/notificacoes${path}`
   return `/api/v1/platform/notificacoes${path}`
 }
 
