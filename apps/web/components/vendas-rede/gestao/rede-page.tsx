@@ -177,6 +177,7 @@ export function RedeConteudo({ escopo, eu }: { escopo: EscopoRede; eu: VendasEu 
     const agentes = new Map<string, VendasArvoreAgente>()
     const add = (l: VendasArvoreAgente[]) => l.forEach(a => agentes.set(a.id, a))
     arvore.corretoras.forEach(c => {
+      if (c.gerente) add([c.gerente])
       add(c.agentes)
       c.unidades.forEach(u => {
         add(u.agentes)

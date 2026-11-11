@@ -816,6 +816,15 @@ function linkDaMensagem(ctx: VendasCtx, lead: Pick<VendasLeadRow, 'id' | 'intere
   return `${webBaseUrl}/contratar${codigo ? `?ref=${encodeURIComponent(codigo)}` : ''}`
 }
 
+/** Troca "(n)o/do plano {{plano}}" por "(n)os/dos nossos planos" quando o lead não tem plano de interesse. */
+function semPlanoNoTexto(texto: string): string {
+  return texto
+    .replace(/\bno plano\s*\{\{\s*plano\s*\}\}/gi, 'nos nossos planos')
+    .replace(/\bdo plano\s*\{\{\s*plano\s*\}\}/gi, 'dos nossos planos')
+    .replace(/\bo plano\s*\{\{\s*plano\s*\}\}/gi, 'os nossos planos')
+    .replace(/\bplano\s*\{\{\s*plano\s*\}\}/gi, 'nossos planos')
+}
+
 /** `GET /leads/:id/mensagem?modelo=` — modelo de `vendas_config.modelos_mensagem` com placeholders preenchidos. */
 export async function mensagem(ctx: VendasCtx, id: string, modeloId: string): Promise<MensagemLeadResponse> {
   const { lead } = await carregarLead(ctx, id)
@@ -825,11 +834,13 @@ export async function mensagem(ctx: VendasCtx, id: string, modeloId: string): Pr
   const planos = await nomesDePlanos(ctx, lead.interessePlanoId ? [lead.interessePlanoId] : [])
   const valores: Record<string, string> = {
     nome: lead.nome,
-    plano: (lead.interessePlanoId ? planos.get(lead.interessePlanoId) : null) ?? 'um dos nossos planos',
+    plano: (lead.interessePlanoId ? planos.get(lead.interessePlanoId) : null) ?? 'nossos planos',
     vendedor: ctx.agente?.nome ?? ctx.userName,
     link: linkDaMensagem(ctx, lead),
   }
-  const texto = modelo.texto.replace(/\{\{\s*(nome|plano|vendedor|link)\s*\}\}/g, (_, chave: string) => valores[chave] ?? '')
+  // Sem plano de interesse, "no plano {{plano}}" viraria "no plano nossos planos": ajusta a frase inteira.
+  const base = lead.interessePlanoId ? modelo.texto : semPlanoNoTexto(modelo.texto)
+  const texto = base.replace(/\{\{\s*(nome|plano|vendedor|link)\s*\}\}/g, (_, chave: string) => valores[chave] ?? '')
   const telefone = modelo.canal === 'whatsapp' ? telefoneParaWhatsapp(lead.telefone) : null
   return {
     modeloId: modelo.id,

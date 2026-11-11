@@ -44,10 +44,10 @@ function textoOferta(info: ConcluidoInfo): string {
     return `${abertura} Quando quiser conhecer nossos planos, é só responder esta mensagem.`
   }
   const r = simularEconomia(info.valorTabela, info.plano)
-  const servico = info.servico ? `${info.servico.toLowerCase()}` : 'o atendimento'
+  const servico = info.servico ? info.servico.toLowerCase() : 'o atendimento'
   const adesao = info.plano.adesao ? ` + adesão de ${formatarMoeda(info.plano.adesao)}` : ''
   return (
-    `${abertura} Hoje ${servico} sai por ${formatarMoeda(info.valorTabela)}. ` +
+    `${abertura} O valor de hoje para ${servico} é ${formatarMoeda(info.valorTabela)}. ` +
     `Com o plano ${info.plano.nome} ficaria ${formatarMoeda(r.valorComPlano)} (−${info.plano.descontoPercentual} %), ` +
     `uma economia de ${formatarMoeda(r.economiaNaConsulta)} já na primeira consulta. ` +
     `Mensalidade de ${formatarMoeda(info.plano.precoMensal)}${adesao}. Quando decidir, é só responder esta mensagem.`

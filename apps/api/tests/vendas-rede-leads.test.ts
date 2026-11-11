@@ -446,7 +446,7 @@ describe('mensagem pronta e carteira', () => {
     leadRow(L.v1).telefone = '123'
     const res = await call('u-vendedor1', 'GET', `${P}/leads/${L.v1}/mensagem?modelo=primeiro-contato`)
     expect(res.body.data.linkWhatsapp).toBeNull()
-    expect(res.body.data.texto).toContain('o plano um dos nossos planos')
+    expect(res.body.data.texto).toContain('nossos planos')
     expect((await call('u-vendedor1', 'GET', `${P}/leads/${L.v1}/mensagem?modelo=nao-existe`)).status).toBe(404)
     expect((await call('u-vendedor1', 'GET', `${P}/leads/${L.v2}/mensagem?modelo=primeiro-contato`)).status).toBe(404)
   })

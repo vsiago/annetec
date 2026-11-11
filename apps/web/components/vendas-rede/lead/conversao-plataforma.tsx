@@ -40,6 +40,10 @@ export function ConversaoPlataforma({
   const [enviarEmail, setEnviarEmail] = useState(true)
   const [enviando, setEnviando] = useState(false)
   const [pendencias, setPendencias] = useState<string[]>([])
+  // O vendedor completou o cadastro: os avisos da tentativa anterior ficam velhos.
+  useEffect(() => {
+    setPendencias([])
+  }, [lead.documento, lead.vidasEstimadas, lead.email, lead.telefone])
   const [descontoAberto, setDescontoAberto] = useState(false)
 
   const carregarProposta = useCallback(async () => {

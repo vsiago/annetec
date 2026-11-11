@@ -185,7 +185,7 @@ export function ArvoreRede({
           titulo={c.nome}
           subtitulo={[c.cnpj, c.gerente ? `Gerente: ${c.gerente}` : null].filter(Boolean).join(' · ') || undefined}
           agentes={agentesDaCorretora(c)}
-          filhos={c.unidades.length}
+          filhos={c.unidades.filter(u => !u.id.startsWith('__direto:')).length}
           acoes={acoes?.corretora?.(c)}
           abertoInicial={i === 0}
         >

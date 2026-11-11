@@ -17,12 +17,10 @@ import { Chips } from '../lead/campos'
 import { Campo } from '../lead/formulario-lead'
 
 /**
- * A API só deixa gestores (master, gerente, supervisor) alterarem cadastro de
- * agente (`PATCH /rede/agentes/:id`). Vendedor e balcão veem os próprios dados
- * em modo leitura, com o aviso de a quem pedir a mudança. Troque para `true`
- * quando a rota aceitar a edição do próprio perfil.
+ * A API aceita que cada agente edite o PRÓPRIO cadastro (só dados pessoais e repasse;
+ * papel, vínculo e meta continuam com a gestão). Troque para `false` para voltar ao modo leitura.
  */
-const AGENTE_EDITA_PROPRIO_PERFIL = false
+const AGENTE_EDITA_PROPRIO_PERFIL = true
 
 interface Form {
   nome: string

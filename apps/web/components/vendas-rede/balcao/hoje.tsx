@@ -69,7 +69,7 @@ export function HojePagina() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-2xl font-bold text-foreground">Hoje</h1>
-        <p className="m-0 text-base capitalize text-muted-foreground">{dataPorExtenso()}</p>
+        <p className="m-0 text-base first-letter:uppercase text-muted-foreground">{dataPorExtenso()}</p>
       </div>
 
       <KpiGrid itens={itens} colunas={2} className="sm:grid-cols-2 xl:grid-cols-2" />

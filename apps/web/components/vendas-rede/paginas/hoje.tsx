@@ -132,11 +132,11 @@ export function HojePage() {
             {d ? (
               d.meta.metaMensal ? (
                 <>
-                  Meta do mês: {formatarMoeda(d.meta.realizado, { inteiro: true })} de {formatarMoeda(d.meta.metaMensal, { inteiro: true })}
+                  Meta do mês: {d.meta.realizado.toLocaleString('pt-BR')} de {d.meta.metaMensal.toLocaleString('pt-BR')} {d.meta.metaMensal === 1 ? 'fechamento' : 'fechamentos'}
                   <span className="sr-only"> ({formatarPercentual((d.meta.realizado / d.meta.metaMensal) * 100)})</span>
                 </>
               ) : (
-                `Vendido no mês: ${formatarMoeda(d.meta.realizado, { inteiro: true })}`
+                `Fechamentos no mês: ${d.meta.realizado.toLocaleString('pt-BR')}`
               )
             ) : (
               'Meta do mês'

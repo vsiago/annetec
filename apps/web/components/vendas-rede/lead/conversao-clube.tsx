@@ -43,6 +43,10 @@ export function ConversaoClube({
   const [assinando, setAssinando] = useState(false)
   const [resultado, setResultado] = useState<CheckoutResult | null>(null)
   const [pendencias, setPendencias] = useState<string[]>([])
+  // O vendedor completou o cadastro: os avisos da tentativa anterior ficam velhos.
+  useEffect(() => {
+    setPendencias([])
+  }, [lead.documento, lead.vidasEstimadas, lead.email, lead.telefone])
 
   useEffect(() => {
     if (!planoId && planos && planos.length === 1) setPlanoId(planos[0]!.id)
