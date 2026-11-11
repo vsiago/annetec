@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
 import { LockKeyhole } from 'lucide-react'
 import type { PapelComercial, VendasEu } from '@annetec/contracts'
 import { LoadError, TableSkeleton, useConsoleData } from '@/components/admin-platform/billing/console-kit'
@@ -16,9 +17,26 @@ import type { EscopoRede } from './tipos'
  * dentro do layout do console.
  */
 
-/** Rota da tela "Hoje" no escopo (destino do "Voltar para o início"). */
-export function caminhoBase(escopo: EscopoRede): string {
+/**
+ * Rota de "início" no escopo. Dentro do console (`/admin/comercial/*`) e do
+ * painel do clube (`/<slug>/admin/comercial/*`) leva ao funil do console;
+ * fora deles, à tela "Hoje" da Rede Comercial.
+ */
+export function caminhoBase(escopo: EscopoRede, pathname?: string | null): string {
+  const caminho = pathname ?? ''
+  if (caminho.startsWith('/admin/comercial')) return '/admin/comercial/funil'
+  if (escopo.kind === 'tenant' && caminho.includes('/admin/comercial')) return `/${escopo.slug}/admin/comercial/funil`
   return escopo.kind === 'platform' ? '/vendas' : `/${escopo.slug}/vendas`
+}
+
+export function useCaminhoBase(escopo: EscopoRede): string {
+  return caminhoBase(escopo, usePathname())
+}
+
+/** Rota de uma tela irmã (ex.: `comissoes`) no mesmo escopo/casca. */
+export function useCaminhoTela(escopo: EscopoRede, tela: string): string {
+  const base = useCaminhoBase(escopo)
+  return base.endsWith('/funil') ? `${base.slice(0, -'/funil'.length)}/${tela}` : `${base}/${tela}`
 }
 
 export type TelaGestao = 'equipe' | 'rede' | 'resultados' | 'comissoes' | 'regras'
@@ -71,13 +89,14 @@ export function PortaoDePapel({
 }
 
 export function SemAcesso({ escopo, mensagem }: { escopo: EscopoRede; mensagem: string }) {
+  const base = useCaminhoBase(escopo)
   return (
     <EstadoVazio
       ilustracao="busca"
       moldura
       titulo="Esta tela não está disponível para o seu papel"
       descricao={mensagem}
-      acao={<AcaoPrincipal href={caminhoBase(escopo)}>Voltar para o início</AcaoPrincipal>}
+      acao={<AcaoPrincipal href={base}>Voltar para o início</AcaoPrincipal>}
     />
   )
 }

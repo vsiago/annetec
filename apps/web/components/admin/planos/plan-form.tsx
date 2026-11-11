@@ -550,6 +550,16 @@ export function PlanForm({
               onCheckedChange={checked => update('enrollmentFeeWaived', checked)}
               disabled={!form.enrollmentFee.trim() && !form.enrollmentFeeWaived}
             />
+            <FormRow>
+              <FormField
+                label="Desconto médio no balcão (%)"
+                htmlFor="plano-balcaoDescontoPercentual"
+                error={errors.balcaoDescontoPercentual}
+                hint="Usado no simulador do balcão para mostrar a economia da consulta."
+              >
+                <AffixInput {...bind('balcaoDescontoPercentual')} prefix="%" inputMode="numeric" placeholder="Padrão da rede" />
+              </FormField>
+            </FormRow>
             <div className="grid gap-4 sm:grid-cols-3">
               <FormField
                 label="Máximo de dependentes"

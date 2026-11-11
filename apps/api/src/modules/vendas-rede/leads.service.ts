@@ -869,10 +869,13 @@ export interface Carteira {
   totais: Record<SituacaoCarteira, number>
 }
 
+const diaDeSaoPaulo = (d: Date): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d)
+
 function diasAte(data: string | null, agora: Date): number | null {
   if (!data) return null
-  const alvo = new Date(`${data}T12:00:00-03:00`).getTime()
-  return Math.round((alvo - agora.getTime()) / 86_400_000)
+  // Diferença em dias de calendário de Brasília (determinística, independe da hora do dia).
+  const hoje = diaDeSaoPaulo(agora)
+  return Math.round((Date.parse(`${data}T00:00:00Z`) - Date.parse(`${hoje}T00:00:00Z`)) / 86_400_000)
 }
 
 function situacaoDaAssinatura(status: string): SituacaoCarteira {

@@ -14,7 +14,7 @@ import { GraficoOrigens } from '../ui/grafico-origens'
 import { KpiGrid } from '../ui/kpi-grid'
 import { formatarMoeda, formatarPercentual } from '../ui/mascaras'
 import { RankingTabela } from '../ui/ranking-tabela'
-import { CabecalhoTela, PERIODOS, PortaoDePapel, Segmentado, caminhoBase } from './comum'
+import { CabecalhoTela, PERIODOS, PortaoDePapel, Segmentado, useCaminhoTela } from './comum'
 import type { EscopoRede } from './tipos'
 
 /**
@@ -59,6 +59,7 @@ export function ResultadosPage({ escopo }: { escopo: EscopoRede }) {
 
 export function ResultadosConteudo({ escopo, eu }: { escopo: EscopoRede; eu: VendasEu }) {
   const chave = escopo.kind === 'platform' ? 'platform' : escopo.slug
+  const caminhoComissoes = useCaminhoTela(escopo, 'comissoes')
   const opcoesAgrupar = useMemo(() => agrupamentosDoPapel(eu.papel), [eu.papel])
   const [periodo, setPeriodo] = useState<'30d' | 'mes' | 'trimestre'>('30d')
   const [agrupar, setAgrupar] = useState<Agrupamento>('agente')
@@ -126,7 +127,7 @@ export function ResultadosConteudo({ escopo, eu }: { escopo: EscopoRede; eu: Ven
                 <LinhaValor rotulo="Comissão paga" valor={formatarMoeda(d.kpis.comissaoPaga)} />
               </dl>
               <Link
-                href={`${caminhoBase(escopo)}/comissoes`}
+                href={caminhoComissoes}
                 className="mt-4 inline-flex min-h-10 items-center gap-1.5 rounded-lg text-sm font-semibold text-secondary hover:underline focus-visible:ring-2 focus-visible:ring-secondary/40"
               >
                 Ver extrato de comissões

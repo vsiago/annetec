@@ -31,6 +31,9 @@ export function CheckoutApp({
   const subscriptionId = params.get('assinatura')
   const chave = params.get('chave')
   const planParam = params.get('plano')
+  // Rede Comercial: indicação do agente e lead de origem (o servidor ignora o que for inválido).
+  const refParam = params.get('ref')?.trim().slice(0, 40) || null
+  const leadParam = params.get('lead')?.trim().slice(0, 50) || null
 
   const prefetched = initialContext && initialContext.slug === slug ? initialContext.context : null
   const [fetched, setFetched] = useState<CheckoutContext | null>(null)
@@ -96,6 +99,8 @@ export function CheckoutApp({
       tenant={tenant}
       context={context}
       planParam={planParam}
+      refParam={refParam}
+      leadParam={leadParam}
       onSubmitted={(result, extra) => {
         const { accessKey, signedIn, accountCreated, session: _none, ...status } = result
         setHandoff({ status, signedIn, accountCreated, ...extra })

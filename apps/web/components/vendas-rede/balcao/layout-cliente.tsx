@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import type { VendasEu } from '@annetec/contracts'
+import { NotificationBell } from '@/components/notifications/notification-bell'
+import { NotificationsProvider } from '@/components/notifications/notifications-provider'
 import { useAuth } from '@/contexts/auth-context'
 import { useTenant } from '@/contexts/tenant-context'
 import { balcaoEuAction, balcaoHojeAction } from '@/lib/actions/vendas-balcao-api'
@@ -72,8 +74,10 @@ export function BalcaoLayoutCliente({ children }: { children: ReactNode }) {
   const unidade = unidadeNome ?? clube
   const nome = eu.agente?.nome ?? user?.name ?? 'Balcão'
   return (
+    <NotificationsProvider scope={{ kind: 'seller', slug }}>
     <BalcaoContexto.Provider value={{ slug, eu, unidade, recarregarEu: carregar }}>
       <BalcaoShell
+        slotSino={<NotificationBell variant="topbar" />}
         unidade={unidade}
         itens={itens}
         usuario={{ nome, online: true }}
@@ -86,5 +90,6 @@ export function BalcaoLayoutCliente({ children }: { children: ReactNode }) {
         {children}
       </BalcaoShell>
     </BalcaoContexto.Provider>
+    </NotificationsProvider>
   )
 }

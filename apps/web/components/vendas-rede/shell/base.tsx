@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { initialsOf } from '@/components/admin-platform/ui/entity-avatar'
 import { cn } from '@/lib/utils'
+export { Conteudo, Embutido } from './conteudo'
 import { PresencaDot } from '../ui/presenca-dot'
 import { variaveisDeCor } from '../ui/tokens'
 import type { IconeMenu } from './itens'
@@ -117,14 +118,6 @@ export function Selo({ valor }: { valor?: number }) {
  * Conteúdo da página dentro da casca: respiro lateral, largura máxima e
  * centralização. `largo` solta a largura máxima (Funil/Resultados em telas grandes).
  */
-export function Conteudo({ children, largo, className }: { children: ReactNode; largo?: boolean; className?: string }) {
-  return (
-    <div className={cn('mx-auto flex w-full min-w-0 flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-8', largo ? 'max-w-[1400px]' : 'max-w-6xl', className)}>
-      {children}
-    </div>
-  )
-}
-
 /** Link "Pular para o conteúdo" (primeiro foco da página). */
 export function PularParaConteudo({ alvo }: { alvo: string }) {
   return (

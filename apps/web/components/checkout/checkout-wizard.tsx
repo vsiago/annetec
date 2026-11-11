@@ -9,6 +9,7 @@ import { googleClientIdConfigured } from '@/components/auth/google-sign-in-butto
 import { useAuth } from '@/contexts/auth-context'
 import { googleLoginConfigAction } from '@/lib/actions/auth-api'
 import { submitCheckoutAction } from '@/lib/actions/checkout-api'
+import { nomeDoVendedorPorRefAction } from '@/lib/actions/vendas-publico-api'
 import {
   CHECKOUT_STEPS,
   cardNameFromHolder,
@@ -95,6 +96,10 @@ interface CheckoutWizardProps {
   tenant: Tenant
   context: CheckoutContext
   planParam: string | null
+  /** `?ref=` da URL (código de indicação do agente). */
+  refParam?: string | null
+  /** `?lead=` da URL (lead que originou o link). */
+  leadParam?: string | null
   onSubmitted: (result: CheckoutSubmitResult, extra: { holderName: string; holderEmail: string; holderCpf: string }) => void
 }
 
@@ -105,7 +110,19 @@ interface CheckoutWizardProps {
  * a escolha do plano vem antes. Tudo no mesmo componente: trocar de passo não
  * recarrega nada. O resultado (QR Pix, boleto, cartão) é a tela seguinte.
  */
-export function CheckoutWizard({ slug, tenant, context, planParam, onSubmitted }: CheckoutWizardProps) {
+export function CheckoutWizard({ slug, tenant, context, planParam, refParam = null, leadParam = null, onSubmitted }: CheckoutWizardProps) {
+  // "Atendido por {nome}": código inválido ou sem resposta é ignorado em silêncio.
+  const [atendidoPor, setAtendidoPor] = useState<string | null>(null)
+  useEffect(() => {
+    if (!refParam) return
+    let vivo = true
+    void nomeDoVendedorPorRefAction(refParam).then(r => {
+      if (vivo && r.success && r.data.nomeVendedor) setAtendidoPor(r.data.nomeVendedor)
+    })
+    return () => {
+      vivo = false
+    }
+  }, [refParam])
   const plans = useMemo(() => checkoutPlans(context.plans), [context.plans])
   const cards = useMemo(() => testCardsFor(context), [context])
   const isDemo = isDemoMode(context)
@@ -387,7 +404,11 @@ export function CheckoutWizard({ slug, tenant, context, planParam, onSubmitted }
     setSubmitError(null)
     let result: Awaited<ReturnType<typeof submitCheckoutAction>>
     try {
-      result = await submitCheckoutAction(slug, parsed.data)
+      result = await submitCheckoutAction(slug, {
+        ...parsed.data,
+        ...(refParam ? { ref: refParam } : {}),
+        ...(leadParam ? { lead: leadParam } : {}),
+      })
     } catch {
       // A chamada nem chegou ao servidor (sem internet, deploy no meio): nada foi criado.
       submittingRef.current = false
@@ -652,6 +673,7 @@ export function CheckoutWizard({ slug, tenant, context, planParam, onSubmitted }
             quote={quote}
             method={method}
             showMethod={step.id === 'pagamento'}
+            atendidoPor={atendidoPor}
             onChangePlan={step.id !== 'plano' ? onChangePlan : undefined}
           />
         </div>
@@ -737,6 +759,7 @@ export function CheckoutWizard({ slug, tenant, context, planParam, onSubmitted }
               quote={quote}
               method={method}
               showMethod={step.id === 'pagamento'}
+              atendidoPor={atendidoPor}
               onChangePlan={step.id !== 'plano' ? onChangePlan : undefined}
             />
           </div>

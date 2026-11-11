@@ -16,7 +16,6 @@ import {
   Building2,
   Users,
   UsersRound,
-  UserCog,
   Receipt,
   Handshake,
   Tags,
@@ -36,6 +35,8 @@ import {
   HandCoins,
   KanbanSquare,
   Percent,
+  Network,
+  BadgePercent,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -103,11 +104,12 @@ const navGroups: NavGroup[] = [
     // para a equipe toda; as ações de escrita são só do superadmin.
     label: 'Comercial',
     items: [
-      { href: '/admin/comercial/vendedores', label: 'Vendedores', icon: BriefcaseBusiness },
-      { href: '/admin/comercial/funil', label: 'Funil geral', icon: KanbanSquare },
+      { href: '/admin/comercial/funil', label: 'Funil', icon: KanbanSquare },
+      { href: '/admin/comercial/rede', label: 'Rede', icon: Network },
       { href: '/admin/comercial/comissoes', label: 'Comissões', icon: HandCoins },
-      { href: '/admin/comercial/regras', label: 'Regras de comissão', icon: Percent },
-      { href: '/admin/comercial/relatorio', label: 'Relatório', icon: ChartColumn },
+      { href: '/admin/comercial/descontos', label: 'Descontos', icon: BadgePercent },
+      { href: '/admin/comercial/resultados', label: 'Resultados', icon: ChartColumn },
+      { href: '/admin/comercial/regras', label: 'Regras', icon: Percent },
     ],
   },
   {
@@ -122,14 +124,14 @@ const navGroups: NavGroup[] = [
  */
 const mainLinks: NavItem[] = navGroups.flatMap(group =>
   group.label === 'Comercial'
-    ? [{ href: '/admin/comercial/vendedores', label: 'Comercial', icon: BriefcaseBusiness, alsoActive: ['/admin/comercial'] }]
+    ? [{ href: '/admin/comercial/funil', label: 'Comercial', icon: BriefcaseBusiness, alsoActive: ['/admin/comercial'] }]
     : group.items,
 )
 
 /**
  * Grupo "Avançado": só superadmin, fechado por padrão. Além do que é de
  * suporte (histórico, acessos, e-mails), guarda as telas da Digital Saúde que
- * o painel do clube não cobre: contratos, catálogo, vendedores com comissões
+ * o painel do clube não cobre: contratos, catálogo
  * e os benefícios do clube de vantagens. As rotas e os dados não mudam.
  */
 const advancedLinks: NavItem[] = [
@@ -138,7 +140,6 @@ const advancedLinks: NavItem[] = [
   { href: '/admin/emails', label: 'E-mails enviados', icon: Inbox },
   { href: '/admin/clientes', label: 'Contratos na Digital Saúde', icon: UsersRound },
   { href: '/admin/catalogo', label: 'Catálogo da Digital Saúde', icon: Layers },
-  { href: '/admin/vendedores', label: 'Vendedores e comissões', icon: UserCog, alsoActive: ['/admin/comissoes'] },
   { href: '/admin/parceiros', label: 'Parceiros e benefícios', icon: Handshake },
 ]
 

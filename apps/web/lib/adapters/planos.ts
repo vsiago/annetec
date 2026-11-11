@@ -115,6 +115,7 @@ export function normalizeClubPlan(dto: ClubPlan): ClubPlan {
     includedDependents: intOrNull(dto.includedDependents),
     enrollmentFee: numOrNull(dto.enrollmentFee),
     enrollmentFeeWaived: dto.enrollmentFeeWaived === true,
+    balcaoDescontoPercentual: intOrNull(dto.balcaoDescontoPercentual),
     holderMinAge: intOrNull(dto.holderMinAge),
     holderMaxAge: intOrNull(dto.holderMaxAge),
     dependentRules: Array.isArray(dto.dependentRules)
@@ -507,6 +508,8 @@ export interface PlanFormState {
   maxDependents: string
   enrollmentFee: string
   enrollmentFeeWaived: boolean
+  /** Rede Comercial: desconto médio (%) do balcão; `''` = padrão da rede. */
+  balcaoDescontoPercentual: string
   // Elegibilidade
   holderMinAge: string
   holderMaxAge: string
@@ -593,6 +596,7 @@ export function emptyPlanForm(): PlanFormState {
     maxDependents: '',
     enrollmentFee: '',
     enrollmentFeeWaived: false,
+    balcaoDescontoPercentual: '',
     holderMinAge: '',
     holderMaxAge: '',
     restrictRelationships: false,
@@ -630,6 +634,7 @@ export function planToFormState(plan: ClubPlan): PlanFormState {
     maxDependents: intText(plan.maxDependents),
     enrollmentFee: decimalText(plan.enrollmentFee),
     enrollmentFeeWaived: plan.enrollmentFeeWaived === true,
+    balcaoDescontoPercentual: intText(plan.balcaoDescontoPercentual),
     holderMinAge: intText(plan.holderMinAge),
     holderMaxAge: intText(plan.holderMaxAge),
     restrictRelationships: hasRules,
@@ -725,6 +730,7 @@ export function lenientPlanFromForm(state: PlanFormState): CreateClubPlanInput {
     includedDependents: pricing.includedDependents,
     enrollmentFee: pricing.enrollmentFee,
     enrollmentFeeWaived: pricing.enrollmentFeeWaived,
+    balcaoDescontoPercentual: int(state.balcaoDescontoPercentual),
     holderMinAge: int(state.holderMinAge),
     holderMaxAge: int(state.holderMaxAge),
     dependentRules: rules.length > 0 ? rules : null,
@@ -853,6 +859,12 @@ export function planFormToInput(state: PlanFormState, context: PlanFormContext =
   set('includedDependents', included.error)
   const fee = parseMoneyField(state.enrollmentFee)
   set('enrollmentFee', fee.error)
+  const balcao = parseIntField(state.balcaoDescontoPercentual, {
+    min: 0,
+    max: 100,
+    rangeMessage: 'Use um percentual de 0 a 100',
+  })
+  set('balcaoDescontoPercentual', balcao.error)
 
   // Elegibilidade
   const minAge = parseIntField(state.holderMinAge, {
@@ -976,6 +988,7 @@ export function planFormToInput(state: PlanFormState, context: PlanFormContext =
     includedDependents: included.value,
     enrollmentFee: fee.value,
     enrollmentFeeWaived: state.enrollmentFeeWaived,
+    balcaoDescontoPercentual: balcao.value,
     holderMinAge: minAge.value,
     holderMaxAge: maxAge.value,
     dependentRules,
@@ -1071,6 +1084,7 @@ const SECTION_BY_FIELD: Record<string, PlanFormSection> = {
   maxDependents: 'preco',
   enrollmentFee: 'preco',
   enrollmentFeeWaived: 'preco',
+  balcaoDescontoPercentual: 'preco',
   holderMinAge: 'elegibilidade',
   holderMaxAge: 'elegibilidade',
   dependentRules: 'elegibilidade',

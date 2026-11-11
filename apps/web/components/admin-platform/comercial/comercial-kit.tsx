@@ -9,17 +9,18 @@ import { cn } from '@/lib/utils'
 
 /**
  * Peças comuns do grupo Comercial do console (/admin/comercial/*): as abas
- * entre as cinco telas (no celular o menu tem um item só, "Comercial") e a
+ * entre as seis telas (no celular o menu tem um item só, "Comercial") e a
  * lista de vendedores para os filtros. Os descontos pedidos pelos vendedores
  * ficam em Aprovações › Descontos de vendedores (`/admin/compliance?tipo=descontos`).
  */
 
 export const COMERCIAL_TABS = [
-  { href: '/admin/comercial/vendedores', label: 'Vendedores' },
-  { href: '/admin/comercial/funil', label: 'Funil geral' },
+  { href: '/admin/comercial/funil', label: 'Funil' },
+  { href: '/admin/comercial/rede', label: 'Rede' },
   { href: '/admin/comercial/comissoes', label: 'Comissões' },
-  { href: '/admin/comercial/regras', label: 'Regras de comissão' },
-  { href: '/admin/comercial/relatorio', label: 'Relatório' },
+  { href: '/admin/comercial/descontos', label: 'Descontos' },
+  { href: '/admin/comercial/resultados', label: 'Resultados' },
+  { href: '/admin/comercial/regras', label: 'Regras' },
 ] as const
 
 /** Abas sublinhadas (links) entre as telas do Comercial, no mesmo desenho das `SectionTabs`. */

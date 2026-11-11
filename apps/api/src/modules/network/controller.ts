@@ -388,6 +388,7 @@ export function clubPlanColumns(input: UpdateClubPlanInput): Partial<typeof club
   if (input.includedDependents !== undefined) columns.includedDependents = input.includedDependents
   if (input.enrollmentFee !== undefined) columns.enrollmentFee = numericOrNull(input.enrollmentFee)
   if (input.enrollmentFeeWaived !== undefined) columns.enrollmentFeeWaived = input.enrollmentFeeWaived
+  if (input.balcaoDescontoPercentual !== undefined) columns.balcaoDescontoPercentual = input.balcaoDescontoPercentual
   if (input.holderMinAge !== undefined) columns.holderMinAge = input.holderMinAge
   if (input.holderMaxAge !== undefined) columns.holderMaxAge = input.holderMaxAge
   if (input.dependentRules !== undefined) columns.dependentRules = listOrNull(input.dependentRules)
@@ -453,6 +454,7 @@ export function toClubPlan(row: typeof clubPlans.$inferSelect): ClubPlan {
     includedDependents: row.includedDependents,
     enrollmentFee: row.enrollmentFee === null ? null : Number(row.enrollmentFee),
     enrollmentFeeWaived: row.enrollmentFeeWaived,
+    balcaoDescontoPercentual: row.balcaoDescontoPercentual,
     holderMinAge: row.holderMinAge,
     holderMaxAge: row.holderMaxAge,
     dependentRules: row.dependentRules ?? null,

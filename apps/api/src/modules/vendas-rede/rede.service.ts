@@ -867,7 +867,7 @@ export async function listarAgentes(
     )
     .orderBy(asc(vendasAgentes.nome))
   const apresentados = rows
-    .filter(row => combina(query.q, row.agente.nome, row.email, row.agente.cpf, row.agente.telefone, row.agente.codigoIndicacao))
+    .filter(row => combina(query.q ?? query.busca, row.agente.nome, row.email, row.agente.cpf, row.agente.telefone, row.agente.codigoIndicacao))
     .map(row => toVendasAgente(row.agente, { email: row.email ?? null, agora, presencaMinutos }))
     .filter(agente => query.online === undefined || agente.online === query.online)
   const { items, total } = paginar(apresentados, query.page, query.perPage)
@@ -913,6 +913,11 @@ export async function atualizarAgente(
 
   if (!podeGerenciar(ctx, alvo) && !(proprio && !mudaPapel && !mudaVinculo)) {
     throw semPermissao('Você não pode alterar este agente.')
+  }
+  // Edição do próprio cadastro (qualquer papel): só dados pessoais e repasse.
+  // Meta é da gestão; papel/vínculo diferentes já foram barrados acima (403).
+  if (!podeGerenciar(ctx, alvo) && input.metaMensal !== undefined && input.metaMensal !== (alvo.metaMensal ?? null)) {
+    throw semPermissao('A meta é definida pela gestão da rede.')
   }
 
   let vinculo: VinculoResolvido | null = null

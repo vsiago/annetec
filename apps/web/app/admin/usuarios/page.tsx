@@ -73,7 +73,7 @@ export default function PlatformUsuariosPage() {
           <>
             Quem da ANNETEC tem acesso ao console. Os vendedores aparecem aqui para cuidar da conta (nome, telefone, acesso); código de
             indicação e meta ficam em{' '}
-            <Link href="/admin/comercial/vendedores" className="font-medium text-secondary underline-offset-2 hover:underline">
+            <Link href="/admin/comercial/rede" className="font-medium text-secondary underline-offset-2 hover:underline">
               Comercial › Vendedores
             </Link>
             .

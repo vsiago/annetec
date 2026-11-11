@@ -241,7 +241,7 @@ export function TeamMemberWizard({
       {editing ? null : (
         <Notice tone="info" icon={BriefcaseBusiness}>
           Vai cadastrar um vendedor ANNETEC? Use{' '}
-          <Link href="/admin/comercial/vendedores" className="font-semibold underline underline-offset-2">
+          <Link href="/admin/comercial/rede" className="font-semibold underline underline-offset-2">
             Comercial › Vendedores
           </Link>
           : ele cria a conta já com o código de indicação e a meta.

@@ -404,6 +404,8 @@ export type UpdateAgenteInput = z.infer<typeof updateAgenteInput>
 const booleanQuery = z.enum(['true', 'false']).transform(v => v === 'true')
 
 export const listAgentesQuery = paginationQuery.extend({
+  /** Alias de `q` (o front envia os dois). */
+  busca: z.string().trim().min(1).optional(),
   papel: papelComercial.optional(),
   corretoraId: uuid.optional(),
   unidadeId: uuid.optional(),

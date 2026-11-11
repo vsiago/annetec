@@ -51,9 +51,15 @@ export function VendasRedeProvider({
   escopo,
   children,
   aoSair,
+  notificacoes = true,
+  presenca = true,
 }: {
   escopo: EscopoVendas
   children: ReactNode
+  /** Monta o `NotificationsProvider` do público `sales` (padrão: sim). O console já tem o seu. */
+  notificacoes?: boolean
+  /** Envia o heartbeat de presença da equipe (padrão: sim). O console não deve marcar presença. */
+  presenca?: boolean
   /** Encerra a sessão: botão "Sair" da tela de acesso não liberado, do menu da conta e de Ajustes. */
   aoSair?: () => void
 }) {
@@ -108,7 +114,7 @@ export function VendasRedeProvider({
   // Heartbeat de presença: na entrada, a cada 60 s e ao voltar para a aba.
   const logado = Boolean(eu)
   useEffect(() => {
-    if (!logado) return
+    if (!logado || !presenca) return
     const bater = () => {
       if (document.visibilityState === 'visible') void enviarPresencaAction(escopoEstavel)
     }
@@ -119,7 +125,7 @@ export function VendasRedeProvider({
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', bater)
     }
-  }, [logado, escopoEstavel])
+  }, [logado, presenca, escopoEstavel])
 
   if (!eu) {
     if (erro) {
@@ -162,9 +168,13 @@ export function VendasRedeProvider({
   return (
     <Contexto.Provider value={{ escopo: escopoEstavel, eu, recarregar }}>
       <ContextoSair.Provider value={aoSair ?? null}>
-        <NotificacoesDoAgente escopo={escopoEstavel} recarregar={recarregar}>
-          {children}
-        </NotificacoesDoAgente>
+        {notificacoes ? (
+          <NotificacoesDoAgente escopo={escopoEstavel} recarregar={recarregar}>
+            {children}
+          </NotificacoesDoAgente>
+        ) : (
+          children
+        )}
       </ContextoSair.Provider>
     </Contexto.Provider>
   )

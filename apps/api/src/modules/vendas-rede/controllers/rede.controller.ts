@@ -220,7 +220,9 @@ export const redeController = new Hono<AppEnv>()
 
   .get('/rede/agentes/:id', param(vendasIdParam), async c => ok(c, await obterAgente(vendasOf(c), c.req.valid('param').id)))
 
-  .patch('/rede/agentes/:id', requirePapel(...GESTORES), requireEscrita, param(vendasIdParam), json(updateAgenteInput), async c => {
+  // Qualquer agente edita o próprio cadastro (nome, contato, repasse...); papel, vínculo e meta só a gestão
+  // (o serviço responde 403 VENDAS_SEM_PERMISSAO_NA_REDE para campos proibidos ou outro agente).
+  .patch('/rede/agentes/:id', requireEscrita, param(vendasIdParam), json(updateAgenteInput), async c => {
     const { id } = c.req.valid('param')
     const body = c.req.valid('json')
     const { antes, depois } = await atualizarAgente(vendasOf(c), id, body)

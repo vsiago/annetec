@@ -199,7 +199,7 @@ export default function AdminDashboard() {
       label: 'Leads novos sem contato',
       icon: UserSearch,
       tone: 'bg-emerald-50 text-emerald-600',
-      href: `${base}/leads`,
+      href: `${base}/comercial/funil`,
     },
   ].filter(alert => alert.count > 0)
 
@@ -455,7 +455,7 @@ export default function AdminDashboard() {
           <CardHeader>
             <CardTitle className="text-lg">Últimas vendas</CardTitle>
             <CardAction className="self-center">
-              <Link href={`${base}/vendas`} className="text-sm font-medium text-primary hover:underline">
+              <Link href={`${base}/comercial/funil`} className="text-sm font-medium text-primary hover:underline">
                 Ver todas
               </Link>
             </CardAction>

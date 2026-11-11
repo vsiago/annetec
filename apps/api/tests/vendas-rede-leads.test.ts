@@ -462,7 +462,7 @@ describe('mensagem pronta e carteira', () => {
   })
 
   it('carteira do clube: ganho + assinatura ativa com vencimento em frase; só os leads visíveis', async () => {
-    const vence = new Date(Date.now() + 12 * 86_400_000).toISOString().slice(0, 10)
+    const vence = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() + 12 * 86_400_000))
     semearLead(mem(), schema, { id: L.clubeA, scope: 'tenant', tenantId: CLUBE_A.id, nome: 'Associada Ativa', tipo: 'pessoa', agenteId: ID.vendedorA, etapa: 'ganho', ganhoEm: new Date() } as never)
     semearLead(mem(), schema, { id: L.clubeB, scope: 'tenant', tenantId: CLUBE_A.id, nome: 'Associada Atrasada', tipo: 'pessoa', agenteId: ID.vendedorA, etapa: 'ganho', ganhoEm: new Date() } as never)
     semearLead(mem(), schema, { id: L.v3, scope: 'tenant', tenantId: CLUBE_A.id, nome: 'De Outro Vendedor', tipo: 'pessoa', agenteId: ID.balcaoA, etapa: 'ganho', ganhoEm: new Date() } as never)

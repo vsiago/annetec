@@ -74,7 +74,7 @@ export async function balcaoAtendimentosAction(
 ): Promise<ActionResult<Paged<VendasAtendimentoBalcao>>> {
   return run(async () => {
     const r = await apiFetch<VendasAtendimentoBalcao[]>(raiz(slug, '/balcao/atendimentos'), {
-      query: { dia: query.dia, resultado: query.resultado, page: query.page, perPage: query.perPage },
+      query: { dia: query.dia, resultado: query.resultado, agente: query.agente, page: query.page, perPage: query.perPage },
     })
     return pagedOf(r.data, r.meta, query.page ?? 1, query.perPage ?? 20)
   })

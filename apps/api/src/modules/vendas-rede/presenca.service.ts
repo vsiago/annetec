@@ -29,11 +29,11 @@ export function whereAgentesVisiveis(ctx: VendasCtx): SQL {
 }
 
 /** Heartbeat: marca o agente como online agora. Master implícito não é agente: nada a gravar. */
-export async function registrarPresenca(ctx: VendasCtx): Promise<{ registrada: boolean; ultimaPresencaEm: string | null }> {
+export async function registrarPresenca(ctx: VendasCtx, agora: Date = new Date()): Promise<{ registrada: boolean; ultimaPresencaEm: string | null }> {
   if (!ctx.agente) return { registrada: false, ultimaPresencaEm: null }
   const [row] = await db
     .update(vendasAgentes)
-    .set({ ultimaPresencaEm: sql`now()` })
+    .set({ ultimaPresencaEm: agora })
     .where(and(eq(vendasAgentes.id, ctx.agente.id), whereEscopo(vendasAgentes, ctx)))
     .returning({ ultimaPresencaEm: vendasAgentes.ultimaPresencaEm })
   return { registrada: Boolean(row), ultimaPresencaEm: row?.ultimaPresencaEm ? row.ultimaPresencaEm.toISOString() : null }

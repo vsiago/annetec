@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { Building2, MousePointerClick, MoreHorizontal, Plus, Store, Trash2, UserPlus, UsersRound } from 'lucide-react'
+import { Building2, MousePointerClick, MoreHorizontal, Pencil, Plus, Store, Trash2, UserPlus, UsersRound } from 'lucide-react'
 import {
   TIPO_UNIDADE_LABELS,
   type PapelComercial,
@@ -37,6 +37,7 @@ import { AgenteDetalhe, AgenteDetalheSheet } from './agente-detalhe'
 import { AgenteWizard, type VinculoInicial } from './agente-wizard'
 import { CabecalhoTela, PortaoDePapel, papeisCriaveis } from './comum'
 import { CorretoraWizard } from './corretora-wizard'
+import { EditarCorretoraDialog, EditarEquipeDialog, EditarUnidadeDialog } from './editar-rede-dialogs'
 import { EquipeWizard } from './equipe-wizard'
 import type { EscopoRede } from './tipos'
 import { UnidadeWizard } from './unidade-wizard'
@@ -248,6 +249,7 @@ export function RedeConteudo({ escopo, eu }: { escopo: EscopoRede; eu: VendasEu 
         selecao={selecao}
         papel={papel}
         abrir={abrir}
+        aoEditar={() => void reload({ silent: true })}
         aoMudar={() => {
           setSelecao(null)
           void reload({ silent: true })
@@ -397,6 +399,7 @@ function PainelNo({
   selecao,
   papel,
   abrir,
+  aoEditar,
   aoMudar,
 }: {
   escopo: EscopoRede
@@ -404,10 +407,16 @@ function PainelNo({
   selecao: Exclude<Selecao, { tipo: 'agente' }>
   papel: PapelComercial
   abrir: (c: Cadastro) => void
+  aoEditar: () => void
   aoMudar: () => void
 }) {
   const [remover, setRemover] = useState(false)
+  const [editando, setEditando] = useState(false)
   const master = papel === 'master'
+  const salvou = () => {
+    setEditando(false)
+    aoEditar()
+  }
 
   const todasUnidades = [...arvore.corretoras.flatMap(c => c.unidades.map(u => ({ u, c }))), ...arvore.unidadesProprias.map(u => ({ u, c: null as VendasArvoreCorretora | null }))]
   const todasEquipes = [
@@ -431,6 +440,7 @@ function PainelNo({
   let corpo: ReactNode = null
   let acoes: ReactNode = null
   let confirmar: { titulo: string; texto: string; executar: () => Promise<boolean> } | null = null
+  let editor: ReactNode = null
   let alternar: { rotulo: string; executar: () => Promise<boolean> } | null = null
 
   if (selecao.tipo === 'corretora') {
@@ -468,6 +478,7 @@ function PainelNo({
       </>
     )
     if (master) {
+      editor = <EditarCorretoraDialog escopo={escopo} corretora={c} aoMudarAberto={a => !a && setEditando(false)} aoSalvar={salvou} />
       alternar = {
         rotulo: ativo ? 'Desativar corretora' : 'Reativar corretora',
         executar: async () => (await runCommand(updateCorretoraAction(escopo, c.id, { status: ativo ? 'inativa' : 'ativa' }), ativo ? `${c.nomeFantasia} foi desativada.` : `${c.nomeFantasia} foi reativada.`)) !== null,
@@ -511,6 +522,7 @@ function PainelNo({
         </Button>
       </>
     )
+    editor = <EditarUnidadeDialog escopo={escopo} unidade={u} aoMudarAberto={a => !a && setEditando(false)} aoSalvar={salvou} />
     alternar = {
       rotulo: ativo ? 'Desativar unidade' : 'Reativar unidade',
       executar: async () => (await runCommand(updateUnidadeAction(escopo, u.id, { status: ativo ? 'inativa' : 'ativa' }), ativo ? `${u.nome} foi desativada.` : `${u.nome} foi reativada.`)) !== null,
@@ -544,6 +556,7 @@ function PainelNo({
         Novo vendedor nesta equipe
       </Button>
     )
+    editor = <EditarEquipeDialog escopo={escopo} equipe={e} arvore={arvore} aoMudarAberto={a => !a && setEditando(false)} aoSalvar={salvou} />
     alternar = {
       rotulo: ativo ? 'Desativar equipe' : 'Reativar equipe',
       executar: async () => (await runCommand(updateEquipeAction(escopo, e.id, { status: ativo ? 'inativa' : 'ativa' }), ativo ? `${e.nome} foi desativada.` : `${e.nome} foi reativada.`)) !== null,
@@ -560,6 +573,7 @@ function PainelNo({
   }
 
   const gerencia = master || papel === 'gerente'
+  const podeEditar = editor !== null && (selecao.tipo === 'corretora' ? master : gerencia)
 
   return (
     <div className="flex flex-col gap-5">
@@ -572,6 +586,12 @@ function PainelNo({
       </div>
       {corpo}
       <div className="flex flex-col gap-2">
+        {podeEditar ? (
+          <Button type="button" variant="outline" className="gap-2" onClick={() => setEditando(true)}>
+            <Pencil aria-hidden="true" />
+            Editar
+          </Button>
+        ) : null}
         {acoes}
       </div>
       {gerencia && (alternar || confirmar) ? (
@@ -595,6 +615,7 @@ function PainelNo({
           ) : null}
         </div>
       ) : null}
+      {podeEditar && editando ? editor : null}
       {confirmar ? (
         <ConfirmDialog
           open={remover}

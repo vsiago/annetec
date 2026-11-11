@@ -622,7 +622,6 @@ describe('agentes: quem cria quem', () => {
       state.session = agentePlatform(user)
       for (const [method, path, body] of [
         ['POST', `${P}/rede/agentes`, cadastro({ papel: 'vendedor', equipeId: EQ1 })],
-        ['PATCH', `${P}/rede/agentes/${VEN1}`, { nome: 'Outro Nome' }],
         ['POST', `${P}/rede/agentes/${VEN1}/desativar`, undefined],
         ['POST', `${P}/rede/agentes/${VEN1}/reenviar-convite`, undefined],
       ] as const) {
@@ -632,6 +631,27 @@ describe('agentes: quem cria quem', () => {
       }
     }
     expect(fakes.platformCreate).not.toHaveBeenCalled()
+  })
+
+  it('vendedor e balcão editam o próprio cadastro (repasse Pix), mas não papel, vínculo, meta nem outros agentes', async () => {
+    for (const [user, id, outro] of [['u-ven1', VEN1, BAL1], ['u-bal1', BAL1, VEN1]] as const) {
+      state.session = agentePlatform(user)
+      const ok = await call('PATCH', `${P}/rede/agentes/${id}`, { nome: 'Nome Atualizado', telefone: '21988887777', repasse: { tipo: 'pix', chavePix: 'chave@pix.com' } })
+      expect(ok.status, ok.text).toBe(200)
+      expect(ok.body.data.nome).toBe('Nome Atualizado')
+      expect(agentes().find(a => a.id === id)?.repasse).toMatchObject({ tipo: 'pix', chavePix: 'chave@pix.com' })
+
+      for (const proibido of [{ papel: 'supervisor' }, { equipeId: EQ2 }, { corretoraId: CORR2 }, { unidadeId: UN2 }, { metaMensal: 999 }]) {
+        const r = await call('PATCH', `${P}/rede/agentes/${id}`, proibido)
+        expect(r.status, JSON.stringify(proibido)).toBe(403)
+        expect(r.body.error.code).toBe('VENDAS_SEM_PERMISSAO_NA_REDE')
+      }
+      // Outro agente: nunca (403 se visível, 404 se fora da visibilidade).
+      expect([403, 404]).toContain((await call('PATCH', `${P}/rede/agentes/${outro}`, { nome: 'Invasor Teste' })).status)
+    }
+    // Mesmo papel e vínculo atuais não contam como mudança.
+    state.session = agentePlatform('u-ven1')
+    expect((await call('PATCH', `${P}/rede/agentes/${VEN1}`, { papel: 'vendedor', equipeId: EQ1 })).status).toBe(200)
   })
 
   it('consistência de vínculo: equipe implica corretora/unidade; conflito = 422; balcão exige unidade; master sem vínculo', async () => {

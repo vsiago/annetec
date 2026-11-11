@@ -2,9 +2,10 @@
 
 import { motion } from "framer-motion"
 import { useState } from "react"
-import { Send, Mail, CheckCircle } from "lucide-react"
+import { Send, Mail, CheckCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { enviarLeadPlataformaAction } from "@/lib/actions/vendas-publico-api"
 
 const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "contato@annetec.org.br"
 
@@ -13,23 +14,33 @@ export function ContactSection() {
     name: "",
     email: "",
     phone: "",
+    company: "",
     message: "",
+    website: "",
   })
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Não há endpoint de lead da plataforma: abre o e-mail do visitante já preenchido.
-    const corpo = [
-      `Nome: ${formState.name}`,
-      `E-mail: ${formState.email}`,
-      formState.phone ? `Telefone: ${formState.phone}` : "",
-      "",
-      formState.message,
-    ].join("\n")
-    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
-      `Contato pelo site - ${formState.name}`,
-    )}&body=${encodeURIComponent(corpo)}`
+    if (sending) return
+    setSending(true)
+    setError(null)
+    const result = await enviarLeadPlataformaAction({
+      nome: formState.name,
+      email: formState.email,
+      telefone: formState.phone,
+      empresa: formState.company || undefined,
+      origemDetalhe: "site-contato",
+      mensagem: formState.message || undefined,
+      website: formState.website || undefined,
+    })
+    setSending(false)
+    if (!result.success) {
+      setError(result.error)
+      return
+    }
     setIsSubmitted(true)
   }
 
@@ -83,11 +94,28 @@ export function ContactSection() {
                   <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-4">
                     <CheckCircle size={32} className="text-green-600" />
                   </div>
-                  <h3 className="text-xl font-bold text-[#26365f] mb-2">Abrimos seu e-mail</h3>
-                  <p className="text-muted-foreground">Envie a mensagem pelo seu aplicativo de e-mail para falar com a equipe.</p>
+                  <h3 className="text-xl font-bold text-[#26365f] mb-2">Mensagem enviada!</h3>
+                  <p className="text-muted-foreground">Recebemos o seu contato. Em breve alguém da equipe ANNETEC fala com você.</p>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} className="relative space-y-6">
+                  {error && (
+                    <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {error}
+                    </p>
+                  )}
+                  {/* Honeypot: fora da tela e da ordem de tabulação; só robô preenche. */}
+                  <div aria-hidden="true" className="absolute -left-[10000px] top-auto h-px w-px overflow-hidden">
+                    <label htmlFor="contato-website">Não preencha este campo</label>
+                    <input
+                      id="contato-website"
+                      type="text"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={formState.website}
+                      onChange={(e) => setFormState({ ...formState, website: e.target.value })}
+                    />
+                  </div>
                   <div>
                     <label htmlFor="name" className="block text-sm font-medium text-[#26365f] mb-2">
                       Nome completo
@@ -120,7 +148,7 @@ export function ContactSection() {
 
                   <div>
                     <label htmlFor="phone" className="block text-sm font-medium text-[#26365f] mb-2">
-                      Telefone
+                      Telefone / WhatsApp
                     </label>
                     <Input
                       id="phone"
@@ -129,6 +157,23 @@ export function ContactSection() {
                       onChange={(e) => setFormState({ ...formState, phone: e.target.value })}
                       placeholder="(00) 00000-0000"
                       className="h-12"
+                      autoComplete="tel"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="company" className="block text-sm font-medium text-[#26365f] mb-2">
+                      Entidade ou empresa <span className="font-normal text-muted-foreground">(opcional)</span>
+                    </label>
+                    <Input
+                      id="company"
+                      type="text"
+                      value={formState.company}
+                      onChange={(e) => setFormState({ ...formState, company: e.target.value })}
+                      placeholder="Nome da entidade ou empresa"
+                      className="h-12"
+                      autoComplete="organization"
                     />
                   </div>
 
@@ -151,9 +196,10 @@ export function ContactSection() {
                     type="submit"
                     size="lg"
                     className="w-full bg-[#e84364] hover:bg-[#d12d4f] text-white h-14"
+                    disabled={sending}
                   >
-                    <Send size={18} className="mr-2" />
-                    Enviar por e-mail
+                    {sending ? <Loader2 size={18} className="mr-2 animate-spin" aria-hidden="true" /> : <Send size={18} className="mr-2" />}
+                    {sending ? "Enviando…" : "Enviar mensagem"}
                   </Button>
                 </form>
               )}

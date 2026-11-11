@@ -21,9 +21,6 @@ import { cn } from '@/lib/utils'
 const ROTAS_COM_ESCOPO = [
   '/admin/clientes',
   '/admin/catalogo',
-  '/admin/vendedores',
-  '/admin/leads',
-  '/admin/comissoes',
   '/admin/parceiros',
 ]
 

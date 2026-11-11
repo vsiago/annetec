@@ -292,3 +292,25 @@ describe('AppError.notFound — concordância de gênero', () => {
     expect(AppError.notFound(resource).message).toBe(message)
   })
 })
+
+describe('desconto do balcão no plano (Rede Comercial)', () => {
+  const base = () => createClubPlanInput.parse({ ...PLANOS_COMPLETOS[0], terms: undefined })
+
+  it('contrato aceita 0–100 inteiro ou null; recusa fora da faixa', () => {
+    expect(createClubPlanInput.parse({ ...base(), balcaoDescontoPercentual: 25 }).balcaoDescontoPercentual).toBe(25)
+    expect(createClubPlanInput.parse({ ...base(), balcaoDescontoPercentual: null }).balcaoDescontoPercentual).toBeNull()
+    expect(createClubPlanInput.safeParse({ ...base(), balcaoDescontoPercentual: 101 }).success).toBe(false)
+    expect(createClubPlanInput.safeParse({ ...base(), balcaoDescontoPercentual: -1 }).success).toBe(false)
+    expect(createClubPlanInput.safeParse({ ...base(), balcaoDescontoPercentual: 10.5 }).success).toBe(false)
+  })
+
+  it('API: clubPlanColumns grava a coluna e toClubPlan devolve o valor (null quando não definido)', async () => {
+    const { clubPlanColumns, toClubPlan } = await import('@/modules/network/controller')
+    expect(clubPlanColumns({ balcaoDescontoPercentual: 40 }).balcaoDescontoPercentual).toBe(40)
+    expect(clubPlanColumns({ balcaoDescontoPercentual: null }).balcaoDescontoPercentual).toBeNull()
+    expect('balcaoDescontoPercentual' in clubPlanColumns({ name: 'Plano X' })).toBe(false)
+    const row = { id: 'p', organizationId: 't', name: 'P', description: '', priceMonthly: '10', features: [], audience: null, highlight: false, upstreamPlanCodigo: null, status: 'active', balcaoDescontoPercentual: 15 } as never
+    expect(toClubPlan(row).balcaoDescontoPercentual).toBe(15)
+    expect(toClubPlan({ ...(row as object), balcaoDescontoPercentual: null } as never).balcaoDescontoPercentual).toBeNull()
+  }, 60_000)
+})

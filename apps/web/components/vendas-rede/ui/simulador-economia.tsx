@@ -53,12 +53,15 @@ export function SimuladorEconomia({
   valorInicial = 0,
   aoMudarValor,
   aoEscolher,
+  planoSelecionadoId,
   className,
 }: {
   planos: PlanoSimulavel[]
   valorInicial?: number
   aoMudarValor?: (valor: number) => void
   aoEscolher?: (plano: PlanoSimulavel, valorConsulta: number) => void
+  /** Plano já escolhido: o cartão ganha borda na cor de ação e o selo "Escolhido". */
+  planoSelecionadoId?: string | null
   className?: string
 }) {
   const campo = useId()
@@ -100,10 +103,21 @@ export function SimuladorEconomia({
         <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 md:grid-cols-2">
           {planos.map(plano => {
             const r = simularEconomia(valor, plano)
+            const escolhido = planoSelecionadoId === plano.id
             return (
-              <li key={plano.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-white p-4">
+              <li
+                key={plano.id}
+                aria-current={escolhido ? 'true' : undefined}
+                className={cn(
+                  'flex min-w-0 flex-col gap-3 rounded-2xl border bg-white p-4',
+                  escolhido ? 'border-2 border-[var(--vr-accent,#1E2A4A)]' : 'border-border',
+                )}
+              >
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="m-0 min-w-0 truncate text-base font-semibold text-foreground">{plano.nome}</h3>
+                  {escolhido ? (
+                    <span className="shrink-0 rounded-full bg-[var(--vr-accent,#1E2A4A)] px-2.5 py-0.5 text-xs font-semibold text-white">Escolhido</span>
+                  ) : null}
                   <span className="shrink-0 rounded-full bg-[#E3F6EA] px-2.5 py-0.5 text-xs font-semibold text-[#067647]">
                     −{plano.descontoPercentual} %
                   </span>

@@ -245,6 +245,11 @@ export const clubPlan = z.object({
   enrollmentFee: z.number().nonnegative().nullable().optional(),
   /** Isenção da adesão ativa (a tela mostra "de R$ X por R$ 0"). */
   enrollmentFeeWaived: z.boolean().optional(),
+  /**
+   * Rede Comercial: desconto (%) que o balcão pode dar neste plano (0–100).
+   * `null`/ausente = usa `vendas_config.balcaoDescontoPadrao`.
+   */
+  balcaoDescontoPercentual: z.number().int().min(0).max(100).nullable().optional(),
 
   // --- Elegibilidade --------------------------------------------------------
   /** Idade mínima do titular na adesão; `null` = 18 (regra geral do checkout). */

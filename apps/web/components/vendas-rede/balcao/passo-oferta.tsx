@@ -119,7 +119,7 @@ export function PassoOferta({
           <AcaoPrincipal tamanho="lg" variante="secundaria" onClick={recarregarPlanos}>Tentar de novo</AcaoPrincipal>
         </div>
       ) : (
-        <SimuladorEconomia planos={vendaveis} valorInicial={valor} aoMudarValor={aoMudarValor} aoEscolher={escolher} />
+        <SimuladorEconomia planos={vendaveis} valorInicial={valor} aoMudarValor={aoMudarValor} aoEscolher={escolher} planoSelecionadoId={planoId} />
       )}
 
       <BotaoTexto onClick={aoSeguirSemPlano}>Seguir sem escolher plano</BotaoTexto>

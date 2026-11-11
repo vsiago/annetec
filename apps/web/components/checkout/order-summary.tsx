@@ -19,9 +19,11 @@ interface SummaryProps {
   quote: ClubPlanQuote | null
   method: ClubPaymentMethod | null
   showMethod: boolean
+  /** Rede Comercial: nome de quem indicou o link (`?ref=`). */
+  atendidoPor?: string | null
 }
 
-function SummaryLines({ plan, quote, method, showMethod }: SummaryProps) {
+function SummaryLines({ plan, quote, method, showMethod, atendidoPor }: SummaryProps) {
   if (!plan || !quote) {
     return <p className="text-sm text-muted-foreground">Escolha um plano para ver o valor.</p>
   }
@@ -33,6 +35,14 @@ function SummaryLines({ plan, quote, method, showMethod }: SummaryProps) {
           <div className="flex justify-between gap-3">
             <dt className="text-muted-foreground">Pagamento</dt>
             <dd className="text-foreground">{CLUB_PAYMENT_METHOD_LABELS[method]}</dd>
+          </div>
+        </dl>
+      ) : null}
+      {atendidoPor ? (
+        <dl className="text-sm">
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted-foreground">Atendido por</dt>
+            <dd className="text-right text-foreground">{atendidoPor}</dd>
           </div>
         </dl>
       ) : null}
