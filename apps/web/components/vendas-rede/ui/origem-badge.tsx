@@ -34,3 +34,15 @@ export function OrigemBadge({ origem, detalhe, className }: { origem: Origem; de
     </span>
   )
 }
+
+/** Só o ícone da origem (cartões densos): o nome fica em `title` e em texto para leitor de tela. */
+export function IconeOrigem({ origem, detalhe, className }: { origem: Origem; detalhe?: string | null; className?: string }) {
+  const { rotulo, icone: Icone } = ORIGENS[origem]
+  const nome = detalhe ? `${rotulo} · ${detalhe}` : rotulo
+  return (
+    <span title={`Origem: ${nome}`} className={cn('inline-flex shrink-0 items-center text-muted-foreground', className)}>
+      <Icone className="size-3.5" aria-hidden="true" />
+      <span className="sr-only">Origem: {nome}</span>
+    </span>
+  )
+}

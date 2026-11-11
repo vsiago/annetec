@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils'
 
 export type DegrauFunil = { rotulo: string; valor: number }
 
-export const DEGRAUS_PADRAO: ReadonlyArray<string> = ['Novos', 'Em contato', 'Proposta', 'Negociação', 'Ganhos']
+export const DEGRAUS_PADRAO: ReadonlyArray<string> = ['Novos', 'Em contato', 'Proposta', 'Negociação', 'Vendas']
 
 /**
  * Funil em degraus: Novos → Em contato → Proposta → Negociação → Ganhos.
@@ -17,7 +17,7 @@ export function FunilDegraus({
   className,
 }: {
   degraus: DegrauFunil[]
-  orientacao?: 'horizontal' | 'vertical'
+  orientacao?: 'horizontal' | 'vertical' | 'escada'
   className?: string
 }) {
   const topo = Math.max(1, ...degraus.map(d => d.valor))
@@ -27,23 +27,42 @@ export function FunilDegraus({
     return `${Math.round(((degraus[i]?.valor ?? 0) / anterior) * 100)} %`
   }
 
+  if (orientacao === 'horizontal') {
+    return (
+      <div className={cn('@container min-w-0', className)}>
+        <div className="hidden @xl:block">
+          <FunilDegraus degraus={degraus} orientacao="escada" />
+        </div>
+        <div className="@xl:hidden">
+          <FunilDegraus degraus={degraus} orientacao="vertical" />
+        </div>
+      </div>
+    )
+  }
+
   if (orientacao === 'vertical') {
     return (
-      <ol className={cn('m-0 flex list-none flex-col gap-3 p-0', className)}>
-        {degraus.map((d, i) => (
-          <li key={d.rotulo} className="flex flex-col gap-1">
-            <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="min-w-0 truncate text-muted-foreground">{d.rotulo}</span>
-              <span className="shrink-0 font-semibold tabular-nums text-foreground">{d.valor.toLocaleString('pt-BR')}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-[#F2F4F7]" aria-hidden="true">
-              <div
-                className={cn('h-full rounded-full', i === degraus.length - 1 ? 'bg-[#067647]' : 'bg-[#1E2A4A]')}
-                style={{ width: `${Math.max(d.valor > 0 ? 3 : 0, (d.valor / topo) * 100)}%` }}
-              />
-            </div>
-          </li>
-        ))}
+      <ol className={cn('@container m-0 flex list-none flex-col gap-2.5 p-0', className)}>
+        {degraus.map((d, i) => {
+          const ultimo = i === degraus.length - 1
+          const t = taxa(i)
+          return (
+            <li
+              key={d.rotulo}
+              className="grid min-w-0 grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)_3.5rem] items-center gap-x-3 text-sm @max-[17rem]:grid-cols-[minmax(0,5rem)_minmax(0,1fr)_3rem]"
+              title={t ? `${d.rotulo}: ${d.valor.toLocaleString('pt-BR')} (${t} do degrau anterior)` : undefined}
+            >
+              <span className="truncate text-[13px] text-muted-foreground">{d.rotulo}</span>
+              <div className="h-2.5 overflow-hidden rounded-full bg-[#EEF1F5]" aria-hidden="true">
+                <div
+                  className={cn('h-full rounded-full', ultimo ? 'bg-[#DC6803]' : 'bg-[var(--vr-accent,#1E2A4A)]')}
+                  style={{ width: `${Math.max(d.valor > 0 ? 3 : 0, (d.valor / topo) * 100)}%`, opacity: ultimo ? 1 : 0.4 + 0.6 * (d.valor / topo) }}
+                />
+              </div>
+              <span className="text-right font-semibold tabular-nums text-foreground">{d.valor.toLocaleString('pt-BR')}</span>
+            </li>
+          )
+        })}
       </ol>
     )
   }
@@ -66,7 +85,7 @@ export function FunilDegraus({
             </div>
             <div className="flex h-20 items-end" aria-hidden="true">
               <div
-                className={cn('w-full rounded-t-lg', ultimo ? 'bg-[#067647]' : 'bg-[#1E2A4A]')}
+                className={cn('w-full rounded-t-lg', ultimo ? 'bg-[#DC6803]' : 'bg-[var(--vr-accent,#1E2A4A)]')}
                 style={{ height: `${Math.max(d.valor > 0 ? 8 : 2, (d.valor / topo) * 100)}%`, opacity: ultimo ? 1 : 0.35 + 0.65 * (d.valor / topo) }}
               />
             </div>

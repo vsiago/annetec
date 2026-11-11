@@ -3,9 +3,10 @@
 import type { ReactNode } from 'react'
 import { CircleCheck, FileText, Link2, PhoneCall, UserCheck, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
-import type { EtapaLead, VendasLead } from '@annetec/contracts'
+import { ETAPA_LEAD_LABELS, type EtapaLead, type VendasLead } from '@annetec/contracts'
 import { mudarEtapaAction, reatribuirLeadAction, reivindicarLeadAction } from '@/lib/actions/vendas-rede-api'
 import type { EscopoVendas } from '@/lib/vendas-rede/escopo'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
 /**
  * Regras de "qual é a ação principal deste lead" e ações com feedback
@@ -26,11 +27,11 @@ export function leadNoPool(lead: Pick<VendasLead, 'agenteId' | 'etapa'>): boolea
 
 /**
  * Uma ação por estado do lead:
- *  - no pool: Atender (reivindica);
+ *  - em Disponíveis: Atender (reivindica);
  *  - novo, com dono: Registrar contato;
  *  - em contato: Enviar proposta (plataforma) ou Enviar link (clube);
  *  - proposta: Registrar contato (acompanhar);
- *  - negociação: Fechar;
+ *  - negociação: Fechar venda;
  *  - ganho/perdido: Ver detalhes.
  */
 export function acaoPrincipalDoLead(lead: VendasLead, escopo: EscopoVendas): AcaoDoLead {
@@ -44,7 +45,7 @@ export function acaoPrincipalDoLead(lead: VendasLead, escopo: EscopoVendas): Aca
         ? { id: 'proposta', rotulo: 'Enviar proposta', icone: <FileText /> }
         : { id: 'proposta', rotulo: 'Enviar link', icone: <Link2 /> }
     case 'negociacao':
-      return { id: 'fechar', rotulo: 'Fechar', icone: <CircleCheck /> }
+      return { id: 'fechar', rotulo: 'Fechar venda', icone: <CircleCheck /> }
     default:
       return { id: 'abrir', rotulo: 'Ver detalhes', icone: <ExternalLink /> }
   }
@@ -54,31 +55,33 @@ export function acaoPrincipalDoLead(lead: VendasLead, escopo: EscopoVendas): Aca
 export async function atenderLead(escopo: EscopoVendas, lead: Pick<VendasLead, 'id' | 'nome'>): Promise<VendasLead | null> {
   const r = await reivindicarLeadAction(escopo, lead.id)
   if (r.success) {
-    toast.success(`${lead.nome} agora é seu lead`, { description: 'Faça o primeiro contato e registre aqui.' })
+    toast.success(`${lead.nome} agora é seu lead.`, { description: 'Faça o primeiro contato e registre aqui.' })
     return r.data
   }
   if (r.code === 'VENDAS_LEAD_JA_REIVINDICADO') {
-    toast.error('Outra pessoa atendeu este lead antes de você.', { description: 'Ele saiu do pool. Veja os próximos.' })
+    toast.error('Outra pessoa atendeu este lead antes de você.', { description: 'Ele saiu de Disponíveis. Veja os próximos.' })
     return null
   }
-  toast.error(r.error)
+  toast.error(mensagemDoErro(r.code, r.error))
   return null
 }
 
-/** Devolve ao pool com toast "Desfazer" (volta para quem estava). */
+/** Libera o lead (volta para Disponíveis) com toast "Desfazer" (volta para quem estava). */
 export async function devolverAoPool(
   escopo: EscopoVendas,
-  lead: Pick<VendasLead, 'id' | 'nome' | 'agenteId'>,
+  lead: Pick<VendasLead, 'id' | 'nome' | 'agenteId'> & { agenteNome?: string | null },
   aoMudar: () => void,
 ): Promise<boolean> {
   const anterior = lead.agenteId
+  const nomeAnterior = lead.agenteNome ?? null
   const r = await reatribuirLeadAction(escopo, lead.id, null)
   if (!r.success) {
-    toast.error(r.error)
+    toast.error(mensagemDoErro(r.code, r.error))
     return false
   }
   aoMudar()
-  toast.success(`${lead.nome} voltou ao pool`, {
+  toast.success(`${lead.nome} foi liberado`, {
+    description: 'Voltou para Disponíveis.',
     duration: 8000,
     action: anterior
       ? {
@@ -86,9 +89,9 @@ export async function devolverAoPool(
           onClick: () => {
             void reatribuirLeadAction(escopo, lead.id, anterior).then(res => {
               if (res.success) {
-                toast.success('Lead de volta com quem estava')
+                toast.success(`Lead de volta com ${nomeAnterior ?? 'quem estava'}`)
                 aoMudar()
-              } else toast.error(res.error)
+              } else toast.error(mensagemDoErro(res.code, res.error))
             })
           },
         }
@@ -109,9 +112,12 @@ export async function mudarEtapaComDesfazer(
   const anterior = lead.etapa
   const r = await mudarEtapaAction(escopo, lead.id, { etapa, ...(extras.motivoPerda ? { motivoPerda: extras.motivoPerda } : {}), ...(extras.confirmar ? { confirmar: true } : {}) })
   if (!r.success) {
-    toast.error(r.code === 'VENDAS_TRANSICAO_INVALIDA' ? 'Essa mudança de etapa não é permitida agora.' : r.error, {
-      description: r.code === 'VENDAS_TRANSICAO_INVALIDA' ? r.error : undefined,
-    })
+    if (r.code === 'VENDAS_TRANSICAO_INVALIDA') {
+      // A mensagem do servidor já vem com os nomes das etapas ("Este lead não pode ir de Em contato para Venda fechada.").
+      toast.error(`${lead.nome} não pode ir de ${ETAPA_LEAD_LABELS[anterior]} para ${ETAPA_LEAD_LABELS[etapa]}.`, {
+        description: etapa === 'ganho' ? 'Gere a proposta ou o link de adesão: a venda fecha quando o primeiro pagamento chegar.' : r.error,
+      })
+    } else toast.error(mensagemDoErro(r.code, r.error))
     return null
   }
   aoMudar()
@@ -124,7 +130,7 @@ export async function mudarEtapaComDesfazer(
           if (res.success) {
             toast.success('Etapa restaurada')
             aoMudar()
-          } else toast.error(res.error)
+          } else toast.error(mensagemDoErro(res.code, res.error))
         })
       },
     },

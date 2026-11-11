@@ -10,6 +10,7 @@ import {
   mudarEtapaLeadInput,
   proximoPassoInput,
   propostaLeadInput,
+  quadroLeadsQuery,
   reatribuirLeadInput,
   updateVendasLeadInput,
   vendasIdParam,
@@ -35,6 +36,7 @@ import {
   mudarEtapa,
   obter,
   proximoPasso,
+  quadro,
   reatribuir,
   registrarEvento,
   reivindicar,
@@ -42,7 +44,7 @@ import {
 
 /**
  * Leads da Rede Comercial — `/vendas/*` (platform) e `/t/:slug/vendas/*` (tenant), o mesmo conjunto.
- * O `salesContext` do escopo já autenticou. Funil, pool, carteira e reivindicação não existem para o
+ * O `salesContext` do escopo já autenticou. Funil, Disponíveis (pool), carteira e reivindicação não existem para o
  * balcão; agente inativo só lê (o `salesContext` barra qualquer método de escrita).
  * `recordAudit` nas escritas relevantes.
  */
@@ -65,10 +67,13 @@ export const leadsController = new Hono<AppEnv>()
     return ok(c, page.items, page.meta)
   })
 
-  /** Contadores das abas (pool/novos/andamento/fechados). */
+  /** Contadores das abas (Disponíveis/novos/andamento/fechados). */
   .get('/leads/contadores', FUNIL, async c => ok(c, await contarPorEstacao(vendasOf(c))))
 
-  /** Pool: leads sem dono. */
+  /** Funil em quadro: colunas por etapa, Disponíveis e fechados do mês numa chamada (antes de `/leads/:id`). */
+  .get('/leads/quadro', FUNIL, query(quadroLeadsQuery), async c => ok(c, await quadro(vendasOf(c), c.req.valid('query'))))
+
+  /** Disponíveis (pool): leads sem responsável. */
   .get('/leads/pool', FUNIL, query(listLeadsQuery), async c => {
     const q = c.req.valid('query')
     const { items, total } = await listar(vendasOf(c), { ...q, estacao: 'pool' })

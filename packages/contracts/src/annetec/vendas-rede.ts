@@ -27,7 +27,7 @@ export const papelComercial = z.enum(PAPEIS_COMERCIAIS)
 export type PapelComercial = z.infer<typeof papelComercial>
 
 export const PAPEL_COMERCIAL_LABELS: Record<PapelComercial, string> = {
-  master: 'Master',
+  master: 'Administrador',
   gerente: 'Gerente',
   supervisor: 'Supervisor',
   vendedor: 'Vendedor',
@@ -43,7 +43,7 @@ export const ETAPA_LEAD_LABELS: Record<EtapaLead, string> = {
   em_contato: 'Em contato',
   proposta: 'Proposta',
   negociacao: 'Negociação',
-  ganho: 'Ganho',
+  ganho: 'Venda fechada',
   perdido: 'Perdido',
 }
 
@@ -114,14 +114,14 @@ export const TIPO_EVENTO_LEAD_LABELS: Record<TipoEventoLead, string> = {
   criado: 'Lead criado',
   reivindicado: 'Lead atendido',
   atribuido: 'Lead atribuído',
-  devolvido_pool: 'Devolvido ao pool',
+  devolvido_pool: 'Lead liberado',
   etapa: 'Mudança de etapa',
   ligacao: 'Ligação',
   whatsapp: 'WhatsApp',
   email: 'E-mail',
   reuniao: 'Reunião',
   visita: 'Visita',
-  nota: 'Nota',
+  nota: 'Anotação',
   atendimento_balcao: 'Atendimento no balcão',
   proximo_passo: 'Próximo passo',
   conversao: 'Conversão',
@@ -192,10 +192,32 @@ export const estacaoLead = z.enum(ESTACOES_LEAD)
 export type EstacaoLead = z.infer<typeof estacaoLead>
 
 export const ESTACAO_LEAD_LABELS: Record<EstacaoLead, string> = {
-  pool: 'Pool',
+  pool: 'Disponíveis',
   novos: 'Novos',
   andamento: 'Em andamento',
-  fechados: 'Fechados',
+  fechados: 'Encerrados',
+}
+
+/** Como a pessoa reagiu no contato (pergunta opcional em "Registrar contato"). Guardado em `dados.sentimento` do evento. */
+export const SENTIMENTOS_CONTATO = ['positivo', 'neutro', 'negativo'] as const
+export const sentimentoContato = z.enum(SENTIMENTOS_CONTATO)
+export type SentimentoContato = z.infer<typeof sentimentoContato>
+
+export const SENTIMENTO_CONTATO_LABELS: Record<SentimentoContato, string> = {
+  positivo: 'Interessada',
+  neutro: 'Neutra',
+  negativo: 'Sem interesse',
+}
+
+/** Temperatura do lead, calculada por regra (sem IA) a partir do último contato e do próximo passo. */
+export const TEMPERATURAS_LEAD = ['quente', 'morna', 'fria'] as const
+export const temperaturaLead = z.enum(TEMPERATURAS_LEAD)
+export type TemperaturaLead = z.infer<typeof temperaturaLead>
+
+export const TEMPERATURA_LEAD_LABELS: Record<TemperaturaLead, string> = {
+  quente: 'Quente',
+  morna: 'Morna',
+  fria: 'Fria',
 }
 
 export const CANAIS_MENSAGEM = ['whatsapp', 'email'] as const
@@ -463,6 +485,21 @@ export const listLeadsQuery = paginationQuery.extend({
 })
 export type ListLeadsQuery = z.infer<typeof listLeadsQuery>
 
+/** Etapas abertas do quadro do Funil, na ordem das colunas. */
+export const ETAPAS_QUADRO = ['novo', 'em_contato', 'proposta', 'negociacao'] as const
+export type EtapaQuadro = (typeof ETAPAS_QUADRO)[number]
+
+/** `GET /leads/quadro` — mesmos filtros do Funil; `limite` = cards por coluna (padrão 40). */
+export const quadroLeadsQuery = z.object({
+  agente: uuid.optional(),
+  origem: origemLead.optional(),
+  temperatura: temperaturaLead.optional(),
+  busca: z.string().trim().min(1).max(100).optional(),
+  atrasados: booleanQuery.optional(),
+  limite: z.coerce.number().int().min(1).max(200).default(40),
+})
+export type QuadroLeadsQuery = z.infer<typeof quadroLeadsQuery>
+
 /** `POST /leads/:id/etapa`. `perdido` exige motivo; `ganho` manual exige `confirmar`. */
 export const mudarEtapaLeadInput = z
   .object({
@@ -481,6 +518,8 @@ export const createEventoLeadInput = z.object({
   tipo: z.enum(EVENTOS_MANUAIS),
   texto: z.string().trim().min(2).max(4000),
   dados: z.record(z.unknown()).nullable().optional(),
+  /** Como a pessoa reagiu (opcional; só vale para contatos, não para `nota`). Grava em `dados.sentimento`. */
+  sentimento: sentimentoContato.optional(),
 })
 export type CreateEventoLeadInput = z.infer<typeof createEventoLeadInput>
 
@@ -491,7 +530,7 @@ export const proximoPassoInput = z.object({
 })
 export type ProximoPassoInput = z.infer<typeof proximoPassoInput>
 
-/** `POST /leads/:id/reatribuir`. `null` = devolver ao pool. */
+/** `POST /leads/:id/reatribuir`. `null` = liberar o lead (volta para Disponíveis). */
 export const reatribuirLeadInput = z.object({ agenteId: uuid.nullable() })
 export type ReatribuirLeadInput = z.infer<typeof reatribuirLeadInput>
 
@@ -583,13 +622,13 @@ export const DEFAULT_MODELOS_MENSAGEM: ModeloMensagem[] = [
     id: 'primeiro-contato',
     titulo: 'Primeiro contato',
     canal: 'whatsapp',
-    texto: 'Olá, {{nome}}! Aqui é {{vendedor}}. Vi seu interesse no plano {{plano}} e queria te apresentar as condições. Posso te ligar agora?',
+    texto: 'Olá, {{nome}}! Aqui é {{vendedor}}. Vi seu interesse e queria apresentar o plano {{plano}} para você. Posso te ligar agora?',
   },
   {
     id: 'envio-link',
     titulo: 'Envio do link',
     canal: 'whatsapp',
-    texto: 'Oi, {{nome}}! Segue o link para você conhecer o plano {{plano}} e aderir: {{link}}. Qualquer dúvida, fico por aqui. {{vendedor}}',
+    texto: 'Oi, {{nome}}! Segue o link para você conhecer o plano {{plano}} e aderir:\n{{link}}\nQualquer dúvida, fico por aqui. {{vendedor}}',
   },
   {
     id: 'retomar',
@@ -601,7 +640,7 @@ export const DEFAULT_MODELOS_MENSAGEM: ModeloMensagem[] = [
     id: 'proposta-email',
     titulo: 'Proposta por e-mail',
     canal: 'email',
-    texto: 'Olá, {{nome}}. Conforme conversamos, segue o link da proposta do plano {{plano}}: {{link}}. Atenciosamente, {{vendedor}}.',
+    texto: 'Olá, {{nome}}. Segue o link da proposta do plano {{plano}}:\n{{link}}\nAtenciosamente, {{vendedor}}',
   },
 ]
 
@@ -844,12 +883,54 @@ export const vendasLead = z.object({
   dados: z.record(z.unknown()),
   createdAt: iso,
   updatedAt: iso,
+  /** Temperatura por regra (`null` = lead novo sem contato ou encerrado). */
+  temperatura: temperaturaLead.nullable().optional(),
+  /** Frase que explica a temperatura ("Reagiu com interesse há 2 dias"). */
+  temperaturaMotivo: z.string().nullable().optional(),
+  /** Sentimento registrado no último contato. */
+  ultimoSentimento: sentimentoContato.nullable().optional(),
+  /** Desde quando está na etapa atual (último evento de etapa; senão, quando foi atribuído/criado). */
+  etapaDesde: iso.nullable().optional(),
   /** Só no detalhe (`GET /leads/:id`). */
   eventos: z.array(vendasLeadEvento).optional(),
   jornada: jornadaLead.optional(),
   proximoPassoInfo: proximoPassoDoLead.optional(),
 })
 export type VendasLead = z.infer<typeof vendasLead>
+
+const colunaQuadro = z.object({
+  etapa: z.enum(ETAPAS_QUADRO),
+  /** Leads da etapa (todos os visíveis, não só os cards devolvidos). */
+  total: z.number().int(),
+  /** Soma do valor estimado da etapa. */
+  valor: z.number(),
+  /** Quantos têm próximo passo vencido. */
+  atrasados: z.number().int(),
+  /** Até `limite` cards: atrasados primeiro, depois quente, morna, fria e os mais antigos na etapa. */
+  itens: z.array(vendasLead),
+})
+
+/** `GET /leads/quadro` — o Funil em quadro numa única chamada. */
+export const quadroLeadsResposta = z.object({
+  etapas: z.array(colunaQuadro),
+  /** Leads sem responsável (os mais antigos primeiro). */
+  disponiveis: z.object({ total: z.number().int(), itens: z.array(vendasLead) }),
+  /** Ganhos e perdidos do mês corrente (fuso de Brasília). */
+  fechados: z.object({
+    ganhos: z.object({ total: z.number().int(), valor: z.number() }),
+    perdidos: z.object({ total: z.number().int(), valor: z.number() }),
+    itens: z.array(vendasLead),
+  }),
+  resumo: z.object({
+    emAndamento: z.number().int(),
+    valorNegociacao: z.number(),
+    valorAberto: z.number(),
+    atrasados: z.number().int(),
+  }),
+  geradoEm: iso,
+})
+export type QuadroLeadsResposta = z.infer<typeof quadroLeadsResposta>
+export type ColunaQuadro = z.infer<typeof colunaQuadro>
 
 export const vendasComissao = z.object({
   id: uuid,

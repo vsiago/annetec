@@ -38,7 +38,12 @@ export function ContactSection() {
     })
     setSending(false)
     if (!result.success) {
-      setError(result.error)
+      // 429: o servidor limita a 10 pedidos por hora por origem.
+      setError(
+        result.code === 'RATE_LIMITED' || result.code === 'UPSTREAM_RATE_LIMITED'
+          ? 'Você já enviou muitas mensagens. Tente de novo em uma hora.'
+          : result.error,
+      )
       return
     }
     setIsSubmitted(true)
@@ -95,7 +100,7 @@ export function ContactSection() {
                     <CheckCircle size={32} className="text-green-600" />
                   </div>
                   <h3 className="text-xl font-bold text-[#26365f] mb-2">Mensagem enviada!</h3>
-                  <p className="text-muted-foreground">Recebemos o seu contato. Em breve alguém da equipe ANNETEC fala com você.</p>
+                  <p className="text-muted-foreground">Recebemos o seu contato. Respondemos em horário comercial.</p>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="relative space-y-6">

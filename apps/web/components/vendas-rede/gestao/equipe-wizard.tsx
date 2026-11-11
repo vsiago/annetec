@@ -308,7 +308,7 @@ export function EquipeWizard({
             <ReviewItem label="CPF" value={maskCpf(values.cpf)} />
             <ReviewItem label="Convite" value={values.enviarConvite ? 'Enviado ao concluir' : 'Não enviar agora'} />
             <ReviewItem
-              label="Repasse"
+              label="Dados para pagamento"
               value={values.repasseTipo === 'pix' ? `Pix · ${values.chavePix}` : values.repasseTipo === 'conta' ? `Conta · ${values.banco}` : ''}
               empty="Informar depois"
             />

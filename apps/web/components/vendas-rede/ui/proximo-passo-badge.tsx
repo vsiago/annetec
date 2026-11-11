@@ -12,7 +12,7 @@ export function ProximoPassoBadge({ passo, className }: { passo?: ProximoPasso |
     return (
       <span className={cn('inline-flex items-center gap-1.5 text-xs text-muted-foreground', className)}>
         <CalendarClock className="size-3.5 shrink-0" aria-hidden="true" />
-        Sem próximo passo definido
+        Sem próximo passo
       </span>
     )
   }

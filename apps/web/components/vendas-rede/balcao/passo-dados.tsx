@@ -46,7 +46,7 @@ export function PassoDados({
 
       {leadEncontrado ? (
         <p role="status" className="m-0 rounded-xl bg-[#E5EDF5] px-4 py-3 text-sm font-medium text-[#1E2A4A]">
-          Já existe um contato desta pessoa. Conferimos os dados abaixo.
+          Já existe um cadastro desta pessoa. Confira os dados abaixo.
         </p>
       ) : null}
 

@@ -153,7 +153,7 @@ export function UnidadeWizard({
             span={12}
             placeholder={lookups.carregando ? 'Carregando…' : 'Escolha a corretora'}
             options={opcoesCorretora}
-            hint="Unidade própria é a do próprio escopo (clínica, ambulatório, hospital, loja), sem corretora."
+            hint="Unidade própria é a que não pertence a nenhuma corretora (clínica, ambulatório, hospital, loja)."
           />
         ) : (
           <Notice tone="neutral" icon={Store}>

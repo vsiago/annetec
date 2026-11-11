@@ -105,8 +105,8 @@ export const adminNavGroups: AdminNavGroup[] = [
       { segment: 'comercial/rede', label: 'Rede', icon: Network, hint: 'Corretoras, unidades e equipes' },
       { segment: 'comercial/balcao', label: 'Balcão', icon: Store, hint: 'Atendimentos das unidades' },
       { segment: 'comercial/comissoes', label: 'Comissões', icon: CircleDollarSign, hint: 'O que cada agente tem a receber' },
-      { segment: 'comercial/resultados', label: 'Resultados', icon: TrendingUp, hint: 'Desempenho da força de vendas' },
-      { segment: 'comercial/regras', label: 'Regras', icon: SlidersHorizontal, hint: 'Comissão e distribuição de leads' },
+      { segment: 'comercial/resultados', label: 'Resultados', icon: TrendingUp, hint: 'Desempenho das vendas' },
+      { segment: 'comercial/regras', label: 'Regras', icon: SlidersHorizontal, hint: 'Comissões, adicional da rede e como os leads chegam' },
     ],
   },
   {

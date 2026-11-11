@@ -8,8 +8,10 @@ import type { AppNotification, VendasEu } from '@annetec/contracts'
 import { NotificationsProvider } from '@/components/notifications/notifications-provider'
 import { enviarPresencaAction, getEuAction, reivindicarLeadAction } from '@/lib/actions/vendas-rede-api'
 import { basePath, chaveDoEscopo, type EscopoVendas } from '@/lib/vendas-rede/escopo'
+import { EVENTO_LEAD_NOVO } from './funil/use-quadro'
 import { AcaoPrincipal } from './ui/acao-principal'
 import { EstadoVazio } from './ui/estado-vazio'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
 /**
  * Contexto da Rede Comercial: escopo (plataforma ou clube), perfil do agente
@@ -17,7 +19,7 @@ import { EstadoVazio } from './ui/estado-vazio'
  *
  * Também cuida de duas coisas que valem para qualquer tela da casca:
  *  - presença: `POST /presenca` na entrada e a cada 60 s, só com a aba visível;
- *  - notificações em tempo real (SSE): toast "Novo lead no pool" com o botão
+ *  - notificações em tempo real (SSE): toast "Novo lead disponível" com o botão
  *    **Atender**, que reivindica o lead e abre o detalhe.
  *
  * Quem consome: `const { escopo, eu, recarregar } = useVendasRede()`.
@@ -67,7 +69,7 @@ export function VendasRedeProvider({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const escopoEstavel = useMemo(() => escopo, [chave])
   const [eu, setEu] = useState<VendasEu | null>(null)
-  const [erro, setErro] = useState<{ mensagem: string; semPerfil: boolean } | null>(null)
+  const [erro, setErro] = useState<{ mensagem: string; semPerfil: boolean; inativo: boolean } | null>(null)
   const [tentativa, setTentativa] = useState(0)
   const euRef = useRef<VendasEu | null>(null)
   euRef.current = eu
@@ -82,8 +84,9 @@ export function VendasRedeProvider({
     // Releitura que falha mantém o que já está na tela.
     if (!euRef.current) {
       setErro({
-        mensagem: resultado.error,
+        mensagem: mensagemDoErro(resultado.code, resultado.error),
         semPerfil: resultado.code === 'VENDAS_SEM_PERFIL' || resultado.code === 'VENDAS_PERFIL_INATIVO',
+        inativo: resultado.code === 'VENDAS_PERFIL_INATIVO',
       })
     }
     return false
@@ -135,11 +138,19 @@ export function VendasRedeProvider({
             moldura
             ilustracao="equipe"
             className="max-w-md bg-white"
-            titulo={erro.semPerfil ? 'Seu acesso à Rede Comercial ainda não está liberado' : 'Não foi possível abrir a Rede Comercial'}
+            titulo={
+              erro.inativo
+                ? 'Seu perfil está inativo'
+                : erro.semPerfil
+                  ? 'Sua conta ainda não tem perfil de vendas'
+                  : 'Não foi possível abrir a Rede Comercial'
+            }
             descricao={
-              erro.semPerfil
-                ? 'Fale com quem cuida da rede de vendas para ativar o seu perfil de agente. Assim que ele estiver ativo, é só entrar de novo.'
-                : erro.mensagem
+              erro.inativo
+                ? 'Peça ao administrador para reativar o seu perfil em Rede comercial. Assim que ele estiver ativo, é só entrar de novo.'
+                : erro.semPerfil
+                  ? 'Peça ao administrador para cadastrar você em Rede comercial, em “Novo agente”. Depois é só entrar de novo.'
+                  : erro.mensagem
             }
             acao={
               <>
@@ -181,7 +192,7 @@ export function VendasRedeProvider({
 }
 
 /**
- * SSE de notificações do agente. Lead novo no pool vira toast com **Atender**
+ * SSE de notificações do agente. Lead novo em Disponíveis vira toast com **Atender**
  * (reivindica e abre o lead); lead atribuído vira toast com **Abrir**.
  */
 function NotificacoesDoAgente({
@@ -206,15 +217,15 @@ function NotificacoesDoAgente({
       const resultado = await reivindicarLeadAction(escopo, leadId)
       void recarregar()
       if (resultado.success) {
-        toast.success('Lead é seu. Bom atendimento!')
+        toast.success(`${resultado.data.nome} agora é seu lead.`, { description: 'Faça o primeiro contato e registre aqui.' })
         router.push(rotaRef.current(leadId))
         return
       }
       if (resultado.code === 'VENDAS_LEAD_JA_REIVINDICADO') {
-        toast.error('Outra pessoa atendeu este lead antes de você.', { description: 'Ele já saiu do pool.' })
+        toast.error('Outra pessoa atendeu este lead antes de você.', { description: 'Ele já saiu de Disponíveis.' })
         return
       }
-      toast.error(resultado.error)
+      toast.error(mensagemDoErro(resultado.code, resultado.error))
     },
     [escopo, recarregar, router],
   )
@@ -223,9 +234,11 @@ function NotificacoesDoAgente({
     (n: AppNotification): boolean => {
       if (n.kind === 'vendas_lead_novo') {
         void recarregar()
+        // Avisa o Funil aberto: ele atualiza a faixa Disponíveis na hora.
+        window.dispatchEvent(new CustomEvent(EVENTO_LEAD_NOVO))
         const leadId = n.payload.leadId
         if (!leadId) return false
-        toast('Novo lead no pool', {
+        toast('Novo lead disponível', {
           id: n.id,
           description: n.body ?? n.title,
           duration: 12_000,

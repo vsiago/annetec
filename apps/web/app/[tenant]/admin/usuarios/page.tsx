@@ -393,7 +393,7 @@ export default function AdminUsuariosPage() {
     <div className="space-y-5">
       <PageHeader
         title="Equipe e permissões"
-        description="Quem acessa o clube, com qual perfil, e o que cada perfil pode fazer."
+        description="Quem acessa o clube, com qual perfil, e o que cada perfil pode fazer. Vendedores também aparecem na Rede comercial, onde você define equipe e unidade."
       >
         <Button className="h-11 gap-2 px-5" onClick={openCreate}>
           <Plus className="h-4 w-4" />
@@ -834,6 +834,9 @@ export default function AdminUsuariosPage() {
               invalid={!!form.errors.role}
             />
           </FormField>
+          {form.values.role === 'seller' ? (
+            <p className="m-0 text-xs text-muted-foreground">Vendedores também aparecem na Rede comercial, onde você define equipe e unidade.</p>
+          ) : null}
         </FormRow>
       </FormDialog>
 

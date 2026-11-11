@@ -28,7 +28,7 @@ export function ResultadoConviteBloco({ convite, email, nome }: { convite: Convi
         <Notice tone="success" icon={MailCheck} title={`Convite enviado para ${email}`}>
           {convite.contaNova === false
             ? `${primeiro} já tinha conta e entra com a senha que já usa.`
-            : `${primeiro} recebe o acesso por e-mail e define o uso no primeiro login.`}
+            : `${primeiro} recebe o acesso por e-mail e cria a senha no primeiro acesso.`}
         </Notice>
       ) : (
         <Notice tone="warning" icon={MailWarning} title="O convite não foi enviado">

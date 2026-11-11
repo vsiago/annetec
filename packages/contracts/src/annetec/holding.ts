@@ -165,9 +165,9 @@ export const holdingReceivingIssue = z.enum(['nao_conectado', 'conta_pendente', 
 export type HoldingReceivingIssue = z.infer<typeof holdingReceivingIssue>
 
 export const HOLDING_RECEIVING_ISSUE_LABELS: Record<HoldingReceivingIssue, string> = {
-  nao_conectado: 'Falta conectar',
-  conta_pendente: 'Conta em aprovação no Asaas',
-  aviso_com_erro: 'Aviso de pagamento com falha',
+  nao_conectado: 'Conta de recebimento não conectada',
+  conta_pendente: 'Documentos pendentes no Asaas',
+  aviso_com_erro: 'Falha no aviso de pagamentos',
 }
 
 export const holdingTenantRow = z.object({

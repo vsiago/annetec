@@ -15,6 +15,7 @@ import { formatarMoeda } from '../ui/mascaras'
 import { PedirDescontoDialog } from './pedir-desconto'
 import { SeletorPlano } from './seletor-plano'
 import { usePlanos } from './use-planos'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
 /**
  * Conversão na plataforma: gerar a proposta (link de contratação) para o
@@ -69,7 +70,7 @@ export function ConversaoPlataforma({
     if (!r.success) {
       const itens = Object.values(r.fieldErrors ?? {}).filter(Boolean)
       if (itens.length > 0) setPendencias(itens)
-      else toast.error(r.error)
+      else toast.error(mensagemDoErro(r.code, r.error))
       return
     }
     setProposta(r.data.proposal)
@@ -117,7 +118,7 @@ export function ConversaoPlataforma({
                   <dd className="m-0 font-medium">{formatarMoeda(proposta.quote.monthlyTotal)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Ativação (1ª cobrança)</dt>
+                  <dt className="text-xs text-muted-foreground">Adesão (1ª cobrança)</dt>
                   <dd className="m-0 font-medium">{formatarMoeda(proposta.quote.activationTotal)}</dd>
                 </div>
               </>
@@ -155,7 +156,7 @@ export function ConversaoPlataforma({
           ) : null}
         </div>
         <p className="m-0 text-xs text-muted-foreground">
-          O link de contratação vai só para o e-mail do cliente ({proposta.applicant.email}). Quando o primeiro pagamento cair, o lead vira ganho sozinho.
+          O link de contratação vai só para o e-mail do cliente ({proposta.applicant.email}). Quando o primeiro pagamento for confirmado, a venda é fechada automaticamente.
         </p>
 
         <PedirDescontoDialog

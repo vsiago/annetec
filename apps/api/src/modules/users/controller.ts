@@ -51,7 +51,9 @@ export const usersController = new Hono<AppEnv>()
    */
   .post('/', json(createTenantUserInput), async c => {
     const tenantId = tenantOf(c).id
-    const { tenantUser, provisionalPassword } = await usersService.create(tenantId, c.req.valid('json'))
+    const { tenantUser, provisionalPassword } = await usersService.create(tenantId, c.req.valid('json'), {
+      criadoPorUserId: c.get('auth')?.user.id ?? null,
+    })
 
     let convite: string | null = null
     if (tenantUser.role === 'client') {

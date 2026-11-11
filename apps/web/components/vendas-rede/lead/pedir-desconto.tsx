@@ -92,7 +92,7 @@ export function PedirDescontoDialog({
       icon={BadgePercent}
       size="md"
       title="Pedir desconto"
-      description={`Condição especial para ${leadNome}. O superadmin decide e você recebe o aviso no sino.`}
+      description={`Condição especial para ${leadNome}. A equipe ANNETEC decide e você recebe o aviso no sino.`}
       submitLabel="Enviar pedido de desconto"
       submittingLabel="Enviando…"
       discardTitle="Descartar o pedido?"
@@ -107,8 +107,8 @@ export function PedirDescontoDialog({
             title="Pedido enviado para aprovação"
             description={
               feito.proposal.linkStatus === 'sent'
-                ? 'O cliente já tem o link. Se o superadmin aprovar, o desconto entra na proposta.'
-                : `O link vai para ${feito.proposal.applicant.email} quando o superadmin decidir.`
+                ? 'O cliente já tem o link. Se a ANNETEC aprovar, o desconto entra na proposta.'
+                : `O link vai para ${feito.proposal.applicant.email} quando a ANNETEC decidir.`
             }
             actions={
               <Button type="button" className={successButton.primary} onClick={() => mudar(false)}>

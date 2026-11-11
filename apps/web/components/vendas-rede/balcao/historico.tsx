@@ -116,7 +116,7 @@ export function HistoricoPagina() {
           <EstadoVazio
             moldura
             ilustracao="busca"
-            titulo="Nenhum atendimento encontrado."
+            titulo="Nenhum atendimento encontrado"
             descricao={resultado ? 'Tente outro resultado ou outro dia.' : ehHoje ? 'Quando você atender alguém hoje, aparece aqui.' : 'Neste dia não houve atendimentos. Tente outra data.'}
           />
         ) : (

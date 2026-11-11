@@ -7,6 +7,7 @@ import { definirProximoPassoAction } from '@/lib/actions/vendas-rede-api'
 import type { EscopoVendas } from '@/lib/vendas-rede/escopo'
 import { AcaoPrincipal } from '../ui/acao-principal'
 import { PASSO_VAZIO, SeletorProximoPasso, dataDoPasso, erroDoPasso, type PassoForm } from './campos'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
 /** Define (ou troca) o próximo passo do lead: o que fazer e quando. */
 export function ProximoPassoDialog({
@@ -49,7 +50,7 @@ export function ProximoPassoDialog({
     const r = await definirProximoPassoAction(escopo, leadId, { texto: passo.texto.trim(), em })
     setEnviando(false)
     if (!r.success) {
-      toast.error(r.error)
+      toast.error(mensagemDoErro(r.code, r.error))
       return
     }
     toast.success('Próximo passo marcado')
@@ -70,7 +71,7 @@ export function ProximoPassoDialog({
             Cancelar
           </AcaoPrincipal>
           <AcaoPrincipal onClick={() => void salvar()} carregando={enviando}>
-            Marcar
+            Marcar próximo passo
           </AcaoPrincipal>
         </DialogFooter>
       </DialogContent>

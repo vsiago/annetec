@@ -52,7 +52,7 @@ export function ComissaoExtrato({ linhas, className }: { linhas: LinhaComissao[]
     <div className={cn('overflow-x-auto', className)}>
       <table className="w-full min-w-[560px] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+          <tr className="border-b border-border bg-[#F8F9FB] text-left text-[11px] uppercase tracking-wide text-muted-foreground">
             <th scope="col" className="py-2 pr-3 font-medium">Referência</th>
             <th scope="col" className="py-2 pr-3 text-right font-medium">Parcela</th>
             <th scope="col" className="py-2 pr-3 text-right font-medium">Base</th>

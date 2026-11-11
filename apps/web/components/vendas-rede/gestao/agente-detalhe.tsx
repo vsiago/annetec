@@ -30,9 +30,10 @@ import {
 } from '@/lib/actions/vendas-rede-gestao-api'
 import { cn } from '@/lib/utils'
 import { CopiarBotao } from '../ui/copiar-botao'
-import { KpiGrid } from '../ui/kpi-grid'
+import { CampoFicha, NaoInformado, TextoQuebravel, ValorLongo } from '../ui/campo-ficha'
+import { CartaoDinheiro, FaixaContagens } from '../ui/desempenho-resumo'
 import { PresencaDot } from '../ui/presenca-dot'
-import { formatarCelular, formatarMoeda, formatarPercentual } from '../ui/mascaras'
+import { formatarCelular, pluralizar } from '../ui/mascaras'
 import {
   CHAVES_ENDERECO,
   CHAVES_PESSOA,
@@ -64,14 +65,11 @@ const GESTORES: readonly PapelComercial[] = ['master', 'gerente', 'supervisor']
 
 type RepasseGuardado = { tipo?: string; chavePix?: string; banco?: string; agencia?: string; conta?: string; titular?: string; documento?: string }
 
-function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+function Linha({ rotulo, largo, children }: { rotulo: string; largo?: boolean; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 py-2 sm:flex-row sm:items-baseline sm:gap-4">
-      <dt className="w-36 shrink-0 text-[13px] text-muted-foreground">{rotulo}</dt>
-      <dd className="m-0 min-w-0 break-words text-sm font-medium text-foreground">
-        {children || <span className="font-normal italic text-muted-foreground">Não informado</span>}
-      </dd>
-    </div>
+    <CampoFicha rotulo={rotulo} largo={largo}>
+      {children || <NaoInformado />}
+    </CampoFicha>
   )
 }
 
@@ -138,21 +136,25 @@ export function AgenteDetalhe({
 
   return (
     <div className={cn('flex flex-col gap-6', className)}>
-      <div className="flex items-start gap-3">
-        <span className="relative inline-flex shrink-0">
-          <span aria-hidden="true" className="inline-flex size-14 items-center justify-center rounded-full bg-[#E5EDF5] text-base font-bold text-[#1E2A4A]">
-            {initialsOf(a.nome)}
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
+        <div className="flex min-w-0 flex-1 basis-[17rem] items-start gap-3">
+          <span className="relative inline-flex shrink-0">
+            <span aria-hidden="true" className="inline-flex size-14 items-center justify-center rounded-full bg-[#E5EDF5] text-base font-bold text-[#1E2A4A]">
+              {initialsOf(a.nome)}
+            </span>
+            <PresencaDot online={a.online} className="absolute -bottom-0.5 -right-0.5" />
           </span>
-          <PresencaDot online={a.online} className="absolute -bottom-0.5 -right-0.5" />
-        </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h2 className="m-0 truncate text-lg font-bold leading-tight">{a.nome}</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusPill tone="info" dot={false} icon={<UserRound />}>
-              {PAPEL_COMERCIAL_LABELS[a.papel]}
-            </StatusPill>
-            <StatusPill tone={a.ativo ? 'success' : 'neutral'}>{a.ativo ? 'Ativo' : 'Desativado'}</StatusPill>
-            <PresencaDot online={a.online} rotulo />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <h2 className="m-0 truncate text-lg font-bold leading-tight" title={a.nome}>
+              {a.nome}
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill tone="info" dot={false} icon={<UserRound />}>
+                {PAPEL_COMERCIAL_LABELS[a.papel]}
+              </StatusPill>
+              <StatusPill tone={a.ativo ? 'success' : 'neutral'}>{a.ativo ? 'Ativo' : 'Desativado'}</StatusPill>
+              <PresencaDot online={a.online} rotulo />
+            </div>
           </div>
         </div>
         {podeGerir ? (
@@ -203,17 +205,8 @@ export function AgenteDetalhe({
           <LoadError message={desempenho.error} onRetry={() => void desempenho.reload()} framed={false} />
         ) : k ? (
           <>
-            <KpiGrid
-              colunas={3}
-              itens={[
-                { rotulo: 'Leads recebidos', valor: k.leadsRecebidos.toLocaleString('pt-BR') },
-                { rotulo: 'Contatos', valor: k.contatos.toLocaleString('pt-BR') },
-                { rotulo: 'Propostas', valor: k.propostas.toLocaleString('pt-BR') },
-                { rotulo: 'Ganhos', valor: k.ganhos.toLocaleString('pt-BR'), tom: 'green', dica: `Conversão ${formatarPercentual(k.taxaConversao, 1)}` },
-                { rotulo: 'Valor ganho', valor: formatarMoeda(k.valorGanho) },
-                { rotulo: 'Comissão a pagar', valor: formatarMoeda(k.comissaoAPagar), tom: 'amber', dica: `Prevista ${formatarMoeda(k.comissaoPrevista)} · paga ${formatarMoeda(k.comissaoPaga)}` },
-              ]}
-            />
+            <FaixaContagens k={k} />
+            <CartaoDinheiro k={k} />
             {k.leadsRecebidos === 0 ? (
               <p className="m-0 text-sm text-muted-foreground">Nenhum lead recebido neste período. Quando chegarem, os números aparecem aqui.</p>
             ) : null}
@@ -221,18 +214,24 @@ export function AgenteDetalhe({
         ) : null}
       </section>
 
-      <section aria-labelledby="ficha-titulo" className="flex flex-col">
-        <h3 id="ficha-titulo" className="m-0 mb-1 text-sm font-semibold">
+      <section aria-labelledby="ficha-titulo" className="@container flex min-w-0 flex-col">
+        <h3 id="ficha-titulo" className="m-0 mb-3 text-sm font-semibold">
           Ficha
         </h3>
-        <dl className="m-0 divide-y divide-border/60">
-          <Linha rotulo="E-mail (login)">{a.email}</Linha>
+        <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-4 @sm:grid-cols-2">
+          <Linha rotulo="E-mail (login)" largo>
+            {a.email ? <ValorLongo texto={a.email} href={`mailto:${a.email}`} icone={Mail} rotuloCopiar="Copiar e-mail" mensagemCopiar="E-mail copiado" /> : null}
+          </Linha>
           <Linha rotulo="CPF">{a.cpf ? maskCpf(a.cpf) : ''}</Linha>
           <Linha rotulo="Celular">{a.telefone ? formatarCelular(a.telefone) : ''}</Linha>
           <Linha rotulo="Nascimento">{a.dataNascimento ? a.dataNascimento.split('-').reverse().join('/') : ''}</Linha>
-          <Linha rotulo="Endereço">{enderecoTexto}</Linha>
-          <Linha rotulo="Repasse">{descreverRepasse(a.repasse)}</Linha>
-          <Linha rotulo="Meta mensal">{a.metaMensal ? `${a.metaMensal} vendas/mês` : ''}</Linha>
+          <Linha rotulo="Endereço" largo>
+            {enderecoTexto ? <TextoQuebravel>{enderecoTexto}</TextoQuebravel> : null}
+          </Linha>
+          <Linha rotulo="Dados para pagamento" largo>
+            {descreverRepasse(a.repasse) ? <ValorLongo texto={descreverRepasse(a.repasse)} rotuloCopiar="Copiar dados de pagamento" mensagemCopiar="Dados copiados" /> : null}
+          </Linha>
+          <Linha rotulo="Meta mensal">{a.metaMensal ? `${pluralizar(a.metaMensal, 'venda')}/mês` : ''}</Linha>
           <Linha rotulo="Código de indicação">
             <span className="inline-flex items-center gap-2">
               <code className="rounded bg-[#F2F4F7] px-1.5 py-0.5 text-xs">{a.codigoIndicacao}</code>
@@ -240,7 +239,11 @@ export function AgenteDetalhe({
             </span>
           </Linha>
           <Linha rotulo="Cadastrado em">{dataCurta(a.createdAt)}</Linha>
-          {a.observacoes ? <Linha rotulo="Observações">{a.observacoes}</Linha> : null}
+          {a.observacoes ? (
+            <Linha rotulo="Observações" largo>
+              <span className="block whitespace-pre-line">{a.observacoes}</span>
+            </Linha>
+          ) : null}
         </dl>
       </section>
 
@@ -287,7 +290,7 @@ export function AgenteDetalheSheet({
     <Sheet open={agenteId !== null} onOpenChange={aberto => !aberto && aoFechar()}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>Ficha do agente</SheetTitle>
+          <SheetTitle>Ficha</SheetTitle>
           <SheetDescription>Dados, desempenho e ações.</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-6">

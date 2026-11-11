@@ -3,299 +3,494 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Ellipsis, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronsUpDown, Ellipsis, LogOut, Settings } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { initialsOf } from '@/components/admin-platform/ui/entity-avatar'
+import { NotificationBell } from '@/components/notifications/notification-bell'
 import { cn } from '@/lib/utils'
+import { PresencaDot } from '../ui/presenca-dot'
 import type { PapelComercial } from '../ui/tipos'
-import { FOCUS_RING } from '../ui/tokens'
-import { AvatarPresenca, type Branding, Conteudo, ICONES, Marca, PularParaConteudo, Selo, type UsuarioShell, estiloDaCasca } from './base'
+import { variaveisDeCor } from '../ui/tokens'
+import { type Branding, Conteudo, ICONES, PularParaConteudo, type UsuarioShell } from './base'
 import { itemAtivo, type ItemMenu } from './itens'
 
-const CHAVE_FIXO = 'vr-trilho-fixo'
+/**
+ * Mesmas chaves do admin (clube e console): quem recolhe o menu num lugar
+ * encontra o menu recolhido no outro, no mesmo navegador.
+ */
+const CHAVE_RECOLHIDO = {
+  clube: 'annetec_admin_sidebar_collapsed',
+  plataforma: 'annetec_platform_sidebar_collapsed',
+} as const
+
 const ROTULO_PAPEL: Record<PapelComercial, string> = {
-  master: 'Master',
+  master: 'Administrador',
   gerente: 'Gerente',
   supervisor: 'Supervisor',
   vendedor: 'Vendedor',
   balcao: 'Balcão',
 }
 
-function lerFixo(): boolean {
-  try {
-    return window.localStorage.getItem(CHAVE_FIXO) === '1'
-  } catch {
-    return false
-  }
+const FOCO = 'outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
+
+/** Indicador numérico do item (mesmo desenho do menu do admin). */
+function Contador({ valor, embutido, rotulo }: { valor: number; embutido: boolean; rotulo: string }) {
+  return (
+    <span
+      aria-label={rotulo}
+      className={cn(
+        'flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground',
+        !embutido && 'absolute -right-2 -top-1.5 h-4 min-w-4 px-1 text-[10px]',
+      )}
+    >
+      {valor > 99 ? '99+' : valor}
+    </span>
+  )
+}
+
+function rotuloContador(valor: number): string {
+  return `${valor} ${valor === 1 ? 'lead disponível' : 'leads disponíveis'}`
+}
+
+/** Avatar de iniciais com a bolinha de presença (cor primária, como o avatar do admin). */
+function AvatarConta({ usuario }: { usuario: UsuarioShell }) {
+  return (
+    <span className="relative inline-flex shrink-0">
+      <span
+        aria-hidden="true"
+        className="inline-flex size-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
+      >
+        {usuario.iniciais ?? initialsOf(usuario.nome)}
+      </span>
+      <PresencaDot online={usuario.online} className="absolute -bottom-0.5 -right-0.5" />
+    </span>
+  )
+}
+
+/** Marca de quadrado com a inicial, quando o clube ainda não subiu logo. */
+function MarcaInicial({ nome, compacta }: { nome: string; compacta: boolean }) {
+  return (
+    <span className="flex items-center gap-2">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-base font-bold text-primary-foreground">
+        {nome.charAt(0).toUpperCase()}
+      </span>
+      {!compacta && <span className="truncate text-base font-bold text-foreground">{nome}</span>}
+    </span>
+  )
 }
 
 /**
- * Casca comercial (vendedor, supervisor, gerente e master).
+ * Marca do topo do menu: no clube, logo (expandido) ou ícone (recolhido) do
+ * clube, como no admin; na plataforma, a marca ANNETEC com a etiqueta "Comercial".
+ */
+function MarcaMenu({ area, branding, compacta }: { area: 'clube' | 'plataforma'; branding?: Branding; compacta: boolean }) {
+  if (area === 'plataforma' || !branding) {
+    return compacta ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src="/favicon.png" alt="ANNETEC" className="size-8 object-contain" />
+    ) : (
+      <span className="flex items-center gap-2.5">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/annetec.svg" alt="ANNETEC" className="h-9 w-auto shrink-0" />
+        <span className="whitespace-nowrap rounded-md bg-accent px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-secondary">
+          Comercial
+        </span>
+      </span>
+    )
+  }
+  const imagem = compacta ? (branding.iconeUrl ?? branding.logoUrl) : branding.logoUrl
+  return imagem ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={imagem} alt={branding.nome} className={cn('object-contain', compacta ? 'size-8' : 'h-9')} />
+  ) : (
+    <MarcaInicial nome={branding.nome} compacta={compacta} />
+  )
+}
+
+/**
+ * Casca comercial (vendedor, supervisor, gerente e master), montada com o
+ * mesmo desenho do menu do admin do clube:
  *
- * Desktop (lg+): trilho fixo de ícones à esquerda (56 px). Abre com o mouse ou
- * o foco do teclado mostrando os rótulos (sobrepõe o conteúdo) e `Ctrl+B`
- * (ou o botão do rodapé) fixa-o aberto; a escolha fica no localStorage.
- * Sem barra de topo.
+ * Desktop (lg+): menu fixo à esquerda, expandido (`w-64`, com rótulos) ou
+ * recolhido em ícones (`w-20`, com dica ao lado). O botão redondo na borda e
+ * `Ctrl+B` (`Cmd+B` no Mac) alternam; a escolha fica no `localStorage` com a
+ * mesma chave do admin. Marca no topo; rodapé com sino e conta (avatar com
+ * presença, Ajustes e Sair).
  *
- * Celular: topo `h-14` (marca, sino, avatar com bolinha de presença) e barra
- * inferior `h-16` com até 5 entradas (a 5ª vira "Mais" se o menu tiver mais).
+ * Celular: topo `h-14` (marca, sino e conta) e barra inferior `h-16` como a do
+ * admin: até 5 entradas; com mais, 4 + "Mais", que abre uma folha acima da
+ * barra com as demais.
  *
- * Tema claro forçado; `branding.corPrimaria` colore a ação principal.
- * Props: `papel`, `itens` (use `itensDoPapel`), `usuario`, `branding?`,
- * `slotSino?` (o sino de notificações; recebe o mesmo elemento no desktop e no
- * celular), `slotConta?` (ex.: menu da conta; no celular substitui o avatar
- * simples), `raiz` (rota do "Hoje", para marcar o item ativo; padrão = href do
- * primeiro item).
+ * Área da página: `p-4 lg:p-6`, sem largura máxima (igual `/admin`). As telas
+ * usam `Conteudo`, que só empilha as seções.
+ *
+ * Props: `area` (`clube` ou `plataforma`: escolhe a chave de persistência e a
+ * marca), `papel`, `itens` (use `itensDoPapel`), `usuario`, `branding?`,
+ * `hrefAjustes?`, `aoSair?`, `raiz` (rota do "Hoje", para marcar o item ativo;
+ * padrão = href do primeiro item).
  */
 export function ComercialShell({
+  area,
   papel,
   itens,
   usuario,
   branding,
-  slotSino,
-  slotConta,
+  hrefAjustes,
+  aoSair,
   raiz,
   children,
 }: {
+  area: 'clube' | 'plataforma'
   papel: PapelComercial
   itens: ItemMenu[]
   usuario: UsuarioShell
   branding?: Branding
-  slotSino?: ReactNode
-  slotConta?: ReactNode
+  hrefAjustes?: string
+  aoSair?: () => void
   raiz?: string
   children: ReactNode
 }) {
   const pathname = usePathname()
-  const [fixo, setFixo] = useState(false)
-  const [sobre, setSobre] = useState(false)
+  const [recolhido, setRecolhido] = useState(false)
   const [maisAberto, setMaisAberto] = useState(false)
+  const chave = CHAVE_RECOLHIDO[area]
   const raizDoMenu = raiz ?? itens[0]?.href ?? '/'
 
   useEffect(() => {
-    setFixo(lerFixo())
-  }, [])
+    try {
+      const guardado = window.localStorage.getItem(chave)
+      if (guardado !== null) setRecolhido(guardado === 'true')
+    } catch {
+      /* sem storage: começa expandido */
+    }
+  }, [chave])
 
-  const alternarFixo = useCallback(() => {
-    setFixo(atual => {
+  const alternar = useCallback(() => {
+    setRecolhido(atual => {
       const proximo = !atual
       try {
-        window.localStorage.setItem(CHAVE_FIXO, proximo ? '1' : '0')
+        window.localStorage.setItem(chave, String(proximo))
       } catch {
         /* sem storage: vale só nesta sessão */
       }
       return proximo
     })
-  }, [])
+  }, [chave])
 
   useEffect(() => {
     function aoTeclar(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault()
-        alternarFixo()
+        alternar()
       }
     }
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)
-  }, [alternarFixo])
+  }, [alternar])
 
   useEffect(() => {
     setMaisAberto(false)
   }, [pathname])
 
-  const expandido = fixo || sobre
   const ativo = (href: string) => itemAtivo(pathname, href, raizDoMenu)
   const caber = itens.length <= 5 ? itens : itens.slice(0, 4)
   const resto = itens.length <= 5 ? [] : itens.slice(4)
   const restoAtivo = resto.some(i => ativo(i.href))
-  const linkAjustes = itens.find(i => i.icon === 'ajustes')
+  const linkAjustes = hrefAjustes ?? itens.find(i => i.icon === 'ajustes')?.href
+  const papelRotulo = ROTULO_PAPEL[papel]
+  const presenca = usuario.online ? 'Online' : 'Offline'
 
-  return (
-    <div style={estiloDaCasca(branding?.corPrimaria)} className="min-h-dvh bg-[#F8F9FB] text-foreground">
-      <PularParaConteudo alvo="conteudo-comercial" />
+  const menuConta = (
+    <>
+      <DropdownMenuLabel className="flex flex-col gap-0.5">
+        <span className="truncate text-sm font-semibold">{usuario.nome}</span>
+        <span className="text-xs font-normal text-muted-foreground">
+          {papelRotulo} · {presenca}
+        </span>
+      </DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      {linkAjustes ? (
+        <DropdownMenuItem asChild className="min-h-10 cursor-pointer">
+          <Link href={linkAjustes}>
+            <Settings aria-hidden="true" /> Ajustes
+          </Link>
+        </DropdownMenuItem>
+      ) : null}
+      {aoSair ? (
+        <DropdownMenuItem onSelect={aoSair} className="min-h-10 cursor-pointer text-destructive focus:text-destructive">
+          <LogOut aria-hidden="true" /> Sair
+        </DropdownMenuItem>
+      ) : null}
+    </>
+  )
 
-      {/* Trilho do desktop */}
-      <aside
-        aria-label="Menu da área comercial"
-        onMouseEnter={() => setSobre(true)}
-        onMouseLeave={() => setSobre(false)}
-        onFocusCapture={() => setSobre(true)}
-        onBlurCapture={e => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setSobre(false)
-        }}
+  function linkDesktop(item: ItemMenu) {
+    const Icone = ICONES[item.icon]
+    const atual = ativo(item.href)
+    const contador = item.badge && item.badge > 0 ? item.badge : null
+    const rotulo = contador ? rotuloContador(contador) : ''
+    const link = (
+      <Link
+        href={item.href}
+        aria-current={atual ? 'page' : undefined}
+        aria-label={rotulo ? `${item.label}, ${rotulo}` : recolhido ? item.label : undefined}
         className={cn(
-          'fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border bg-white transition-[width,box-shadow] duration-200 lg:flex',
-          expandido ? 'w-60' : 'w-14',
-          expandido && !fixo && 'shadow-[8px_0_24px_-12px_rgba(16,24,40,0.18)]',
+          'relative flex items-center rounded-lg text-sm transition-colors',
+          FOCO,
+          recolhido ? 'justify-center p-2.5' : 'gap-3 px-3 py-2',
+          atual ? 'bg-primary/10 font-semibold text-primary' : 'font-medium text-muted-foreground hover:bg-muted hover:text-foreground',
         )}
       >
-        <div className="flex h-14 shrink-0 items-center overflow-hidden px-3">
-          <Marca branding={branding} compacta={!expandido} />
+        <Icone className="h-5 w-5 shrink-0" aria-hidden="true" />
+        {!recolhido && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+        {contador !== null && <Contador valor={contador} embutido={!recolhido} rotulo={rotulo} />}
+      </Link>
+    )
+    return (
+      <li key={item.href}>
+        {recolhido ? (
+          <Tooltip>
+            <TooltipTrigger asChild>{link}</TooltipTrigger>
+            <TooltipContent side="right">
+              {item.label}
+              {rotulo && <span className="block text-xs opacity-80">{rotulo}</span>}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          link
+        )}
+      </li>
+    )
+  }
+
+  const gatilhoConta = (
+    <button
+      type="button"
+      aria-label={`Conta de ${usuario.nome}, ${presenca.toLowerCase()}`}
+      className={cn(
+        'flex items-center rounded-xl text-left transition-colors hover:bg-muted',
+        FOCO,
+        recolhido ? 'mx-auto size-11 justify-center' : 'min-w-0 flex-1 gap-3 p-2',
+      )}
+    >
+      <AvatarConta usuario={usuario} />
+      {!recolhido && (
+        <>
+          <span className="flex min-w-0 flex-1 flex-col leading-tight">
+            <span className="truncate text-sm font-semibold text-foreground">{usuario.nome}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {papelRotulo} · {presenca}
+            </span>
+          </span>
+          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </>
+      )}
+    </button>
+  )
+
+  const marcaLink = (compacta: boolean) => (
+    <Link href={raizDoMenu} aria-label="Início da área comercial" className={cn('flex items-center gap-2 overflow-hidden rounded-lg', FOCO)}>
+      <MarcaMenu area={area} branding={branding} compacta={compacta} />
+    </Link>
+  )
+
+  return (
+    <TooltipProvider delayDuration={100}>
+      <div style={{ colorScheme: 'light', ...variaveisDeCor(branding?.corPrimaria) }} className="min-h-screen bg-background text-foreground">
+        <PularParaConteudo alvo="conteudo-comercial" />
+
+        {/* Topo do celular: no desktop o menu lateral leva a marca. */}
+        <header className="fixed left-0 right-0 top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-card px-4 lg:hidden">
+          {marcaLink(false)}
+          <div className="flex items-center gap-1">
+            <NotificationBell variant="mobile" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`Conta de ${usuario.nome}, ${presenca.toLowerCase()}`}
+                  className={cn('flex size-11 items-center justify-center rounded-full', FOCO)}
+                >
+                  <AvatarConta usuario={usuario} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="z-110 w-56">
+                {menuConta}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
+
+        {/* Menu lateral do desktop */}
+        <aside
+          aria-label="Menu da área comercial"
+          className={cn(
+            'fixed left-0 top-0 z-50 hidden h-full flex-col border-r border-border bg-card transition-all duration-300 ease-in-out lg:flex',
+            recolhido ? 'w-20' : 'w-64',
+          )}
+        >
+          <div className={cn('flex h-18 shrink-0 items-center border-b border-border', recolhido ? 'justify-center px-2' : 'px-5')}>
+            {marcaLink(recolhido)}
+          </div>
+
+          {/* Recolher/expandir: botão flutuante na borda, como no painel do clube. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={alternar}
+                aria-label={recolhido ? 'Expandir menu (Ctrl+B)' : 'Recolher menu (Ctrl+B)'}
+                aria-keyshortcuts="Control+B Meta+B"
+                className="absolute -right-3 top-14.5 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:text-primary"
+              >
+                {recolhido ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{recolhido ? 'Expandir (Ctrl+B)' : 'Recolher (Ctrl+B)'}</TooltipContent>
+          </Tooltip>
+
+          <nav className="scrollbar-translucent flex-1 overflow-y-auto overflow-x-hidden p-3" aria-label="Principal">
+            <ul className="space-y-0.5">{itens.map(linkDesktop)}</ul>
+          </nav>
+
+          <div className={cn('shrink-0 border-t border-border p-3', recolhido ? 'space-y-2' : 'flex items-center gap-1')}>
+            {recolhido ? (
+              <>
+                <div className="flex justify-center">
+                  <NotificationBell variant="topbar" />
+                </div>
+                <DropdownMenu>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>{gatilhoConta}</DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      {usuario.nome} · {papelRotulo}
+                    </TooltipContent>
+                  </Tooltip>
+                  <DropdownMenuContent side="right" align="end" sideOffset={14} className="z-110 w-56">
+                    {menuConta}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : (
+              <>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>{gatilhoConta}</DropdownMenuTrigger>
+                  <DropdownMenuContent side="top" align="start" className="z-110 w-56">
+                    {menuConta}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <NotificationBell variant="topbar" />
+              </>
+            )}
+          </div>
+        </aside>
+
+        <div
+          className={cn(
+            'flex min-h-screen flex-col pt-14 transition-[padding] duration-300 ease-in-out lg:pt-0',
+            recolhido ? 'lg:pl-20' : 'lg:pl-64',
+          )}
+        >
+          {/* Área da página: igual ao `main` do admin (p-4 / lg:p-6, sem largura máxima). */}
+          <main id="conteudo-comercial" tabIndex={-1} className="flex-1 p-4 pb-24 outline-none lg:p-6 lg:pb-6">
+            {children}
+          </main>
         </div>
-        <nav aria-label="Principal" className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 py-2">
-          {itens.map(item => {
+
+        {/* Barra inferior do celular (mesmo desenho da do admin). */}
+        <nav
+          aria-label="Navegação móvel"
+          style={{ gridTemplateColumns: `repeat(${caber.length + (resto.length > 0 ? 1 : 0)}, minmax(0, 1fr))` }}
+          className="fixed bottom-0 left-0 right-0 z-100 grid h-16 items-center gap-0.5 border-t border-border bg-card px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_12px_rgba(15,23,42,0.06)] min-[400px]:gap-1 min-[400px]:px-2 lg:hidden"
+        >
+          {caber.map(item => {
             const Icone = ICONES[item.icon]
             const atual = ativo(item.href)
+            const contador = item.badge && item.badge > 0 ? item.badge : null
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                title={expandido ? undefined : item.label}
                 aria-current={atual ? 'page' : undefined}
-                aria-label={item.badge ? `${item.label}, ${item.badge} novidades` : undefined}
+                aria-label={contador !== null ? `${item.label}, ${rotuloContador(contador)}` : undefined}
                 className={cn(
-                  'group relative flex h-10 items-center gap-3 rounded-xl px-2.5 text-sm font-medium transition-colors',
-                  atual ? 'bg-[#E5EDF5] text-[#1E2A4A]' : 'text-[#475467] hover:bg-[#F2F4F7] hover:text-foreground',
-                  FOCUS_RING,
+                  'relative flex h-13 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-center text-[10px] font-medium tracking-tight transition-all min-[400px]:text-[11px] min-[400px]:tracking-normal',
+                  FOCO,
+                  atual ? 'bg-primary/10 font-semibold text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                 )}
               >
-                {atual ? (
-                  <span aria-hidden="true" className="absolute -left-2 top-2 h-6 w-1 rounded-r-full bg-[var(--vr-accent,#1E2A4A)]" />
-                ) : null}
-                <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-                  <Icone className="size-5" strokeWidth={atual ? 2.25 : 2} aria-hidden="true" />
-                  <Selo valor={item.badge} />
+                <span className="relative inline-flex">
+                  <Icone className={cn('h-5 w-5 shrink-0 transition-transform', atual && 'scale-110')} aria-hidden="true" />
+                  {contador !== null && <Contador valor={contador} embutido={false} rotulo={rotuloContador(contador)} />}
                 </span>
-                <span className={cn('truncate transition-opacity duration-150', expandido ? 'opacity-100' : 'sr-only opacity-0')}>
-                  {item.label}
-                </span>
+                <span className="w-full truncate px-0.5">{item.label}</span>
               </Link>
-            )
-          })}
-        </nav>
-        <div className="flex shrink-0 flex-col gap-1 border-t border-border px-2 py-2">
-          {slotSino ? <div className="flex min-h-10 items-center justify-start px-0.5">{slotSino}</div> : null}
-          <div className="flex h-12 items-center gap-3 overflow-hidden px-1.5">
-            <AvatarPresenca usuario={usuario} />
-            <span className={cn('flex min-w-0 flex-col leading-tight transition-opacity', expandido ? 'opacity-100' : 'sr-only opacity-0')}>
-              <span className="truncate text-sm font-semibold text-foreground">{usuario.nome}</span>
-              <span className="truncate text-xs text-muted-foreground">
-                {ROTULO_PAPEL[papel]} · {usuario.online ? 'Online' : 'Offline'}
-              </span>
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={alternarFixo}
-            aria-pressed={fixo}
-            aria-keyshortcuts="Control+B"
-            title="Fixar menu aberto (Ctrl+B)"
-            className={cn('flex h-10 items-center gap-3 rounded-xl px-2.5 text-sm text-[#475467] hover:bg-[#F2F4F7]', FOCUS_RING)}
-          >
-            {fixo ? <PanelLeftClose className="size-5 shrink-0" aria-hidden="true" /> : <PanelLeftOpen className="size-5 shrink-0" aria-hidden="true" />}
-            <span className={cn('truncate', expandido ? 'opacity-100' : 'sr-only opacity-0')}>
-              {fixo ? 'Recolher menu' : 'Fixar menu'} <kbd className="ml-1 rounded border border-border px-1 text-[10px]">Ctrl B</kbd>
-            </span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Topo do celular */}
-      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-border bg-white/95 px-4 backdrop-blur lg:hidden">
-        <Link href={raizDoMenu} className={cn('min-w-0 rounded-lg', FOCUS_RING)}>
-          <Marca branding={branding} />
-        </Link>
-        <div className="flex items-center gap-1">
-          {slotSino}
-          {slotConta ??
-            (linkAjustes ? (
-              <Link
-                href={linkAjustes.href}
-                aria-label={`Ajustes de ${usuario.nome}, ${usuario.online ? 'online' : 'offline'}`}
-                className={cn('flex size-11 items-center justify-center rounded-full', FOCUS_RING)}
-              >
-                <AvatarPresenca usuario={usuario} />
-              </Link>
-            ) : (
-              <span className="flex size-11 items-center justify-center">
-                <AvatarPresenca usuario={usuario} />
-              </span>
-            ))}
-        </div>
-      </header>
-
-      <main
-        id="conteudo-comercial"
-        tabIndex={-1}
-        className={cn(
-          'pb-24 pt-14 outline-none transition-[padding] duration-200 lg:pb-0 lg:pt-0',
-          fixo ? 'lg:pl-60' : 'lg:pl-14',
-        )}
-      >
-        {children}
-      </main>
-
-      {/* Barra inferior do celular */}
-      <nav
-        aria-label="Navegação principal"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
-      >
-        <ul className="m-0 grid h-16 list-none grid-cols-[repeat(auto-fit,minmax(0,1fr))] p-0">
-          {caber.map(item => {
-            const Icone = ICONES[item.icon]
-            const atual = ativo(item.href)
-            return (
-              <li key={item.href} className="min-w-0">
-                <Link
-                  href={item.href}
-                  aria-current={atual ? 'page' : undefined}
-                  className={cn('flex h-full flex-col items-center justify-center gap-0.5 text-[11px] font-medium', atual ? 'text-[#1E2A4A]' : 'text-[#667085]', FOCUS_RING)}
-                >
-                  <span className={cn('relative inline-flex h-7 w-12 items-center justify-center rounded-full transition-colors', atual && 'bg-[#E5EDF5]')}>
-                    <Icone className="size-5" strokeWidth={atual ? 2.25 : 2} aria-hidden="true" />
-                    <Selo valor={item.badge} />
-                  </span>
-                  <span className="max-w-full truncate px-1">{item.label}</span>
-                </Link>
-              </li>
             )
           })}
           {resto.length > 0 ? (
-            <li className="min-w-0">
-              <button
-                type="button"
-                onClick={() => setMaisAberto(true)}
-                aria-haspopup="dialog"
-                className={cn('flex h-full w-full flex-col items-center justify-center gap-0.5 text-[11px] font-medium', restoAtivo ? 'text-[#1E2A4A]' : 'text-[#667085]', FOCUS_RING)}
-              >
-                <span className={cn('inline-flex h-7 w-12 items-center justify-center rounded-full', restoAtivo && 'bg-[#E5EDF5]')}>
-                  <Ellipsis className="size-5" aria-hidden="true" />
-                </span>
-                Mais
-              </button>
-            </li>
+            <button
+              type="button"
+              onClick={() => setMaisAberto(aberto => !aberto)}
+              aria-expanded={maisAberto}
+              aria-haspopup="dialog"
+              className={cn(
+                'relative flex h-13 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-center text-[10px] font-medium tracking-tight transition-all min-[400px]:text-[11px] min-[400px]:tracking-normal',
+                FOCO,
+                restoAtivo || maisAberto ? 'bg-primary/10 font-semibold text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <Ellipsis className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span className="w-full truncate px-0.5">Mais</span>
+            </button>
           ) : null}
-        </ul>
-      </nav>
+        </nav>
 
-      {resto.length > 0 ? (
-        <Sheet open={maisAberto} onOpenChange={setMaisAberto}>
-          <SheetContent side="bottom" style={estiloDaCasca(branding?.corPrimaria)} className="rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)]">
-            <SheetHeader>
-              <SheetTitle>Mais opções</SheetTitle>
-              <SheetDescription className="sr-only">Outras áreas do módulo comercial</SheetDescription>
-            </SheetHeader>
-            <ul className="m-0 flex list-none flex-col gap-1 p-4 pt-0">
-              {resto.map(item => {
-                const Icone = ICONES[item.icon]
-                return (
-                  <li key={item.href}>
+        {resto.length > 0 ? (
+          <Sheet open={maisAberto} onOpenChange={setMaisAberto}>
+            {/* Fica acima da barra inferior (bottom-16), que continua à vista. */}
+            <SheetContent side="bottom" className="bottom-16 max-h-[78vh] gap-0 rounded-t-2xl pb-2 lg:hidden">
+              <SheetHeader className="pb-2">
+                <SheetTitle>Mais opções</SheetTitle>
+                <SheetDescription>Outras áreas do módulo comercial.</SheetDescription>
+              </SheetHeader>
+              <div className="grid grid-cols-3 gap-2 overflow-y-auto px-4 pb-2">
+                {resto.map(item => {
+                  const Icone = ICONES[item.icon]
+                  const atual = ativo(item.href)
+                  return (
                     <Link
+                      key={item.href}
                       href={item.href}
                       onClick={() => setMaisAberto(false)}
-                      aria-current={ativo(item.href) ? 'page' : undefined}
-                      className={cn('flex min-h-12 items-center gap-3 rounded-xl px-3 text-base font-medium', ativo(item.href) ? 'bg-[#E5EDF5] text-[#1E2A4A]' : 'hover:bg-[#F2F4F7]', FOCUS_RING)}
+                      aria-current={atual ? 'page' : undefined}
+                      className={cn(
+                        'relative flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl border p-2 text-center text-xs transition-colors',
+                        FOCO,
+                        atual ? 'border-primary/30 bg-primary/10 font-semibold text-primary' : 'border-border/70 font-medium text-foreground hover:bg-muted',
+                      )}
                     >
-                      <Icone className="size-5" aria-hidden="true" />
-                      {item.label}
+                      <Icone className={cn('h-5 w-5', atual ? 'text-primary' : 'text-muted-foreground')} aria-hidden="true" />
+                      <span className="line-clamp-2 leading-tight">{item.label}</span>
                     </Link>
-                  </li>
-                )
-              })}
-            </ul>
-          </SheetContent>
-        </Sheet>
-      ) : null}
-    </div>
+                  )
+                })}
+              </div>
+            </SheetContent>
+          </Sheet>
+        ) : null}
+      </div>
+    </TooltipProvider>
   )
 }
 

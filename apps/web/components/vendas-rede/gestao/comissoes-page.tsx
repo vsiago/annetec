@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Banknote, Loader2, Wallet } from 'lucide-react'
+import { Ban, Banknote, CircleCheck, Clock, HandCoins, Loader2, MinusCircle, Wallet, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   PARTE_COMISSAO_LABELS,
@@ -28,7 +28,10 @@ import { AcaoPrincipal } from '../ui/acao-principal'
 import { ComissaoExtrato, type LinhaComissao } from '../ui/comissao-extrato'
 import { EstadoVazio } from '../ui/estado-vazio'
 import { formatarMoeda, formatarPercentual } from '../ui/mascaras'
+import { KpiGrid } from '../ui/kpi-grid'
+import { ValorMoeda } from '../ui/valor-moeda'
 import { CabecalhoTela, PortaoDePapel, mesAtual, ultimosMeses } from './comum'
+import type { ConsoleTone } from '@/components/admin-platform/ui/tone'
 import type { EscopoRede, ResumoComissoes } from './tipos'
 
 /**
@@ -49,9 +52,17 @@ const TOM_STATUS: Record<StatusComissao, StatusPillTone> = {
 const DICA_STATUS: Record<StatusComissao, string> = {
   prevista: 'Fatura ainda não paga',
   a_pagar: 'Fatura paga, comissão liberada',
-  paga: 'Repasse feito',
+  paga: 'Comissão paga',
   cancelada: 'Estornada ou cancelada',
-  a_descontar: 'Abatida do próximo repasse',
+  a_descontar: 'Abatida do próximo pagamento',
+}
+
+const VISUAL_STATUS: Record<StatusComissao, { icone: LucideIcon; tom: ConsoleTone }> = {
+  prevista: { icone: Clock, tom: 'blue' },
+  a_pagar: { icone: HandCoins, tom: 'amber' },
+  paga: { icone: CircleCheck, tom: 'green' },
+  cancelada: { icone: Ban, tom: 'neutral' },
+  a_descontar: { icone: MinusCircle, tom: 'red' },
 }
 
 export function ComissoesPage({ escopo }: { escopo: EscopoRede }) {
@@ -123,10 +134,11 @@ export function ComissoesConteudo({ escopo, eu }: { escopo: EscopoRede; eu: Vend
   return (
     <div className="flex flex-col gap-6">
       <CabecalhoTela
+        icone={Wallet}
         titulo="Comissões"
         descricao={
           master
-            ? 'Acompanhe o que foi gerado no mês, marque os repasses como pagos e cancele o que não vale mais.'
+            ? 'Acompanhe o que foi gerado no mês, marque as comissões como pagas e cancele o que não vale mais.'
             : veTodos
               ? 'As comissões do período, do vendedor ao gerente, por fatura paga.'
               : 'Cada fatura paga de um cliente seu gera uma comissão. Aqui está o extrato do mês.'
@@ -174,15 +186,17 @@ export function ComissoesConteudo({ escopo, eu }: { escopo: EscopoRede; eu: Vend
       </div>
 
       {totais ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          {STATUS_COMISSAO.map(s => (
-            <div key={s} className="flex min-w-0 flex-col gap-1.5 rounded-2xl border border-border bg-card p-4">
-              <StatusPill tone={TOM_STATUS[s]}>{STATUS_COMISSAO_LABELS[s]}</StatusPill>
-              <p className="m-0 text-xl font-bold tabular-nums">{formatarMoeda(totais[s])}</p>
-              <p className="m-0 text-xs text-muted-foreground">{DICA_STATUS[s]}</p>
-            </div>
-          ))}
-        </div>
+        <KpiGrid
+          colunas={5}
+          className="grid-cols-2 gap-3 sm:gap-4 [&>:last-child:nth-child(odd)]:col-span-2 sm:[&>:last-child:nth-child(odd)]:col-span-1"
+          itens={STATUS_COMISSAO.map(st => ({
+            rotulo: STATUS_COMISSAO_LABELS[st],
+            valor: <ValorMoeda valor={totais[st]} limite="xs" />,
+            dica: DICA_STATUS[st],
+            icone: VISUAL_STATUS[st].icone,
+            tom: VISUAL_STATUS[st].tom,
+          }))}
+        />
       ) : null}
 
       {lista.loading && !lista.data ? (
@@ -198,6 +212,20 @@ export function ComissoesConteudo({ escopo, eu }: { escopo: EscopoRede; eu: Vend
             status !== 'all' || agente !== 'all'
               ? 'Limpe os filtros ou escolha outro mês para ver mais comissões.'
               : 'Quando um cliente pagar a primeira fatura, a comissão aparece aqui. Escolha outro mês para ver o histórico.'
+          }
+          acao={
+            status !== 'all' || agente !== 'all' ? (
+              <AcaoPrincipal
+                variante="secundaria"
+                onClick={() => {
+                  setStatus('all')
+                  setAgente('all')
+                  setPagina(1)
+                }}
+              >
+                Limpar filtros
+              </AcaoPrincipal>
+            ) : undefined
           }
         />
       ) : (
@@ -259,7 +287,7 @@ export function ComissoesConteudo({ escopo, eu }: { escopo: EscopoRede; eu: Vend
             <div className="overflow-x-auto">
               <table className="w-full min-w-[620px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+                  <tr className="border-b border-border bg-[#F8F9FB] text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <th scope="col" className="px-4 py-2 font-medium">Beneficiário</th>
                     <th scope="col" className="px-3 py-2 text-right font-medium">Prevista</th>
                     <th scope="col" className="px-3 py-2 text-right font-medium">A pagar</th>
@@ -306,7 +334,7 @@ export function ComissoesConteudo({ escopo, eu }: { escopo: EscopoRede; eu: Vend
               )
               if (!r) return false
               toast.success(`${r.pagas} ${r.pagas === 1 ? 'comissão marcada como paga' : 'comissões marcadas como pagas'}.`, {
-                description: r.ignoradas > 0 ? `${r.ignoradas} ignorada(s): já estavam pagas ou canceladas.` : undefined,
+                description: r.ignoradas > 0 ? `${r.ignoradas} ${r.ignoradas === 1 ? 'já estava paga ou cancelada' : 'já estavam pagas ou canceladas'}.` : undefined,
               })
               recarregar()
               return true
@@ -323,7 +351,7 @@ export function ComissoesConteudo({ escopo, eu }: { escopo: EscopoRede; eu: Vend
                 </p>
               ) : null
             }
-            confirmLabel="Cancelar comissão"
+            confirmLabel="Sim, cancelar comissão"
             destructive
             reason={{ label: 'Motivo do cancelamento', placeholder: 'Ex.: cliente pediu estorno da fatura', minLength: 3, maxLength: 500 }}
             onConfirm={async motivo => {
@@ -362,7 +390,7 @@ function TabelaMaster({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[820px] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+          <tr className="border-b border-border bg-[#F8F9FB] text-left text-[11px] uppercase tracking-wide text-muted-foreground">
             <th scope="col" className="w-10 px-4 py-2">
               <Checkbox
                 checked={todasMarcadas}
@@ -459,7 +487,7 @@ function PagarDialog({
         <DialogHeader>
           <DialogTitle>Marcar como {quantidade === 1 ? 'paga' : 'pagas'}</DialogTitle>
           <DialogDescription>
-            {quantidade} {quantidade === 1 ? 'comissão' : 'comissões'}, {formatarMoeda(total)} no total. Faça o repasse primeiro e registre aqui: a baixa não move dinheiro.
+            {quantidade} {quantidade === 1 ? 'comissão' : 'comissões'}, {formatarMoeda(total)} no total. Isto só registra o pagamento; não envia dinheiro. Faça o pagamento primeiro e registre aqui.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">

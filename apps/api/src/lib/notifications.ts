@@ -432,7 +432,7 @@ export interface VendasLeadNoticeFacts {
   leadNome: string
   /** Rótulo da origem ("Site", "Indicação"...). */
   origemLabel: string
-  /** Momento em que o lead entrou no pool (entra na chave: cada entrada avisa uma vez). */
+  /** Momento em que o lead ficou disponível (entra na chave: cada entrada avisa uma vez). */
   poolDesde: Date
 }
 
@@ -442,7 +442,7 @@ export function vendasLeadLink(tenant: TenantRef | null, leadId: string): string
 }
 
 /**
- * Lead novo no pool: uma linha `sales` por agente que deve ver (online e
+ * Lead novo em Disponíveis (sem responsável): uma linha `sales` por agente que deve ver (online e
  * masters explícitos — quem resolve é o chamador) + o sino da gerência do
  * escopo (equipe ANNETEC no platform, admin do clube no tenant). Puro.
  */
@@ -455,7 +455,7 @@ export function vendasLeadNoPoolNotifications(facts: VendasLeadNoticeFacts, reci
     kind: 'vendas_lead_novo' as const,
     organizationId: facts.tenant?.id ?? null,
     recipientUserId: userId,
-    title: 'Novo lead no pool',
+    title: 'Novo lead disponível',
     body,
     payload,
     link: vendasLeadLink(facts.tenant, facts.leadId),
@@ -477,7 +477,7 @@ export function vendasLeadNoPoolNotifications(facts: VendasLeadNoticeFacts, reci
       audience: 'platform',
       kind: 'vendas_lead_novo',
       organizationId: null,
-      title: 'Novo lead no pool comercial',
+      title: 'Novo lead disponível no comercial',
       body,
       payload,
       link: `/admin/comercial/funil?lead=${encodeURIComponent(facts.leadId)}`,

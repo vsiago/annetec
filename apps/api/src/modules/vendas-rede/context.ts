@@ -93,7 +93,7 @@ async function equipesDoSupervisor(agenteId: string): Promise<string[]> {
 function semPerfil(): AppError {
   return new AppError(
     ERROR_CODES.VENDAS_SEM_PERFIL,
-    'Sua conta ainda não tem perfil na Rede Comercial. Peça ao responsável para cadastrar o seu perfil de vendas.',
+    'Sua conta ainda não tem perfil de vendas. Peça ao administrador para cadastrar você na Rede Comercial.',
   )
 }
 
@@ -111,9 +111,9 @@ async function montarContexto(c: Context<AppEnv>, scope: EscopoVendas): Promise<
   let masterPossivel = false
 
   if (scope === 'platform') {
-    if (membership.scope !== 'platform') throw AppError.forbidden('Rota restrita à plataforma ANNETEC')
+    if (membership.scope !== 'platform') throw AppError.forbidden('Esta área é da equipe e dos vendedores da ANNETEC.')
     const staff = isPlatformStaffRole(membership.platformRole)
-    if (!staff && membership.platformRole !== 'platform_seller') throw AppError.forbidden('Rota restrita à equipe e aos vendedores ANNETEC')
+    if (!staff && membership.platformRole !== 'platform_seller') throw AppError.forbidden('Esta área é da equipe e dos vendedores da ANNETEC.')
     masterPossivel = staff
     agente = await buscarAgenteDoUsuario(userId, 'platform', null)
   } else {
@@ -196,7 +196,7 @@ export function requirePapel(...papeis: PapelComercial[]) {
   return createMiddleware<AppEnv>(async (c, next) => {
     const ctx = vendasOf(c)
     if (!papeis.includes(ctx.papel)) {
-      throw new AppError(ERROR_CODES.VENDAS_SEM_PERMISSAO_NA_REDE, 'Seu papel na rede não permite esta operação.')
+      throw new AppError(ERROR_CODES.VENDAS_SEM_PERMISSAO_NA_REDE, 'Seu perfil não permite esta ação. Fale com o seu supervisor ou gerente.')
     }
     await next()
   })

@@ -11,6 +11,7 @@ import type {
   PapelComercial,
   PlatformPlanOffer,
   ProximoPassoInput,
+  QuadroLeadsResposta,
   SellerLinkResult,
   SellerProposal,
   UpdateAgenteInput,
@@ -24,7 +25,7 @@ import type {
 import { apiFetch } from '@/lib/api/client'
 import { normalizePlanOffer, pagedOf, type Paged } from '@/lib/adapters/platform-console'
 import { prefixoApi, type EscopoVendas } from '@/lib/vendas-rede/escopo'
-import type { CarteiraResposta, ContadoresLeads, FiltrosLeads, LinkAdesao, PlanoVendavel, SituacaoCarteira } from '@/lib/vendas-rede/tipos'
+import type { CarteiraResposta, ContadoresLeads, FiltrosLeads, FiltrosQuadro, LinkAdesao, PlanoVendavel, SituacaoCarteira } from '@/lib/vendas-rede/tipos'
 import { run, type ActionResult } from './_api-result'
 
 /**
@@ -84,6 +85,25 @@ export async function listarLeadsAction(escopo: EscopoVendas, filtros: FiltrosLe
     })
     return pagedOf(data ?? [], meta, filtros.page, filtros.perPage)
   })
+}
+
+/** Funil em quadro: colunas por etapa, Disponíveis e fechados do mês numa chamada. */
+export async function getQuadroLeadsAction(escopo: EscopoVendas, filtros: FiltrosQuadro = {}): Promise<ActionResult<QuadroLeadsResposta>> {
+  return run(
+    async () =>
+      (
+        await apiFetch<QuadroLeadsResposta>(base(escopo, '/leads/quadro'), {
+          query: {
+            agente: filtros.agente,
+            origem: filtros.origem,
+            temperatura: filtros.temperatura,
+            busca: filtros.busca?.trim() || undefined,
+            atrasados: filtros.atrasados ? 'true' : undefined,
+            limite: filtros.limite,
+          },
+        })
+      ).data,
+  )
 }
 
 export async function getContadoresLeadsAction(escopo: EscopoVendas): Promise<ActionResult<ContadoresLeads>> {

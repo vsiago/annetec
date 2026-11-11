@@ -9,6 +9,9 @@ import {
   MessageCircle,
   NotebookPen,
   Phone,
+  Frown,
+  Meh,
+  Smile,
   Sparkles,
   Store,
   UserCheck,
@@ -21,9 +24,9 @@ import type { EventoLead, TipoEvento } from './tipos'
 
 const TIPOS: Record<TipoEvento, { icone: LucideIcon; tom: ConsoleTone; rotulo: string }> = {
   criado: { icone: Sparkles, tom: 'blue', rotulo: 'Lead criado' },
-  reivindicado: { icone: UserCheck, tom: 'navy', rotulo: 'Reivindicado' },
-  atribuido: { icone: Users, tom: 'navy', rotulo: 'Atribuído' },
-  devolvido_pool: { icone: Undo2, tom: 'amber', rotulo: 'Voltou ao pool' },
+  reivindicado: { icone: UserCheck, tom: 'navy', rotulo: 'Lead atendido' },
+  atribuido: { icone: Users, tom: 'navy', rotulo: 'Lead atribuído' },
+  devolvido_pool: { icone: Undo2, tom: 'amber', rotulo: 'Lead liberado' },
   etapa: { icone: ArrowRightLeft, tom: 'violet', rotulo: 'Mudança de etapa' },
   ligacao: { icone: Phone, tom: 'green', rotulo: 'Ligação' },
   whatsapp: { icone: MessageCircle, tom: 'green', rotulo: 'WhatsApp' },
@@ -36,6 +39,12 @@ const TIPOS: Record<TipoEvento, { icone: LucideIcon; tom: ConsoleTone; rotulo: s
   conversao: { icone: Handshake, tom: 'green', rotulo: 'Conversão' },
   sistema: { icone: CircleDot, tom: 'neutral', rotulo: 'Sistema' },
 }
+
+const REACOES = {
+  positivo: { icone: Smile, rotulo: 'Interessada', classe: 'bg-[#E3F6EA] text-[#067647]' },
+  neutro: { icone: Meh, rotulo: 'Neutra', classe: 'bg-[#FEF3DC] text-[#93370D]' },
+  negativo: { icone: Frown, rotulo: 'Sem interesse', classe: 'bg-[#E8F1FD] text-[#175CD3]' },
+} as const
 
 /**
  * Linha do tempo do lead (mais recente primeiro, como vier em `eventos`).
@@ -70,6 +79,17 @@ export function TimelineLead({ eventos, className }: { eventos: EventoLead[]; cl
                 <span className="font-semibold">{rotulo}</span>
                 {e.texto ? <span className="text-muted-foreground"> · {e.texto}</span> : null}
               </p>
+              {e.sentimento ? (
+                <p className="m-0">
+                  <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', REACOES[e.sentimento].classe)}>
+                    {(() => {
+                      const R = REACOES[e.sentimento].icone
+                      return <R className="size-3" aria-hidden="true" />
+                    })()}
+                    Reação: {REACOES[e.sentimento].rotulo}
+                  </span>
+                </p>
+              ) : null}
               <p className="m-0 text-xs text-muted-foreground">
                 {e.quando}
                 {e.autor ? ` · ${e.autor}` : ''}

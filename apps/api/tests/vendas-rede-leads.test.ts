@@ -202,6 +202,7 @@ describe('visibilidade do funil', () => {
       const res = await call('u-balcaoA', method, path)
       expect(res.status, `${method} ${path}`).toBe(403)
       expect(res.body.error.code).toBe('VENDAS_SEM_PERMISSAO_NA_REDE')
+      expect(res.body.error.message).toBe('Seu perfil não permite esta ação. Fale com o seu supervisor ou gerente.')
     }
     // O lead sem dono do clube A não aparece nem no detalhe para o balcão.
     expect((await call('u-balcaoA', 'GET', `${T('clube-a')}/leads/${L.clubeA}`)).status).toBe(404)
@@ -231,6 +232,7 @@ describe('pool: reivindicar', () => {
     expect(status).toEqual([200, 409])
     const perdedor = a.status === 409 ? a : b
     expect(perdedor.body.error.code).toBe('VENDAS_LEAD_JA_REIVINDICADO')
+    expect(perdedor.body.error.message).toBe('Outra pessoa já atendeu este lead.')
     const vencedor = a.status === 200 ? ID.vendedor1 : ID.solo
     const lead = leadRow(L.pool)
     expect(lead.agenteId).toBe(vencedor)
@@ -279,6 +281,8 @@ describe('etapas e eventos', () => {
     const res = await call('u-vendedor1', 'POST', `${P}/leads/${L.v1}/etapa`, { etapa: 'proposta' })
     expect(res.status).toBe(422)
     expect(res.body.error.code).toBe('VENDAS_TRANSICAO_INVALIDA')
+    // Mensagem com rótulos de etapa, nunca os identificadores internos.
+    expect(res.body.error.message).toBe('Este lead não pode ir de Novo para Proposta.')
     expect(leadRow(L.v1).etapa).toBe('novo')
   })
 
@@ -304,6 +308,7 @@ describe('etapas e eventos', () => {
     const vendedor = await call('u-vendedor1', 'POST', `${P}/leads/${L.v1}/etapa`, { etapa: 'ganho', confirmar: true })
     expect(vendedor.status).toBe(422)
     expect(vendedor.body.error.code).toBe('VENDAS_TRANSICAO_INVALIDA')
+    expect(vendedor.body.error.message).toContain('Só o administrador e o gerente marcam como fechada')
     const com = await call('u-gerente1', 'POST', `${P}/leads/${L.v1}/etapa`, { etapa: 'ganho', confirmar: true })
     expect(com.status).toBe(200)
     expect(com.body.data.atribuicao).toMatchObject({

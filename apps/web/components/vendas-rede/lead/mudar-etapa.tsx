@@ -7,14 +7,16 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ETAPAS_LEAD, ETAPA_LEAD_LABELS, type EtapaLead, type VendasLead } from '@annetec/contracts'
 import type { EscopoVendas } from '@/lib/vendas-rede/escopo'
+import { avaliarMovimento } from '@/lib/vendas-rede/funil'
+import { useVendasRede } from '../provider'
 import { AcaoPrincipal } from '../ui/acao-principal'
 import { mudarEtapaComDesfazer } from './acoes'
 import { Chips } from './campos'
 
 const MOTIVOS = [
   { id: 'Sem interesse', rotulo: 'Sem interesse' },
-  { id: 'Preço', rotulo: 'Preço' },
-  { id: 'Sem resposta', rotulo: 'Sem resposta' },
+  { id: 'Achou caro', rotulo: 'Achou caro' },
+  { id: 'Não respondeu', rotulo: 'Não respondeu' },
   { id: 'Escolheu outra opção', rotulo: 'Escolheu outra opção' },
   { id: 'outro', rotulo: 'Outro' },
 ] as const
@@ -35,7 +37,7 @@ export function MudarEtapaDialog({
   aberto: boolean
   aoFechar: () => void
   escopo: EscopoVendas
-  lead: Pick<VendasLead, 'id' | 'nome' | 'etapa'>
+  lead: Pick<VendasLead, 'id' | 'nome' | 'etapa'> & Partial<Pick<VendasLead, 'conversao'>>
   etapaInicial?: EtapaLead
   aoConcluir: (atualizado: VendasLead) => void
 }) {
@@ -47,7 +49,12 @@ export function MudarEtapaDialog({
   const [enviando, setEnviando] = useState(false)
   const [tentou, setTentou] = useState(false)
 
-  const opcoes = ETAPAS_LEAD.filter(e => e !== lead.etapa).map(e => ({ id: e, rotulo: ETAPA_LEAD_LABELS[e] }))
+  const { eu } = useVendasRede()
+  // Só as transições que o papel pode fazer: ganho manual é de master e gerente (os demais fecham a venda pela proposta ou adesão).
+  const opcoes = ETAPAS_LEAD.filter(e => {
+    const v = avaliarMovimento({ etapa: lead.etapa, conversao: lead.conversao ?? null }, e, eu.papel)
+    return v.tipo === 'mover' || v.tipo === 'perdido' || v.tipo === 'ganho-confirmar'
+  }).map(e => ({ id: e, rotulo: ETAPA_LEAD_LABELS[e] }))
 
   useEffect(() => {
     if (aberto) {
@@ -62,7 +69,7 @@ export function MudarEtapaDialog({
   }, [aberto, etapaInicial, lead.etapa])
 
   const motivoFinal = motivo === 'outro' ? detalhe.trim() : [motivo, detalhe.trim()].filter(Boolean).join(': ')
-  const erroMotivo = etapa === 'perdido' && motivoFinal.length < 3 ? 'Conte o motivo da perda.' : null
+  const erroMotivo = etapa === 'perdido' && motivoFinal.length < 3 ? 'Informe o motivo da perda.' : null
   const erroConfirmar = etapa === 'ganho' && !confirmou ? 'Confirme que a venda foi fechada.' : null
 
   async function salvar() {
@@ -90,11 +97,14 @@ export function MudarEtapaDialog({
         <DialogHeader>
           <DialogTitle>Mudar etapa</DialogTitle>
           <DialogDescription>
-            {lead.nome} está em <strong>{ETAPA_LEAD_LABELS[lead.etapa]}</strong>. Para onde vai?
+            {lead.nome} está em <strong>{ETAPA_LEAD_LABELS[lead.etapa]}</strong>. Para qual etapa vai?
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-5">
           <Chips rotulo="Nova etapa" valor={etapa} opcoes={opcoes} aoMudar={setEtapa} />
+          {!opcoes.some(o => o.id === 'ganho') && lead.etapa !== 'ganho' && lead.etapa !== 'perdido' ? (
+            <p className="m-0 text-sm text-muted-foreground">A venda fecha sozinha quando o primeiro pagamento chegar.</p>
+          ) : null}
           {etapa === 'perdido' ? (
             <div className="flex flex-col gap-3">
               <Chips rotulo="Motivo da perda" valor={motivo as (typeof MOTIVOS)[number]['id']} opcoes={MOTIVOS} aoMudar={setMotivo} />
@@ -112,7 +122,7 @@ export function MudarEtapaDialog({
           {etapa === 'ganho' ? (
             <div className="flex flex-col gap-2 rounded-xl border border-[#FEDF89] bg-[#FFFAEB] p-3">
               <p className="m-0 text-sm text-[#93370D]">
-                O normal é a venda fechar sozinha quando o primeiro pagamento chega. Marque como ganho só se o cliente já fechou por fora.
+                A venda fecha sozinha quando o primeiro pagamento chega. Marque como venda fechada só se o cliente já fechou por fora.
               </p>
               <div className="flex items-center gap-2">
                 <Checkbox id={`${id}-confirma`} checked={confirmou} onCheckedChange={v => setConfirmou(v === true)} />

@@ -24,11 +24,31 @@ import {
   type PassoAtendimento,
   type Rascunho,
 } from './rascunho'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
 const ORDEM: PassoAtendimento[] = ['pessoa', 'dados', 'oferta', 'resultado']
 const ANTERIOR: Record<PassoAtendimento, PassoAtendimento | null> = { pessoa: null, dados: 'pessoa', oferta: 'dados', resultado: 'oferta' }
 const CAMPOS_DADOS = ['nome', 'telefone', 'documento', 'email', 'dataNascimento'] as const
 const CAMPOS_OFERTA = ['servico', 'valorTabela', 'planoId'] as const
+
+const ROTULO_CAMPO: Record<string, string> = {
+  nome: 'nome',
+  telefone: 'celular',
+  documento: 'CPF',
+  email: 'e-mail',
+  dataNascimento: 'data de nascimento',
+  servico: 'serviço',
+  valorTabela: 'valor',
+  planoId: 'plano',
+}
+
+/** "Falta preencher: CPF e e-mail." com os campos que de fato faltam. */
+function textoDoQueFalta(chaves: string[]): string {
+  const nomes = [...new Set(chaves.map(c => ROTULO_CAMPO[c] ?? c))]
+  if (nomes.length === 0) return 'Faltam dados para continuar.'
+  const lista = nomes.length === 1 ? nomes[0]! : `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`
+  return `Falta preencher: ${lista}.`
+}
 
 function montarInput(r: Rascunho, resultado: ResultadoBalcao, extra?: ExtraRegistro): AtendimentoBalcaoInput {
   const d = r.dados
@@ -138,17 +158,17 @@ export function AtenderPagina() {
 
   const plano = planos?.find(p => p.id === r.planoId)
 
-  function aposFalha(res: { error: string; fieldErrors?: Record<string, string> }) {
+  function aposFalha(res: { error: string; code?: string; fieldErrors?: Record<string, string> }) {
     const campos = res.fieldErrors ?? {}
     if (Object.keys(campos).length > 0) {
       setErros(campos)
       const passo: PassoAtendimento = CAMPOS_DADOS.some(c => campos[c]) ? 'dados' : CAMPOS_OFERTA.some(c => campos[c]) ? 'oferta' : 'resultado'
       setErroGeral(res.error)
-      toast.error('Faltam dados para continuar. Confira os campos marcados.')
+      toast.error(textoDoQueFalta(Object.keys(campos)), { description: 'Confira os campos marcados.' })
       ir(passo, passo === 'resultado' ? null : 'resultado')
     } else {
       setErroGeral(res.error)
-      toast.error(res.error)
+      toast.error(mensagemDoErro(res.code, res.error))
     }
   }
 
@@ -157,7 +177,7 @@ export function AtenderPagina() {
     const falta = conferir(r, resultado)
     if (falta) {
       setErros(falta.erros)
-      toast.error('Faltam dados para continuar. Confira os campos marcados.')
+      toast.error(textoDoQueFalta(Object.keys(falta.erros)), { description: 'Confira os campos marcados.' })
       ir(falta.passo, 'resultado')
       return
     }
@@ -196,7 +216,7 @@ export function AtenderPagina() {
     })
     setRegistrandoAssoc(false)
     if (!res.success) {
-      toast.error(res.error)
+      toast.error(mensagemDoErro(res.code, res.error))
       return
     }
     limparRascunho(slug)

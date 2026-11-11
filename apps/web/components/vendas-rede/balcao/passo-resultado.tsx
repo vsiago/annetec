@@ -18,7 +18,7 @@ export type ExtraRegistro = { formaPagamento?: 'pix' | 'boleto'; observacoes?: s
 
 const FORMAS = [
   { id: 'pix', nome: 'Pix', dica: 'Pagamento na hora', Icone: QrIcone },
-  { id: 'boleto', nome: 'Boleto', dica: 'Vence em poucos dias', Icone: FileText },
+  { id: 'boleto', nome: 'Boleto', dica: 'Vencimento mostrado ao gerar', Icone: FileText },
 ] as const
 
 export function PassoResultado({
@@ -166,7 +166,7 @@ export function PassoResultado({
             disabled={ocupado}
             onClick={() => aoRegistrar('assinou', { formaPagamento: forma })}
           >
-            Confirmar e gerar pagamento
+            {plano ? `Gerar ${forma === 'pix' ? 'Pix' : 'boleto'} de ${formatarMoeda(plano.precoMensal + (plano.adesao ?? 0))}` : 'Confirmar e gerar pagamento'}
           </AcaoPrincipal>
           <BotaoTexto disabled={ocupado} onClick={() => setAcao(null)}>
             Voltar

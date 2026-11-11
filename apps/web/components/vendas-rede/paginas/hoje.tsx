@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AlarmClock, ArrowRight, Flag, Inbox, Phone, FileText, NotebookPen, Plus, UserCheck } from 'lucide-react'
+import { toast } from 'sonner'
 import type { VendasLinhaDaVez, VendasPainelHoje } from '@annetec/contracts'
 import { useConsoleData } from '@/components/admin-platform/billing/console-kit'
 import { ErrorState } from '@/components/admin-platform/ui/empty-state'
@@ -17,10 +18,11 @@ import { useVendasRede } from '../provider'
 import { EstadoVazio } from '../ui/estado-vazio'
 import { DEGRAUS_PADRAO, FunilDegraus } from '../ui/funil-degraus'
 import { LinhaDaVez } from '../ui/linha-da-vez'
-import { dataPorExtenso, formatarMoeda, formatarPercentual, primeiroNome, saudacaoPorHora } from '../ui/mascaras'
+import { dataPorExtenso, formatarPercentual, pluralizar, primeiroNome, saudacaoPorHora } from '../ui/mascaras'
 import { NumerosDaSemana } from '../ui/numeros-da-semana'
+import { ValorMoeda } from '../ui/valor-moeda'
 import { PresencaDot } from '../ui/presenca-dot'
-import { CARD_SHADOW, FOCUS_RING } from '../ui/tokens'
+import { CARD_SHADOW, FAB_MOBILE, FOCUS_RING } from '../ui/tokens'
 import { atenderLead } from '../lead/acoes'
 import { LeadDetalhe, type AbaLead, type DialogoLead } from '../lead/lead-detalhe'
 import { NovoLeadDialog } from '../lead/novo-lead'
@@ -84,6 +86,26 @@ export function HojePage() {
       if (atualizado) setAberto({ id: lead.id })
       return
     }
+    if (item.acao === 'ligar') {
+      const digitos = (lead.telefone ?? '').replace(/\D/g, '')
+      if (!digitos) {
+        // Sem celular não há para quem ligar: abre a edição para cadastrar.
+        toast(`Cadastre o celular de ${lead.nome} para ligar.`)
+        setAberto({ id: lead.id, dialogo: 'editar' })
+        return
+      }
+      window.location.href = `tel:${digitos}`
+      if (eu.podeEscrever) {
+        window.setTimeout(() => {
+          toast(`Como foi com ${lead.nome}?`, {
+            description: 'Registre a ligação enquanto está fresco.',
+            duration: 12_000,
+            action: { label: 'Registrar contato', onClick: () => setAberto({ id: lead.id, dialogo: 'contato' }) },
+          })
+        }, 1200)
+      }
+      return
+    }
     if (item.acao === 'registrar') setAberto({ id: lead.id, dialogo: 'contato' })
     else if (item.acao === 'enviar_proposta') setAberto({ id: lead.id, aba: 'venda' })
     else setAberto({ id: lead.id })
@@ -103,7 +125,7 @@ export function HojePage() {
               {!d
                 ? 'Carregando o seu dia…'
                 : d.contadores.minhaVez > 0
-                  ? `${d.contadores.minhaVez} ${d.contadores.minhaVez === 1 ? 'lead espera' : 'leads esperam'} você agora.`
+                  ? `${d.contadores.minhaVez} ${d.contadores.minhaVez === 1 ? 'lead espera' : 'leads esperam'} por você agora.`
                   : 'Nada urgente agora. Bom momento para prospectar.'}
             </p>
           </div>
@@ -120,11 +142,11 @@ export function HojePage() {
           </li>
           <li>
             <Link
-              href={`${raiz}/funil`}
+              href={`${raiz}/funil?estacao=disponiveis`}
               className={cn('inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-white px-3.5 text-xs font-medium text-[#344054] hover:bg-[#F2F4F7]', FOCUS_RING)}
             >
               <Inbox className="size-3.5" aria-hidden="true" />
-              Pool: {(d?.contadores.pool ?? eu.contadores.pool).toLocaleString('pt-BR')} {(d?.contadores.pool ?? eu.contadores.pool) === 1 ? 'novo' : 'novos'}
+              Disponíveis: {(d?.contadores.pool ?? eu.contadores.pool).toLocaleString('pt-BR')}
             </Link>
           </li>
           <li className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-white px-3.5 text-xs font-medium text-[#344054]">
@@ -132,11 +154,11 @@ export function HojePage() {
             {d ? (
               d.meta.metaMensal ? (
                 <>
-                  Meta do mês: {d.meta.realizado.toLocaleString('pt-BR')} de {d.meta.metaMensal.toLocaleString('pt-BR')} {d.meta.metaMensal === 1 ? 'fechamento' : 'fechamentos'}
+                  Meta do mês: {d.meta.realizado.toLocaleString('pt-BR')} de {pluralizar(d.meta.metaMensal, 'venda', 'vendas')}
                   <span className="sr-only"> ({formatarPercentual((d.meta.realizado / d.meta.metaMensal) * 100)})</span>
                 </>
               ) : (
-                `Fechamentos no mês: ${d.meta.realizado.toLocaleString('pt-BR')}`
+                `Vendas no mês: ${d.meta.realizado.toLocaleString('pt-BR')}`
               )
             ) : (
               'Meta do mês'
@@ -164,15 +186,15 @@ export function HojePage() {
             {d.suaVez.length === 0 ? (
               <EstadoVazio
                 ilustracao="pool"
-                titulo={d.contadores.pool > 0 ? 'Você está em dia' : 'Nenhum lead esperando'}
+                titulo={d.contadores.pool > 0 ? 'Você está em dia' : 'Nenhum lead esperando por você'}
                 descricao={
                   d.contadores.pool > 0
-                    ? `Há ${d.contadores.pool} ${d.contadores.pool === 1 ? 'lead' : 'leads'} no pool. Pegue um para começar.`
+                    ? `Há ${d.contadores.pool} ${d.contadores.pool === 1 ? 'lead disponível' : 'leads disponíveis'}. Atenda um para começar.`
                     : 'Quando alguém pedir contato pelo site ou você marcar um próximo passo, ele aparece aqui.'
                 }
                 acao={
-                  <AcaoPrincipal href={`${raiz}/funil`} icone={<ArrowRight />}>
-                    Abrir o funil
+                  <AcaoPrincipal href={d.contadores.pool > 0 ? `${raiz}/funil?estacao=disponiveis` : `${raiz}/funil`} icone={<ArrowRight />}>
+                    {d.contadores.pool > 0 ? 'Ver disponíveis' : 'Ver o funil'}
                   </AcaoPrincipal>
                 }
               />
@@ -190,7 +212,7 @@ export function HojePage() {
                           motivo: item.motivo,
                           urgente: item.acao === 'atender' || Boolean(item.lead.proximoPassoInfo?.atrasado),
                         }}
-                        acao={{ rotulo: rotulo.texto, icone: rotulo.icone, onClick: () => void aoAcao(item), carregando: atendendo === item.lead.id }}
+                        acao={{ rotulo: item.acao === 'ligar' && !item.lead.telefone ? 'Cadastrar celular' : rotulo.texto, icone: rotulo.icone, onClick: () => void aoAcao(item), carregando: atendendo === item.lead.id }}
                         onAbrir={() => setAberto({ id: item.lead.id })}
                       />
                     </li>
@@ -226,14 +248,16 @@ export function HojePage() {
                 orientacao="vertical"
                 degraus={ETAPAS_DEGRAUS.map((etapa, i) => ({ rotulo: DEGRAUS_PADRAO[i] ?? etapa, valor: d.funil.contagem[etapa] ?? 0 }))}
               />
-              <dl className="m-0 grid grid-cols-2 gap-3 border-t border-border pt-3 text-sm">
-                <div>
+              <dl className="@container m-0 grid grid-cols-2 gap-3 border-t border-border pt-3 text-sm">
+                <div className="min-w-0">
                   <dt className="text-xs text-muted-foreground">Conversão</dt>
                   <dd className="m-0 font-semibold tabular-nums">{formatarPercentual(d.funil.taxaConversao, 1)}</dd>
                 </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Em negociação</dt>
-                  <dd className="m-0 font-semibold tabular-nums">{formatarMoeda(d.funil.valorEmNegociacao, { inteiro: true })}</dd>
+                <div className="min-w-0">
+                  <dt className="truncate text-xs text-muted-foreground">Em negociação</dt>
+                  <dd className="m-0 font-semibold">
+                    <ValorMoeda valor={d.funil.valorEmNegociacao} inteiro limite="xs" />
+                  </dd>
                 </div>
               </dl>
             </div>
@@ -246,7 +270,7 @@ export function HojePage() {
               className="lg:col-span-12"
             >
               {d.equipeOnline.length === 0 ? (
-                <p className="m-0 text-sm text-muted-foreground">Leads novos ficam no pool até alguém entrar.</p>
+                <p className="m-0 text-sm text-muted-foreground">Enquanto ninguém estiver online, os leads novos ficam em Disponíveis.</p>
               ) : (
                 <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
                   {d.equipeOnline.map(p => (
@@ -268,7 +292,8 @@ export function HojePage() {
           onClick={() => setNovoAberto(true)}
           aria-label="Novo lead"
           className={cn(
-            'fixed bottom-20 right-4 z-30 inline-flex size-14 items-center justify-center rounded-full bg-[var(--vr-accent,#1E2A4A)] text-[var(--vr-accent-fg,#FFFFFF)] shadow-lg hover:brightness-110 sm:hidden',
+            FAB_MOBILE,
+            'inline-flex size-14 items-center justify-center rounded-full bg-[var(--vr-accent,#1E2A4A)] text-[var(--vr-accent-fg,#FFFFFF)] shadow-lg hover:brightness-110 sm:hidden',
             FOCUS_RING,
           )}
         >
@@ -302,19 +327,19 @@ function rotuloDaAcao(acao: VendasLinhaDaVez['acao']): { texto: string; icone: R
     case 'ligar':
       return { texto: 'Ligar', icone: <Phone /> }
     case 'registrar':
-      return { texto: 'Registrar', icone: <NotebookPen /> }
+      return { texto: 'Registrar contato', icone: <NotebookPen /> }
     case 'enviar_proposta':
       return { texto: 'Enviar proposta', icone: <FileText /> }
   }
 }
 
-/** Card âmbar: só aparece quando há algo parado no pool ou próximo passo atrasado. */
+/** Card âmbar: só aparece quando há lead disponível parado ou próximo passo atrasado. */
 function AvisoDoDia({ painel, raiz }: { painel: VendasPainelHoje; raiz: string }) {
   const parados = painel.contadores.poolParadoMais15min
   const atrasados = painel.contadores.proximosPassosAtrasados
   const frases = useMemo(() => {
     const f: string[] = []
-    if (parados > 0) f.push(`${parados} ${parados === 1 ? 'lead está' : 'leads estão'} no pool há mais de 15 minutos sem dono`)
+    if (parados > 0) f.push(`${parados} ${parados === 1 ? 'lead disponível' : 'leads disponíveis'} há mais de 15 minutos sem ninguém atender`)
     if (atrasados > 0) f.push(`${atrasados} ${atrasados === 1 ? 'próximo passo atrasado' : 'próximos passos atrasados'}`)
     return f
   }, [parados, atrasados])
@@ -324,10 +349,10 @@ function AvisoDoDia({ painel, raiz }: { painel: VendasPainelHoje; raiz: string }
       <AlarmClock className="size-5 shrink-0" aria-hidden="true" />
       <p className="m-0 min-w-0 flex-1 text-sm font-medium">{frases.join(' · ')}.</p>
       <Link
-        href={`${raiz}/funil${parados > 0 ? '?estacao=pool' : '?estacao=andamento'}`}
+        href={`${raiz}/funil${parados > 0 ? '?estacao=disponiveis' : '?estacao=andamento'}`}
         className={cn('inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-[#FEDF89] bg-white px-4 text-sm font-semibold hover:bg-[#FEF3DC]', FOCUS_RING)}
       >
-        Ver agora <ArrowRight className="size-4" aria-hidden="true" />
+        Ver leads <ArrowRight className="size-4" aria-hidden="true" />
       </Link>
     </div>
   )

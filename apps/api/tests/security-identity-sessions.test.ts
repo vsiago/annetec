@@ -102,8 +102,11 @@ vi.mock('@/lib/auth', () => ({
 }))
 vi.mock('@/integrations/digitalsaude/provider', () => ({ getDigitalSaudeClient: vi.fn() }))
 vi.mock('@/modules/club-billing/access.service', () => ({ loadClubAccess: vi.fn() }))
+// O perfil de vendedor na Rede Comercial tem teste próprio (vendas-rede-agente-solo.test.ts); aqui o banco falso não tem a tabela.
+vi.mock('@/modules/vendas-rede/agente-solo', () => ({ garantirAgenteSolo: vi.fn(async () => ({})) }))
 
 const { usersService } = await import('@/modules/users/service')
+const { garantirAgenteSolo } = await import('@/modules/vendas-rede/agente-solo')
 const { changedIdentityFields } = await import('@/modules/users/membership-rules')
 const { isUserBanned, resolveActiveMembership } = await import('@/modules/auth/membership')
 const { optionalAuth, requireAuth } = await import('@/http/middleware/auth')
@@ -249,6 +252,8 @@ describe('A1 — POST /t/:slug/usuarios com e-mail de conta de outro clube', () 
     expect(provisionalPassword).toMatch(/^[A-Za-z2-9]{16}$/)
     expect(auth.api.signUpEmail).toHaveBeenCalledTimes(1)
     expect(auth.api.addMember).toHaveBeenCalledTimes(1)
+    // Vendedor criado por Usuários nasce com perfil na Rede Comercial (senão entra e vê "acesso não liberado").
+    expect(garantirAgenteSolo).toHaveBeenCalledWith(expect.objectContaining({ scope: 'tenant', tenantId: ORG }))
   })
 })
 

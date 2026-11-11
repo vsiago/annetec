@@ -1,4 +1,4 @@
-import type { PapelComercial, VendasLead, VendasLeadEvento } from '@annetec/contracts'
+import { ETAPA_LEAD_LABELS, type EtapaLead, type PapelComercial, type VendasLead, type VendasLeadEvento } from '@annetec/contracts'
 import { JORNADA_ROTULOS, type EventoLead, type LeadCardDados, type PassoJornada, type ProximoPasso, type TipoEvento } from '@/components/vendas-rede'
 
 /**
@@ -121,6 +121,31 @@ const TIPOS_EVENTO_KIT: ReadonlySet<string> = new Set<TipoEvento>([
   'sistema',
 ])
 
+function sentimentoDoDados(dados: Record<string, unknown> | null | undefined): EventoLead['sentimento'] {
+  const v = dados?.sentimento
+  return v === 'positivo' || v === 'neutro' || v === 'negativo' ? v : undefined
+}
+
+/**
+ * Eventos já gravados na linha do tempo guardam o texto da época ("Devolvido ao pool.", "Etapa: novo → em_contato").
+ * Aqui o texto antigo é lido com o vocabulário de hoje; o rótulo do tipo vem do `tipo`, não do texto.
+ */
+export function textoDoEventoLegado(texto: string): string {
+  let t = texto
+  if (/^Etapa:/.test(t)) {
+    // Só a parte das etapas: o motivo da perda é texto livre e não pode ser trocado.
+    const [etapas = '', ...motivo] = t.split(' Motivo:')
+    const traduzidas = etapas.replace(/(novo|em_contato|proposta|negociacao|ganho|perdido)/g, id => ETAPA_LEAD_LABELS[id as EtapaLead] ?? id)
+    t = [traduzidas, ...motivo].join(' Motivo:')
+  }
+  return t
+    .replace(/Devolvido ao pool/gi, 'Voltou para Disponíveis')
+    .replace(/ao pool/gi, 'para Disponíveis')
+    .replace(/no pool/gi, 'em Disponíveis')
+    .replace(/assumiu o atendimento/gi, 'passou a atender este lead')
+    .replace(/pool/gi, 'Disponíveis')
+}
+
 export function eventosParaTimeline(eventos: VendasLeadEvento[] | undefined, agora: Date = new Date()): EventoLead[] {
   return (eventos ?? []).map(e => ({
     id: e.id,
@@ -128,6 +153,7 @@ export function eventosParaTimeline(eventos: VendasLeadEvento[] | undefined, ago
     texto: e.texto ?? '',
     quando: quandoEvento(e.em, agora),
     autor: e.porNome ?? undefined,
+    sentimento: sentimentoDoDados(e.dados),
   }))
 }
 

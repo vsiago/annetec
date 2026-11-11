@@ -15,6 +15,7 @@ import { EstadoVazio } from '../ui/estado-vazio'
 import { formatarCelular, formatarCpf } from '../ui/mascaras'
 import { Chips } from '../lead/campos'
 import { Campo } from '../lead/formulario-lead'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
 /**
  * A API aceita que cada agente edite o PRÓPRIO cadastro (só dados pessoais e repasse;
@@ -90,10 +91,12 @@ export function AjustesPage() {
             key={agente.updatedAt}
             agente={agente}
             podeEditar={podeEditar}
+            inativo={!eu.podeEscrever}
+            quemPaga={escopo.kind === 'platform' ? 'a ANNETEC' : 'o clube'}
             salvar={async input => {
               const r = await atualizarAgenteAction(escopo, agente.id, input)
               if (!r.success) {
-                toast.error(r.error)
+                toast.error(mensagemDoErro(r.code, r.error))
                 return false
               }
               toast.success('Ajustes salvos')
@@ -106,7 +109,7 @@ export function AjustesPage() {
             moldura
             ilustracao="equipe"
             titulo={`Você entra como ${PAPEL_COMERCIAL_LABELS[eu.papel]} da equipe`}
-            descricao="Seu acesso vem da conta de administração, então não há cadastro de agente nem repasse para editar aqui."
+            descricao="Seu acesso vem da conta de administração, então não há cadastro de agente nem dados para pagamento para editar aqui."
           />
         )}
 
@@ -133,10 +136,16 @@ export function AjustesPage() {
 function FormularioAjustes({
   agente,
   podeEditar,
+  inativo,
+  quemPaga,
   salvar,
 }: {
   agente: VendasAgente
   podeEditar: boolean
+  /** Perfil inativo: só consulta. */
+  inativo: boolean
+  /** Quem paga as comissões neste escopo ("a ANNETEC" na plataforma, "o clube" no clube). */
+  quemPaga: string
   salvar: (input: UpdateAgenteInput) => Promise<boolean>
 }) {
   const id = useId()
@@ -175,7 +184,9 @@ function FormularioAjustes({
     <div className="flex flex-col gap-6">
       {!podeEditar ? (
         <p role="status" className="m-0 rounded-2xl border border-border bg-white px-4 py-3 text-sm text-[#475467]">
-          Para alterar seus dados ou o repasse, peça ao seu supervisor ou gerente. Aqui você consulta o que está cadastrado.
+          {inativo
+            ? 'Seu perfil está inativo. Peça ao administrador para reativar. Aqui você consulta o que está cadastrado.'
+            : 'Seus dados estão em modo de consulta. Para alterar, fale com o administrador.'}
         </p>
       ) : null}
 
@@ -206,7 +217,7 @@ function FormularioAjustes({
         </div>
       </SectionCard>
 
-      <SectionCard title="Repasse das comissões" description="Onde a ANNETEC deposita o que você ganha.">
+      <SectionCard title="Dados para pagamento" description={`Onde ${quemPaga} paga as suas comissões.`}>
         <div className="flex flex-col gap-4">
           <Chips
             rotulo="Receber por"

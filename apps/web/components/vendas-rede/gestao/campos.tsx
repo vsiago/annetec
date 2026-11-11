@@ -100,7 +100,7 @@ export function validarPessoa<V extends object>(prefixo = '') {
     if (!nome) uma(erros, k('nome'), 'Informe o nome completo.')
     else if (nome.length < 2) uma(erros, k('nome'), 'Use pelo menos 2 letras.')
     uma(erros, k('email'), (v[k('email')] ?? '').trim() ? primeiroErro(emailSchema, v[k('email')], 'Informe um e-mail válido, como nome@exemplo.com.br.') : 'Informe o e-mail: é o login da pessoa.')
-    uma(erros, k('cpf'), (v[k('cpf')] ?? '').trim() ? primeiroErro(cpfSchema, v[k('cpf')], 'Este CPF não existe. Confira os números digitados.') : 'Informe o CPF.')
+    uma(erros, k('cpf'), (v[k('cpf')] ?? '').trim() ? primeiroErro(cpfSchema, v[k('cpf')], 'CPF inválido. Confira os números.') : 'Informe o CPF.')
     uma(
       erros,
       k('telefone'),
@@ -215,7 +215,7 @@ export const ALIAS_API: Record<string, string> = {
 
 export function CamposPessoa({ campo, comMeta = true, emailBloqueado = false }: { campo: Binder; comMeta?: boolean; emailBloqueado?: boolean }) {
   return (
-    <FieldSection title="Dados da pessoa" description="Cadastro completo: o acesso e os repasses saem daqui." icon={UserRound}>
+    <FieldSection title="Dados da pessoa" description="O acesso e o pagamento das comissões saem destes dados." icon={UserRound}>
       <TextField {...campo('nome')} label="Nome completo" required span={12} maxLength={120} autoComplete="off" />
       <TextField {...campo('cpf')} label="CPF" required span={5} inputMode="numeric" mask={maskCpf} maxLength={14} placeholder="000.000.000-00" />
       <TextField
@@ -326,13 +326,13 @@ export function CamposEndereco({
 export function CamposRepasse({ campo, tipo }: { campo: Binder; tipo: string }) {
   return (
     <FieldSection
-      title="Repasse da comissão"
-      description="Para onde vai o pagamento das comissões. Pode ficar para depois."
+      title="Dados para pagamento"
+      description="Para onde vão as comissões. Pode ficar para depois."
       icon={Landmark}
     >
       <SelectField
         {...campo('repasseTipo')}
-        label="Forma de repasse"
+        label="Receber por"
         span={5}
         options={[
           { value: 'nenhum', label: 'Informar depois' },
@@ -369,7 +369,7 @@ export function CamposRepasse({ campo, tipo }: { campo: Binder; tipo: string }) 
       ) : null}
       {tipo === 'pix' ? <TextField {...campo('titular')} label="Titular da chave" optional span={12} maxLength={120} autoComplete="off" /> : null}
       {tipo === 'nenhum' ? (
-        <Notice tone="neutral">Sem dados de repasse a comissão fica registrada, mas não há para onde pagar. Complete na ficha da pessoa.</Notice>
+        <Notice tone="neutral">Sem dados para pagamento, a comissão fica registrada, mas não há para onde pagar. Complete na ficha da pessoa.</Notice>
       ) : null}
     </FieldSection>
   )

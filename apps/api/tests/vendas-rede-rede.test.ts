@@ -730,7 +730,8 @@ describe('agentes: escopo tenant', () => {
     state.session = tenantSession('admin-a', 'admin', CLUB_A)
     const resposta = await call('POST', `${TA}/rede/agentes`, cadastro({ papel: 'vendedor' }))
     expect(resposta.status).toBe(201)
-    expect(fakes.tenantCreate).toHaveBeenCalledWith(CLUB_A.id, expect.objectContaining({ role: 'seller', active: true }))
+    // A Rede cria o próprio perfil de agente: a conta nasce sem o vendedor solo automático.
+    expect(fakes.tenantCreate).toHaveBeenCalledWith(CLUB_A.id, expect.objectContaining({ role: 'seller', active: true }), { semAgenteComercial: true })
     expect(resposta.body.data.agente).toMatchObject({ scope: 'tenant', tenantId: CLUB_A.id, papel: 'vendedor' })
     expect(fakes.sendStaffInvite).toHaveBeenCalledWith(expect.objectContaining({ tenantId: CLUB_A.id, role: 'seller', password: 'SenhaProvisoria123' }))
     expect(fakes.sendEmail).not.toHaveBeenCalled()

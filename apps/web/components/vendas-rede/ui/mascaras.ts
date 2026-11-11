@@ -43,9 +43,42 @@ export function formatarMoeda(valor: number | null | undefined, opcoes?: { intei
   return (opcoes?.inteiro ? BRL_INTEIRO : BRL).format(n)
 }
 
+const SUFIXOS_COMPACTOS = [
+  { de: 1e12, sufixo: 'tri' },
+  { de: 1e9, sufixo: 'bi' },
+  { de: 1e6, sufixo: 'mi' },
+  { de: 1e3, sufixo: 'mil' },
+] as const
+
+/**
+ * Variante compacta de `formatarMoeda`, para espaços estreitos: "R$ 3,2 mil",
+ * "R$ 1,5 mi". Abaixo de R$ 1.000 devolve o valor completo (já é curto). Mostre o
+ * valor completo no `title` e num rótulo acessível quando usar esta.
+ */
+export function formatarMoedaCompacta(valor: number | null | undefined): string {
+  const n = typeof valor === 'number' && Number.isFinite(valor) ? valor : 0
+  const abs = Math.abs(n)
+  if (abs < 1000) return formatarMoeda(n)
+  let i = SUFIXOS_COMPACTOS.findIndex(s => abs >= s.de)
+  let escalado = abs / SUFIXOS_COMPACTOS[i]!.de
+  // 999,96 mil arredonda para 1.000 mil: sobe para a próxima unidade.
+  if (Math.round(escalado * 10) / 10 >= 1000 && i > 0) {
+    i -= 1
+    escalado = abs / SUFIXOS_COMPACTOS[i]!.de
+  }
+  const texto = escalado.toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 0 })
+  return `${n < 0 ? '−' : ''}R$ ${texto} ${SUFIXOS_COMPACTOS[i]!.sufixo}`
+}
+
+/** Percentual com espaço sem quebra entre o número e o "%" ("29 %" não parte em duas linhas). */
 export function formatarPercentual(valor: number | null | undefined, casas = 0): string {
   const n = typeof valor === 'number' && Number.isFinite(valor) ? valor : 0
-  return `${n.toLocaleString('pt-BR', { maximumFractionDigits: casas, minimumFractionDigits: 0 })} %`
+  return `${n.toLocaleString('pt-BR', { maximumFractionDigits: casas, minimumFractionDigits: 0 })}\u00A0%`
+}
+
+/** "1 unidade", "2 unidades". Sem o plural informado, acrescenta "s". */
+export function pluralizar(n: number, singular: string, plural: string = `${singular}s`): string {
+  return `${n.toLocaleString('pt-BR')} ${n === 1 ? singular : plural}`
 }
 
 /** "terça-feira, 10 de novembro". */

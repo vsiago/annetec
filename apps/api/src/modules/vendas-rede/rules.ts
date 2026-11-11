@@ -10,6 +10,15 @@
 
 export type PapelComercial = 'master' | 'gerente' | 'supervisor' | 'vendedor' | 'balcao'
 export type EtapaLead = 'novo' | 'em_contato' | 'proposta' | 'negociacao' | 'ganho' | 'perdido'
+/** Rótulos de etapa para textos exibidos (mensagens de erro e linha do tempo). */
+export const ROTULO_ETAPA: Record<EtapaLead, string> = {
+  novo: 'Novo',
+  em_contato: 'Em contato',
+  proposta: 'Proposta',
+  negociacao: 'Negociação',
+  ganho: 'Venda fechada',
+  perdido: 'Perdido',
+}
 export type ParteComissao = 'vendedor' | 'supervisor' | 'gerente' | 'corretora'
 export type TipoComissao = 'mensalidade' | 'adesao'
 export type StatusComissao = 'prevista' | 'a_pagar' | 'paga' | 'cancelada' | 'a_descontar'
@@ -700,6 +709,131 @@ export function rankingDeAgentes(
       (x.agenteId < y.agenteId ? -1 : x.agenteId > y.agenteId ? 1 : 0),
   )
   return linhas.map((l, i) => ({ posicao: i + 1, ...l }))
+}
+
+// ---------------------------------------------------------------------------
+// Temperatura do lead (sentimento por regra, sem IA)
+// ---------------------------------------------------------------------------
+
+export type Temperatura = 'quente' | 'morna' | 'fria'
+export type SentimentoContato = 'positivo' | 'neutro' | 'negativo'
+
+/**
+ * Limiares da temperatura, em dias. Documentados em `docs/rede-comercial.md` (4.2 "Temperatura").
+ * - `quentePositivo`: contato com reação positiva há no máximo N dias;
+ * - `quenteNegociacao`: em negociação com contato há no máximo N dias;
+ * - `friaSemContato`: sem contato há mais de N dias;
+ * - `friaPassoAtrasado`: próximo passo atrasado há mais de N dias.
+ */
+export const LIMIARES_TEMPERATURA = {
+  quentePositivo: 7,
+  quenteNegociacao: 3,
+  friaSemContato: 14,
+  friaPassoAtrasado: 7,
+} as const
+
+export interface EntradaTemperatura {
+  etapa: EtapaLead
+  ultimoContatoEm: Date | null
+  /** Sentimento gravado no último evento de contato (`dados.sentimento`); `null` = não informado. */
+  ultimoSentimento: SentimentoContato | null
+  proximoPassoEm: Date | null
+  agora: Date
+}
+
+export interface AvaliacaoTemperatura {
+  nivel: Temperatura
+  /** Frase pronta para o tooltip ("Reagiu com interesse há 2 dias"). */
+  motivo: string
+}
+
+export function sentimentoDoEvento(dados: Record<string, unknown> | null | undefined): SentimentoContato | null {
+  const valor = dados?.sentimento
+  return valor === 'positivo' || valor === 'neutro' || valor === 'negativo' ? valor : null
+}
+
+/** Dias inteiros entre `de` e `agora` (nunca negativo). */
+function diasEntre(de: Date, agora: Date): number {
+  return Math.max(0, Math.floor((agora.getTime() - de.getTime()) / MS_DIA))
+}
+
+/** "hoje", "há 1 dia", "há 5 dias". */
+function haDias(dias: number): string {
+  if (dias === 0) return 'hoje'
+  return `há ${dias} ${dias === 1 ? 'dia' : 'dias'}`
+}
+
+/**
+ * Temperatura + motivo. `null` para lead encerrado (ganho/perdido) e para lead novo sem contato.
+ * Ordem de decisão (a primeira que casar vale):
+ *  1. FRIA: reagiu sem interesse no último contato; ou sem contato há mais de 14 dias; ou próximo
+ *     passo atrasado há mais de 7 dias;
+ *  2. QUENTE: reagiu com interesse há 7 dias ou menos; ou em negociação com contato há 3 dias ou menos;
+ *  3. MORNA: todo o resto (contato recente sem sinal claro, reação neutra, interesse que esfriou).
+ * Lead em etapa avançada sem nenhum contato registrado nunca é quente nem fria por contato:
+ * fica morna, salvo passo atrasado.
+ */
+export function avaliarTemperatura(e: EntradaTemperatura): AvaliacaoTemperatura | null {
+  if (e.etapa === 'ganho' || e.etapa === 'perdido') return null
+  if (e.ultimoContatoEm === null && e.ultimoSentimento === null && e.etapa === 'novo') return null
+
+  const dias = e.ultimoContatoEm ? diasEntre(e.ultimoContatoEm, e.agora) : null
+  const quando = dias === null ? '' : haDias(dias)
+  const passoAtrasadoDias =
+    e.proximoPassoEm && e.proximoPassoEm.getTime() < e.agora.getTime() ? diasEntre(e.proximoPassoEm, e.agora) : 0
+
+  if (e.ultimoSentimento === 'negativo') {
+    return { nivel: 'fria', motivo: `Reagiu sem interesse ${quando || 'no último contato'}` }
+  }
+  if (dias !== null && dias > LIMIARES_TEMPERATURA.friaSemContato) {
+    return { nivel: 'fria', motivo: `Sem contato há ${dias} dias` }
+  }
+  if (passoAtrasadoDias > LIMIARES_TEMPERATURA.friaPassoAtrasado) {
+    return { nivel: 'fria', motivo: `Próximo passo atrasado há ${passoAtrasadoDias} dias` }
+  }
+
+  if (e.ultimoSentimento === 'positivo' && dias !== null && dias <= LIMIARES_TEMPERATURA.quentePositivo) {
+    return { nivel: 'quente', motivo: `Reagiu com interesse ${quando}` }
+  }
+  if (e.etapa === 'negociacao' && dias !== null && dias <= LIMIARES_TEMPERATURA.quenteNegociacao) {
+    return { nivel: 'quente', motivo: `Em negociação, contato ${quando}` }
+  }
+
+  if (dias === null) return { nivel: 'morna', motivo: 'Ainda sem contato registrado' }
+  if (e.ultimoSentimento === 'neutro') return { nivel: 'morna', motivo: `Reagiu de forma neutra ${quando}` }
+  if (e.ultimoSentimento === 'positivo') return { nivel: 'morna', motivo: `Mostrou interesse ${quando}, sem novo contato` }
+  return { nivel: 'morna', motivo: `Último contato ${quando}, sem sinal claro de interesse` }
+}
+
+export function temperaturaDoLead(e: EntradaTemperatura): Temperatura | null {
+  return avaliarTemperatura(e)?.nivel ?? null
+}
+
+const PESO_TEMPERATURA: Record<Temperatura, number> = { quente: 0, morna: 1, fria: 2 }
+
+export interface LeadParaOrdemQuadro {
+  /** Próximo passo vencido. */
+  atrasado: boolean
+  temperatura: Temperatura | null
+  /** Desde quando está na etapa (mais antigo primeiro). */
+  etapaDesde: Date
+  id: string
+}
+
+/** Ordem dos cards no quadro: atrasados, depois quente → morna → fria → sem temperatura, depois os mais antigos na etapa. */
+export function compararNoQuadro(a: LeadParaOrdemQuadro, b: LeadParaOrdemQuadro): number {
+  if (a.atrasado !== b.atrasado) return a.atrasado ? -1 : 1
+  const pa = a.temperatura ? PESO_TEMPERATURA[a.temperatura] : 3
+  const pb = b.temperatura ? PESO_TEMPERATURA[b.temperatura] : 3
+  if (pa !== pb) return pa - pb
+  const dif = a.etapaDesde.getTime() - b.etapaDesde.getTime()
+  if (dif !== 0) return dif
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
+
+/** Início do mês corrente em Brasília (UTC-3, sem horário de verão). `mes` = 'YYYY-MM'. */
+export function inicioDoMesSaoPaulo(agora: Date): Date {
+  return new Date(`${mesReferenciaSaoPaulo(agora)}-01T00:00:00-03:00`)
 }
 
 // ---------------------------------------------------------------------------

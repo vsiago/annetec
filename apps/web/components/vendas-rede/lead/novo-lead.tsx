@@ -9,6 +9,7 @@ import type { EscopoVendas } from '@/lib/vendas-rede/escopo'
 import { AcaoPrincipal } from '../ui/acao-principal'
 import { PASSO_VAZIO, SeletorProximoPasso, dataDoPasso, erroDoPasso, type PassoForm } from './campos'
 import { FormularioLead, LEAD_VAZIO, corpoDoLead, validarLead, type ErrosLead, type ValoresLead } from './formulario-lead'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
 /**
  * Assistente "Novo lead" em 3 passos curtos: quem é, detalhes do cadastro e
@@ -27,7 +28,9 @@ export function NovoLeadDialog({
 }) {
   const id = useId()
   const [passoAtual, setPassoAtual] = useState(0)
-  const [valores, setValores] = useState<ValoresLead>(LEAD_VAZIO)
+  // A plataforma vende para empresa: é o tipo que já vem marcado.
+  const vazio = { ...LEAD_VAZIO, tipo: escopo.kind === 'platform' ? ('empresa' as const) : ('pessoa' as const) }
+  const [valores, setValores] = useState<ValoresLead>(vazio)
   const [proximo, setProximo] = useState<PassoForm>(PASSO_VAZIO)
   const [erros, setErros] = useState<ErrosLead>({})
   const [erroProximo, setErroProximo] = useState<string | null>(null)
@@ -36,15 +39,16 @@ export function NovoLeadDialog({
   useEffect(() => {
     if (aberto) {
       setPassoAtual(0)
-      setValores(LEAD_VAZIO)
+      setValores(vazio)
       setProximo(PASSO_VAZIO)
       setErros({})
       setErroProximo(null)
       setEnviando(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto])
 
-  const titulos = ['Quem é', 'Detalhes', 'Próximo passo']
+  const titulos = ['Contato', 'Detalhes', 'Próximo passo']
 
   function avancar() {
     if (passoAtual === 0) {
@@ -80,10 +84,10 @@ export function NovoLeadDialog({
         setErros(mapa)
         setPassoAtual(mapa.nome || mapa.telefone || mapa.email ? 0 : 1)
       }
-      toast.error(r.error)
+      toast.error(mensagemDoErro(r.code, r.error))
       return
     }
-    toast.success(`${r.data.nome} entrou no seu funil`, { description: 'Faça o primeiro contato e registre aqui.' })
+    toast.success(`${r.data.nome} entrou no seu funil.`, { description: 'Faça o primeiro contato e registre aqui.' })
     aoCriar(r.data)
     aoFechar()
   }
@@ -114,7 +118,7 @@ export function NovoLeadDialog({
         {passoAtual === 2 ? (
           <div className="flex flex-col gap-3">
             <p className="m-0 text-sm text-muted-foreground">
-              Combine o que você faz a seguir. Na data, {valores.nome.split(' ')[0] || 'o lead'} aparece em “Sua vez agora”. Pode pular.
+              Marque o que você vai fazer a seguir. Na data, {valores.nome.split(' ')[0] || 'o lead'} aparece em “Sua vez agora”. Se preferir, pule este passo.
             </p>
             <SeletorProximoPasso passo={proximo} aoMudar={setProximo} opcional erro={erroProximo} idBase={id} />
           </div>

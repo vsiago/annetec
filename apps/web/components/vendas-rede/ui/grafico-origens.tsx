@@ -10,8 +10,8 @@ import type { Origem } from './tipos'
 export type PontoOrigem = { origem: Origem; total: number; ganhos?: number }
 
 const CONFIG: ChartConfig = {
-  total: { label: 'Leads', color: TONES.navy.stroke },
-  ganhos: { label: 'Ganhos', color: TONES.green.stroke },
+  total: { label: 'Leads', color: 'var(--vr-accent, #1E2A4A)' },
+  ganhos: { label: 'Vendas', color: TONES.amber.stroke },
 }
 
 /**
@@ -37,7 +37,7 @@ export function GraficoOrigens({ dados, className }: { dados: PontoOrigem[]; cla
       <BarChart data={linhas} layout="vertical" margin={{ left: 0, right: 16, top: 0, bottom: 0 }}>
         <CartesianGrid horizontal={false} strokeDasharray="3 3" />
         <XAxis type="number" hide allowDecimals={false} />
-        <YAxis type="category" dataKey="nome" tickLine={false} axisLine={false} width={96} />
+        <YAxis type="category" dataKey="nome" tickLine={false} axisLine={false} width={104} tick={{ fontSize: 12 }} />
         <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
         <Bar dataKey="total" fill="var(--color-total)" radius={[0, 6, 6, 0]} barSize={14} />
         {comGanhos ? <Bar dataKey="ganhos" fill="var(--color-ganhos)" radius={[0, 6, 6, 0]} barSize={14} /> : null}

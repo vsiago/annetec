@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { CalendarCheck, CircleCheck, Clock, Handshake, PiggyBank, RefreshCw, Store } from 'lucide-react'
 import {
   RESULTADOS_BALCAO,
@@ -234,8 +235,19 @@ export function BalcaoClube({ slug }: { slug: string }) {
         ) : (lista?.items.length ?? 0) === 0 ? (
           <EmptyStateCard
             icon={Store}
-            title="Nenhum atendimento neste filtro"
-            description="Os atendimentos feitos no balcão das unidades aparecem aqui. Tente outro dia ou limpe os filtros."
+            title={agentes.length === 0 ? 'Nenhum atendente de balcão cadastrado' : 'Nenhum atendimento neste filtro'}
+            description={
+              agentes.length === 0
+                ? 'Os atendimentos feitos no balcão das unidades aparecem aqui. Cadastre um atendente de balcão em Rede para começar.'
+                : 'Os atendimentos feitos no balcão das unidades aparecem aqui. Tente outro dia ou limpe os filtros.'
+            }
+            action={
+              agentes.length === 0 ? (
+                <Button asChild>
+                  <Link href={`/${slug}/admin/comercial/rede`}>Cadastrar atendente</Link>
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <>

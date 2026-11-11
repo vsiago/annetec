@@ -2,40 +2,44 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Loader2, Plus, Search, X } from 'lucide-react'
-import {
-  ESTACOES_LEAD,
-  ETAPAS_LEAD,
-  ETAPA_LEAD_LABELS,
-  ORIGENS_LEAD,
-  ORIGEM_LEAD_LABELS,
-  type EstacaoLead,
-  type EtapaLead,
-  type OrigemLead,
-  type VendasAgente,
-  type VendasLead,
-} from '@annetec/contracts'
+import { CheckCircle2, Columns3, List, Loader2, PartyPopper, Plus, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
+import { ETAPA_LEAD_LABELS, type EtapaLead, type VendasAgente, type VendasLead } from '@annetec/contracts'
 import { ErrorState } from '@/components/admin-platform/ui/empty-state'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getContadoresLeadsAction, listarAgentesAction, listarLeadsAction } from '@/lib/actions/vendas-rede-api'
-import { leadParaCard, veEquipe } from '@/lib/vendas-rede/adaptadores'
-import { basePath, chaveDoEscopo } from '@/lib/vendas-rede/escopo'
-import type { ContadoresLeads } from '@/lib/vendas-rede/tipos'
+import { listarAgentesAction, mudarEtapaAction } from '@/lib/actions/vendas-rede-api'
+import { veEquipe } from '@/lib/vendas-rede/adaptadores'
+import { basePath } from '@/lib/vendas-rede/escopo'
+import { destinosDoMenu, avaliarMovimento, textoDoResumo, transicaoPermitida } from '@/lib/vendas-rede/funil'
+import type { FiltrosQuadro } from '@/lib/vendas-rede/tipos'
 import { cn } from '@/lib/utils'
 import { useVendasRede } from '../provider'
 import { Conteudo } from '../shell/base'
 import { AcaoPrincipal } from '../ui/acao-principal'
-import { EstacoesTabs } from '../ui/estacoes-tabs'
-import { EstadoVazio, type IlustracaoVazio } from '../ui/estado-vazio'
-import { LeadCard, type LeadCardMenuItem } from '../ui/lead-card'
-import { FOCUS_RING } from '../ui/tokens'
-import { acaoPrincipalDoLead, atenderLead, devolverAoPool, leadNoPool } from '../lead/acoes'
-import { SelectFiltro } from '../lead/campos'
+import { EstadoVazio } from '../ui/estado-vazio'
+import { formatarMoedaCompacta } from '../ui/mascaras'
+import type { LeadCardMenuItem } from '../ui/lead-card'
+import { FAB_MOBILE, FOCUS_RING } from '../ui/tokens'
+import { atenderLead, devolverAoPool } from '../lead/acoes'
 import { LeadDetalhe, type AbaLead, type DialogoLead } from '../lead/lead-detalhe'
 import { NovoLeadDialog } from '../lead/novo-lead'
+import { BarraFiltros, FILTROS_VAZIOS, temFiltro, type FiltrosFunil } from '../funil/barra-filtros'
+import { celebrarVenda } from '../funil/celebracao'
+import { DialogosDeEtapa, type PedidoEtapa } from '../funil/dialogos-etapa'
+import { EtapasMobile, type EtapaMobile } from '../funil/etapas-mobile'
+import { FaixaDisponiveis } from '../funil/faixa-disponiveis'
+import { ListaFunil } from '../funil/lista'
+import { Quadro } from '../funil/quadro'
+import type { AcoesDoFunil } from '../funil/tipos'
+import { useQuadro } from '../funil/use-quadro'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
-const POR_PAGINA = 20
+type Visao = 'quadro' | 'lista'
+const CHAVE_VISAO = 'vendas-rede:funil:visao'
+const LIMITE_INICIAL = 40
+const PASSO_VER_MAIS = 40
+/** Largura do contêiner a partir da qual o quadro de colunas cabe (abaixo: chips de etapa + lista). */
+const LARGURA_QUADRO = 768
 
 interface Aberto {
   id: string
@@ -43,372 +47,446 @@ interface Aberto {
   dialogo?: DialogoLead
 }
 
-const ESTACOES_VALIDAS = new Set<string>(ESTACOES_LEAD)
+const lerVisao = (): Visao => {
+  try {
+    return window.localStorage.getItem(CHAVE_VISAO) === 'lista' ? 'lista' : 'quadro'
+  } catch {
+    return 'quadro'
+  }
+}
 
-/** Textos dos estados vazios, que dizem o que aconteceu e o que fazer. */
-const VAZIOS: Record<EstacaoLead, { ilustracao: IlustracaoVazio; titulo: string; descricao: string }> = {
-  pool: {
-    ilustracao: 'pool',
-    titulo: 'Nenhum lead no pool agora',
-    descricao: 'Quando alguém pedir contato no site, ele aparece aqui e você recebe um aviso para atender.',
-  },
-  novos: {
-    ilustracao: 'funil',
-    titulo: 'Você não tem leads novos',
-    descricao: 'Pegue um lead no Pool ou cadastre o seu. Quem ainda não recebeu o primeiro contato fica aqui.',
-  },
-  andamento: {
-    ilustracao: 'funil',
-    titulo: 'Nada em andamento',
-    descricao: 'Depois do primeiro contato, o lead passa a aparecer aqui até virar venda ou ser perdido.',
-  },
-  fechados: {
-    ilustracao: 'carteira',
-    titulo: 'Ainda não há leads fechados',
-    descricao: 'Vendas ganhas e leads perdidos ficam guardados aqui, com todo o histórico.',
-  },
+/** Largura do próprio contêiner (e não da janela): o menu lateral abre e fecha e muda o espaço da página. */
+function useLarguraDoContainer() {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [largura, setLargura] = useState<number | null>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    setLargura(el.getBoundingClientRect().width)
+    const obs = new ResizeObserver(entradas => {
+      const w = entradas[0]?.contentRect.width
+      if (typeof w === 'number') setLargura(w)
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+  return { ref, largura }
 }
 
 /**
- * Funil: estações (Pool · Novos · Em andamento · Fechados) com contadores,
- * cartões com UMA ação principal por lead, filtros e detalhe em folha.
- * `leadIdInicial` abre o detalhe de cara (rota `/funil/[id]`, links de
- * notificação). Funciona nos dois escopos.
+ * Funil: o quadro (kanban) com a faixa "Disponíveis" no topo, alternância Quadro/Lista, filtros e a
+ * folha do lead. Colunas Novo · Em contato · Proposta · Negociação, cards com temperatura e próximo
+ * passo, arrastar para mudar de etapa (o servidor continua mandando nas regras). No celular, chips de
+ * etapa e lista de cards. `leadIdInicial` abre o detalhe de cara (`/funil/[id]`, links de aviso).
+ * Funciona nos dois escopos e dentro dos consoles.
  */
 export function FunilPage({ leadIdInicial }: { leadIdInicial?: string }) {
   const { escopo, eu, recarregar } = useVendasRede()
   const raiz = basePath(escopo)
-  const chave = chaveDoEscopo(escopo)
   const equipe = veEquipe(eu.papel)
   const params = useSearchParams()
+  const leadDaUrl = params.get('lead')
   const estacaoDaUrl = params.get('estacao')
+  const { ref: refRaiz, largura } = useLarguraDoContainer()
+  const largo = largura !== null && largura >= LARGURA_QUADRO
 
-  const [estacao, setEstacao] = useState<EstacaoLead | null>(
-    estacaoDaUrl && ESTACOES_VALIDAS.has(estacaoDaUrl) ? (estacaoDaUrl as EstacaoLead) : null,
-  )
-  const [contadores, setContadores] = useState<ContadoresLeads | null>(null)
-  const [busca, setBusca] = useState('')
+  const [visao, setVisao] = useState<Visao>('quadro')
+  useEffect(() => setVisao(lerVisao()), [])
+  const trocarVisao = (v: Visao) => {
+    setVisao(v)
+    try {
+      window.localStorage.setItem(CHAVE_VISAO, v)
+    } catch {
+      /* sem armazenamento (janela privada): a escolha vale só nesta tela */
+    }
+  }
+
+  const [filtros, setFiltros] = useState<FiltrosFunil>(FILTROS_VAZIOS)
   const [buscaAplicada, setBuscaAplicada] = useState('')
-  const [origem, setOrigem] = useState<OrigemLead | ''>('')
-  const [etapa, setEtapa] = useState<EtapaLead | ''>('')
-  const [agente, setAgente] = useState('')
+  const [limite, setLimite] = useState(LIMITE_INICIAL)
   const [agentes, setAgentes] = useState<VendasAgente[]>([])
-
-  const [itens, setItens] = useState<VendasLead[]>([])
-  const [total, setTotal] = useState(0)
-  const [pagina, setPagina] = useState(1)
-  const [carregando, setCarregando] = useState(true)
-  const [carregandoMais, setCarregandoMais] = useState(false)
-  const [erro, setErro] = useState<string | null>(null)
-  const [aberto, setAberto] = useState<Aberto | null>(leadIdInicial ? { id: leadIdInicial } : null)
+  const [etapaMobile, setEtapaMobile] = useState<EtapaMobile>(estacaoDaUrl === 'andamento' ? 'em_contato' : 'novo')
+  const [aberto, setAberto] = useState<Aberto | null>(leadIdInicial ? { id: leadIdInicial } : leadDaUrl ? { id: leadDaUrl } : null)
   const [novoAberto, setNovoAberto] = useState(false)
-  const [atendendo, setAtendendo] = useState<string | null>(null)
-  const sequencia = useRef(0)
+  const [pedido, setPedido] = useState<PedidoEtapa | null>(null)
+  const [atendendoId, setAtendendoId] = useState<string | null>(null)
+  const [anuncio, setAnuncio] = useState('')
+  const [agoraMs, setAgoraMs] = useState(() => Date.now())
 
-  // Contadores das estações.
-  const carregarContadores = useCallback(async () => {
-    const r = await getContadoresLeadsAction(escopo)
-    if (r.success) setContadores(r.data)
-    else setEstacao(atual => atual ?? 'novos')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chave])
-
+  // Busca com atraso de 300 ms.
   useEffect(() => {
-    void carregarContadores()
-  }, [carregarContadores])
+    const t = window.setTimeout(() => setBuscaAplicada(filtros.busca.trim()), 300)
+    return () => window.clearTimeout(t)
+  }, [filtros.busca])
 
-  // Estação padrão: Novos; se só o Pool tem coisa, começa nele.
+  // Relógio da tela: o "esperando há 18 min" e o "atrasado há 2 dias" andam sozinhos.
   useEffect(() => {
-    if (estacao || !contadores) return
-    setEstacao(contadores.novos === 0 && contadores.pool > 0 && contadores.andamento === 0 ? 'pool' : contadores.novos === 0 && contadores.andamento > 0 ? 'andamento' : 'novos')
-  }, [estacao, contadores])
+    const t = window.setInterval(() => setAgoraMs(Date.now()), 30_000)
+    return () => window.clearInterval(t)
+  }, [])
 
-  // Agentes para o filtro (só quem enxerga equipe).
   useEffect(() => {
     if (!equipe) return
     void listarAgentesAction(escopo, { perPage: 100 }).then(r => {
       if (r.success) setAgentes(r.data.filter(a => a.papel !== 'balcao'))
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [equipe, chave])
+  }, [equipe, escopo.kind === 'tenant' ? escopo.slug : 'p'])
 
-  // Busca com atraso de 300 ms.
-  useEffect(() => {
-    const t = window.setTimeout(() => setBuscaAplicada(busca.trim()), 300)
-    return () => window.clearTimeout(t)
-  }, [busca])
-
-  const filtrosAtivos = Boolean(buscaAplicada || origem || etapa || agente)
-
-  const carregar = useCallback(
-    async (alvo: number, anexar: boolean) => {
-      if (!estacao) return
-      const id = ++sequencia.current
-      if (anexar) setCarregandoMais(true)
-      else setCarregando(true)
-      const r = await listarLeadsAction(escopo, {
-        estacao,
-        etapa: etapa || undefined,
-        agente: agente || undefined,
-        origem: origem || undefined,
-        busca: buscaAplicada || undefined,
-        page: alvo,
-        perPage: POR_PAGINA,
-      })
-      if (id !== sequencia.current) return
-      if (r.success) {
-        setItens(atual => (anexar ? [...atual, ...r.data.items.filter(n => !atual.some(a => a.id === n.id))] : r.data.items))
-        setTotal(r.data.meta.total)
-        setPagina(alvo)
-        setErro(null)
-      } else {
-        setErro(r.error)
-      }
-      setCarregando(false)
-      setCarregandoMais(false)
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chave, estacao, etapa, agente, origem, buscaAplicada],
+  const filtrosApi = useMemo<FiltrosQuadro>(
+    () => ({
+      busca: buscaAplicada || undefined,
+      origem: filtros.origem || undefined,
+      temperatura: filtros.temperatura || undefined,
+      agente: filtros.agente || undefined,
+      atrasados: filtros.atrasados || undefined,
+      limite,
+    }),
+    [buscaAplicada, filtros.origem, filtros.temperatura, filtros.agente, filtros.atrasados, limite],
   )
 
-  useEffect(() => {
-    setItens([])
-    void carregar(1, false)
-  }, [carregar])
+  const celebrar = useCallback((lead: Pick<VendasLead, 'nome' | 'valorEstimado'>) => {
+    toast.success('Venda fechada!', {
+      icon: <PartyPopper className="size-5" aria-hidden="true" />,
+      description: `${lead.nome}${lead.valorEstimado ? ` · ${formatarMoedaCompacta(lead.valorEstimado)}` : ''}. Parabéns!`,
+      duration: 7000,
+    })
+    window.requestAnimationFrame(() => celebrarVenda())
+  }, [])
 
-  const atualizar = useCallback(() => {
-    void carregar(1, false)
-    void carregarContadores()
+  const quadro = useQuadro({
+    escopo,
+    filtros: filtrosApi,
+    aoGanhar: celebrar,
+    aoZerarAtrasados: () =>
+      toast.success('Nenhum atrasado!', { icon: <CheckCircle2 className="size-5" aria-hidden="true" />, description: 'Todos os próximos passos estão em dia. Bom trabalho.' }),
+  })
+  const { dados, carregando, atualizando, erro } = quadro
+
+  // `?estacao=disponiveis` (ou o antigo `pool`, de links e notificações já enviados) leva à faixa Disponíveis.
+  const irParaDisponiveis = estacaoDaUrl === 'disponiveis' || estacaoDaUrl === 'pool'
+  const jaRolou = useRef(false)
+  useEffect(() => {
+    if (!irParaDisponiveis || !dados || jaRolou.current) return
+    const faixa = document.getElementById('funil-disponiveis')
+    if (!faixa) return
+    jaRolou.current = true
+    faixa.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    faixa.focus({ preventScroll: true })
+  }, [irParaDisponiveis, dados])
+
+  const atualizarTudo = useCallback(() => {
+    void quadro.recarregar()
     void recarregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [carregar, carregarContadores, recarregar])
+  }, [quadro.recarregar, recarregar])
 
-  // Mantém a URL em sincronia com o lead aberto, sem recarregar a página.
+  // ----- Folha do lead e URL -------------------------------------------------
+
   const sincronizarUrl = useCallback(
     (id: string | null) => {
-      const query = estacao ? `?estacao=${estacao}` : ''
-      const alvo = id ? `${raiz}/funil/${encodeURIComponent(id)}` : `${raiz}/funil${query}`
+      const alvo = id ? `${raiz}/funil/${encodeURIComponent(id)}` : `${raiz}/funil`
       if (typeof window !== 'undefined' && window.location.pathname + window.location.search !== alvo) {
         window.history.replaceState(window.history.state, '', alvo)
       }
     },
-    [estacao, raiz],
+    [raiz],
   )
-
-  const abrir = useCallback(
+  const abrirPorId = useCallback(
     (id: string, extra: Omit<Aberto, 'id'> = {}) => {
       setAberto({ id, ...extra })
       sincronizarUrl(id)
     },
     [sincronizarUrl],
   )
-
   const fechar = useCallback(() => {
     setAberto(null)
     sincronizarUrl(null)
   }, [sincronizarUrl])
 
-  async function aoAcaoPrincipal(lead: VendasLead) {
-    const acao = acaoPrincipalDoLead(lead, escopo)
-    if (acao.id === 'atender') {
-      setAtendendo(lead.id)
-      const atualizado = await atenderLead(escopo, lead)
-      setAtendendo(null)
-      atualizar()
-      if (atualizado) abrir(lead.id)
-      return
-    }
-    if (acao.id === 'contato') abrir(lead.id, { dialogo: 'contato' })
-    else if (acao.id === 'proposta' || acao.id === 'fechar') abrir(lead.id, { aba: 'venda' })
-    else abrir(lead.id)
-  }
+  // ----- Mover de etapa -----------------------------------------------------
 
-  function menuDoLead(lead: VendasLead): LeadCardMenuItem[] {
-    const itensMenu: LeadCardMenuItem[] = [{ rotulo: 'Abrir detalhes', onSelecionar: () => abrir(lead.id) }]
-    if (!eu.podeEscrever || leadNoPool(lead)) return itensMenu
-    const encerrado = lead.etapa === 'ganho' || lead.etapa === 'perdido'
-    if (!encerrado) {
-      itensMenu.push({ rotulo: 'Registrar contato', onSelecionar: () => abrir(lead.id, { dialogo: 'contato' }) })
-      itensMenu.push({ rotulo: 'Marcar próximo passo', onSelecionar: () => abrir(lead.id, { dialogo: 'passo' }) })
-    }
-    itensMenu.push({ rotulo: 'Mudar etapa', onSelecionar: () => abrir(lead.id, { dialogo: 'etapa' }) })
-    if (equipe) itensMenu.push({ rotulo: 'Reatribuir', onSelecionar: () => abrir(lead.id, { dialogo: 'reatribuir' }) })
-    if (!encerrado && lead.agenteId && (equipe || lead.agenteId === eu.agente?.id)) {
-      itensMenu.push({
-        rotulo: 'Devolver ao pool',
-        separador: true,
-        perigo: true,
-        onSelecionar: () => void devolverAoPool(escopo, lead, atualizar),
+  const executarMover = useCallback(
+    async (lead: VendasLead, para: EtapaLead, extras: { motivoPerda?: string; confirmar?: boolean } = {}): Promise<boolean> => {
+      const r = await quadro.mover(lead, para, extras)
+      if (!r.ok) {
+        const titulo = r.codigo === 'VENDAS_TRANSICAO_INVALIDA' ? 'Movimento não permitido' : 'Não foi possível mover o lead'
+        const motivo = mensagemDoErro(r.codigo, r.erro)
+        toast.error(titulo, { description: motivo })
+        setAnuncio(`${titulo}. ${motivo}`)
+        return false
+      }
+      void recarregar()
+      if (para === 'ganho') {
+        celebrar(lead)
+        setAnuncio(`Venda fechada: ${lead.nome}.`)
+        return true
+      }
+      const voltaPossivel = para !== 'perdido' && transicaoPermitida(para, lead.etapa, eu.papel)
+      toast.success(`${lead.nome} foi para ${ETAPA_LEAD_LABELS[para]}`, {
+        duration: 8000,
+        action: voltaPossivel
+          ? {
+              label: 'Desfazer',
+              onClick: () => {
+                void mudarEtapaAction(escopo, lead.id, { etapa: lead.etapa }).then(res => {
+                  if (res.success) toast.success('Etapa restaurada')
+                  else toast.error(mensagemDoErro(res.code, res.error))
+                  atualizarTudo()
+                })
+              },
+            }
+          : undefined,
       })
-    }
-    return itensMenu
-  }
-
-  const estacoes = useMemo(
-    () =>
-      [
-        { id: 'pool', rotulo: 'Pool', contador: contadores?.pool, destaque: (contadores?.pool ?? 0) > 0 },
-        { id: 'novos', rotulo: 'Novos', contador: contadores?.novos },
-        { id: 'andamento', rotulo: 'Em andamento', contador: contadores?.andamento },
-        { id: 'fechados', rotulo: 'Fechados', contador: contadores?.fechados },
-      ] as const,
-    [contadores],
+      setAnuncio(`${lead.nome} foi para ${ETAPA_LEAD_LABELS[para]}.`)
+      return true
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [quadro.mover, recarregar, celebrar, eu.papel, escopo, atualizarTudo],
   )
 
-  function limparFiltros() {
-    setBusca('')
-    setBuscaAplicada('')
-    setOrigem('')
-    setEtapa('')
-    setAgente('')
-  }
+  const pedirMover = useCallback<AcoesDoFunil['pedirMover']>(
+    (lead, para) => {
+      const v = avaliarMovimento(lead, para, eu.papel)
+      switch (v.tipo) {
+        case 'mesma-etapa':
+          return
+        case 'invalido':
+          toast.error('Movimento não permitido', { description: v.motivo })
+          setAnuncio(`Movimento não permitido. ${v.motivo}`)
+          return
+        case 'perdido':
+          setPedido({ tipo: 'perdido', lead })
+          return
+        case 'ganho-confirmar':
+          setPedido({ tipo: 'ganho', lead })
+          return
+        case 'ganho-bloqueado':
+          setPedido({ tipo: 'ganho-bloqueado', lead, motivo: v.motivo })
+          return
+        case 'mover':
+          void executarMover(lead, para)
+      }
+    },
+    [eu.papel, executarMover],
+  )
 
-  function trocarEstacao(id: string) {
-    setEstacao(id as EstacaoLead)
-    setItens([])
-    if (!aberto) window.history.replaceState(window.history.state, '', `${raiz}/funil?estacao=${id}`)
-  }
+  // ----- Ações dos cards ------------------------------------------------------
 
-  const temMais = itens.length < total
+  const podeAtender = eu.podeEscrever && Boolean(eu.agente)
+
+  const atender = useCallback(
+    async (lead: VendasLead) => {
+      if (!eu.podeEscrever) return
+      if (!podeAtender) {
+        abrirPorId(lead.id, { dialogo: 'reatribuir' })
+        return
+      }
+      setAtendendoId(lead.id)
+      const atualizado = await atenderLead(escopo, lead)
+      setAtendendoId(null)
+      atualizarTudo()
+      if (atualizado) abrirPorId(lead.id, { dialogo: 'contato' })
+    },
+    [eu.podeEscrever, podeAtender, escopo, atualizarTudo, abrirPorId],
+  )
+
+  const menuDoLead = useCallback(
+    (lead: VendasLead): LeadCardMenuItem[] => {
+      const itens: LeadCardMenuItem[] = [{ rotulo: 'Abrir detalhes', onSelecionar: () => abrirPorId(lead.id) }]
+      if (!eu.podeEscrever) return itens
+      const encerrado = lead.etapa === 'ganho' || lead.etapa === 'perdido'
+      if (!encerrado) {
+        itens.push({ rotulo: 'Registrar contato', onSelecionar: () => abrirPorId(lead.id, { dialogo: 'contato' }) })
+        itens.push({ rotulo: 'Marcar próximo passo', onSelecionar: () => abrirPorId(lead.id, { dialogo: 'passo' }) })
+      }
+      // "Mover para": só o que o papel pode fazer (não é preciso arrastar).
+      const destinos = destinosDoMenu(lead, eu.papel).filter(para => {
+        const v = avaliarMovimento(lead, para, eu.papel)
+        return v.tipo === 'mover' || v.tipo === 'perdido' || v.tipo === 'ganho-confirmar'
+      })
+      destinos.forEach((para, i) => {
+        itens.push({
+          rotulo: para === 'perdido' ? 'Marcar como perdido' : para === 'ganho' ? 'Mover para Venda fechada' : `Mover para ${ETAPA_LEAD_LABELS[para]}`,
+          onSelecionar: () => pedirMover(lead, para, 'menu'),
+          separador: i === 0,
+          perigo: para === 'perdido',
+        })
+      })
+      if (equipe) itens.push({ rotulo: 'Passar para outra pessoa', separador: destinos.length === 0, onSelecionar: () => abrirPorId(lead.id, { dialogo: 'reatribuir' }) })
+      if (!encerrado && lead.agenteId && (equipe || lead.agenteId === eu.agente?.id)) {
+        itens.push({
+          rotulo: 'Liberar lead',
+          descricao: 'Volta para Disponíveis para outra pessoa atender.',
+          perigo: true,
+          onSelecionar: () => void devolverAoPool(escopo, lead, atualizarTudo),
+        })
+      }
+      return itens
+    },
+    [eu.podeEscrever, eu.papel, eu.agente?.id, equipe, escopo, abrirPorId, pedirMover, atualizarTudo],
+  )
+
+  const aoLigouOuChamou = useCallback(
+    (lead: VendasLead, canal: 'ligacao' | 'whatsapp') => {
+      if (!eu.podeEscrever) return
+      window.setTimeout(() => {
+        toast(`Como foi com ${lead.nome}?`, {
+          description: canal === 'ligacao' ? 'Registre a ligação enquanto está fresco.' : 'Registre a conversa enquanto está fresco.',
+          duration: 12_000,
+          action: { label: 'Registrar contato', onClick: () => abrirPorId(lead.id, { dialogo: 'contato' }) },
+        })
+      }, 1200)
+    },
+    [eu.podeEscrever, abrirPorId],
+  )
+
+  const acoes = useMemo<AcoesDoFunil>(
+    () => ({
+      agora: new Date(agoraMs),
+      mostrarAgente: equipe,
+      podeEscrever: eu.podeEscrever,
+      abrir: (lead, extra) => abrirPorId(lead.id, extra),
+      menu: menuDoLead,
+      pedirMover,
+      aoLigouOuChamou,
+      atender: lead => void atender(lead),
+      atendendoId,
+      podeAtender,
+    }),
+    [agoraMs, equipe, eu.podeEscrever, abrirPorId, menuDoLead, pedirMover, aoLigouOuChamou, atender, atendendoId, podeAtender],
+  )
+
+  const verMais = useCallback(() => setLimite(l => Math.min(200, l + PASSO_VER_MAIS)), [])
+
+  // ----- Render -------------------------------------------------------------
+
+  const resumo = dados ? textoDoResumo(dados.resumo, formatarMoedaCompacta) : null
+  const comFiltro = temFiltro(filtros)
+  const semNada =
+    dados !== null &&
+    dados.etapas.every(c => c.total === 0) &&
+    dados.disponiveis.total === 0 &&
+    dados.fechados.itens.length === 0 &&
+    dados.fechados.ganhos.total + dados.fechados.perdidos.total === 0
+  // Disponíveis são leads sem responsável: não valem para filtros que olham só os com dono.
+  const mostrarDisponiveis = !filtros.agente && !filtros.temperatura && !filtros.atrasados
 
   return (
-    <Conteudo largo>
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="m-0 text-2xl font-bold leading-tight tracking-tight text-foreground">Funil</h1>
-          <p className="m-0 text-sm text-muted-foreground">
-            {equipe ? 'Os leads da sua rede, do pool ao fechamento.' : 'Seus leads, do primeiro contato ao fechamento.'}
-          </p>
-        </div>
-        {eu.podeEscrever ? (
-          <AcaoPrincipal icone={<Plus />} onClick={() => setNovoAberto(true)} className="hidden sm:inline-flex">
-            Novo lead
-          </AcaoPrincipal>
-        ) : null}
-      </header>
-
-      <div className="flex flex-col gap-4">
-        <EstacoesTabs estacoes={estacoes as unknown as Array<{ id: string; rotulo: string; contador?: number; destaque?: boolean }>} valor={estacao ?? 'novos'} aoMudar={trocarEstacao} />
-
-        <form
-          role="search"
-          aria-label="Filtrar leads"
-          onSubmit={e => e.preventDefault()}
-          className={cn('grid gap-3 sm:grid-cols-2', equipe ? 'lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]' : 'lg:grid-cols-[minmax(0,2fr)_repeat(2,minmax(0,1fr))]')}
-        >
-          <div className="relative flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
-            <label htmlFor="vr-funil-busca" className="text-xs font-medium text-muted-foreground">
-              Buscar
-            </label>
-            <Search className="pointer-events-none absolute bottom-3.5 left-3 size-4 text-muted-foreground" aria-hidden="true" />
-            <Input
-              id="vr-funil-busca"
-              type="search"
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              placeholder="Nome, telefone ou documento"
-              className="min-h-11 rounded-xl bg-white pl-9"
-            />
-          </div>
-          <SelectFiltro rotulo="Origem" valor={origem} aoMudar={setOrigem} opcoes={ORIGENS_LEAD.map(o => ({ id: o, rotulo: ORIGEM_LEAD_LABELS[o] }))} />
-          <SelectFiltro rotulo="Etapa" valor={etapa} aoMudar={setEtapa} opcoes={ETAPAS_LEAD.map(e => ({ id: e, rotulo: ETAPA_LEAD_LABELS[e] }))} />
-          {equipe ? (
-            <SelectFiltro rotulo="Agente" valor={agente} aoMudar={setAgente} opcoes={agentes.map(a => ({ id: a.id, rotulo: a.nome }))} />
-          ) : null}
-        </form>
-
-        {filtrosAtivos ? (
-          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
-            {carregando ? 'Buscando…' : `${total.toLocaleString('pt-BR')} ${total === 1 ? 'lead encontrado' : 'leads encontrados'}`}
-            <button type="button" onClick={limparFiltros} className={cn('inline-flex min-h-11 items-center gap-1 rounded-lg px-2 font-semibold text-[#1E2A4A] hover:bg-[#F2F4F7]', FOCUS_RING)}>
-              <X className="size-4" aria-hidden="true" /> Limpar filtros
-            </button>
-          </div>
-        ) : null}
-
-        <div role="tabpanel" id={`painel-${estacao ?? 'novos'}`} aria-labelledby={`aba-${estacao ?? 'novos'}`} className="flex flex-col gap-3">
-          {erro && itens.length === 0 ? (
-            <ErrorState onRetry={() => void carregar(1, false)} />
-          ) : (carregando || !estacao) && itens.length === 0 ? (
-            <div role="status" aria-label="Carregando leads" className="grid gap-3 lg:grid-cols-2">
-              <Skeleton className="h-44 rounded-2xl" />
-              <Skeleton className="h-44 rounded-2xl" />
-              <Skeleton className="hidden h-44 rounded-2xl lg:block" />
-              <Skeleton className="hidden h-44 rounded-2xl lg:block" />
-            </div>
-          ) : itens.length === 0 && estacao ? (
-            filtrosAtivos ? (
-              <EstadoVazio
-                moldura
-                ilustracao="busca"
-                titulo="Nenhum lead com esses filtros"
-                descricao="Tente outro nome ou tire algum filtro para ver todos desta estação."
-                acao={<AcaoPrincipal variante="secundaria" onClick={limparFiltros}>Limpar filtros</AcaoPrincipal>}
-              />
-            ) : (
-              <EstadoVazio
-                moldura
-                ilustracao={VAZIOS[estacao].ilustracao}
-                titulo={VAZIOS[estacao].titulo}
-                descricao={VAZIOS[estacao].descricao}
-                acao={
-                  estacao === 'novos' || estacao === 'andamento' ? (
+    <Conteudo>
+      <div ref={refRaiz} className="@container flex w-full min-w-0 flex-col gap-4">
+        <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="m-0 text-2xl font-bold leading-tight tracking-tight text-foreground">Funil</h1>
+            <p className="m-0 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground" aria-live="polite">
+              {resumo ? (
+                <>
+                  <span>{resumo.andamento}</span>
+                  {resumo.negociacao ? (
                     <>
-                      {contadores && contadores.pool > 0 ? (
-                        <AcaoPrincipal onClick={() => trocarEstacao('pool')}>Ir para o Pool ({contadores.pool})</AcaoPrincipal>
-                      ) : null}
-                      {eu.podeEscrever ? (
-                        <AcaoPrincipal variante={contadores && contadores.pool > 0 ? 'secundaria' : 'principal'} icone={<Plus />} onClick={() => setNovoAberto(true)}>
-                          Novo lead
-                        </AcaoPrincipal>
-                      ) : null}
+                      <span aria-hidden="true">·</span>
+                      <span>{resumo.negociacao}</span>
                     </>
-                  ) : undefined
-                }
-              />
-            )
-          ) : (
-            <>
-              <ul className="m-0 grid list-none gap-3 p-0 lg:grid-cols-2 2xl:grid-cols-3">
-                {itens.map(lead => {
-                  const acao = acaoPrincipalDoLead(lead, escopo)
-                  const bloqueado = !eu.podeEscrever && acao.id !== 'abrir'
-                  return (
-                    <li key={lead.id} className="min-w-0">
-                      <LeadCard
-                        lead={leadParaCard(lead, { mostrarAgente: equipe })}
-                        acao={{
-                          rotulo: bloqueado ? 'Ver detalhes' : acao.rotulo,
-                          icone: acao.icone,
-                          onClick: () => (bloqueado ? abrir(lead.id) : void aoAcaoPrincipal(lead)),
-                          carregando: atendendo === lead.id,
-                        }}
-                        menu={menuDoLead(lead)}
-                        onAbrir={() => abrir(lead.id)}
-                      />
-                    </li>
-                  )
-                })}
-              </ul>
-              {temMais ? (
-                <div className="flex justify-center pt-2">
-                  <AcaoPrincipal variante="secundaria" carregando={carregandoMais} onClick={() => void carregar(pagina + 1, true)}>
-                    Carregar mais ({(total - itens.length).toLocaleString('pt-BR')})
-                  </AcaoPrincipal>
-                </div>
+                  ) : null}
+                  <span aria-hidden="true">·</span>
+                  <span className={cn('inline-flex items-center gap-1', resumo.atrasados.ok ? 'font-medium text-[#067647]' : 'font-semibold text-[#B42318]')}>
+                    {resumo.atrasados.ok ? <CheckCircle2 className="size-3.5" aria-hidden="true" /> : null}
+                    {resumo.atrasados.texto}
+                  </span>
+                  {atualizando ? <Loader2 className="ml-1 size-3 animate-spin" aria-label="Atualizando" /> : null}
+                </>
               ) : (
-                <p className="m-0 pt-1 text-center text-xs text-muted-foreground">
-                  {total === 1 ? '1 lead' : `${total.toLocaleString('pt-BR')} leads`} nesta estação.
-                </p>
+                <span>{equipe ? 'Os leads da sua rede, do primeiro contato à venda.' : 'Seus leads, do primeiro contato à venda.'}</span>
               )}
-              {carregando ? (
-                <p role="status" className="m-0 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> Atualizando…
-                </p>
-              ) : null}
-            </>
-          )}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div role="radiogroup" aria-label="Forma de exibição" className="inline-flex rounded-xl border border-border bg-white p-0.5">
+              {(
+                [
+                  { id: 'quadro', rotulo: 'Quadro', icone: <Columns3 /> },
+                  { id: 'lista', rotulo: 'Lista', icone: <List /> },
+                ] as const
+              ).map(o => (
+                <button
+                  key={o.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={visao === o.id}
+                  onClick={() => trocarVisao(o.id)}
+                  className={cn(
+                    'inline-flex min-h-10 items-center gap-1.5 rounded-[10px] px-3 text-sm font-medium transition-colors',
+                    visao === o.id ? 'bg-[#1E2A4A] text-white' : 'text-[#344054] hover:bg-[#F2F4F7]',
+                    FOCUS_RING,
+                  )}
+                >
+                  <span aria-hidden="true" className="inline-flex [&>svg]:size-4">
+                    {o.icone}
+                  </span>
+                  {o.rotulo}
+                </button>
+              ))}
+            </div>
+            {eu.podeEscrever ? (
+              <AcaoPrincipal icone={<Plus />} onClick={() => setNovoAberto(true)} className="hidden sm:inline-flex">
+                Novo lead
+              </AcaoPrincipal>
+            ) : null}
+          </div>
+        </header>
+
+        {dados && mostrarDisponiveis ? <FaixaDisponiveis itens={dados.disponiveis.itens} total={dados.disponiveis.total} acoes={acoes} agoraMs={agoraMs} /> : null}
+
+        <BarraFiltros filtros={filtros} aoMudar={p => { setFiltros(f => ({ ...f, ...p })); setLimite(LIMITE_INICIAL) }} agentes={agentes} equipe={equipe} />
+
+        <div aria-live="polite" className="sr-only">
+          {anuncio}
         </div>
+
+        {erro && !dados ? (
+          <ErrorState onRetry={() => void quadro.recarregarInicial()} />
+        ) : carregando || !dados || largura === null ? (
+          <EsqueletoFunil largo={largo} />
+        ) : semNada && !comFiltro ? (
+          <EstadoVazio
+            moldura
+            ilustracao="funil"
+            titulo="Seu funil está pronto para o primeiro lead"
+            descricao="Quando um lead aparecer em Disponíveis, é só atender. Se já tem alguém em mente, cadastre agora e comece a conversa."
+            acao={
+              eu.podeEscrever ? (
+                <AcaoPrincipal icone={<Plus />} onClick={() => setNovoAberto(true)}>
+                  Novo lead
+                </AcaoPrincipal>
+              ) : undefined
+            }
+          />
+        ) : semNada && comFiltro ? (
+          <EstadoVazio
+            moldura
+            ilustracao="busca"
+            titulo="Nenhum lead com esses filtros"
+            descricao="Tente outro nome ou tire algum filtro para ver o funil inteiro."
+            acao={
+              <AcaoPrincipal variante="secundaria" onClick={() => setFiltros({ ...FILTROS_VAZIOS })}>
+                Limpar filtros
+              </AcaoPrincipal>
+            }
+          />
+        ) : visao === 'quadro' && largo ? (
+          <Quadro dados={dados} acoes={acoes} aoPausar={quadro.pausar} aoVerMais={verMais} />
+        ) : visao === 'quadro' ? (
+          <EtapasMobile dados={dados} etapa={etapaMobile} aoMudar={setEtapaMobile} acoes={acoes} aoVerMais={verMais} />
+        ) : (
+          <ListaFunil dados={dados} acoes={acoes} largo={largo} aoVerMais={verMais} />
+        )}
+
+        {dados && resumo?.atrasados.ok && dados.resumo.emAndamento > 0 && !comFiltro ? (
+          <p className="m-0 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+            <Sparkles className="size-3.5 text-[#067647]" aria-hidden="true" />
+            Tudo em dia por aqui. Continue assim.
+          </p>
+        ) : null}
       </div>
 
       {eu.podeEscrever ? (
@@ -417,7 +495,8 @@ export function FunilPage({ leadIdInicial }: { leadIdInicial?: string }) {
           onClick={() => setNovoAberto(true)}
           aria-label="Novo lead"
           className={cn(
-            'fixed bottom-20 right-4 z-30 inline-flex size-14 items-center justify-center rounded-full bg-[var(--vr-accent,#1E2A4A)] text-[var(--vr-accent-fg,#FFFFFF)] shadow-lg hover:brightness-110 sm:hidden',
+            FAB_MOBILE,
+            'inline-flex size-14 items-center justify-center rounded-full bg-[var(--vr-accent,#1E2A4A)] text-[var(--vr-accent-fg,#FFFFFF)] shadow-lg hover:brightness-110 sm:hidden',
             FOCUS_RING,
           )}
         >
@@ -429,17 +508,66 @@ export function FunilPage({ leadIdInicial }: { leadIdInicial?: string }) {
         leadId={aberto?.id ?? null}
         inicial={aberto ? { aba: aberto.aba, dialogo: aberto.dialogo } : undefined}
         aoFechar={fechar}
-        aoAlterar={atualizar}
+        aoAlterar={atualizarTudo}
       />
       <NovoLeadDialog
         aberto={novoAberto}
         aoFechar={() => setNovoAberto(false)}
         escopo={escopo}
         aoCriar={lead => {
-          atualizar()
-          abrir(lead.id)
+          atualizarTudo()
+          abrirPorId(lead.id)
+        }}
+      />
+      <DialogosDeEtapa
+        pedido={pedido}
+        aoFechar={() => setPedido(null)}
+        aoConfirmarPerda={async (lead, motivo) => {
+          const ok = await executarMover(lead, 'perdido', { motivoPerda: motivo })
+          if (ok) setPedido(null)
+        }}
+        aoConfirmarGanho={async lead => {
+          const ok = await executarMover(lead, 'ganho', { confirmar: true })
+          if (ok) setPedido(null)
         }}
       />
     </Conteudo>
+  )
+}
+
+function EsqueletoFunil({ largo }: { largo: boolean }) {
+  if (!largo) {
+    return (
+      <div role="status" aria-label="Carregando o funil" className="flex flex-col gap-3">
+        <div className="flex gap-2 overflow-hidden">
+          {[0, 1, 2, 3].map(i => (
+            <Skeleton key={i} className="h-11 w-28 shrink-0 rounded-full" />
+          ))}
+        </div>
+        <Skeleton className="h-36 rounded-xl" />
+        <Skeleton className="h-36 rounded-xl" />
+      </div>
+    )
+  }
+  return (
+    <div role="status" aria-label="Carregando o funil" className="grid grid-cols-[repeat(4,minmax(0,1fr))_15rem] gap-3">
+      {[0, 1, 2, 3, 4].map(i => (
+        <div key={i} className="flex flex-col gap-2 rounded-2xl border border-border bg-[#F6F7F9] p-2">
+          <Skeleton className="h-10 rounded-lg" />
+          {i < 4 ? (
+            <>
+              <Skeleton className="h-32 rounded-xl" />
+              <Skeleton className="h-32 rounded-xl" />
+              {i < 3 ? <Skeleton className="h-32 rounded-xl" /> : null}
+            </>
+          ) : (
+            <>
+              <Skeleton className="h-20 rounded-xl" />
+              <Skeleton className="h-20 rounded-xl" />
+            </>
+          )}
+        </div>
+      ))}
+    </div>
   )
 }

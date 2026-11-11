@@ -21,7 +21,7 @@ import { Chips } from '../lead/campos'
  * Meu link: o código de indicação e o link para o cliente contratar sozinho.
  * Plataforma: link de contratação (`/contratar?ref=`). Clube: link de adesão,
  * geral ou por plano (`/<clube>/assinar?plano=&ref=`). Sempre com QR, copiar e
- * WhatsApp. Quem compra pelo seu link já entra com a sua atribuição.
+ * WhatsApp. A venda de quem compra pelo seu link fica registrada no seu nome.
  */
 export function MeuLinkPage() {
   const { escopo, eu } = useVendasRede()
@@ -58,10 +58,16 @@ export function MeuLinkPage() {
     return `${origem}/${encodeURIComponent(escopo.slug)}/assinar?${q.toString()}`
   }, [codigo, origem, escopo, plano])
 
+  // Mesmo tom dos modelos de Regras: link em linha própria, sem pontuação colada a ele.
+  const assinatura = eu.agente?.nome ? ` ${eu.agente.nome}` : ''
   const texto =
     escopo.kind === 'platform'
-      ? `Olá! Aqui está o meu link para contratar a plataforma ANNETEC: ${url}`
-      : `Olá! Aqui está o link para você assinar${plano ? ` o plano ${plano.nome}` : ''}: ${url}`
+      ? `Olá! Segue o link para contratar a plataforma ANNETEC:
+${url}
+Qualquer dúvida, fico por aqui.${assinatura}`
+      : `Olá! Segue o link para você conhecer ${plano ? `o plano ${plano.nome}` : 'os nossos planos'} e aderir:
+${url}
+Qualquer dúvida, fico por aqui.${assinatura}`
   const compartilharWa = url ? `https://wa.me/?text=${encodeURIComponent(texto)}` : null
 
   return (
@@ -70,7 +76,7 @@ export function MeuLinkPage() {
         <h1 className="m-0 text-2xl font-bold leading-tight tracking-tight text-foreground">Meu link</h1>
         <p className="m-0 text-base text-[#475467]">
           {escopo.kind === 'platform'
-            ? 'Quem contratar pelo seu link já entra com a sua atribuição.'
+            ? 'A venda de quem contratar pelo seu link fica registrada no seu nome.'
             : 'Quem assinar pelo seu link já entra na sua carteira.'}
         </p>
       </header>
@@ -84,7 +90,7 @@ export function MeuLinkPage() {
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-          <SectionCard title="Seu código" description="Quem informa este código é atribuído a você." className="lg:self-start">
+          <SectionCard title="Seu código" description="A venda de quem informar este código fica registrada no seu nome." className="lg:self-start">
             <div className="flex flex-col items-start gap-4">
               <p className="m-0 select-all break-all rounded-xl bg-[#F8F9FB] px-4 py-3 font-mono text-2xl font-bold tracking-wider text-[#1E2A4A]">{codigo}</p>
               <CopiarBotao texto={codigo} rotulo="Copiar código" mensagem="Código copiado" />

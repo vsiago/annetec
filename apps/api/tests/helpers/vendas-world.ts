@@ -105,6 +105,12 @@ export interface LeadSeed {
   interessePlanoId?: string | null
   conversao?: Record<string, unknown> | null
   ganhoEm?: Date | null
+  perdidoEm?: Date | null
+  origem?: string
+  valorEstimado?: string | null
+  proximoPasso?: string | null
+  proximoPassoEm?: Date | null
+  updatedAt?: Date
   createdAt?: Date
 }
 

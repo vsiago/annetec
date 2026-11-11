@@ -95,15 +95,12 @@ export function GettingStarted({ slug, base }: { slug: string; base: string }) {
     const sellers = users.filter(
       user => user.role === 'seller' && (user.accessStatus ?? (user.active === false ? 'removed' : 'active')) === 'active',
     ).length
-    const admins = users.filter(
-      user => user.role === 'admin' && (user.accessStatus ?? (user.active === false ? 'removed' : 'active')) === 'active',
-    ).length
 
     return [
       {
         key: 'receiving',
         title: 'Conectar a conta de recebimento',
-        description: 'Sem a conta Asaas do clube, ninguém consegue assinar nem pagar.',
+        description: 'Sem a conta de recebimento, o clube não consegue cobrar: ninguém assina nem paga.',
         icon: Landmark,
         // Só o gateway Asaas pede conta própria.
         done: doneOf(settings.data, settings.error, value => value.gateway !== 'asaas' || value.asaasConfigured),
@@ -139,12 +136,12 @@ export function GettingStarted({ slug, base }: { slug: string; base: string }) {
       },
       {
         key: 'team',
-        title: 'Convidar a equipe e os vendedores',
-        description: 'Quem vende ou ajuda a administrar recebe o próprio acesso.',
+        title: 'Cadastrar os vendedores',
+        description: 'Quem vende entra na Rede comercial, onde você define equipe e unidade. O vendedor recebe o acesso por e-mail.',
         icon: UserCog,
-        done: sellers > 0 || admins > 1,
-        href: `${base}/usuarios?novo=vendedor`,
-        cta: 'Convidar pessoa',
+        done: sellers > 0,
+        href: `${base}/comercial/rede`,
+        cta: 'Novo agente',
       },
       {
         key: 'share',

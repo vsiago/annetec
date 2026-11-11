@@ -52,7 +52,8 @@ import { enviarConvite, provisionarUsuario, reenviarConvite, type ResultadoConvi
 import { whereEscopo, type VendasCtx } from './context'
 import { whereAgentesVisiveis } from './presenca.service'
 import { toArvoreAgente, toVendasAgente, toVendasCorretora, toVendasEquipe, toVendasUnidade } from './presenter'
-import { gerarCodigoIndicacao, mesReferenciaSaoPaulo } from './rules'
+import { gerarCodigoLivre } from './agente-solo'
+import { mesReferenciaSaoPaulo } from './rules'
 
 /**
  * Rede: perfil do usuário (`GET /eu`), corretoras, unidades, equipes, agentes,
@@ -68,7 +69,7 @@ import { gerarCodigoIndicacao, mesReferenciaSaoPaulo } from './rules'
 // Erros e utilidades
 // ---------------------------------------------------------------------------
 
-const semPermissao = (mensagem = 'Seu papel na rede não permite esta operação.') =>
+const semPermissao = (mensagem = 'Seu perfil não permite esta ação. Fale com o seu supervisor ou gerente.') =>
   new AppError(ERROR_CODES.VENDAS_SEM_PERMISSAO_NA_REDE, mensagem)
 const jaExiste = (mensagem: string) => new AppError(ERROR_CODES.ALREADY_EXISTS, mensagem)
 const regra = (mensagem: string) => AppError.businessRule(mensagem)
@@ -339,7 +340,7 @@ function autorizarEstrutura(ctx: VendasCtx, corretoraId: string | null): void {
 /** Concilia o que o pedido informou com o que o "pai" (unidade/equipe) já determina. */
 function conciliar(informado: string | null | undefined, doPai: string | null, rotulo: string): string | null {
   if (informado && doPai && informado !== doPai) {
-    throw regra(`A ${rotulo} informada não confere com o vínculo escolhido`)
+    throw regra(`A ${rotulo} escolhida não pertence ao vínculo informado.`)
   }
   return doPai ?? informado ?? null
 }
@@ -687,7 +688,7 @@ function autorizarPapelDoAlvo(ctx: VendasCtx, papel: PapelComercial): void {
       ? 'O gerente cadastra apenas supervisor, vendedor e balcão da sua corretora.'
       : ctx.papel === 'supervisor'
         ? 'O supervisor cadastra apenas vendedores das suas equipes.'
-        : 'Seu papel na rede não permite esta operação.',
+        : 'Seu perfil não permite esta ação. Fale com o seu supervisor ou gerente.',
   )
 }
 
@@ -696,7 +697,7 @@ function autorizarVinculoDoAlvo(ctx: VendasCtx, vinculo: Vinculo): void {
   if (ctx.papel === 'master') return
   if (ctx.papel === 'gerente') {
     if (ctx.agente?.corretoraId && vinculo.corretoraId === ctx.agente.corretoraId) return
-    throw semPermissao('Você só gerencia agentes da sua corretora.')
+    throw semPermissao('Você só gerencia pessoas da sua corretora.')
   }
   if (ctx.papel === 'supervisor') {
     if (vinculo.equipeId && (ctx.visibilidade.equipeIds ?? []).includes(vinculo.equipeId)) return
@@ -715,15 +716,6 @@ function podeGerenciar(ctx: VendasCtx, alvo: VendasAgenteRow): boolean {
     return alvo.papel === 'vendedor' && Boolean(alvo.equipeId) && (ctx.visibilidade.equipeIds ?? []).includes(alvo.equipeId!)
   }
   return false
-}
-
-async function gerarCodigoLivre(): Promise<string> {
-  for (let tentativa = 0; tentativa < 20; tentativa++) {
-    const codigo = gerarCodigoIndicacao()
-    const [existente] = await db.select({ id: vendasAgentes.id }).from(vendasAgentes).where(eq(vendasAgentes.codigoIndicacao, codigo)).limit(1)
-    if (!existente) return codigo
-  }
-  throw regra('Não foi possível gerar um código de indicação único: tente novamente')
 }
 
 async function presencaMinutosDoEscopo(ctx: VendasCtx): Promise<number> {
@@ -803,7 +795,7 @@ async function gravarAgente(
       codigo = await gerarCodigoLivre()
     }
   }
-  if (!linha) throw jaExiste('Não foi possível reservar o código de indicação: tente novamente')
+  if (!linha) throw jaExiste('Não foi possível reservar o código de indicação. Tente de novo.')
 
   if (dados.papel === 'gerente' && vinculo.corretoraId) {
     await db
@@ -916,7 +908,7 @@ export async function atualizarAgente(
     (input.equipeId !== undefined && input.equipeId !== (alvo.equipeId ?? null))
 
   if (!podeGerenciar(ctx, alvo) && !(proprio && !mudaPapel && !mudaVinculo)) {
-    throw semPermissao('Você não pode alterar este agente.')
+    throw semPermissao('Você não pode alterar esta pessoa.')
   }
   // Edição do próprio cadastro (qualquer papel): só dados pessoais e repasse.
   // Meta é da gestão; papel/vínculo diferentes já foram barrados acima (403).
@@ -929,7 +921,7 @@ export async function atualizarAgente(
   const repasseAntes = alvo.repasse ?? null
   const mudaRepasse = input.repasse !== undefined && JSON.stringify(input.repasse ?? null) !== JSON.stringify(repasseAntes)
   if (mudaRepasse && !proprio && ctx.papel !== 'master') {
-    throw semPermissao('Só o próprio agente ou o master altera os dados de repasse.')
+    throw semPermissao('Só a própria pessoa ou o administrador altera os dados para pagamento.')
   }
 
   let vinculo: VinculoResolvido | null = null
@@ -1057,8 +1049,8 @@ async function auditarRepasse(ctx: VendasCtx, agenteId: string, antes: unknown, 
  */
 export async function definirAtivo(ctx: VendasCtx, id: string, ativo: boolean): Promise<VendasAgente> {
   const { agente: alvo, email } = await acharAgenteVisivel(ctx, id)
-  if (ctx.agente?.id === alvo.id) throw regra('Você não pode alterar o próprio status')
-  if (!podeGerenciar(ctx, alvo)) throw semPermissao('Você não pode alterar este agente.')
+  if (ctx.agente?.id === alvo.id) throw regra('Você não pode desativar o seu próprio perfil.')
+  if (!podeGerenciar(ctx, alvo)) throw semPermissao('Você não pode alterar esta pessoa.')
   if (alvo.ativo === ativo) return apresentarAgente(ctx, alvo, email)
   const [linha] = await db
     .update(vendasAgentes)
@@ -1074,7 +1066,7 @@ export async function definirAtivo(ctx: VendasCtx, id: string, ativo: boolean): 
 /** `POST /rede/agentes/:id/reenviar-convite`. */
 export async function reenviarConviteDoAgente(ctx: VendasCtx, id: string): Promise<ResultadoConvite> {
   const { agente: alvo } = await acharAgenteVisivel(ctx, id)
-  if (!podeGerenciar(ctx, alvo)) throw semPermissao('Você não pode reenviar o convite deste agente.')
+  if (!podeGerenciar(ctx, alvo)) throw semPermissao('Você não pode reenviar o convite desta pessoa.')
   return reenviarConvite({ scope: ctx.scope, tenantId: ctx.tenantId, userId: alvo.userId, actorUserId: ctx.userId })
 }
 

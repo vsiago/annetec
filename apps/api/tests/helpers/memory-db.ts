@@ -6,7 +6,7 @@ import { getTableColumns } from 'drizzle-orm'
  * conexão real): `select/insert/update/delete` com `where` feito de
  * `eq/ne/lt/lte/gt/gte/inArray/isNull/isNotNull/and/or`, `leftJoin`/
  * `innerJoin` por igualdade de colunas, `orderBy(asc|desc)`, `limit`,
- * `returning`, `onConflictDoNothing/onConflictDoUpdate` e índices únicos
+ * `returning`, `selectDistinctOn` (1ª linha por chave, após o `orderBy`), `onConflictDoNothing/onConflictDoUpdate` e índices únicos
  * (inclusive parciais) declarados pelo teste. `sql\`…\`` cru no `where` não é
  * suportado (lança — o teste fica sabendo). Cada operação resolve numa volta
  * nova da fila de tarefas, então `Promise.all` intercala como no banco real.
@@ -216,7 +216,7 @@ export function createMemoryDb(options: MemoryDbOptions) {
     readonly code = '23505'
   }
 
-  function chain(kind: 'select' | 'insert' | 'update' | 'delete', table: Table | null, fields?: unknown) {
+  function chain(kind: 'select' | 'insert' | 'update' | 'delete', table: Table | null, fields?: unknown, distinctOn?: unknown[]) {
     const ops: { name: string; args: unknown[] }[] = []
     const arg = (op: string) => ops.find(item => item.name === op)?.args
     const run = (): unknown => {
@@ -242,6 +242,16 @@ export function createMemoryDb(options: MemoryDbOptions) {
         if (aggregate) return [{ [aggregate[0]]: contexts.length }]
         const orderBy = arg('orderBy')
         if (orderBy) contexts = sortRows(contexts, orderBy)
+        // `selectDistinctOn([colunas], campos)`: mantém a 1ª linha de cada chave, já na ordem pedida.
+        if (distinctOn) {
+          const vistos = new Set<string>()
+          contexts = contexts.filter(ctx => {
+            const chave = JSON.stringify(distinctOn.map(ref => comparable(valueOf(ref, ctx))))
+            if (vistos.has(chave)) return false
+            vistos.add(chave)
+            return true
+          })
+        }
         const limit = arg('limit')?.[0] as number | undefined
         if (limit !== undefined) contexts = contexts.slice(0, limit)
         return contexts.map(ctx => project(fields, ctx, base))
@@ -321,6 +331,7 @@ export function createMemoryDb(options: MemoryDbOptions) {
 
   const db: Record<string, unknown> = {
     select: (fields?: unknown) => chain('select', null, fields),
+    selectDistinctOn: (on: unknown[], fields?: unknown) => chain('select', null, fields, on),
     insert: (table: Table) => chain('insert', table),
     update: (table: Table) => chain('update', table),
     delete: (table: Table) => chain('delete', table),

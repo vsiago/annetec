@@ -177,7 +177,7 @@ export function CorretoraWizard({
       },
       {
         id: 'repasse',
-        title: 'Endereço e repasse',
+        title: 'Endereço e pagamento',
         icon: Landmark,
         description: 'Endereço do gerente e para onde vai a comissão.',
         fields: [...CHAVES_ENDERECO, ...CHAVES_REPASSE],
@@ -393,7 +393,7 @@ export function CorretoraWizard({
         <ReviewItem label="Celular" value={values.telefone} />
         <ReviewItem label="Convite" value={values.enviarConvite ? 'Enviado ao concluir' : 'Não enviar agora'} />
       </ReviewSection>
-      <ReviewSection title="Repasse do gerente" icon={Landmark} onEdit={() => wizard.goToStep('repasse')}>
+      <ReviewSection title="Dados para pagamento do gerente" icon={Landmark} onEdit={() => wizard.goToStep('repasse')}>
         <ReviewItem
           label="Forma"
           wide

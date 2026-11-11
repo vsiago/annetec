@@ -158,7 +158,7 @@ describe('avisos do pool', () => {
     await receberLead({ scope: 'platform', tenantId: null, tipo: 'empresa', nome: 'Entidade X', telefone: '11977776666', origemDetalhe: 'entidades' })
     const sales = avisos('vendas_lead_novo').filter(n => n.audience === 'sales')
     expect(sales.map(n => n.recipientUserId).sort()).toEqual(['u-master', 'u-solo', 'u-vendedor1'])
-    for (const aviso of sales) expect(aviso).toMatchObject({ organizationId: null, title: 'Novo lead no pool' })
+    for (const aviso of sales) expect(aviso).toMatchObject({ organizationId: null, title: 'Novo lead disponível' })
     const equipe = avisos('vendas_lead_novo').filter(n => n.audience === 'platform')
     expect(equipe).toHaveLength(1)
     expect(avisos().every(n => n.audience === 'sales' || n.audience === 'platform')).toBe(true)

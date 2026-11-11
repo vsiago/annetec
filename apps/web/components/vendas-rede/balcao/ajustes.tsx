@@ -10,6 +10,7 @@ import { formatarCelular, formatarCpf } from '../ui/mascaras'
 import { Campo } from './campo'
 import { useBalcao } from './contexto'
 import { limparRascunho, soDigitos } from './rascunho'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
 export function AjustesPagina() {
   const { slug, eu, unidade, recarregarEu } = useBalcao()
@@ -42,7 +43,7 @@ export function AjustesPagina() {
     setSalvando(false)
     if (!r.success) {
       if (r.fieldErrors) setErros(r.fieldErrors)
-      toast.error(r.error)
+      toast.error(mensagemDoErro(r.code, r.error))
       return
     }
     toast.success('Dados salvos')
@@ -70,7 +71,7 @@ export function AjustesPagina() {
             value={agente.email ?? ''}
             readOnly
             disabled
-            ajuda="O e-mail não muda por aqui. Peça ao administrador."
+            ajuda="O e-mail não muda por aqui. Peça ao administrador do clube."
           />
           <Campo
             rotulo="Celular"
@@ -97,7 +98,7 @@ export function AjustesPagina() {
         </form>
       ) : (
         <p className="m-0 rounded-2xl bg-[#F2F4F7] p-4 text-base text-muted-foreground">
-          Esta conta não tem cadastro de atendente. Peça ao administrador para cadastrar você na rede comercial.
+          Esta conta não tem cadastro de atendente. Peça ao administrador do clube para cadastrar você na Rede comercial.
         </p>
       )}
 

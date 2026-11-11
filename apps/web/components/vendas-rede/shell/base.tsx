@@ -37,7 +37,13 @@ export const ICONES: Record<IconeMenu, LucideIcon> = {
 }
 
 
-export type Branding = { nome: string; logoUrl?: string | null; corPrimaria?: string | null }
+export type Branding = {
+  nome: string
+  logoUrl?: string | null
+  /** Símbolo quadrado (menu recolhido); sem ele usa `logoUrl`. */
+  iconeUrl?: string | null
+  corPrimaria?: string | null
+}
 export type UsuarioShell = { nome: string; iniciais?: string; online: boolean }
 
 /**
@@ -109,15 +115,11 @@ export function Selo({ valor }: { valor?: number }) {
   return (
     <span className="absolute -right-1.5 -top-1.5 inline-flex min-w-4 items-center justify-center rounded-full bg-[#B42318] px-1 text-[10px] font-bold leading-4 text-white ring-2 ring-white">
       {valor > 99 ? '99+' : valor}
-      <span className="sr-only"> {valor === 1 ? 'novidade' : 'novidades'}</span>
+      <span className="sr-only"> {valor === 1 ? 'lead disponível' : 'leads disponíveis'}</span>
     </span>
   )
 }
 
-/**
- * Conteúdo da página dentro da casca: respiro lateral, largura máxima e
- * centralização. `largo` solta a largura máxima (Funil/Resultados em telas grandes).
- */
 /** Link "Pular para o conteúdo" (primeiro foco da página). */
 export function PularParaConteudo({ alvo }: { alvo: string }) {
   return (

@@ -188,7 +188,7 @@ function acaoDaVez(l: VendasLeadRow, motivo: MotivoDaVez): VendasLinhaDaVez['aca
 }
 
 function textoDaVez(l: VendasLeadRow, motivo: MotivoDaVez, passo: string): string {
-  if (!l.agenteId) return 'Lead no pool: ninguém atendeu ainda'
+  if (!l.agenteId) return 'Disponível: ninguém atendeu ainda'
   if (motivo === 'atrasado') return `Próximo passo atrasado: ${passo}`
   if (motivo === 'novo') return 'Lead novo sem nenhum contato'
   return 'Proposta enviada aguardando resposta'

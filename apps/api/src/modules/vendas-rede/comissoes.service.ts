@@ -666,7 +666,7 @@ export async function resumo(ctx: VendasCtx, mes?: string, agora: Date = new Dat
 // ---------------------------------------------------------------------------
 
 function exigirMaster(ctx: VendasCtx): void {
-  if (ctx.papel !== 'master') throw AppError.forbidden('Só o master da Rede Comercial pode alterar comissões.')
+  if (ctx.papel !== 'master') throw AppError.forbidden('Só o administrador pode alterar comissões.')
 }
 
 async function auditarEscrita(ctx: VendasCtx, action: string, resourceId: string | null, metadata: Record<string, unknown>): Promise<void> {

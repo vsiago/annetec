@@ -54,7 +54,7 @@ export interface ProvisionarUsuarioInput {
   criadoPorUserId: string | null
 }
 
-const EMAIL_EXISTENTE = 'Já existe uma conta com este e-mail'
+const EMAIL_EXISTENTE = 'Este e-mail já tem conta'
 
 /** Cria (ou reaproveita) a conta de acesso do agente. NÃO cria `vendas_agentes`. */
 export async function provisionarUsuario(input: ProvisionarUsuarioInput): Promise<UsuarioProvisionado> {
@@ -68,14 +68,14 @@ export async function provisionarUsuario(input: ProvisionarUsuarioInput): Promis
   if (input.scope === 'platform') {
     if (existente) {
       if (existente.role !== 'platform_seller') {
-        throw new AppError(ERROR_CODES.ALREADY_EXISTS, `${EMAIL_EXISTENTE} e ela não é de vendedor ANNETEC`)
+        throw new AppError(ERROR_CODES.ALREADY_EXISTS, `${EMAIL_EXISTENTE} e ela não é de vendedor ANNETEC. Use outro e-mail.`)
       }
       return { userId: existente.id, email, nome: existente.name, contaNova: false, senhaProvisoria: null }
     }
     const senha = generateProvisionalPassword()
     const conta = await platformUsersService.create(
       { name: input.nome, email, phone: input.telefone ?? undefined, password: senha, role: 'platform_seller' },
-      { referralCode: input.codigoIndicacao.toLowerCase(), createdByUserId: input.criadoPorUserId },
+      { referralCode: input.codigoIndicacao.toLowerCase(), createdByUserId: input.criadoPorUserId, semAgenteComercial: true },
     )
     return { userId: conta.id, email, nome: conta.name, contaNova: true, senhaProvisoria: senha }
   }
@@ -91,7 +91,7 @@ export async function provisionarUsuario(input: ProvisionarUsuarioInput): Promis
       .limit(1)
     if (vinculo) {
       if (vinculo.role !== 'seller') {
-        throw new AppError(ERROR_CODES.ALREADY_EXISTS, `${EMAIL_EXISTENTE} neste clube com outro perfil (administrador ou associado)`)
+        throw new AppError(ERROR_CODES.ALREADY_EXISTS, `${EMAIL_EXISTENTE} neste clube com outro perfil (administrador ou associado). Use outro e-mail.`)
       }
       if (vinculo.accessStatus !== 'active') {
         await db.update(member).set({ accessStatus: 'active', accessChangedAt: new Date() }).where(eq(member.id, vinculo.id))
@@ -108,7 +108,7 @@ export async function provisionarUsuario(input: ProvisionarUsuarioInput): Promis
     phone: input.telefone ?? undefined,
     role: 'seller',
     active: true,
-  } as CreateTenantUserInput)
+  } as CreateTenantUserInput, { semAgenteComercial: true })
   return {
     userId: tenantUser.id,
     email,

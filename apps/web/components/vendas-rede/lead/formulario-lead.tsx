@@ -69,13 +69,17 @@ export function validarLead(v: ValoresLead, campos: ReadonlyArray<keyof ValoresL
     const n = digitos(v.telefone).length
     if (n < 10 || n > 11) erros.telefone = 'Informe o DDD e o número.'
   }
-  if (quer('email') && v.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email.trim())) erros.email = 'E-mail inválido.'
+  if (quer('email') && v.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email.trim())) erros.email = 'Informe um e-mail válido, como nome@exemplo.com.br.'
   if (quer('documento') && v.documento.trim()) {
     const n = digitos(v.documento).length
     if (n !== 11 && n !== 14) erros.documento = 'Use um CPF (11 dígitos) ou CNPJ (14 dígitos).'
   }
+  // Sem celular nem e-mail ninguém consegue contatar a pessoa.
+  if (quer('telefone') && quer('email') && !v.telefone.trim() && !v.email.trim()) {
+    erros.telefone = 'Informe o celular ou o e-mail para contatar.'
+  }
   if (quer('uf') && v.uf.trim() && !/^[A-Za-z]{2}$/.test(v.uf.trim())) erros.uf = 'Use a sigla do estado (SP).'
-  if (quer('vidasEstimadas') && v.vidasEstimadas.trim() && !/^\d+$/.test(v.vidasEstimadas.trim())) erros.vidasEstimadas = 'Somente números.'
+  if (quer('vidasEstimadas') && v.vidasEstimadas.trim() && !/^\d+$/.test(v.vidasEstimadas.trim())) erros.vidasEstimadas = 'Use só números.'
   return erros
 }
 
@@ -164,7 +168,7 @@ export function FormularioLead({
       {mostraContato ? (
         <>
           <Chips
-            rotulo="Quem é"
+            rotulo="Tipo de lead"
             valor={valores.tipo}
             opcoes={[
               { id: 'pessoa', rotulo: 'Pessoa' },
@@ -184,7 +188,7 @@ export function FormularioLead({
             />
           </Campo>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Campo htmlFor={`${id}-tel`} rotulo="Celular ou telefone" erro={erros.telefone} opcional>
+            <Campo htmlFor={`${id}-tel`} rotulo="Celular (com DDD)" erro={erros.telefone} opcional>
               <Input
                 id={`${id}-tel`}
                 inputMode="tel"

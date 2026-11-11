@@ -2,13 +2,14 @@
 
 import type { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import { LockKeyhole } from 'lucide-react'
+import { LockKeyhole, type LucideIcon } from 'lucide-react'
 import type { PapelComercial, VendasEu } from '@annetec/contracts'
 import { LoadError, TableSkeleton, useConsoleData } from '@/components/admin-platform/billing/console-kit'
 import { euAction } from '@/lib/actions/vendas-rede-gestao-api'
 import { cn } from '@/lib/utils'
 import { EstadoVazio } from '../ui/estado-vazio'
 import { AcaoPrincipal } from '../ui/acao-principal'
+import { ACCENT_BG } from '../ui/tokens'
 import type { EscopoRede } from './tipos'
 
 /**
@@ -50,11 +51,11 @@ const QUEM_VE: Record<TelaGestao, readonly PapelComercial[]> = {
 }
 
 const EXPLICACAO: Record<TelaGestao, string> = {
-  equipe: 'A tela Equipe é de quem lidera vendedores: supervisor, gerente e master.',
-  rede: 'A gestão da rede (corretoras, unidades, equipes e agentes) é do gerente e do master.',
-  resultados: 'Os resultados da rede são de quem acompanha vendedores: supervisor, gerente e master.',
-  comissoes: 'As comissões aparecem para vendedores, supervisores, gerentes e master. O balcão não tem comissão.',
-  regras: 'As regras de comissão e de distribuição de leads só podem ser alteradas pelo master.',
+  equipe: 'A tela Equipe é de quem lidera vendedores: supervisor, gerente e administrador.',
+  rede: 'A gestão da rede (corretoras, unidades, equipes e agentes) é do gerente e do administrador.',
+  resultados: 'Os resultados da rede são de quem acompanha vendedores: supervisor, gerente e administrador.',
+  comissoes: 'As comissões aparecem para vendedores, supervisores, gerentes e administradores. O balcão não tem comissão.',
+  regras: 'As regras de comissão e de distribuição de leads só podem ser alteradas pelo administrador.',
 }
 
 export function podeVerTela(tela: TelaGestao, papel: PapelComercial): boolean {
@@ -94,7 +95,7 @@ export function SemAcesso({ escopo, mensagem }: { escopo: EscopoRede; mensagem: 
     <EstadoVazio
       ilustracao="busca"
       moldura
-      titulo="Esta tela não está disponível para o seu papel"
+      titulo="Esta tela não está liberada para o seu perfil"
       descricao={mensagem}
       acao={<AcaoPrincipal href={base}>Voltar para o início</AcaoPrincipal>}
     />
@@ -106,20 +107,33 @@ export function CabecalhoTela({
   titulo,
   descricao,
   acao,
+  icone: Icone,
   className,
 }: {
   titulo: string
   descricao?: ReactNode
   acao?: ReactNode
+  /** Ícone da seção no selo da cor do clube (padrão das páginas do console). */
+  icone?: LucideIcon
   className?: string
 }) {
   return (
-    <header className={cn('flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between', className)}>
-      <div className="min-w-0">
-        <h1 className="m-0 text-2xl font-bold leading-tight text-foreground">{titulo}</h1>
-        {descricao ? <p className="m-0 mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">{descricao}</p> : null}
+    <header className={cn('flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between', className)}>
+      <div className="flex min-w-0 items-start gap-4">
+        {Icone ? (
+          <span
+            aria-hidden="true"
+            className={cn('mt-0.5 inline-flex size-11 shrink-0 items-center justify-center rounded-2xl shadow-[0_1px_2px_rgba(16,24,40,0.12)] sm:size-12', ACCENT_BG)}
+          >
+            <Icone className="size-5" strokeWidth={2} />
+          </span>
+        ) : null}
+        <div className="min-w-0">
+          <h1 className={cn('m-0 font-bold leading-tight text-foreground', Icone ? 'text-[24px] tracking-tight sm:text-[30px]' : 'text-2xl')}>{titulo}</h1>
+          {descricao ? <p className="m-0 mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground sm:text-[15px]">{descricao}</p> : null}
+        </div>
       </div>
-      {acao ? <div className="flex shrink-0 flex-wrap items-center gap-2">{acao}</div> : null}
+      {acao ? <div className="flex flex-wrap items-center gap-3 sm:shrink-0 sm:justify-end">{acao}</div> : null}
     </header>
   )
 }
@@ -206,7 +220,7 @@ export function Segmentado<T extends string>({
             }}
             className={cn(
               'min-h-9 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#1E2A4A]',
-              ativo ? 'bg-[#1E2A4A] text-white' : 'text-muted-foreground hover:bg-[#F2F4F7] hover:text-foreground',
+              ativo ? 'bg-[var(--vr-accent,#1E2A4A)] text-[var(--vr-accent-fg,#FFFFFF)]' : 'text-muted-foreground hover:bg-[#F2F4F7] hover:text-foreground',
             )}
           >
             {o.label}

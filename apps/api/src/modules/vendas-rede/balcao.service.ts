@@ -31,7 +31,7 @@ import { getOrCreateConfig } from './config.service'
 import type { VendasCtx } from './context'
 import { assinar } from './conversao.service'
 import { atualizar, criar, obter, registrarEventoLead, toVendasLead } from './leads.service'
-import { simularEconomiaBalcao, transicaoPermitida } from './rules'
+import { ROTULO_ETAPA, simularEconomiaBalcao, transicaoPermitida, type EtapaLead } from './rules'
 
 /**
  * Balcão (`docs/rede-comercial.md`, 4.2 "Balcão"). Só escopo tenant; papel `balcao` ou master
@@ -54,7 +54,7 @@ function exigeAgente(ctx: VendasCtx) {
   if (!ctx.agente) {
     throw new AppError(
       ERROR_CODES.VENDAS_SEM_PERFIL,
-      'Para registrar atendimentos no balcão é preciso ter perfil de agente. Peça ao responsável para cadastrar o seu perfil.',
+      'Para registrar atendimentos é preciso ter perfil de atendente. Peça ao administrador para cadastrar você.',
     )
   }
   return ctx.agente
@@ -371,7 +371,7 @@ function invalido(issues: { path: string; message: string }[], mensagem: string)
 }
 
 function transicaoInvalida(de: string, para: string): AppError {
-  return new AppError(ERROR_CODES.VENDAS_TRANSICAO_INVALIDA, `Não é possível mover o lead de "${de}" para "${para}".`)
+  return new AppError(ERROR_CODES.VENDAS_TRANSICAO_INVALIDA, `Este lead não pode ir de ${ROTULO_ETAPA[de as EtapaLead] ?? de} para ${ROTULO_ETAPA[para as EtapaLead] ?? para}.`)
 }
 
 /** Lead do balcão (dono = o atendente, etapa `novo`) + evento `criado`, no executor recebido. */
@@ -456,7 +456,7 @@ async function registrarContatoBalcao(
     await registrarEventoLead(executor, {
       leadId: lead.id,
       tipo: 'etapa',
-      texto: 'Etapa: novo → em_contato (atendimento no balcão).',
+      texto: 'Etapa: Novo → Em contato (atendimento no balcão).',
       dados: { de: 'novo', para: 'em_contato', automatico: true },
       porUserId: ctx.userId,
       porAgenteId: ctx.agente?.id ?? null,
@@ -505,7 +505,7 @@ async function perderLead(
   await registrarEventoLead(executor, {
     leadId,
     tipo: 'etapa',
-    texto: `Etapa: ${de} → perdido. Motivo: ${motivo}`,
+    texto: `Etapa: ${ROTULO_ETAPA[de as EtapaLead] ?? de} → Perdido. Motivo: ${motivo}`,
     dados: { de, para: 'perdido', motivoPerda: motivo },
     porUserId: ctx.userId,
     porAgenteId: ctx.agente?.id ?? null,
@@ -609,10 +609,10 @@ export async function registrarAtendimento(
     if (!nascimento && typeof dadosExistentes.dataNascimento !== 'string') {
       problemas.push({ path: 'dataNascimento', message: 'Informe a data de nascimento do titular' })
     }
-    if (problemas.length > 0) throw invalido(problemas, 'Faltam dados para registrar a adesão no balcão')
+    if (problemas.length > 0) throw invalido(problemas, 'Faltam dados para registrar a adesão')
   }
   if (resultado === 'vai_pensar' && !telefone) {
-    throw invalido([{ path: 'telefone', message: 'Informe o celular para retomar o contato' }], 'Informe o celular para retomar o contato')
+    throw invalido([{ path: 'telefone', message: 'Informe o celular para anotar o retorno.' }], 'Informe o celular para anotar o retorno.')
   }
   // `recusou` perde o lead próprio: a etapa dele precisa permitir (ganho é final e só o master reabre).
   if (resultado === 'recusou' && existente && proprio && !transicaoPermitida(existente.etapa, 'perdido', ctx.papel)) {

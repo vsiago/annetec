@@ -34,7 +34,8 @@ function Area({ children }: { children: ReactNode }) {
   const branding = useMemo(
     () => ({
       nome: tenant?.name ?? 'Clube',
-      logoUrl: tenant?.branding.iconUrl ?? tenant?.branding.logoUrl ?? null,
+      logoUrl: tenant?.branding.logoUrl ?? tenant?.branding.iconUrl ?? null,
+      iconeUrl: tenant?.branding.iconUrl ?? tenant?.branding.logoUrl ?? null,
       corPrimaria: tenant?.branding.primaryColor ?? null,
     }),
     [tenant],

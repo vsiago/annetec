@@ -188,7 +188,7 @@ describe('GET /painel/hoje', () => {
     const hoje = await painel.hoje(ctxDe('supervisor', ID.supervisor), AGORA)
     expect(hoje.agente.online).toBe(false) // última presença há 10 min (janela de 3)
     expect(hoje.suaVez.map(item => item.lead.nome)).toEqual(['Pool parado', 'Pool recente'])
-    expect(hoje.suaVez.find(item => item.lead.nome === 'Pool parado')).toMatchObject({ acao: 'atender', motivo: 'Lead no pool: ninguém atendeu ainda' })
+    expect(hoje.suaVez.find(item => item.lead.nome === 'Pool parado')).toMatchObject({ acao: 'atender', motivo: 'Disponível: ninguém atendeu ainda' })
     expect(hoje.suaVez.some(item => item.lead.nome === 'Lead do Vitor')).toBe(false)
     expect(hoje.equipeOnline).toEqual([{ id: ID.vendedor, nome: 'Vera Vendedora', papel: 'vendedor' }])
     expect(hoje.contadores.minhaVez).toBe(0) // nenhum lead próprio

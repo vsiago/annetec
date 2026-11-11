@@ -99,7 +99,7 @@ export function erroDoPasso(passo: PassoForm, obrigatorio: boolean): string | nu
   const temTexto = passo.texto.trim().length > 0
   const temData = passo.quando !== 'nenhum'
   if (!obrigatorio && !temTexto && !temData) return null
-  if (passo.texto.trim().length < 2) return 'Diga o que fazer no próximo passo.'
+  if (passo.texto.trim().length < 2) return 'Escreva o que você vai fazer.'
   if (!temData) return 'Escolha quando.'
   if (!dataDoPasso(passo)) return 'Informe a data e a hora.'
   return null

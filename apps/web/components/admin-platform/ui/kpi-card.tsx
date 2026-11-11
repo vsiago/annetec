@@ -90,7 +90,7 @@ export function KpiCard({
       <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <p
           className={cn(
-            'm-0 min-w-0 text-[28px] font-bold leading-tight tracking-tight tabular-nums sm:text-[30px]',
+            'm-0 min-w-0 text-[28px] font-bold leading-tight tracking-tight tabular-nums sm:text-[30px] @max-[11rem]:text-[22px]!',
             VALUE_TONES[tone],
           )}
         >
@@ -122,7 +122,7 @@ export function KpiCard({
   )
 
   const base = cn(
-    'group relative flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-card px-5 py-5 sm:px-6',
+    'group @container relative flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-card px-5 py-5 sm:px-6',
     CARD_SHADOW,
   )
 

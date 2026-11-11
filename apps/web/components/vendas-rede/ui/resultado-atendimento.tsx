@@ -56,7 +56,7 @@ export function ResultadoAtendimento({
         <Clock3 className="size-6 shrink-0 text-[#B54708]" aria-hidden="true" />
         <span className="flex flex-col">
           Vai pensar
-          <span className="text-sm font-normal text-muted-foreground">Marca o retorno em 2 dias e envia a mensagem</span>
+          <span className="text-sm font-normal text-muted-foreground">Anota o retorno para daqui a 2 dias</span>
         </span>
       </button>
       <button

@@ -27,7 +27,7 @@ import { OPEN_PROPOSAL_STATUSES } from '@/modules/platform-sales/rules'
 import { atribuicaoDoAgente, compradorEhOAgenteNoBanco } from './atribuicao'
 import { whereEscopo, type VendasCtx } from './context'
 import { carregarEditavel, carregarLead, registrarEventoLead } from './leads.service'
-import { compradorEhOAgente, MOTIVO_AUTO_COMPRA } from './rules'
+import { compradorEhOAgente, MOTIVO_AUTO_COMPRA, ROTULO_ETAPA, type EtapaLead } from './rules'
 
 /**
  * Conversão do lead em venda (ponte com a contratação e o checkout) —
@@ -90,8 +90,8 @@ export async function criarProposta(ctx: VendasCtx, leadId: string, input: Propo
   exigePlatform(ctx)
   const { lead } = await carregarEditavel(ctx, leadId)
   const dono = await agenteDoLead(lead)
-  if (!dono) throw AppError.businessRule('Atribua o lead a um vendedor antes de gerar a proposta.')
-  if (!dono.ativo) throw AppError.businessRule('O vendedor dono do lead está inativo: reatribua o lead antes de gerar a proposta.')
+  if (!dono) throw AppError.businessRule('Atenda o lead antes de gerar a proposta.')
+  if (!dono.ativo) throw AppError.businessRule('O responsável por este lead está inativo. Passe o lead para outra pessoa antes de gerar a proposta.')
   const [conta] = await db.select({ email: user.email }).from(user).where(eq(user.id, dono.userId)).limit(1)
 
   // Proposta em andamento: reaproveita.
@@ -211,7 +211,7 @@ export async function criarProposta(ctx: VendasCtx, leadId: string, input: Propo
     await registrarEventoLead(db, {
       leadId: lead.id,
       tipo: 'etapa',
-      texto: `Etapa: ${lead.etapa} → negociacao (proposta ${proposal.code} gerada).`,
+      texto: `Etapa: ${ROTULO_ETAPA[lead.etapa as EtapaLead] ?? lead.etapa} → Negociação (proposta ${proposal.code} gerada).`,
       dados: { de: lead.etapa, para: 'negociacao', automatico: true },
       porUserId: ctx.userId,
       porAgenteId: ctx.agente?.id ?? null,
@@ -290,7 +290,7 @@ export async function linkAdesao(ctx: VendasCtx, leadId: string, planoId: string
   const { lead } = await carregarEditavel(ctx, leadId)
   const plano = await planoDoClube(ctx.tenantId!, planoId)
   const dono = (await agenteDoLead(lead)) ?? ctx.agente
-  if (dono && !dono.ativo) throw AppError.businessRule('O vendedor dono do lead está inativo: reatribua o lead antes de gerar o link de adesão.')
+  if (dono && !dono.ativo) throw AppError.businessRule('O responsável por este lead está inativo. Passe o lead para outra pessoa antes de gerar o link de adesão.')
   const params = new URLSearchParams({ plano: plano.id })
   if (dono?.codigoIndicacao) params.set('ref', dono.codigoIndicacao)
   params.set('lead', lead.id)
@@ -344,7 +344,7 @@ export async function assinar(
   if (problemas.length > 0) throw AppError.validation(problemas, 'Complete o cadastro do lead antes de assinar')
 
   let dono = (await agenteDoLead(lead)) ?? ctx.agente
-  if (dono && !dono.ativo) throw AppError.businessRule('O vendedor dono do lead está inativo: reatribua o lead antes de assinar.')
+  if (dono && !dono.ativo) throw AppError.businessRule('O responsável por este lead está inativo. Passe o lead para outra pessoa antes de assinar.')
   // Auto-compra: o titular é o próprio agente → a venda segue, mas sem atribuição nem comissão.
   const autoCompra = dono ? await compradorEhOAgenteNoBanco(dono, { cpf, email: lead.email, telefone: lead.telefone }) : false
   if (autoCompra) {

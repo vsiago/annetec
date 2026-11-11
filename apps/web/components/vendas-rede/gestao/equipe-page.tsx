@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowRightLeft, Loader2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
-import type { PapelComercial, VendasAgente, VendasEu, VendasLead } from '@annetec/contracts'
+import { ETAPA_LEAD_LABELS, type PapelComercial, type VendasAgente, type VendasEu, type VendasLead } from '@annetec/contracts'
 import { LoadError, RefreshButton, TableSkeleton, useConsoleData } from '@/components/admin-platform/billing/console-kit'
 import { Button } from '@/components/admin-platform/ui/button'
 import { FilterSelect } from '@/components/admin-platform/ui/table-controls'
@@ -16,6 +16,7 @@ import {
   listLeadsDoAgenteAction,
   reatribuirLeadAction,
 } from '@/lib/actions/vendas-rede-gestao-api'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 import { AcaoPrincipal } from '../ui/acao-principal'
 import { AgenteCard, type AgenteResumo } from '../ui/agente-card'
 import { EstadoVazio } from '../ui/estado-vazio'
@@ -253,11 +254,11 @@ export function ReatribuirLeadsDialog({
       if (r.success) feitos++
       else {
         falhas++
-        ultimoErro = r.error
+        ultimoErro = mensagemDoErro(r.code, r.error)
       }
     }
     setEnviando(false)
-    const nomeDestino = alvo ? (outros.find(o => o.id === alvo)?.nome ?? 'o vendedor escolhido') : 'o pool'
+    const nomeDestino = alvo ? (outros.find(o => o.id === alvo)?.nome ?? 'o vendedor escolhido') : 'Disponíveis'
     if (feitos > 0) toast.success(`${feitos} ${feitos === 1 ? 'lead movido' : 'leads movidos'} para ${nomeDestino}.`)
     if (falhas > 0) toast.error(`${falhas} ${falhas === 1 ? 'lead não pôde ser movido' : 'leads não puderam ser movidos'}.`, { description: ultimoErro || undefined })
     if (feitos > 0) aoConcluir()
@@ -270,7 +271,7 @@ export function ReatribuirLeadsDialog({
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Reatribuir leads de {de?.nome}</DialogTitle>
-          <DialogDescription>Escolha os leads e para quem eles vão. Quem recebe passa a ser o dono do lead.</DialogDescription>
+          <DialogDescription>Escolha os leads e para quem eles vão. Quem recebe passa a ser o responsável pelo lead.</DialogDescription>
         </DialogHeader>
 
         {erro ? (
@@ -302,7 +303,7 @@ export function ReatribuirLeadsDialog({
                     <span className="flex min-w-0 flex-col">
                       <span className="truncate text-sm font-medium">{l.nome}</span>
                       <span className="truncate text-xs text-muted-foreground">
-                        {[l.etapa === 'novo' ? 'Novo' : 'Em andamento', l.interessePlanoNome, l.cidade].filter(Boolean).join(' · ')}
+                        {[ETAPA_LEAD_LABELS[l.etapa], l.interessePlanoNome, l.cidade].filter(Boolean).join(' · ')}
                       </span>
                     </span>
                   </label>
@@ -324,7 +325,7 @@ export function ReatribuirLeadsDialog({
                       {o.online ? ' · online' : ''}
                     </SelectItem>
                   ))}
-                  <SelectItem value={POOL}>Devolver ao pool (sem dono)</SelectItem>
+                  <SelectItem value={POOL}>Liberar (volta para Disponíveis)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

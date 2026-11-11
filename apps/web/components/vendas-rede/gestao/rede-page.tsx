@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { Building2, MousePointerClick, MoreHorizontal, Pencil, Plus, Store, Trash2, UserPlus, UsersRound } from 'lucide-react'
+import { Building2, MousePointerClick, MoreHorizontal, Pencil, Plus, Radio, Store, Trash2, UserCheck, UserPlus, UsersRound } from 'lucide-react'
 import {
   TIPO_UNIDADE_LABELS,
   type PapelComercial,
@@ -18,6 +18,7 @@ import { Button } from '@/components/admin-platform/ui/button'
 import { SectionCard } from '@/components/admin-platform/ui/section-card'
 import { StatusPill } from '@/components/admin-platform/ui/status-pill'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useIsMobile } from '@/components/ui/use-mobile'
 import {
   arvoreAction,
@@ -30,9 +31,10 @@ import {
 } from '@/lib/actions/vendas-rede-gestao-api'
 import { AcaoPrincipal } from '../ui/acao-principal'
 import { ArvoreRede, type NoCorretora, type NoEquipe, type NoUnidade } from '../ui/arvore-rede'
+import { ValorLongo } from '../ui/campo-ficha'
 import { KpiGrid } from '../ui/kpi-grid'
 import type { AgenteResumo } from '../ui/agente-card'
-import { formatarCnpj, formatarCelular } from '../ui/mascaras'
+import { formatarCnpj, formatarCelular, pluralizar } from '../ui/mascaras'
 import { AgenteDetalhe, AgenteDetalheSheet } from './agente-detalhe'
 import { AgenteWizard, type VinculoInicial } from './agente-wizard'
 import { CabecalhoTela, PortaoDePapel, papeisCriaveis } from './comum'
@@ -126,7 +128,7 @@ function converter(arvore: VendasArvoreRede) {
       unidades.unshift({
         id: `__direto:${c.id}`,
         nome: 'Direto na corretora',
-        endereco: 'Gerência, equipes e agentes sem unidade',
+        endereco: 'Gerente, equipes e vendedores sem unidade',
         equipes: equipesSemUnidade.map(e => equipe(e, c.nomeFantasia)),
         agentesDiretos: diretos.map(a => resumo(a, c.nomeFantasia)),
       })
@@ -265,7 +267,7 @@ export function RedeConteudo({ escopo, eu }: { escopo: EscopoRede; eu: VendasEu 
         titulo="Rede"
         descricao={
           master
-            ? 'Corretoras parceiras, unidades, equipes e a força de vendas, do jeito que ela está organizada.'
+            ? 'Corretoras parceiras, unidades, equipes e vendedores, como estão organizados.'
             : 'Unidades, equipes e agentes da sua corretora.'
         }
         acao={
@@ -284,7 +286,7 @@ export function RedeConteudo({ escopo, eu }: { escopo: EscopoRede; eu: VendasEu 
             { rotulo: master ? 'Corretoras' : 'Unidades', valor: master ? totais.corretoras : totais.unidades, icone: Building2 },
             { rotulo: master ? 'Unidades' : 'Equipes', valor: master ? totais.unidades : totais.equipes, icone: Store },
             { rotulo: master ? 'Equipes' : 'Agentes ativos', valor: master ? totais.equipes : totais.agentes, icone: UsersRound },
-            { rotulo: master ? 'Agentes ativos' : 'Online agora', valor: master ? totais.agentes : totais.online, tom: 'green', dica: master ? `${totais.online} online agora` : undefined },
+            { rotulo: master ? 'Agentes ativos' : 'Online agora', valor: master ? totais.agentes : totais.online, icone: master ? UserCheck : Radio, tom: 'green', dica: master ? `${totais.online} online agora` : undefined },
           ]}
         />
       ) : null}
@@ -315,7 +317,7 @@ export function RedeConteudo({ escopo, eu }: { escopo: EscopoRede; eu: VendasEu 
                     <MousePointerClick className="size-6 text-muted-foreground" aria-hidden="true" />
                     <p className="m-0 text-sm font-semibold">Selecione alguém ou um grupo</p>
                     <p className="m-0 max-w-xs text-sm text-muted-foreground">
-                      Clique no nome de um agente ou em “Detalhes” de uma corretora, unidade ou equipe para ver a ficha e as ações.
+                      Toque no nome de uma pessoa ou em “Detalhes” de uma corretora, unidade ou equipe para ver a ficha e as ações.
                     </p>
                   </div>
                 )}
@@ -368,16 +370,21 @@ export function RedeConteudo({ escopo, eu }: { escopo: EscopoRede; eu: VendasEu 
 
 function FolhaPainel({ children, aoFechar }: { children: ReactNode; aoFechar: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/40" role="dialog" aria-modal="true" aria-label="Detalhes do item" onClick={aoFechar}>
-      <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5" onClick={e => e.stopPropagation()}>
+    // Folha do shadcn: Esc fecha, o foco fica preso e volta ao botão que abriu.
+    <Sheet open onOpenChange={aberto => (!aberto ? aoFechar() : undefined)}>
+      <SheetContent side="bottom" className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+        <SheetHeader className="sr-only">
+          <SheetTitle>Detalhes do item</SheetTitle>
+          <SheetDescription>Dados e ações do item selecionado.</SheetDescription>
+        </SheetHeader>
         {children}
         <div className="mt-4">
           <Button type="button" variant="outline" className="w-full" onClick={aoFechar}>
             Fechar
           </Button>
         </div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -387,9 +394,9 @@ function FolhaPainel({ children, aoFechar }: { children: ReactNode; aoFechar: ()
 
 function Dado({ rotulo, children }: { rotulo: string; children?: ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5 py-2">
+    <div className="flex min-w-0 flex-col gap-0.5 py-2">
       <dt className="text-[13px] text-muted-foreground">{rotulo}</dt>
-      <dd className="m-0 break-words text-sm font-medium">{children || <span className="font-normal italic text-muted-foreground">Não informado</span>}</dd>
+      <dd className="m-0 min-w-0 break-words text-sm font-medium">{children || <span className="font-normal italic text-muted-foreground">Não informado</span>}</dd>
     </div>
   )
 }
@@ -456,10 +463,10 @@ function PainelNo({
         <Dado rotulo="Razão social">{c.razaoSocial}</Dado>
         <Dado rotulo="CNPJ">{formatarCnpj(c.cnpj)}</Dado>
         <Dado rotulo="Gerente">{c.gerente?.nome}</Dado>
-        <Dado rotulo="E-mail">{c.email}</Dado>
+        <Dado rotulo="E-mail">{c.email ? <ValorLongo texto={c.email} href={`mailto:${c.email}`} rotuloCopiar="Copiar e-mail" mensagemCopiar="E-mail copiado" /> : null}</Dado>
         <Dado rotulo="Telefone">{c.telefone ? formatarCelular(c.telefone) : ''}</Dado>
         <Dado rotulo="Endereço">{e ? [e.logradouro, e.numero, e.bairro, e.cidade, e.uf].filter(Boolean).join(', ') : ''}</Dado>
-        <Dado rotulo="Estrutura">{`${c.unidades.length} unidades · ${c.equipes.length} equipes · ${c.agentes.length} agentes`}</Dado>
+        <Dado rotulo="Estrutura">{`${pluralizar(c.unidades.length, 'unidade')} · ${pluralizar(c.equipes.length, 'equipe')} · ${pluralizar(c.agentes.length, 'agente')}`}</Dado>
       </dl>
     )
     acoes = (
@@ -486,7 +493,7 @@ function PainelNo({
       }
       confirmar = {
         titulo: `Remover ${c.nomeFantasia}?`,
-        texto: 'Se a corretora já tem histórico (leads, comissões), ela é apenas desativada e continua nos relatórios. Sem histórico, é apagada de vez.',
+        texto: 'Se a corretora já tem histórico (leads, comissões), ela é apenas desativada e continua nos relatórios. Sem histórico, é apagada de vez. Isto não pode ser desfeito.',
         executar: async () => {
           const r = await runCommand(removerCorretoraAction(escopo, c.id))
           if (r) toast.success(r.resultado === 'removida' ? 'Corretora removida.' : 'Corretora desativada: ela tem histórico e foi mantida nos relatórios.')
@@ -505,10 +512,10 @@ function PainelNo({
     corpo = (
       <dl className="m-0 divide-y divide-border/60">
         <Dado rotulo="Tipo">{TIPO_UNIDADE_LABELS[u.tipo]}</Dado>
-        <Dado rotulo="Pertence a">{c ? c.nomeFantasia : 'Escopo (unidade própria)'}</Dado>
+        <Dado rotulo="Pertence a">{c ? c.nomeFantasia : 'Sem corretora (unidade própria)'}</Dado>
         <Dado rotulo="Telefone">{u.telefone ? formatarCelular(u.telefone) : ''}</Dado>
         <Dado rotulo="Endereço">{e ? [e.logradouro, e.numero, e.bairro, e.cidade, e.uf].filter(Boolean).join(', ') : ''}</Dado>
-        <Dado rotulo="Estrutura">{`${u.equipes.length} equipes · ${u.agentes.length} agentes`}</Dado>
+        <Dado rotulo="Estrutura">{`${pluralizar(u.equipes.length, 'equipe')} · ${pluralizar(u.agentes.length, 'agente')}`}</Dado>
       </dl>
     )
     acoes = (
@@ -530,7 +537,7 @@ function PainelNo({
     }
     confirmar = {
       titulo: `Remover ${u.nome}?`,
-      texto: 'Com histórico (atendimentos, agentes), a unidade é apenas desativada. Sem histórico, é apagada.',
+      texto: 'Com histórico (atendimentos, agentes), a unidade é apenas desativada e continua nos relatórios. Sem histórico, é apagada de vez. Isto não pode ser desfeito.',
       executar: async () => {
         const r = await runCommand(removerUnidadeAction(escopo, u.id))
         if (r) toast.success(r.resultado === 'removida' ? 'Unidade removida.' : 'Unidade desativada: ela tem histórico e foi mantida.')
@@ -564,7 +571,7 @@ function PainelNo({
     }
     confirmar = {
       titulo: `Remover ${e.nome}?`,
-      texto: 'Com vendedores ou histórico, a equipe é apenas desativada. Sem nada vinculado, é apagada.',
+      texto: 'Com vendedores ou histórico, a equipe é apenas desativada e continua nos relatórios. Sem nada vinculado, é apagada de vez. Isto não pode ser desfeito.',
       executar: async () => {
         const r = await runCommand(removerEquipeAction(escopo, e.id))
         if (r) toast.success(r.resultado === 'removida' ? 'Equipe removida.' : 'Equipe desativada: ela tem histórico e foi mantida.')

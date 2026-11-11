@@ -18,7 +18,7 @@ export const COMERCIAL_TABS = [
   { href: '/admin/comercial/funil', label: 'Funil' },
   { href: '/admin/comercial/rede', label: 'Rede' },
   { href: '/admin/comercial/comissoes', label: 'Comissões' },
-  { href: '/admin/comercial/descontos', label: 'Descontos' },
+  { href: '/admin/comercial/descontos', label: 'Aprovações de desconto' },
   { href: '/admin/comercial/resultados', label: 'Resultados' },
   { href: '/admin/comercial/regras', label: 'Regras' },
 ] as const

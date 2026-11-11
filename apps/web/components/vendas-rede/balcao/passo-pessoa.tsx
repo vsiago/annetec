@@ -12,6 +12,7 @@ import { FOCUS_RING } from '../ui/tokens'
 import { BotaoTexto, Campo } from './campo'
 import { useBalcao } from './contexto'
 import { celularParaCampo, cpfParaCampo, soDigitos, type DadosPessoa, type Rascunho } from './rascunho'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
 export function PassoPessoa({
   busca,
@@ -54,7 +55,7 @@ export function PassoPessoa({
     const r = await balcaoPessoaAction(slug, ehCpf ? { documento: digitos } : { telefone: digitos })
     setBuscando(false)
     if (!r.success) {
-      toast.error(r.error)
+      toast.error(mensagemDoErro(r.code, r.error))
       setErro(r.error)
       return
     }
@@ -67,8 +68,8 @@ export function PassoPessoa({
     const nome = lead?.nome ?? ''
     const telefone = lead?.telefone ?? (ehCpf ? '' : digitos)
     const email = lead?.email ?? ''
-    if (lead) toast.success('Esta pessoa já tem um contato em andamento. Dados preenchidos.')
-    else if (r.data.leadAberto) toast.info('Esta pessoa já tem um contato em andamento com outro atendente.')
+    if (lead) toast.success('Esta pessoa já está cadastrada. Dados preenchidos.')
+    else if (r.data.leadAberto) toast.info('Esta pessoa já está em atendimento por outra pessoa da equipe.')
     aoContinuar(
       {
         ...(ehCpf ? { documento: formatarCpf(digitos) } : lead?.documento ? { documento: cpfParaCampo(lead.documento) } : {}),
@@ -154,7 +155,9 @@ export function PassoPessoa({
       <AcaoPrincipal type="submit" tamanho="xl" bloco carregando={buscando} icone={<Search />}>
         Buscar
       </AcaoPrincipal>
-      <BotaoTexto onClick={() => aoContinuar({}, false)}>Continuar sem buscar</BotaoTexto>
+      <AcaoPrincipal variante="secundaria" tamanho="lg" bloco onClick={() => aoContinuar({}, false)}>
+        Pessoa nova: continuar sem buscar
+      </AcaoPrincipal>
     </form>
   )
 }

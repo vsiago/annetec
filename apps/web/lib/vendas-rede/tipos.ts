@@ -1,4 +1,4 @@
-import type { EstacaoLead, EtapaLead, OrigemLead, VendasLead } from '@annetec/contracts'
+import type { EstacaoLead, EtapaLead, OrigemLead, TemperaturaLead, VendasLead } from '@annetec/contracts'
 
 /** Plano que o agente pode oferecer (plataforma: plano ANNETEC; clube: plano do clube). */
 export interface PlanoVendavel {
@@ -60,4 +60,15 @@ export interface FiltrosLeads {
   busca?: string
   page?: number
   perPage?: number
+}
+
+/** Filtros do quadro do Funil (`GET /leads/quadro`). */
+export interface FiltrosQuadro {
+  agente?: string
+  origem?: OrigemLead
+  temperatura?: TemperaturaLead
+  busca?: string
+  atrasados?: boolean
+  /** Cards por coluna (padrão da API: 40). */
+  limite?: number
 }

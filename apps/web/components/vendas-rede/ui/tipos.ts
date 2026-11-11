@@ -69,6 +69,8 @@ export type EventoLead = {
   /** Data já formatada ("hoje, 14:32"). */
   quando: string
   autor?: string
+  /** Como a pessoa reagiu no contato (`dados.sentimento` do evento). */
+  sentimento?: 'positivo' | 'neutro' | 'negativo'
 }
 
 export type StatusComissao = 'prevista' | 'a_pagar' | 'paga' | 'cancelada' | 'a_descontar'

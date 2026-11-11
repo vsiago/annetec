@@ -13,6 +13,7 @@ import { AppError } from '@/http/errors'
 import { auth } from '@/lib/auth'
 import { logger } from '@/lib/logger'
 import { ensureSellerProfile, referralCodeTaken } from '@/modules/platform-sales/seller-profile'
+import { garantirAgenteSolo } from '@/modules/vendas-rede/agente-solo'
 
 /**
  * Contas de plataforma Annetec (`user.role` = 'superadmin' | 'platform_admin'
@@ -31,6 +32,8 @@ export interface SellerProfileOptions {
   referralCode?: string | null
   monthlyGoal?: number | null
   createdByUserId?: string | null
+  /** O cadastro pela Rede Comercial cria o perfil de agente por conta própria: não duplicar. */
+  semAgenteComercial?: boolean
 }
 
 export interface PlatformUserSessionDeps {
@@ -106,13 +109,25 @@ export const platformUsersService = {
     const [row] = await db.select().from(user).where(eq(user.id, created.user.id)).limit(1)
     if (!row) throw AppError.businessRule('Falha ao carregar a conta recém-criada')
     if (input.role === 'platform_seller') {
-      await ensureSellerProfile({
+      const perfil = await ensureSellerProfile({
         userId: row.id,
         name: row.name,
         referralCode: seller.referralCode ?? null,
         monthlyGoal: seller.monthlyGoal ?? null,
         createdByUserId: seller.createdByUserId ?? null,
       })
+      // A área de vendas só abre para quem tem perfil de agente: vendedor solo ativo, com o mesmo código.
+      if (!seller.semAgenteComercial) {
+        await garantirAgenteSolo({
+          scope: 'platform',
+          tenantId: null,
+          userId: row.id,
+          nome: row.name,
+          telefone: row.phone ?? null,
+          criadoPorUserId: seller.createdByUserId ?? null,
+          codigoPreferido: perfil.referralCode,
+        })
+      }
     }
     return toDomain(row)
   },
@@ -194,7 +209,16 @@ export const platformUsersService = {
     const trocouPapel = input.role !== undefined && input.role !== alvo.role
     // Virou vendedor: ganha o perfil (código gerado do nome) se ainda não tinha.
     if (trocouPapel && input.role === 'platform_seller') {
-      await ensureSellerProfile({ userId: id, name: input.name ?? alvo.name, createdByUserId: actorId ?? null })
+      const perfil = await ensureSellerProfile({ userId: id, name: input.name ?? alvo.name, createdByUserId: actorId ?? null })
+      await garantirAgenteSolo({
+        scope: 'platform',
+        tenantId: null,
+        userId: id,
+        nome: input.name ?? alvo.name,
+        telefone: alvo.phone ?? null,
+        criadoPorUserId: actorId ?? null,
+        codigoPreferido: perfil.referralCode,
+      })
     }
     if (desativou || trocouPapel) {
       const revogadas = await deps.revokeAllSessions(id)

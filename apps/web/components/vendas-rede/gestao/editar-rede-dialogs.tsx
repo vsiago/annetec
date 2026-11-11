@@ -193,17 +193,17 @@ export function EditarCorretoraDialog({
           <TextField {...campo('email')} label="E-mail da empresa" optional span={7} type="email" inputMode="email" autoComplete="off" />
           <TextField {...campo('telefone')} label="Telefone" optional span={5} type="tel" inputMode="tel" mask={maskPhone} maxLength={15} />
           <CamposEndereco campo={campo} preencher={preencher} />
-          <FieldSection title="Comissão própria" description="Opcional. Em branco, vale o que está nas Regras." icon={Percent}>
+          <FieldSection title="Adicional próprio da corretora" description="Opcional. Em branco, vale o que está nas Regras." icon={Percent}>
             <SwitchField
               {...wizard.field('usarOverrides')}
               label="Usar percentuais próprios nesta corretora"
-              description="Vale só para esta corretora: repasse a supervisor, gerente e corretora."
+              description="Vale só para esta corretora: adicional do supervisor, do gerente e da corretora, em % da comissão do vendedor."
             />
             {wizard.values.usarOverrides ? (
               <>
-                <TextField {...campo('supervisor')} label="Supervisor" required span={4} inputMode="decimal" mask={v => maskDecimal(v, 2)} suffix="%" />
-                <TextField {...campo('gerente')} label="Gerente" required span={4} inputMode="decimal" mask={v => maskDecimal(v, 2)} suffix="%" />
-                <TextField {...campo('corretora')} label="Corretora" required span={4} inputMode="decimal" mask={v => maskDecimal(v, 2)} suffix="%" />
+                <TextField {...campo('supervisor')} label="Adicional do supervisor" required span={4} inputMode="decimal" mask={v => maskDecimal(v, 2)} suffix="%" />
+                <TextField {...campo('gerente')} label="Adicional do gerente" required span={4} inputMode="decimal" mask={v => maskDecimal(v, 2)} suffix="%" />
+                <TextField {...campo('corretora')} label="Adicional da corretora" required span={4} inputMode="decimal" mask={v => maskDecimal(v, 2)} suffix="%" />
               </>
             ) : null}
           </FieldSection>

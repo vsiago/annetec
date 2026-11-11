@@ -8,6 +8,7 @@ import { atualizarLeadAction } from '@/lib/actions/vendas-rede-api'
 import type { EscopoVendas } from '@/lib/vendas-rede/escopo'
 import { AcaoPrincipal } from '../ui/acao-principal'
 import { FormularioLead, corpoDoLead, validarLead, valoresDoLead, type ErrosLead, type ValoresLead } from './formulario-lead'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 
 /** Edita o cadastro do lead (a conversão exige documento, e-mail, telefone e vidas/nascimento). */
 export function EditarLeadDialog({
@@ -49,10 +50,10 @@ export function EditarLeadDialog({
       const mapa: ErrosLead = {}
       for (const [k, msg] of Object.entries(r.fieldErrors ?? {})) mapa[k as keyof ValoresLead] = msg
       setErros(mapa)
-      toast.error(r.error)
+      toast.error(mensagemDoErro(r.code, r.error))
       return
     }
-    toast.success('Cadastro atualizado')
+    toast.success('Dados atualizados')
     aoSalvar(r.data)
     aoFechar()
   }

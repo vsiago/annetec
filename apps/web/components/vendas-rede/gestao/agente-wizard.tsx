@@ -26,7 +26,7 @@ import {
 } from '@/components/admin-platform/ui/wizard'
 import { createAgenteAction } from '@/lib/actions/vendas-rede-gestao-api'
 import { toast } from 'sonner'
-import { formatarCelular } from '../ui/mascaras'
+import { formatarCelular, pluralizar } from '../ui/mascaras'
 import {
   CHAVES_ENDERECO,
   CHAVES_PESSOA,
@@ -105,11 +105,11 @@ const CAMPOS = [
 ] as const
 
 const DESCRICAO_PAPEL: Record<PapelComercial, string> = {
-  master: 'Acesso total à rede.',
+  master: 'Administra toda a rede.',
   gerente: 'Responde por uma corretora inteira: unidades, equipes e agentes.',
   supervisor: 'Lidera uma equipe de vendedores e acompanha os leads deles.',
   vendedor: 'Atende leads, fecha vendas e recebe comissão.',
-  balcao: 'Atende no balcão de uma unidade (clínica, loja…), sem pool de leads.',
+  balcao: 'Atende no balcão de uma unidade (clínica, loja…). Não recebe leads disponíveis.',
 }
 
 function vazio(papel: string, vinculo?: VinculoInicial): Values {
@@ -183,13 +183,13 @@ export function AgenteWizard({
         id: 'endereco',
         title: 'Endereço',
         icon: MapPin,
-        description: 'Opcional, mas ajuda no contrato e nos repasses.',
+        description: 'Opcional, mas ajuda no contrato e no pagamento das comissões.',
         fields: [...CHAVES_ENDERECO],
         validate: validarEndereco<Values>(),
       },
       {
         id: 'repasse',
-        title: 'Repasse',
+        title: 'Dados para pagamento',
         icon: Landmark,
         description: 'Para onde vai a comissão.',
         fields: [...CHAVES_REPASSE],
@@ -351,7 +351,7 @@ export function AgenteWizard({
         <ReviewItem label="CPF" value={maskCpf(values.cpf)} />
         <ReviewItem label="Celular" value={values.telefone ? maskPhone(values.telefone) : ''} />
         <ReviewItem label="Nascimento" value={values.dataNascimento ? values.dataNascimento.split('-').reverse().join('/') : ''} />
-        <ReviewItem label="Meta mensal" value={values.metaMensal ? `${values.metaMensal} vendas/mês` : ''} empty="Meta padrão das Regras" />
+        <ReviewItem label="Meta mensal" value={values.metaMensal ? `${pluralizar(Number(values.metaMensal), 'venda')}/mês` : ''} empty="Meta padrão das Regras" />
         <ReviewItem label="Convite" value={values.enviarConvite ? 'Enviado ao concluir' : 'Não enviar agora'} />
       </ReviewSection>
       <ReviewSection title="Endereço" icon={MapPin} onEdit={() => wizard.goToStep('endereco')}>
@@ -361,7 +361,7 @@ export function AgenteWizard({
           value={endereco ? [endereco.logradouro, endereco.numero, endereco.bairro, endereco.cidade, endereco.uf].filter(Boolean).join(', ') : ''}
         />
       </ReviewSection>
-      <ReviewSection title="Repasse" icon={Landmark} onEdit={() => wizard.goToStep('repasse')}>
+      <ReviewSection title="Dados para pagamento" icon={Landmark} onEdit={() => wizard.goToStep('repasse')}>
         <ReviewItem
           label="Forma"
           value={values.repasseTipo === 'pix' ? `Pix · ${values.chavePix}` : values.repasseTipo === 'conta' ? `Conta · ${values.banco}, ag. ${values.agencia}, c/c ${values.conta}` : ''}
@@ -409,7 +409,7 @@ export function AgenteWizard({
       lockSuccess
       icon={UserPlus}
       title={titulo ?? 'Novo agente'}
-      description="Cadastro completo: papel, vínculo, dados da pessoa e repasse."
+      description="Papel, vínculo, dados da pessoa e dados para pagamento."
       submitLabel="Cadastrar agente"
       submittingLabel="Cadastrando…"
       renderStep={renderStep}

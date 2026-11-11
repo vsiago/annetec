@@ -27,7 +27,7 @@ function linkWa(telefone: string, texto: string): string {
 }
 
 function textoPagamento(info: ConcluidoInfo): string {
-  const abertura = `Olá ${primeiroNome(info.nome)}! Aqui é da ${info.unidade}.`
+  const abertura = `Olá, ${primeiroNome(info.nome)}! Aqui é da ${info.unidade}.`
   const plano = info.plano ? ` Plano ${info.plano.nome}: ${formatarMoeda(info.plano.precoMensal)}/mês.` : ''
   const c = info.checkout?.charge
   if (c?.pix?.payload) return `${abertura}${plano} Para ativar, pague o Pix copia e cola:\n\n${c.pix.payload}`
@@ -39,7 +39,7 @@ function textoPagamento(info: ConcluidoInfo): string {
 }
 
 function textoOferta(info: ConcluidoInfo): string {
-  const abertura = `Olá ${primeiroNome(info.nome)}! Obrigado pela visita à ${info.unidade}.`
+  const abertura = `Olá, ${primeiroNome(info.nome)}! Obrigado pela visita à ${info.unidade}.`
   if (!info.plano) {
     return `${abertura} Quando quiser conhecer nossos planos, é só responder esta mensagem.`
   }
@@ -76,9 +76,11 @@ export function Concluido({ info, aoNovo }: { info: ConcluidoInfo; aoNovo: () =>
   const cabecalho: Record<ResultadoBalcao, { titulo: string; texto: string }> = {
     assinou: {
       titulo: 'Adesão registrada',
-      texto: charge ? 'Falta só o pagamento. Mostre o código ou envie pelo WhatsApp.' : 'A cobrança será enviada à pessoa por e-mail.',
+      texto: charge
+        ? 'Falta só o pagamento. Mostre o código ou envie pelo WhatsApp.'
+        : 'A adesão foi registrada, mas o código de pagamento ainda não apareceu. Confira o atendimento no Histórico em instantes.',
     },
-    vai_pensar: { titulo: 'Lead criado · retomamos em 2 dias', texto: 'Envie o resumo da oferta para a pessoa não esquecer.' },
+    vai_pensar: { titulo: 'Atendimento registrado', texto: 'Anotamos um retorno para daqui a 2 dias. Envie o resumo para a pessoa não esquecer.' },
     recusou: { titulo: 'Atendimento registrado', texto: 'Anotamos que a pessoa não quis o plano.' },
     ja_associado: { titulo: 'Atendimento registrado', texto: 'Atendimento de associado salvo.' },
     so_informacao: { titulo: 'Atendimento registrado', texto: 'Salvo como só informação.' },

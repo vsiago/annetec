@@ -91,7 +91,7 @@ export function CarteiraPage() {
       </header>
 
       <div className="flex flex-col gap-4">
-        <div role="group" aria-label="Filtrar por situação" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden">
+        <div role="group" aria-label="Filtrar por situação" className="-mx-4 flex gap-2 relative overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden">
           <Chip ativo={situacao === ''} aoClicar={() => setSituacao('')} rotulo="Todos" contador={totalGeral} />
           {SITUACOES.map(s => (
             <Chip key={s.id} ativo={situacao === s.id} aoClicar={() => setSituacao(s.id)} rotulo={s.plural} contador={totais?.[s.id] ?? 0} />
@@ -144,7 +144,7 @@ export function CarteiraPage() {
               moldura
               ilustracao="carteira"
               titulo="Sua carteira ainda está vazia"
-              descricao="Quando uma venda é fechada e o primeiro pagamento cai, o cliente aparece aqui com o estado da assinatura."
+              descricao="Quando uma venda é fechada e o primeiro pagamento é confirmado, o cliente aparece aqui com o estado da assinatura."
             />
           )
         ) : (
@@ -182,6 +182,8 @@ function Chip({ ativo, aoClicar, rotulo, contador }: { ativo: boolean; aoClicar:
 }
 
 function CartaoCliente({ item, aoAbrir }: { item: ItemCarteira; aoAbrir: () => void }) {
+  const { eu } = useVendasRede()
+  const vendedor = eu.agente?.nome ?? ''
   const meta = META[item.situacao]
   const Icone = meta.icone
   const plano = item.assinatura?.planoNome ?? item.clube?.planoNome ?? item.lead.interessePlanoNome
@@ -190,7 +192,7 @@ function CartaoCliente({ item, aoAbrir }: { item: ItemCarteira; aoAbrir: () => v
     item.situacao === 'atrasada'
       ? montarWaLink(
           item.lead.telefone,
-          `Olá, ${primeiroNome(item.lead.nome)}! Vi que a mensalidade${plano ? ` do plano ${plano}` : ''} está em atraso. Posso ajudar a regularizar?`,
+          `Oi, ${primeiroNome(item.lead.nome)}, tudo bem? Passando para avisar que a mensalidade${plano ? ` do plano ${plano}` : ''} está em atraso. Posso ajudar a regularizar?${vendedor ? ` ${vendedor}` : ''}`,
         )
       : null
   return (
@@ -229,7 +231,7 @@ function CartaoCliente({ item, aoAbrir }: { item: ItemCarteira; aoAbrir: () => v
             </a>
           ) : null}
           <AcaoPrincipal variante="secundaria" onClick={aoAbrir}>
-            Ver lead
+            Ver cliente
           </AcaoPrincipal>
         </div>
       </div>

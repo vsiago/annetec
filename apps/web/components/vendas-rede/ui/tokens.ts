@@ -13,6 +13,8 @@ export type { ConsoleTone }
  */
 export const ACCENT_BG = 'bg-[var(--vr-accent,#1E2A4A)] text-[var(--vr-accent-fg,#FFFFFF)]'
 export const ACCENT_TEXT = 'text-[var(--vr-accent,#1E2A4A)]'
+/** Botão flutuante no celular: acima da barra inferior (64 px) e da área segura do aparelho. */
+export const FAB_MOBILE = 'fixed right-4 bottom-[calc(4rem+0.75rem+env(safe-area-inset-bottom))] z-30'
 export const FOCUS_RING =
   'outline-none focus-visible:ring-2 focus-visible:ring-[var(--vr-accent,#1E2A4A)] focus-visible:ring-offset-2 focus-visible:ring-offset-white'
 

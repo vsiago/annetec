@@ -8,12 +8,12 @@ export type Estacao = {
   id: string
   rotulo: string
   contador?: number
-  /** Marca a estação que pede atenção (ex.: Pool com leads novos). */
+  /** Marca a estação que pede atenção (ex.: Disponíveis com leads esperando). */
   destaque?: boolean
 }
 
 /**
- * Abas-estação do Funil (Pool · Novos · Em andamento · Fechados), com contadores.
+ * Abas do Funil (Disponíveis · Novos · Em andamento · Encerrados), com contadores.
  * No desktop são abas sublinhadas; no celular, pílulas roláveis presas logo
  * abaixo do topo (`top-14`, a altura do cabeçalho da casca).
  * Teclado: setas esquerda/direita, Home e End trocam de estação.
@@ -24,7 +24,7 @@ export function EstacoesTabs({
   estacoes,
   valor,
   aoMudar,
-  rotulo = 'Estações do funil',
+  rotulo = 'Abas do funil',
   className,
 }: {
   estacoes: Estacao[]
@@ -58,7 +58,7 @@ export function EstacoesTabs({
         className,
       )}
     >
-      <div role="tablist" aria-label={rotulo} className="flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden gap-2 overflow-x-auto md:gap-1">
+      <div role="tablist" aria-label={rotulo} className="flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden gap-2 relative overflow-x-auto md:gap-1">
         {estacoes.map((e, i) => {
           const ativa = e.id === valor
           return (

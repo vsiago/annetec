@@ -43,7 +43,7 @@ export type ActionResult<T> =
  * pessoa clicar de novo contra um servidor que não está lá, enquanto isto
  * aponta para a causa em uma frase.
  */
-const API_FORA = 'A API não respondeu. Verifique se o servidor está no ar e tente novamente.'
+const API_FORA = 'Não foi possível conectar. Verifique a internet e tente de novo.'
 
 const ERRO_GENERICO = 'Não foi possível concluir a operação. Tente novamente.'
 

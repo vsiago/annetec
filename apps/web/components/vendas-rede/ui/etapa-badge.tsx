@@ -7,7 +7,7 @@ const ETAPAS: Record<Etapa, { rotulo: string; tom: ConsoleTone }> = {
   em_contato: { rotulo: 'Em contato', tom: 'navy' },
   proposta: { rotulo: 'Proposta', tom: 'violet' },
   negociacao: { rotulo: 'Negociação', tom: 'amber' },
-  ganho: { rotulo: 'Ganho', tom: 'green' },
+  ganho: { rotulo: 'Venda fechada', tom: 'green' },
   perdido: { rotulo: 'Perdido', tom: 'neutral' },
 }
 

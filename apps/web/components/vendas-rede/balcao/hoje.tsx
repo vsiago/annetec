@@ -7,7 +7,8 @@ import { balcaoHojeAction, balcaoPlanosAction } from '@/lib/actions/vendas-balca
 import { AcaoPrincipal } from '../ui/acao-principal'
 import { EstadoVazio } from '../ui/estado-vazio'
 import { KpiGrid, type KpiItem } from '../ui/kpi-grid'
-import { dataPorExtenso, formatarMoeda } from '../ui/mascaras'
+import { dataPorExtenso } from '../ui/mascaras'
+import { ValorMoeda } from '../ui/valor-moeda'
 import { AtendimentoLinha } from './atendimento-linha'
 import { useBalcao } from './contexto'
 
@@ -50,8 +51,8 @@ export function HojePagina() {
     { rotulo: 'Atendimentos', valor: t.atendimentos, icone: UsersRound, tom: 'navy' },
     { rotulo: 'Ofertas', valor: t.ofertas, icone: Handshake, tom: 'blue', dica: 'Planos apresentados' },
     { rotulo: 'Adesões', valor: t.adesoes, icone: BadgeCheck, tom: 'green' },
-    { rotulo: 'Vai pensar', valor: t.vaiPensar, icone: Timer, tom: 'amber', dica: 'Retorno em 2 dias' },
-    { rotulo: 'Economia média mostrada', valor: formatarMoeda(t.economiaMedia), icone: PiggyBank, tom: 'violet', dica: 'Por consulta' },
+    { rotulo: 'Vai pensar', valor: t.vaiPensar, icone: Timer, tom: 'amber', dica: 'Retorno anotado para 2 dias' },
+    { rotulo: 'Economia média apresentada', valor: <ValorMoeda valor={t.economiaMedia} />, icone: PiggyBank, tom: 'violet', dica: 'Por consulta' },
   ]
   if (dados.metaDia !== null) {
     itens.push({
@@ -80,8 +81,8 @@ export function HojePagina() {
           <EstadoVazio
             moldura
             ilustracao="historico"
-            titulo="Nenhum atendimento ainda hoje."
-            descricao="Comece pelo botão Atender."
+            titulo="Nenhum atendimento hoje"
+            descricao="Toque em Atender para começar."
             acao={<AcaoPrincipal href={`/${slug}/balcao`} tamanho="xl">Atender</AcaoPrincipal>}
           />
         ) : (

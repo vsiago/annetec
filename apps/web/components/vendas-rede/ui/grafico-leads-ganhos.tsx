@@ -1,6 +1,6 @@
 'use client'
 
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import {
   ChartContainer,
   ChartLegend,
@@ -16,19 +16,21 @@ export type PontoLeadsGanhos = {
   /** Rótulo do eixo X já formatado ("05/11"). */
   dia: string
   leads: number
+  /** Vendas fechadas no dia (o campo mantém o nome do contrato da API). */
   ganhos: number
 }
 
 const CONFIG: ChartConfig = {
-  leads: { label: 'Leads', color: TONES.blue.stroke },
-  ganhos: { label: 'Ganhos', color: TONES.green.stroke },
+  leads: { label: 'Leads', color: 'var(--vr-accent, #1E2A4A)' },
+  // Âmbar, não verde: o clube pode ter o verde como cor da marca e as duas séries se confundiriam.
+  ganhos: { label: 'Vendas', color: TONES.amber.stroke },
 }
 
 /**
- * Duas áreas sobrepostas, leads (azul) e ganhos (verde),
- * por dia. Usa o `ChartContainer` do projeto (tooltip e legenda padrão). Com
- * todos os pontos zerados mostra uma frase em vez de um gráfico vazio. Há uma
- * tabela invisível para leitores de tela.
+ * Barras agrupadas por dia: leads (cor do clube) e vendas (âmbar). Barras, e não áreas, porque
+ * a série é esparsa (muitos dias com zero) e a área vira picos triangulares que não dizem nada.
+ * O eixo vertical só tem números inteiros. Com todos os pontos zerados mostra uma frase em vez de
+ * um gráfico vazio. Há uma tabela invisível para leitores de tela.
  */
 export function GraficoLeadsGanhos({ dados, className }: { dados: PontoLeadsGanhos[]; className?: string }) {
   const vazio = dados.length === 0 || dados.every(d => d.leads === 0 && d.ganhos === 0)
@@ -42,33 +44,23 @@ export function GraficoLeadsGanhos({ dados, className }: { dados: PontoLeadsGanh
   return (
     <div className={className}>
       <ChartContainer config={CONFIG} className="aspect-auto h-64 w-full">
-        <AreaChart data={dados} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
-          <defs>
-            <linearGradient id="vr-fill-leads" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-leads)" stopOpacity={0.28} />
-              <stop offset="100%" stopColor="var(--color-leads)" stopOpacity={0.02} />
-            </linearGradient>
-            <linearGradient id="vr-fill-ganhos" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-ganhos)" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="var(--color-ganhos)" stopOpacity={0.03} />
-            </linearGradient>
-          </defs>
+        <BarChart data={dados} margin={{ left: 0, right: 8, top: 8, bottom: 0 }} barGap={2} barCategoryGap="22%">
           <CartesianGrid vertical={false} strokeDasharray="3 3" />
           <XAxis dataKey="dia" tickLine={false} axisLine={false} tickMargin={8} minTickGap={24} />
-          <YAxis tickLine={false} axisLine={false} allowDecimals={false} width={32} />
-          <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
-          <ChartLegend content={<ChartLegendContent />} />
-          <Area dataKey="leads" type="monotone" stroke="var(--color-leads)" strokeWidth={2} fill="url(#vr-fill-leads)" />
-          <Area dataKey="ganhos" type="monotone" stroke="var(--color-ganhos)" strokeWidth={2} fill="url(#vr-fill-ganhos)" />
-        </AreaChart>
+          <YAxis tickLine={false} axisLine={false} allowDecimals={false} width={32} tickFormatter={v => Number(v).toLocaleString('pt-BR')} />
+          <ChartTooltip cursor={{ fill: 'rgba(16,24,40,0.05)' }} content={<ChartTooltipContent indicator="dot" labelFormatter={v => `Dia ${v}`} />} />
+          <ChartLegend verticalAlign="top" align="left" content={<ChartLegendContent className="justify-start pb-3 pt-0" />} />
+          <Bar dataKey="leads" fill="var(--color-leads)" radius={[4, 4, 0, 0]} maxBarSize={22} />
+          <Bar dataKey="ganhos" fill="var(--color-ganhos)" radius={[4, 4, 0, 0]} maxBarSize={22} />
+        </BarChart>
       </ChartContainer>
       <table className="sr-only">
-        <caption>Leads e ganhos por dia</caption>
+        <caption>Leads e vendas por dia</caption>
         <thead>
           <tr>
             <th>Dia</th>
             <th>Leads</th>
-            <th>Ganhos</th>
+            <th>Vendas</th>
           </tr>
         </thead>
         <tbody>

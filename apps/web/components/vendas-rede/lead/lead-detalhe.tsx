@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { CalendarClock, Loader2, Mail, MessageCircle, Pencil, Phone, Repeat2, Undo2, XCircle, ArrowRightLeft } from 'lucide-react'
+import { toast } from 'sonner'
 import type { MensagemLeadResponse, VendasLead } from '@annetec/contracts'
 import { initialsOf } from '@/components/admin-platform/ui/entity-avatar'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -21,6 +22,8 @@ import { OrigemBadge } from '../ui/origem-badge'
 import { ProximoPassoBadge } from '../ui/proximo-passo-badge'
 import { TimelineLead } from '../ui/timeline-lead'
 import { FOCUS_RING } from '../ui/tokens'
+import { TemperaturaChip } from '../funil/temperatura-chip'
+import { CampoFicha, ValorLongo } from '../ui/campo-ficha'
 import { acaoPrincipalDoLead, atenderLead, devolverAoPool, leadNoPool } from './acoes'
 import { ConversaoClube } from './conversao-clube'
 import { ConversaoPlataforma } from './conversao-plataforma'
@@ -72,6 +75,24 @@ export function LeadDetalhe({
   const [trabalhando, setTrabalhando] = useState(false)
   const idRef = useRef<string | null>(null)
   idRef.current = leadId
+  const abasRef = useRef<Array<HTMLButtonElement | null>>([])
+
+  // Setas, Home e End trocam de aba (padrão de abas do WAI-ARIA).
+  function aoTeclarNasAbas(e: KeyboardEvent<HTMLButtonElement>, indice: number) {
+    const ultimo = ABAS.length - 1
+    let destino = -1
+    if (e.key === 'ArrowRight') destino = indice === ultimo ? 0 : indice + 1
+    else if (e.key === 'ArrowLeft') destino = indice === 0 ? ultimo : indice - 1
+    else if (e.key === 'Home') destino = 0
+    else if (e.key === 'End') destino = ultimo
+    if (destino < 0) return
+    e.preventDefault()
+    const alvo = ABAS[destino]
+    if (alvo) {
+      setAba(alvo.id)
+      abasRef.current[destino]?.focus()
+    }
+  }
 
   const carregar = useCallback(
     async (silencioso = false) => {
@@ -138,14 +159,15 @@ export function LeadDetalhe({
               {lead ? initialsOf(lead.nome) : '··'}
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <SheetTitle className="m-0 truncate text-lg font-semibold">{lead?.nome ?? 'Carregando lead'}</SheetTitle>
+              <SheetTitle className="m-0 truncate text-lg font-semibold">{lead?.nome ?? 'Carregando o lead'}</SheetTitle>
               <SheetDescription asChild>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   {lead ? (
                     <>
                       <EtapaBadge etapa={lead.etapa} />
+                      <TemperaturaChip temperatura={lead.temperatura} motivo={lead.temperaturaMotivo} tamanho="md" />
                       <OrigemBadge origem={lead.origem} detalhe={lead.origemDetalhe} />
-                      <span>{noPool ? 'No pool, sem dono' : lead.agenteNome ? `Com ${lead.agenteNome}` : ''}</span>
+                      <span>{noPool ? 'Disponível, sem responsável' : lead.agenteNome ? `Responsável: ${lead.agenteNome}` : ''}</span>
                     </>
                   ) : null}
                 </div>
@@ -153,17 +175,22 @@ export function LeadDetalhe({
             </div>
           </div>
           {lead ? (
-            <nav aria-label="Seções do lead" className="-mx-1 flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <nav aria-label="Seções do lead" className="-mx-1 flex gap-1 relative overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <div role="tablist" className="flex gap-1">
-                {ABAS.map(a => (
+                {ABAS.map((a, i) => (
                   <button
                     key={a.id}
+                    ref={el => {
+                      abasRef.current[i] = el
+                    }}
                     type="button"
                     role="tab"
                     id={`aba-lead-${a.id}`}
                     aria-selected={aba === a.id}
                     aria-controls={`painel-lead-${a.id}`}
+                    tabIndex={aba === a.id ? 0 : -1}
                     onClick={() => setAba(a.id)}
+                    onKeyDown={ev => aoTeclarNasAbas(ev, i)}
                     className={cn(
                       'min-h-11 shrink-0 rounded-full px-4 text-sm font-medium transition-colors',
                       aba === a.id ? 'bg-[#1E2A4A] text-white' : 'text-[#475467] hover:bg-[#F2F4F7]',
@@ -187,7 +214,7 @@ export function LeadDetalhe({
               acao={<AcaoPrincipal onClick={() => void carregar()}>Tentar de novo</AcaoPrincipal>}
             />
           ) : !lead ? (
-            <div role="status" aria-label="Carregando lead" className="flex flex-col gap-4">
+            <div role="status" aria-label="Carregando o lead" className="flex flex-col gap-4">
               <Skeleton className="h-12 w-full rounded-xl" />
               <Skeleton className="h-24 w-full rounded-2xl" />
               <Skeleton className="h-40 w-full rounded-2xl" />
@@ -213,7 +240,7 @@ export function LeadDetalhe({
                   <EstadoVazio
                     ilustracao="pool"
                     titulo="Atenda este lead primeiro"
-                    descricao="Depois de atender, você gera a proposta ou o link de adesão por aqui."
+                    descricao={`Depois de atender, você gera ${escopo.kind === 'platform' ? 'a proposta' : 'o link de adesão'} por aqui.`}
                     acao={
                       <AcaoPrincipal carregando={trabalhando} onClick={() => void executarAcao()}>
                         Atender
@@ -295,12 +322,11 @@ export function LeadDetalhe({
   )
 }
 
-function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+function Linha({ rotulo, largo, children }: { rotulo: string; largo?: boolean; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <dt className="text-xs text-muted-foreground">{rotulo}</dt>
-      <dd className="m-0 min-w-0 break-words text-sm font-medium text-foreground">{children}</dd>
-    </div>
+    <CampoFicha rotulo={rotulo} largo={largo}>
+      {children}
+    </CampoFicha>
   )
 }
 
@@ -330,6 +356,17 @@ function ResumoDoLead({
   const podeEscrever = eu.podeEscrever
   const souDono = lead.agenteId !== null && lead.agenteId === eu.agente?.id
   const telefone = lead.telefone ? formatarCelular(lead.telefone) : null
+  // Ligar e WhatsApp não registram nada sozinhos: o lembrete leva direto ao registro do contato.
+  function lembrarDeRegistrar(canal: 'ligacao' | 'whatsapp') {
+    if (!podeEscrever || noPool || encerrado) return
+    window.setTimeout(() => {
+      toast(`${canal === 'ligacao' ? 'Ligou para' : 'Falou com'} ${primeiroNome(lead.nome)}?`, {
+        description: 'Registre o contato enquanto está fresco.',
+        duration: 12_000,
+        action: { label: 'Registrar contato', onClick: () => aoAbrir('contato') },
+      })
+    }, 1200)
+  }
   return (
     <>
       {rotuloAcao && rotuloAcao.id !== 'abrir' && podeEscrever ? (
@@ -342,6 +379,7 @@ function ResumoDoLead({
         <div className="grid grid-cols-2 gap-2">
           <a
             href={`tel:${lead.telefone.replace(/\D/g, '')}`}
+            onClick={() => lembrarDeRegistrar('ligacao')}
             className={cn('inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white text-sm font-semibold hover:bg-[#F2F4F7]', FOCUS_RING)}
           >
             <Phone className="size-4" aria-hidden="true" /> Ligar
@@ -350,6 +388,7 @@ function ResumoDoLead({
             href={`https://wa.me/55${lead.telefone.replace(/\D/g, '').replace(/^55/, '')}`}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => lembrarDeRegistrar('whatsapp')}
             className={cn('inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white text-sm font-semibold hover:bg-[#F2F4F7]', FOCUS_RING)}
           >
             <MessageCircle className="size-4" aria-hidden="true" /> WhatsApp
@@ -377,7 +416,7 @@ function ResumoDoLead({
         ) : null}
       </section>
 
-      <section aria-label="Ficha" className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-4">
+      <section aria-label="Ficha" className="@container flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-white p-4">
         <div className="flex items-center justify-between gap-2">
           <h3 className="m-0 text-sm font-semibold">Ficha</h3>
           {podeEscrever ? (
@@ -390,13 +429,11 @@ function ResumoDoLead({
             </button>
           ) : null}
         </div>
-        <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <dl className="m-0 grid grid-cols-1 gap-3 @sm:grid-cols-2">
           <Linha rotulo="Celular">{telefone ?? <span className="font-normal text-muted-foreground">Não informado</span>}</Linha>
-          <Linha rotulo="E-mail">
+          <Linha rotulo="E-mail" largo>
             {lead.email ? (
-              <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-1 hover:underline">
-                <Mail className="size-3.5" aria-hidden="true" /> {lead.email}
-              </a>
+              <ValorLongo texto={lead.email} href={`mailto:${lead.email}`} icone={Mail} rotuloCopiar="Copiar e-mail" mensagemCopiar="E-mail copiado" />
             ) : (
               <span className="font-normal text-muted-foreground">Não informado</span>
             )}
@@ -408,7 +445,7 @@ function ResumoDoLead({
           {lead.interessePlanoNome ? <Linha rotulo="Plano de interesse">{lead.interessePlanoNome}</Linha> : null}
           {lead.vidasEstimadas ? <Linha rotulo="Vidas estimadas">{lead.vidasEstimadas.toLocaleString('pt-BR')}</Linha> : null}
           {lead.valorEstimado ? <Linha rotulo="Valor estimado">{formatarMoeda(lead.valorEstimado)}</Linha> : null}
-          <Linha rotulo="Entrou">{tempoDecorrido(lead.createdAt)}</Linha>
+          <Linha rotulo="Chegou">{tempoDecorrido(lead.createdAt)}</Linha>
         </dl>
         {lead.observacoes ? <p className="m-0 whitespace-pre-line rounded-xl bg-[#F8F9FB] px-3 py-2 text-sm text-[#344054]">{lead.observacoes}</p> : null}
       </section>
@@ -427,13 +464,18 @@ function ResumoDoLead({
             ) : null}
             {equipe ? (
               <AcaoPrincipal variante="secundaria" icone={<Repeat2 />} onClick={() => aoAbrir('reatribuir')}>
-                Reatribuir
+                Passar para outra pessoa
               </AcaoPrincipal>
             ) : null}
             {(souDono || equipe) && !encerrado && lead.agenteId ? (
-              <AcaoPrincipal variante="secundaria" icone={<Undo2 />} onClick={aoDevolver}>
-                Devolver ao pool
-              </AcaoPrincipal>
+              <div className="flex flex-col gap-1">
+                <AcaoPrincipal variante="secundaria" icone={<Undo2 />} onClick={aoDevolver} aria-describedby="dica-liberar-lead" className="w-full">
+                  Liberar lead
+                </AcaoPrincipal>
+                <p id="dica-liberar-lead" className="m-0 px-1 text-xs text-muted-foreground">
+                  Volta para Disponíveis para outra pessoa atender.
+                </p>
+              </div>
             ) : null}
           </div>
         </section>
@@ -446,6 +488,7 @@ function MensagensDoLead({ lead }: { lead: VendasLead }) {
   const { escopo, eu } = useVendasRede()
   const modelos = eu.config.modelosMensagem
   const [textos, setTextos] = useState<Record<string, MensagemLeadResponse | 'erro'> | null>(null)
+  const [tentativa, setTentativa] = useState(0)
 
   useEffect(() => {
     let cancelado = false
@@ -462,14 +505,14 @@ function MensagensDoLead({ lead }: { lead: VendasLead }) {
       cancelado = true
     }
     // Recarrega quando o lead muda (ex.: plano de interesse alterado).
-  }, [escopo, lead.id, lead.updatedAt, modelos])
+  }, [escopo, lead.id, lead.updatedAt, modelos, tentativa])
 
   if (modelos.length === 0) {
     return (
       <EstadoVazio
         ilustracao="historico"
         titulo="Nenhum modelo de mensagem ainda"
-        descricao="Quem cuida das regras da rede cadastra os modelos. Quando existirem, eles aparecem aqui prontos para enviar."
+        descricao="O administrador cadastra os modelos em Regras. Quando existirem, eles aparecem aqui prontos para enviar."
       />
     )
   }
@@ -487,9 +530,16 @@ function MensagensDoLead({ lead }: { lead: VendasLead }) {
         const t = textos[m.id]
         if (!t || t === 'erro') {
           return (
-            <p key={m.id} role="alert" className="m-0 rounded-xl bg-[#FEF3F2] px-3 py-2 text-sm text-[#B42318]">
-              Não foi possível preparar “{m.titulo}”.
-            </p>
+            <div key={m.id} role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#FEF3F2] px-3 py-2 text-sm text-[#B42318]">
+              <p className="m-0">Não foi possível preparar “{m.titulo}”.</p>
+              <button
+                type="button"
+                onClick={() => setTentativa(n => n + 1)}
+                className={cn('inline-flex min-h-11 items-center rounded-lg px-2 font-semibold underline', FOCUS_RING)}
+              >
+                Tentar de novo
+              </button>
+            </div>
           )
         }
         return <ModeloMensagemCard key={m.id} titulo={m.titulo} texto={t.texto} canal={t.canal} telefone={lead.telefone} email={lead.email} />

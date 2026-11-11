@@ -6,7 +6,7 @@ import { CARD_SHADOW, CARD_SHADOW_HOVER, FOCUS_RING } from './tokens'
 import type { PapelComercial } from './tipos'
 
 export const ROTULO_PAPEL: Record<PapelComercial, string> = {
-  master: 'Master',
+  master: 'Administrador',
   gerente: 'Gerente',
   supervisor: 'Supervisor',
   vendedor: 'Vendedor',
@@ -44,7 +44,7 @@ export function AgenteCard({
 }) {
   const { ganhosNoMes = 0, metaMensal = 0 } = agente
   const pct = metaMensal > 0 ? Math.min(100, Math.round((ganhosNoMes / metaMensal) * 100)) : 0
-  const nome = <span className="truncate text-sm font-semibold text-foreground">{agente.nome}</span>
+  const nome = <span className="block truncate text-sm font-semibold text-foreground" title={agente.nome}>{agente.nome}</span>
   return (
     <article
       aria-label={`${agente.nome}, ${ROTULO_PAPEL[agente.papel]}, ${agente.online ? 'online' : 'offline'}`}
@@ -62,7 +62,7 @@ export function AgenteCard({
         </span>
         <div className="flex min-w-0 flex-1 flex-col">
           {aoAbrir ? (
-            <button type="button" onClick={aoAbrir} className={cn('min-w-0 rounded text-left hover:underline', FOCUS_RING)}>
+            <button type="button" onClick={aoAbrir} className={cn('block min-w-0 max-w-full rounded text-left hover:underline', FOCUS_RING)}>
               {nome}
             </button>
           ) : (
@@ -73,7 +73,7 @@ export function AgenteCard({
             {agente.vinculo ? ` · ${agente.vinculo}` : ''}
           </span>
         </div>
-        <span className={cn('text-xs font-medium', agente.online ? 'text-[#067647]' : 'text-muted-foreground')} aria-hidden="true">
+        <span className={cn('shrink-0 text-xs font-medium', agente.online ? 'text-[#067647]' : 'text-muted-foreground')} aria-hidden="true">
           {agente.online ? 'Online' : 'Offline'}
         </span>
       </div>
@@ -86,7 +86,7 @@ export function AgenteCard({
               <dd className="m-0 font-semibold tabular-nums">{agente.emAndamento ?? 0}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Ganhos no mês</dt>
+              <dt className="text-xs text-muted-foreground">Vendas no mês</dt>
               <dd className="m-0 font-semibold tabular-nums">{ganhosNoMes}</dd>
             </div>
           </dl>

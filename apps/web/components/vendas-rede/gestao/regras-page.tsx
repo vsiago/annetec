@@ -25,7 +25,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { getConfigAction, updateConfigAction } from '@/lib/actions/vendas-rede-gestao-api'
 import { cn } from '@/lib/utils'
-import { formatarMoeda } from '../ui/mascaras'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
+import { formatarMoeda, formatarPercentual } from '../ui/mascaras'
 import { preencherModelo } from '../ui/wa-link'
 import { CabecalhoTela, PortaoDePapel } from './comum'
 import type { EscopoRede } from './tipos'
@@ -138,7 +139,7 @@ export function RegrasConteudo({ escopo }: { escopo: EscopoRede; eu?: VendasEu }
 
   if (config.loading && !config.data) return <TableSkeleton rows={6} />
   if (!config.data) return <LoadError message={config.error ?? 'Não foi possível carregar as regras.'} onRetry={() => void config.reload()} />
-  if (!completa) return <LoadError message="Só o master vê e altera as regras da rede." framed />
+  if (!completa) return <LoadError message="Só o administrador vê e altera as regras da rede." framed />
 
   return <FormularioRegras escopo={escopo} atual={completa} aoSalvar={nova => config.setData(nova)} />
 }
@@ -164,14 +165,14 @@ function FormularioRegras({ escopo, atual, aoSalvar }: { escopo: EscopoRede; atu
       const payload = paraPayload(valores)
       const conferido = updateConfigInput.safeParse(payload)
       if (!conferido.success) {
-        toast.error('Alguma regra está fora do permitido.', { description: conferido.error.issues[0]?.message })
+        toast.error('Há uma regra fora do limite permitido.', { description: conferido.error.issues[0]?.message })
         return
       }
       setSalvando(true)
       const r = await updateConfigAction(escopo, conferido.data)
       setSalvando(false)
       if (!r.success) {
-        toast.error(r.error, r.fieldErrors ? { description: Object.values(r.fieldErrors).slice(0, 3).join(' · ') } : undefined)
+        toast.error(mensagemDoErro(r.code, r.error), r.fieldErrors ? { description: Object.values(r.fieldErrors).slice(0, 3).join(' · ') } : undefined)
         return
       }
       toast.success('Regras salvas. Valem para as próximas comissões e leads.')
@@ -182,7 +183,7 @@ function FormularioRegras({ escopo, atual, aoSalvar }: { escopo: EscopoRede; atu
   )
 
   return (
-    <form onSubmit={salvar} noValidate className="flex flex-col gap-6 pb-24">
+    <form onSubmit={salvar} noValidate className="flex flex-col gap-6">
       <CabecalhoTela
         titulo="Regras"
         descricao="Quanto cada papel ganha, como os leads são distribuídos e o que o vendedor envia ao cliente. Mudanças valem daqui para frente."
@@ -227,7 +228,7 @@ function FormularioRegras({ escopo, atual, aoSalvar }: { escopo: EscopoRede; atu
             </div>
           </SectionCard>
 
-          <SectionCard title="Repasse para a cadeia" description="Quem está acima do vendedor ganha uma porcentagem da comissão dele, na mesma parcela. Vendedor solo fica com 100% e não gera repasses.">
+          <SectionCard title="Adicional da rede" description="Quem está acima do vendedor ganha um adicional: uma porcentagem da comissão dele, na mesma parcela. Vendedor solo fica com 100 % e não gera adicional.">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <CampoNumero id="supervisor" rotulo="Supervisor" sufixo="%" registro={register('supervisor', { valueAsNumber: true })} erro={errors.supervisor?.message} step="0.01" />
               <CampoNumero id="gerente" rotulo="Gerente" sufixo="%" registro={register('gerente', { valueAsNumber: true })} erro={errors.gerente?.message} step="0.01" />
@@ -281,7 +282,7 @@ function FormularioRegras({ escopo, atual, aoSalvar }: { escopo: EscopoRede; atu
             </div>
           </SectionCard>
 
-          <SectionCard title="Leads novos" description="Como um lead que chega do site ou de um link encontra o vendedor.">
+          <SectionCard title="Leads novos" description="Como os leads novos chegam aos vendedores.">
             <div className="flex flex-col gap-5">
               <Controller
                 control={control}
@@ -291,8 +292,8 @@ function FormularioRegras({ escopo, atual, aoSalvar }: { escopo: EscopoRede; atu
                     <legend className="sr-only">Distribuição de leads</legend>
                     {(
                       [
-                        { value: 'pool', titulo: 'Pool (quem pegar primeiro)', texto: 'O lead fica visível para todos os agentes online, exceto balcão. Quem clicar em “Atender” primeiro fica com ele.' },
-                        { value: 'automatica', titulo: 'Automática', texto: 'O sistema entrega o lead ao vendedor ou supervisor online com menos leads nos últimos 7 dias. Sem ninguém online, ele vai para o pool.' },
+                        { value: 'pool', titulo: 'Disponíveis (quem atender primeiro)', texto: 'O lead fica visível para todos os vendedores online, menos o balcão. Quem tocar em “Atender” primeiro fica com ele.' },
+                        { value: 'automatica', titulo: 'Automática', texto: 'O sistema entrega o lead ao vendedor ou supervisor online com menos leads nos últimos 7 dias. Se ninguém estiver online, ele fica em Disponíveis.' },
                       ] as const
                     ).map(o => (
                       <label
@@ -315,17 +316,17 @@ function FormularioRegras({ escopo, atual, aoSalvar }: { escopo: EscopoRede; atu
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <CampoNumero
                   id="poolRetornoHoras"
-                  rotulo="Retorno ao pool"
+                  rotulo="Volta para Disponíveis após"
                   sufixo="horas"
-                  ajuda="Lead sem nenhum contato registrado por este tempo volta ao pool para outro agente."
+                  ajuda="Lead atendido sem nenhum contato registrado por este tempo volta para Disponíveis."
                   registro={register('poolRetornoHoras', { valueAsNumber: true })}
                   erro={errors.poolRetornoHoras?.message}
                 />
                 <CampoNumero
                   id="presencaMinutos"
-                  rotulo="Presença"
+                  rotulo="Tempo para ficar offline"
                   sufixo="minutos"
-                  ajuda="Sem sinal do navegador por este tempo, o agente aparece como offline e deixa de receber leads."
+                  ajuda="Sem atividade por este tempo, a pessoa aparece como offline e deixa de receber leads."
                   registro={register('presencaMinutos', { valueAsNumber: true })}
                   erro={errors.presencaMinutos?.message}
                 />
@@ -336,7 +337,7 @@ function FormularioRegras({ escopo, atual, aoSalvar }: { escopo: EscopoRede; atu
           <SectionCard title="Meta" description="Vale para quem não tem uma meta individual cadastrada.">
             <CampoNumero
               id="metaMensalPadrao"
-              rotulo="Meta mensal padrão"
+              rotulo="Meta mensal padrão (vendas)"
               sufixo="vendas/mês"
               registro={register('metaMensalPadrao', { valueAsNumber: true })}
               erro={errors.metaMensalPadrao?.message}
@@ -370,8 +371,14 @@ function FormularioRegras({ escopo, atual, aoSalvar }: { escopo: EscopoRede; atu
       </div>
 
       {isDirty ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 px-4 py-3 shadow-[0_-4px_16px_rgba(16,24,40,0.08)] backdrop-blur" role="region" aria-label="Alterações não salvas">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
+        // Presa ao fim da área de conteúdo (não da tela): respeita a largura do menu, recolhido ou aberto, e no
+        // celular fica acima da barra de navegação de 64 px e da área segura do aparelho.
+        <div
+          className="sticky bottom-[calc(4rem+0.75rem+env(safe-area-inset-bottom))] z-30 rounded-2xl border border-border bg-white/95 px-4 py-3 shadow-[0_4px_20px_rgba(16,24,40,0.14)] backdrop-blur lg:bottom-4"
+          role="region"
+          aria-label="Alterações não salvas"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="m-0 text-sm font-medium">Você tem alterações não salvas.</p>
             <div className="flex gap-2">
               <Button type="button" variant="outline" disabled={salvando} onClick={() => reset(inicial)}>
@@ -670,15 +677,15 @@ function Previa({ control }: { control: Control<Form> }) {
                 {Array.from({ length: parcelas }, (_, i) => (i < escala.length ? <FragmentoCelula key={i}>{celula(vend(i))}</FragmentoCelula> : <td key={i} className="px-3 py-2 text-right text-muted-foreground">—</td>))}
               </tr>
               <tr className="border-b border-border/60">
-                <th scope="row" className="px-3 py-2 text-left font-semibold">Supervisor <span className="font-normal text-muted-foreground">({sup}%)</span></th>
+                <th scope="row" className="px-3 py-2 text-left font-semibold">Supervisor <span className="font-normal text-muted-foreground">({formatarPercentual(sup, 2)})</span></th>
                 {Array.from({ length: parcelas }, (_, i) => (i < escala.length ? <FragmentoCelula key={i}>{celula((vend(i) * sup) / 100)}</FragmentoCelula> : <td key={i} className="px-3 py-2 text-right text-muted-foreground">—</td>))}
               </tr>
               <tr className="border-b border-border/60">
-                <th scope="row" className="px-3 py-2 text-left font-semibold">Gerente <span className="font-normal text-muted-foreground">({ger}%)</span></th>
+                <th scope="row" className="px-3 py-2 text-left font-semibold">Gerente <span className="font-normal text-muted-foreground">({formatarPercentual(ger, 2)})</span></th>
                 {Array.from({ length: parcelas }, (_, i) => (i < escala.length ? <FragmentoCelula key={i}>{celula((vend(i) * ger) / 100)}</FragmentoCelula> : <td key={i} className="px-3 py-2 text-right text-muted-foreground">—</td>))}
               </tr>
               <tr className="border-b border-border/60">
-                <th scope="row" className="px-3 py-2 text-left font-semibold">Corretora <span className="font-normal text-muted-foreground">({cor}%)</span></th>
+                <th scope="row" className="px-3 py-2 text-left font-semibold">Corretora <span className="font-normal text-muted-foreground">({formatarPercentual(cor, 2)})</span></th>
                 {Array.from({ length: parcelas }, (_, i) => (i < escala.length ? <FragmentoCelula key={i}>{celula((vend(i) * cor) / 100)}</FragmentoCelula> : <td key={i} className="px-3 py-2 text-right text-muted-foreground">—</td>))}
               </tr>
               {balcao ? (
@@ -688,7 +695,7 @@ function Previa({ control }: { control: Control<Form> }) {
                 </tr>
               ) : null}
               <tr className="bg-[#F8F9FB]">
-                <th scope="row" className="px-3 py-2 text-left font-bold">Custo total da cadeia</th>
+                <th scope="row" className="px-3 py-2 text-left font-bold">Custo total por venda</th>
                 {Array.from({ length: parcelas }, (_, i) => (i < escala.length ? <FragmentoCelula key={i}>{<td className="whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums">{formatarMoeda(linhaCadeia(i))}</td>}</FragmentoCelula> : <td key={i} className="px-3 py-2 text-right text-muted-foreground">—</td>))}
               </tr>
             </tbody>
@@ -697,18 +704,18 @@ function Previa({ control }: { control: Control<Form> }) {
 
         <dl className="m-0 flex flex-col gap-2 text-sm">
           <div className="flex items-baseline justify-between gap-3 rounded-lg bg-[#F8F9FB] px-3 py-2">
-            <dt className="text-muted-foreground">Taxa de adesão de {formatarMoeda(valorBase)}: vendedor</dt>
+            <dt className="text-muted-foreground">Comissão do vendedor sobre a adesão de {formatarMoeda(valorBase)}</dt>
             <dd className="m-0 font-semibold tabular-nums">{formatarMoeda(adesaoVend)}</dd>
           </div>
         </dl>
 
         <p className="m-0 text-[13px] leading-relaxed text-muted-foreground">
-          Vendedor solo recebe 100% da comissão dele e não gera repasse para supervisor, gerente nem corretora. Na distribuição{' '}
-          <strong className="font-semibold text-foreground">{v.distribuicao === 'automatica' ? 'automática' : 'por pool'}</strong>,{' '}
+          Vendedor solo recebe 100 % da comissão dele e não gera adicional para supervisor, gerente nem corretora. Na distribuição{' '}
+          <strong className="font-semibold text-foreground">{v.distribuicao === 'automatica' ? 'automática' : 'por Disponíveis'}</strong>,{' '}
           {v.distribuicao === 'automatica'
             ? 'o lead vai para quem está online com menos leads recentes.'
             : 'o lead espera por quem atender primeiro.'}{' '}
-          Sem contato em {n(v.poolRetornoHoras)} h, ele volta ao pool.
+          Sem contato em {n(v.poolRetornoHoras)} h, ele volta para Disponíveis.
         </p>
       </div>
     </SectionCard>

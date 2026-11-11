@@ -4,17 +4,20 @@ import {
   type CarteiraQuery,
   type CreateEventoLeadInput,
   type CreateVendasLeadInput,
+  ETAPAS_QUADRO,
   type EstacaoLead,
   type ListLeadsQuery,
   type MensagemLeadResponse,
   type MudarEtapaLeadInput,
   type ProximoPassoInput,
+  type QuadroLeadsQuery,
+  type QuadroLeadsResposta,
   type TipoEventoLead,
   type UpdateVendasLeadInput,
   type VendasLead,
   type VendasLeadEvento,
 } from '@annetec/contracts'
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '@/db/client'
 import {
   clubPlans,
@@ -41,16 +44,23 @@ import { whereEscopo, type VendasCtx } from './context'
 import { whereAgentesVisiveis } from './presenca.service'
 import {
   EVENTOS_DE_CONTATO,
+  avaliarTemperatura,
+  compararNoQuadro,
   deveVoltarAoPool,
+  inicioDoMesSaoPaulo,
   jornadaDoLead,
   podeEditarLead,
   podeReatribuir,
   podeVerLead,
   proximoPassoDoLead,
+  sentimentoDoEvento,
+  ROTULO_ETAPA,
   transicaoPermitida,
   type AgenteRef,
   type ContextoVisibilidade,
   type EtapaLead,
+  type SentimentoContato,
+  type Temperatura,
 } from './rules'
 
 /**
@@ -59,8 +69,8 @@ import {
  * Visibilidade (uma regra, em todo o serviço): lead visível = dono em
  * `whereAgentesVisiveis` OU (sem dono E papel ≠ balcão). O master vê tudo do
  * escopo. Lead invisível = 404 (não revela que existe). Editar exige ser o dono
- * ou estar acima dele na cadeia (`podeEditarLead`); lead no pool só o master edita
- * (os demais reivindicam antes).
+ * ou estar acima dele na cadeia (`podeEditarLead`); lead em Disponíveis (sem responsável) só o master
+ * edita (os demais assumem antes). No texto exibido, o "pool" do código chama-se "Disponíveis".
  */
 
 type Executor = Pick<typeof db, 'select' | 'insert' | 'update'>
@@ -73,7 +83,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 // Apoio: permissões e carga
 // ---------------------------------------------------------------------------
 
-export function semPermissao(mensagem = 'Seu papel na rede não permite esta operação.'): AppError {
+export function semPermissao(mensagem = 'Seu perfil não permite esta ação. Fale com o seu supervisor ou gerente.'): AppError {
   return new AppError(ERROR_CODES.VENDAS_SEM_PERMISSAO_NA_REDE, mensagem)
 }
 
@@ -86,7 +96,7 @@ function contextoRegras(ctx: VendasCtx): ContextoVisibilidade {
   }
 }
 
-/** Balcão não enxerga pool nem funil: só os atendimentos dele. */
+/** Balcão não enxerga Disponíveis (pool) nem funil: só os atendimentos dele. */
 function exigeFunil(ctx: VendasCtx): void {
   if (ctx.papel === 'balcao') throw semPermissao('O balcão não acessa o funil comercial.')
 }
@@ -150,8 +160,8 @@ async function carregarEditavel(ctx: VendasCtx, id: string): Promise<LeadCarrega
   if (!podeEditarLead(contextoRegras(ctx), acesso, await cadeiaDoDono(dono))) {
     throw semPermissao(
       lead.agenteId === null
-        ? 'Este lead está no pool: assuma o atendimento antes de alterá-lo.'
-        : 'Este lead pertence a outro vendedor: você só pode consultá-lo.',
+        ? 'Este lead está disponível: atenda antes de alterá-lo.'
+        : 'Este lead é de outro vendedor: você só pode consultá-lo.',
     )
   }
   return carregado
@@ -221,11 +231,68 @@ async function nomesDePlanos(ctx: Pick<VendasCtx, 'scope' | 'tenantId'>, ids: st
   return new Map(rows.map(row => [row.id, row.nome]))
 }
 
+/** Sinais derivados dos eventos: reação do último contato e quando entrou na etapa atual. */
+export interface SinaisDoLead {
+  ultimoSentimento: SentimentoContato | null
+  etapaDesde: Date | null
+}
+
+const SEM_SINAIS: SinaisDoLead = { ultimoSentimento: null, etapaDesde: null }
+
+/** Sinais de UM lead a partir dos eventos já carregados (detalhe). */
+export function sinaisDosEventos(eventos: readonly Pick<VendasLeadEvento, 'tipo' | 'dados' | 'em'>[]): SinaisDoLead {
+  let ultimoContato: { em: number; sentimento: SentimentoContato | null } | null = null
+  let ultimaEtapa = 0
+  for (const e of eventos) {
+    const em = Date.parse(e.em)
+    if (EVENTOS_DE_CONTATO.includes(e.tipo) && (!ultimoContato || em >= ultimoContato.em)) {
+      ultimoContato = { em, sentimento: sentimentoDoEvento(e.dados) }
+    }
+    if (e.tipo === 'etapa' && em > ultimaEtapa) ultimaEtapa = em
+  }
+  return { ultimoSentimento: ultimoContato?.sentimento ?? null, etapaDesde: ultimaEtapa ? new Date(ultimaEtapa) : null }
+}
+
+/**
+ * Sinais de VÁRIOS leads em 2 consultas (sem N+1): o último evento de contato e o último evento de
+ * etapa por lead (`DISTINCT ON (lead_id)` ordenado por `em desc`).
+ */
+export async function carregarSinais(ids: string[]): Promise<Map<string, SinaisDoLead>> {
+  const mapa = new Map<string, SinaisDoLead>()
+  const unicos = [...new Set(ids)]
+  if (unicos.length === 0) return mapa
+  const [contatos, etapas] = await Promise.all([
+    db
+      .selectDistinctOn([vendasLeadEventos.leadId], { leadId: vendasLeadEventos.leadId, dados: vendasLeadEventos.dados })
+      .from(vendasLeadEventos)
+      .where(and(inArray(vendasLeadEventos.leadId, unicos), inArray(vendasLeadEventos.tipo, [...EVENTOS_DE_CONTATO])))
+      .orderBy(vendasLeadEventos.leadId, desc(vendasLeadEventos.em)),
+    db
+      .selectDistinctOn([vendasLeadEventos.leadId], { leadId: vendasLeadEventos.leadId, em: vendasLeadEventos.em })
+      .from(vendasLeadEventos)
+      .where(and(inArray(vendasLeadEventos.leadId, unicos), eq(vendasLeadEventos.tipo, 'etapa')))
+      .orderBy(vendasLeadEventos.leadId, desc(vendasLeadEventos.em)),
+  ])
+  for (const id of unicos) mapa.set(id, { ...SEM_SINAIS })
+  for (const c of contatos) mapa.set(c.leadId, { ...(mapa.get(c.leadId) ?? SEM_SINAIS), ultimoSentimento: sentimentoDoEvento(c.dados) })
+  for (const e of etapas) mapa.set(e.leadId, { ...(mapa.get(e.leadId) ?? SEM_SINAIS), etapaDesde: e.em })
+  return mapa
+}
+
 /** Linha do banco → contrato `VendasLead` (com jornada e próximo passo; `eventos` só no detalhe). */
 export function toVendasLead(
   row: VendasLeadRow,
-  extras: { agenteNome: string | null; planoNome: string | null; agora: Date; eventos?: VendasLeadEvento[] },
+  extras: { agenteNome: string | null; planoNome: string | null; agora: Date; eventos?: VendasLeadEvento[]; sinais?: SinaisDoLead },
 ): VendasLead {
+  const sinais = extras.sinais ?? (extras.eventos ? sinaisDosEventos(extras.eventos) : SEM_SINAIS)
+  const temperatura = avaliarTemperatura({
+    etapa: row.etapa,
+    ultimoContatoEm: row.ultimoContatoEm,
+    ultimoSentimento: sinais.ultimoSentimento,
+    proximoPassoEm: row.proximoPassoEm,
+    agora: extras.agora,
+  })
+  const etapaDesde = sinais.etapaDesde ?? row.reivindicadoEm ?? row.createdAt
   const jornada = jornadaDoLead(
     { etapa: row.etapa, agenteId: row.agenteId, ultimoContatoEm: row.ultimoContatoEm },
     (extras.eventos ?? []).map(e => ({ tipo: e.tipo, dados: e.dados })),
@@ -277,19 +344,30 @@ export function toVendasLead(
     eventos: extras.eventos,
     jornada,
     proximoPassoInfo: proximo,
+    temperatura: temperatura?.nivel ?? null,
+    temperaturaMotivo: temperatura?.motivo ?? null,
+    ultimoSentimento: sinais.ultimoSentimento,
+    etapaDesde: etapaDesde.toISOString(),
   }
 }
 
-async function apresentarLeads(ctx: VendasCtx, rows: VendasLeadRow[], agora: Date): Promise<VendasLead[]> {
-  const [agentes, planos] = await Promise.all([
+async function apresentarLeads(
+  ctx: VendasCtx,
+  rows: VendasLeadRow[],
+  agora: Date,
+  sinaisProntos?: Map<string, SinaisDoLead>,
+): Promise<VendasLead[]> {
+  const [agentes, planos, sinais] = await Promise.all([
     nomesDeAgentes(rows.flatMap(row => (row.agenteId ? [row.agenteId] : []))),
     nomesDePlanos(ctx, rows.flatMap(row => (row.interessePlanoId ? [row.interessePlanoId] : []))),
+    sinaisProntos ?? carregarSinais(rows.map(row => row.id)),
   ])
   return rows.map(row =>
     toVendasLead(row, {
       agenteNome: row.agenteId ? (agentes.get(row.agenteId) ?? null) : null,
       planoNome: row.interessePlanoId ? (planos.get(row.interessePlanoId) ?? null) : null,
       agora,
+      sinais: sinais.get(row.id) ?? SEM_SINAIS,
     }),
   )
 }
@@ -373,7 +451,7 @@ export async function devolverVencidosAoPool(ctx: VendasCtx, agora: Date = new D
     await registrarEventoLead(db, {
       leadId: row.id,
       tipo: 'devolvido_pool',
-      texto: `Voltou ao pool: sem contato em ${config.poolRetornoHoras} h.`,
+      texto: `Voltou para Disponíveis: sem contato em ${config.poolRetornoHoras} h.`,
       dados: { motivo: 'sem_contato', agenteAnteriorId: donoAnterior.get(row.id) ?? null, horas: config.poolRetornoHoras },
       em: agora,
     })
@@ -460,6 +538,172 @@ export async function contarPorEstacao(ctx: VendasCtx, agora: Date = new Date())
 }
 
 // ---------------------------------------------------------------------------
+// Quadro (Funil em colunas)
+// ---------------------------------------------------------------------------
+
+/** Teto de leads abertos lidos (colunas leves) para ordenar e somar o quadro. */
+const LIMITE_CANDIDATOS_QUADRO = 5000
+const MAX_DISPONIVEIS = 30
+const MAX_FECHADOS_MES = 20
+
+const numero = (valor: unknown): number => {
+  const n = Number(valor ?? 0)
+  return Number.isFinite(n) ? n : 0
+}
+
+/**
+ * `GET /leads/quadro` — o Funil em colunas numa chamada: por etapa aberta (novo → negociação) o
+ * total, a soma do valor estimado, quantos estão atrasados e até `limite` cards ordenados
+ * (atrasados, depois quente → morna → fria, depois os mais antigos na etapa); os leads
+ * Disponíveis (sem responsável, mais antigos primeiro); e o resumo dos fechados do mês.
+ *
+ * Respeita a visibilidade por papel (`condicaoLeadsVisiveis`). Duas fases: (1) colunas leves de
+ * todos os abertos visíveis + sinais dos eventos (2 consultas `DISTINCT ON`) para calcular a
+ * temperatura, somar e ordenar; (2) só os leads que viram card são lidos por inteiro.
+ */
+export async function quadro(ctx: VendasCtx, query: QuadroLeadsQuery, agora: Date = new Date()): Promise<QuadroLeadsResposta> {
+  exigeFunil(ctx)
+  await devolverVencidosAoPool(ctx, agora)
+  const colunasVazias = ETAPAS_QUADRO.map(etapa => ({ etapa, total: 0, valor: 0, atrasados: 0, itens: [] as VendasLead[] }))
+  const vazio: QuadroLeadsResposta = {
+    etapas: colunasVazias,
+    disponiveis: { total: 0, itens: [] },
+    fechados: { ganhos: { total: 0, valor: 0 }, perdidos: { total: 0, valor: 0 }, itens: [] },
+    resumo: { emAndamento: 0, valorNegociacao: 0, valorAberto: 0, atrasados: 0 },
+    geradoEm: agora.toISOString(),
+  }
+  const visivel = await condicaoLeadsVisiveis(ctx)
+  if (!visivel) return vazio
+
+  const filtrosComuns: SQL[] = [visivel]
+  if (query.origem) filtrosComuns.push(eq(vendasLeads.origem, query.origem))
+  if (query.busca) filtrosComuns.push(condicaoBusca(query.busca))
+
+  // -- Etapas abertas (só leads com responsável; sem responsável = Disponíveis).
+  const filtrosAbertos = [...filtrosComuns, isNotNull(vendasLeads.agenteId), inArray(vendasLeads.etapa, [...ETAPAS_QUADRO])]
+  if (query.agente) filtrosAbertos.push(eq(vendasLeads.agenteId, query.agente))
+  if (query.atrasados) filtrosAbertos.push(lt(vendasLeads.proximoPassoEm, agora))
+  const leves = await db
+    .select({
+      id: vendasLeads.id,
+      etapa: vendasLeads.etapa,
+      valorEstimado: vendasLeads.valorEstimado,
+      proximoPassoEm: vendasLeads.proximoPassoEm,
+      ultimoContatoEm: vendasLeads.ultimoContatoEm,
+      reivindicadoEm: vendasLeads.reivindicadoEm,
+      createdAt: vendasLeads.createdAt,
+    })
+    .from(vendasLeads)
+    .where(and(...filtrosAbertos))
+    .orderBy(desc(vendasLeads.updatedAt))
+    .limit(LIMITE_CANDIDATOS_QUADRO)
+  const sinais = await carregarSinais(leves.map(l => l.id))
+
+  const avaliados = leves
+    .map(l => {
+      const s = sinais.get(l.id) ?? SEM_SINAIS
+      const temperatura: Temperatura | null =
+        avaliarTemperatura({
+          etapa: l.etapa,
+          ultimoContatoEm: l.ultimoContatoEm,
+          ultimoSentimento: s.ultimoSentimento,
+          proximoPassoEm: l.proximoPassoEm,
+          agora,
+        })?.nivel ?? null
+      return {
+        id: l.id,
+        etapa: l.etapa as (typeof ETAPAS_QUADRO)[number],
+        valor: numero(l.valorEstimado),
+        atrasado: l.proximoPassoEm !== null && l.proximoPassoEm.getTime() < agora.getTime(),
+        temperatura,
+        etapaDesde: s.etapaDesde ?? l.reivindicadoEm ?? l.createdAt,
+      }
+    })
+    .filter(l => !query.temperatura || l.temperatura === query.temperatura)
+
+  const escolhidos: string[] = []
+  const colunas = ETAPAS_QUADRO.map(etapa => {
+    const doEtapa = avaliados.filter(l => l.etapa === etapa).sort(compararNoQuadro)
+    escolhidos.push(...doEtapa.slice(0, query.limite).map(l => l.id))
+    return {
+      etapa,
+      total: doEtapa.length,
+      valor: doEtapa.reduce((soma, l) => soma + l.valor, 0),
+      atrasados: doEtapa.filter(l => l.atrasado).length,
+      ids: doEtapa.slice(0, query.limite).map(l => l.id),
+    }
+  })
+
+  // -- Disponíveis (sem responsável, ainda abertos).
+  const filtrosDisponiveis = [...filtrosComuns, condicaoEstacao('pool')]
+  const [totalDisponiveis] = await db.select({ total: sql<number>`count(*)::int` }).from(vendasLeads).where(and(...filtrosDisponiveis))
+  const rowsDisponiveis = await db
+    .select()
+    .from(vendasLeads)
+    .where(and(...filtrosDisponiveis))
+    .orderBy(asc(vendasLeads.poolDesde))
+    .limit(MAX_DISPONIVEIS)
+
+  // -- Fechados do mês (ganhos por `ganhoEm`, perdidos por `perdidoEm`; fuso de Brasília).
+  const inicioMes = inicioDoMesSaoPaulo(agora)
+  const filtrosFechados: SQL[] = [
+    ...filtrosComuns,
+    or(and(eq(vendasLeads.etapa, 'ganho'), gte(vendasLeads.ganhoEm, inicioMes)), and(eq(vendasLeads.etapa, 'perdido'), gte(vendasLeads.perdidoEm, inicioMes)))!,
+  ]
+  if (query.agente) filtrosFechados.push(eq(vendasLeads.agenteId, query.agente))
+  const fechadosLeves = await db
+    .select({
+      id: vendasLeads.id,
+      etapa: vendasLeads.etapa,
+      valorEstimado: vendasLeads.valorEstimado,
+      ganhoEm: vendasLeads.ganhoEm,
+      perdidoEm: vendasLeads.perdidoEm,
+    })
+    .from(vendasLeads)
+    .where(and(...filtrosFechados))
+    .limit(LIMITE_CANDIDATOS_QUADRO)
+  const ganhosMes = fechadosLeves.filter(l => l.etapa === 'ganho')
+  const perdidosMes = fechadosLeves.filter(l => l.etapa === 'perdido')
+  const recentesFechados = [...fechadosLeves]
+    .sort((a, b) => (b.ganhoEm ?? b.perdidoEm ?? new Date(0)).getTime() - (a.ganhoEm ?? a.perdidoEm ?? new Date(0)).getTime())
+    .slice(0, MAX_FECHADOS_MES)
+    .map(l => l.id)
+
+  // -- Fase 2: lê por inteiro só quem vira card.
+  const idsCards = [...escolhidos, ...recentesFechados]
+  const rowsCards = idsCards.length
+    ? await db
+        .select()
+        .from(vendasLeads)
+        .where(and(inArray(vendasLeads.id, idsCards), whereEscopo(vendasLeads, ctx)))
+    : []
+  const sinaisCards = new Map(sinais)
+  const faltam = [...rowsDisponiveis.map(r => r.id), ...recentesFechados].filter(id => !sinaisCards.has(id))
+  for (const [id, s] of await carregarSinais(faltam)) sinaisCards.set(id, s)
+  const apresentados = new Map((await apresentarLeads(ctx, [...rowsCards, ...rowsDisponiveis], agora, sinaisCards)).map(l => [l.id, l]))
+  const doMapa = (ids: string[]) => ids.flatMap(id => (apresentados.has(id) ? [apresentados.get(id)!] : []))
+
+  const etapas = colunas.map(({ ids, ...coluna }) => ({ ...coluna, itens: doMapa(ids) }))
+  const abertos = etapas.reduce((soma, c) => soma + c.total, 0)
+  return {
+    etapas,
+    disponiveis: { total: Number(totalDisponiveis?.total ?? 0), itens: rowsDisponiveis.map(r => apresentados.get(r.id)!).filter(Boolean) },
+    fechados: {
+      ganhos: { total: ganhosMes.length, valor: ganhosMes.reduce((soma, l) => soma + numero(l.valorEstimado), 0) },
+      perdidos: { total: perdidosMes.length, valor: perdidosMes.reduce((soma, l) => soma + numero(l.valorEstimado), 0) },
+      itens: doMapa(recentesFechados),
+    },
+    resumo: {
+      emAndamento: abertos,
+      valorNegociacao: etapas.find(c => c.etapa === 'negociacao')?.valor ?? 0,
+      valorAberto: etapas.reduce((soma, c) => soma + c.valor, 0),
+      atrasados: etapas.reduce((soma, c) => soma + c.atrasados, 0),
+    },
+    geradoEm: agora.toISOString(),
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Leitura
 // ---------------------------------------------------------------------------
 
@@ -492,7 +736,7 @@ async function agenteDoEscopo(ctx: VendasCtx, agenteId: string): Promise<VendasA
     .where(and(eq(vendasAgentes.id, agenteId), whereEscopo(vendasAgentes, ctx)))
     .limit(1)
   if (!agente) throw AppError.notFound('Agente')
-  if (!agente.ativo) throw AppError.businessRule('Este agente está inativo e não pode receber leads.')
+  if (!agente.ativo) throw AppError.businessRule('Esta pessoa está inativa e não pode receber leads.')
   return agente
 }
 
@@ -524,12 +768,12 @@ export async function criar(ctx: VendasCtx, input: CreateVendasLeadInput, agora:
   let dono: VendasAgenteRow | null = ctx.agente
   if (input.agenteId !== undefined) {
     if (input.agenteId === null) {
-      if (ctx.papel !== 'master') throw semPermissao('Só o master cria um lead direto no pool.')
+      if (ctx.papel !== 'master') throw semPermissao('Só o administrador cria um lead direto em Disponíveis.')
       dono = null
     } else if (input.agenteId !== ctx.agente?.id) {
       const alvo = await agenteDoEscopo(ctx, input.agenteId)
       if (!podeReatribuir(contextoRegras(ctx), null, refDeAgente(alvo))) {
-        throw semPermissao('Você só pode criar leads para agentes da sua equipe ou corretora.')
+        throw semPermissao('Você só pode criar leads para pessoas da sua equipe ou corretora.')
       }
       dono = alvo
     }
@@ -599,7 +843,7 @@ export async function mudarEtapa(ctx: VendasCtx, id: string, input: MudarEtapaLe
   const de = lead.etapa
   const para = input.etapa
   if (!transicaoPermitida(de, para, ctx.papel)) {
-    throw new AppError(ERROR_CODES.VENDAS_TRANSICAO_INVALIDA, `Não é possível mover o lead de "${de}" para "${para}".`)
+    throw new AppError(ERROR_CODES.VENDAS_TRANSICAO_INVALIDA, `Este lead não pode ir de ${ROTULO_ETAPA[de]} para ${ROTULO_ETAPA[para]}.`)
   }
   if (para === 'perdido' && !input.motivoPerda?.trim()) {
     throw AppError.validation([{ path: 'motivoPerda', message: 'Informe o motivo da perda' }])
@@ -607,11 +851,11 @@ export async function mudarEtapa(ctx: VendasCtx, id: string, input: MudarEtapaLe
   const confirmado = para === 'ganho' && !lead.conversao
   // Ganho manual (sem venda) infla ranking e metas: só master e gerente. O ganho automático pelo pagamento vale para todos.
   if (confirmado && ctx.papel !== 'master' && ctx.papel !== 'gerente') {
-    throw new AppError(ERROR_CODES.VENDAS_TRANSICAO_INVALIDA, 'Só master e gerente marcam ganho sem venda: use o fluxo de venda (proposta/adesão).')
+    throw new AppError(ERROR_CODES.VENDAS_TRANSICAO_INVALIDA, 'A venda fecha pela proposta ou pelo link de adesão. Só o administrador e o gerente marcam como fechada sem venda registrada.')
   }
   if (confirmado && !input.confirmar) {
     throw AppError.businessRule(
-      'O fechamento acontece pela proposta ou pela assinatura. Para marcar como ganho manualmente, confirme o fechamento.',
+      'A venda fecha pela proposta ou pela assinatura. Para marcar como fechada manualmente, confirme.',
     )
   }
 
@@ -638,12 +882,15 @@ export async function mudarEtapa(ctx: VendasCtx, id: string, input: MudarEtapaLe
     .set(campos)
     .where(and(eq(vendasLeads.id, lead.id), eq(vendasLeads.etapa, de), whereEscopo(vendasLeads, ctx)))
     .returning({ id: vendasLeads.id })
-  if (!atualizado) throw AppError.conflict('O lead mudou de etapa enquanto você editava. Atualize a tela e tente de novo.')
+  if (!atualizado) throw AppError.conflict('O lead mudou de etapa enquanto você editava. Atualize a página e tente de novo.')
 
   await registrarEventoLead(db, {
     leadId: lead.id,
     tipo: 'etapa',
-    texto: para === 'perdido' ? `Etapa: ${de} → ${para}. Motivo: ${input.motivoPerda!.trim()}` : `Etapa: ${de} → ${para}.`,
+    texto:
+      para === 'perdido'
+        ? `Etapa: ${ROTULO_ETAPA[de]} → ${ROTULO_ETAPA[para]}. Motivo: ${input.motivoPerda!.trim()}`
+        : `Etapa: ${ROTULO_ETAPA[de]} → ${ROTULO_ETAPA[para]}.`,
     dados: { de, para, ...(para === 'perdido' ? { motivoPerda: input.motivoPerda!.trim() } : {}), ...(confirmado ? { confirmado: true } : {}) },
     ...autor(ctx),
     em: agora,
@@ -653,7 +900,8 @@ export async function mudarEtapa(ctx: VendasCtx, id: string, input: MudarEtapaLe
 
 /**
  * `POST /leads/:id/eventos`. Evento de contato atualiza `ultimo_contato_em`; lead `novo`
- * com contato vai sozinho para `em_contato` (com evento `etapa` automático).
+ * com contato vai sozinho para `em_contato` (com evento `etapa` automático). `sentimento` (como a
+ * pessoa reagiu) fica em `dados.sentimento` e alimenta a temperatura do lead.
  */
 export async function registrarEvento(
   ctx: VendasCtx,
@@ -663,11 +911,16 @@ export async function registrarEvento(
 ): Promise<VendasLeadEvento> {
   const { lead } = await carregarEditavel(ctx, id)
   const contato = EVENTOS_DE_CONTATO.includes(input.tipo)
+  if (input.sentimento && !contato) {
+    throw AppError.validation([{ path: 'sentimento', message: 'A reação da pessoa só vale para contatos, não para anotações' }])
+  }
+  // O sentimento vai em `dados.sentimento` do evento (jsonb já existente: sem migração).
+  const dados = { ...(input.dados ?? {}), ...(input.sentimento ? { sentimento: input.sentimento } : {}) }
   const evento = await registrarEventoLead(db, {
     leadId: lead.id,
     tipo: input.tipo,
     texto: input.texto,
-    dados: input.dados ?? null,
+    dados: Object.keys(dados).length > 0 ? dados : null,
     ...autor(ctx),
     em: agora,
   })
@@ -681,7 +934,7 @@ export async function registrarEvento(
       await registrarEventoLead(db, {
         leadId: lead.id,
         tipo: 'etapa',
-        texto: 'Etapa: novo → em_contato (primeiro contato registrado).',
+        texto: 'Etapa: Novo → Em contato (primeiro contato registrado).',
         dados: { de: 'novo', para: 'em_contato', automatico: true },
         ...autor(ctx),
         em: agora,
@@ -721,10 +974,10 @@ export async function reatribuir(ctx: VendasCtx, id: string, agenteId: string | 
   const { lead, dono } = await carregarLead(ctx, id)
   const alvo = agenteId ? await agenteDoEscopo(ctx, agenteId) : null
   if (!podeReatribuir(contextoRegras(ctx), refDeAgente(dono), refDeAgente(alvo))) {
-    throw semPermissao('Você não pode reatribuir este lead para este destino.')
+    throw semPermissao('Você não pode passar este lead para essa pessoa.')
   }
   if ((lead.agenteId ?? null) === (alvo?.id ?? null)) return recarregar(ctx, lead.id, agora)
-  if (ETAPAS_FECHADAS.includes(lead.etapa) && !alvo) throw AppError.businessRule('Lead encerrado não volta ao pool.')
+  if (ETAPAS_FECHADAS.includes(lead.etapa) && !alvo) throw AppError.businessRule('Lead encerrado não pode ser liberado.')
 
   const donoAtual = lead.agenteId ? eq(vendasLeads.agenteId, lead.agenteId) : isNull(vendasLeads.agenteId)
   // Reatribuir muda o beneficiário das comissões AINDA NÃO geradas; as já registradas não mudam.
@@ -751,7 +1004,7 @@ export async function reatribuir(ctx: VendasCtx, id: string, agenteId: string | 
       .where(eq(platformOnboardingProposals.vendasLeadId, lead.id))
     return linha
   })
-  if (!atualizado) throw AppError.conflict('O lead mudou de dono enquanto você editava. Atualize a tela e tente de novo.')
+  if (!atualizado) throw AppError.conflict('O lead mudou de responsável enquanto você editava. Atualize a página e tente de novo.')
 
   if (alvo) {
     await registrarEventoLead(db, {
@@ -767,7 +1020,7 @@ export async function reatribuir(ctx: VendasCtx, id: string, agenteId: string | 
     await registrarEventoLead(db, {
       leadId: lead.id,
       tipo: 'devolvido_pool',
-      texto: 'Devolvido ao pool.',
+      texto: 'Lead liberado: voltou para Disponíveis.',
       dados: { motivo: 'manual', agenteAnteriorId: lead.agenteId },
       ...autor(ctx),
       em: agora,
@@ -783,7 +1036,7 @@ export async function reatribuir(ctx: VendasCtx, id: string, agenteId: string | 
  */
 export async function reivindicar(ctx: VendasCtx, id: string, agora: Date = new Date()): Promise<VendasLead> {
   exigeFunil(ctx)
-  if (!ctx.agente) throw semPermissao('Só quem tem perfil de agente assume leads. Use "Atribuir" para escolher o responsável.')
+  if (!ctx.agente) throw semPermissao('Só quem tem perfil de vendedor atende leads. Use “Passar para outra pessoa” para escolher o responsável.')
   if (!UUID.test(id)) throw AppError.notFound('Lead')
   const [reivindicado] = await db
     .update(vendasLeads)
@@ -797,12 +1050,12 @@ export async function reivindicar(ctx: VendasCtx, id: string, agora: Date = new 
       .where(and(eq(vendasLeads.id, id), whereEscopo(vendasLeads, ctx)))
       .limit(1)
     if (!existe) throw AppError.notFound('Lead')
-    throw new AppError(ERROR_CODES.VENDAS_LEAD_JA_REIVINDICADO, 'Outra pessoa já assumiu este lead.')
+    throw new AppError(ERROR_CODES.VENDAS_LEAD_JA_REIVINDICADO, 'Outra pessoa já atendeu este lead.')
   }
   await registrarEventoLead(db, {
     leadId: id,
     tipo: 'reivindicado',
-    texto: `${ctx.agente.nome} assumiu o atendimento.`,
+    texto: `${ctx.agente.nome} passou a atender este lead.`,
     dados: { agenteId: ctx.agente.id },
     ...autor(ctx),
     em: agora,

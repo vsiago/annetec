@@ -4,14 +4,17 @@ import { useEffect, useState } from 'react'
 import { Banknote, Link2, Loader2, MessageCircle, QrCode as QrIcon, ReceiptText } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatBoletoLine, type CheckoutResult, type VendasLead } from '@annetec/contracts'
+import { ConfirmDialog } from '@/components/admin-platform/billing/console-kit'
 import { assinarLeadAction, gerarLinkAdesaoAction } from '@/lib/actions/vendas-rede-api'
 import type { EscopoVendas } from '@/lib/vendas-rede/escopo'
+import { mensagemDoErro } from '@/lib/vendas-rede/erros'
 import type { LinkAdesao } from '@/lib/vendas-rede/tipos'
+import { useVendasRede } from '../provider'
 import { AcaoPrincipal } from '../ui/acao-principal'
 import { CopiarBotao } from '../ui/copiar-botao'
 import { formatarMoeda, primeiroNome } from '../ui/mascaras'
 import { QrCode } from '../ui/qr-code'
-import { montarWaLink } from '../ui/wa-link'
+import { mensagemDoModelo, montarWaLink } from '../ui/wa-link'
 import { Chips } from './campos'
 import { SeletorPlano } from './seletor-plano'
 import { usePlanos } from './use-planos'
@@ -36,11 +39,13 @@ export function ConversaoClube({
   aoEditarDados: () => void
 }) {
   const { planos, erro, recarregar } = usePlanos(escopo)
+  const { eu } = useVendasRede()
   const [planoId, setPlanoId] = useState<string | null>(lead.interessePlanoId)
   const [link, setLink] = useState<LinkAdesao | null>(null)
   const [gerandoLink, setGerandoLink] = useState(false)
   const [metodo, setMetodo] = useState<Metodo>('pix')
   const [assinando, setAssinando] = useState(false)
+  const [confirmandoAssinatura, setConfirmandoAssinatura] = useState(false)
   const [resultado, setResultado] = useState<CheckoutResult | null>(null)
   const [pendencias, setPendencias] = useState<string[]>([])
   // O vendedor completou o cadastro: os avisos da tentativa anterior ficam velhos.
@@ -65,7 +70,7 @@ export function ConversaoClube({
     const r = await gerarLinkAdesaoAction(escopo, lead.id, planoId)
     setGerandoLink(false)
     if (!r.success) {
-      toast.error(r.error)
+      toast.error(mensagemDoErro(r.code, r.error))
       return
     }
     setLink(r.data)
@@ -73,8 +78,9 @@ export function ConversaoClube({
     aoMudar()
   }
 
-  async function assinar() {
-    if (!planoId) return
+  // Devolve se a assinatura foi criada (a confirmação fecha só nesse caso).
+  async function assinar(): Promise<boolean> {
+    if (!planoId) return false
     setAssinando(true)
     setPendencias([])
     const r = await assinarLeadAction(escopo, lead.id, { planoId, metodoPagamento: metodo })
@@ -82,16 +88,23 @@ export function ConversaoClube({
     if (!r.success) {
       const itens = Object.values(r.fieldErrors ?? {}).filter(Boolean)
       if (itens.length > 0) setPendencias(itens)
-      else toast.error(r.error)
-      return
+      else toast.error(mensagemDoErro(r.code, r.error))
+      return true
     }
     setResultado(r.data)
-    toast.success('Assinatura criada', { description: 'Agora é só o cliente pagar. O lead vira ganho quando o pagamento cair.' })
+    toast.success('Assinatura criada', { description: 'Agora é só o cliente pagar. A venda é fechada quando o pagamento for confirmado.' })
     aoMudar()
+    return true
   }
 
+  // Mesmo modelo "Envio do link" das Regras: o administrador edita e o vendedor vê o efeito aqui.
   const textoWa = link
-    ? `Olá, ${primeiroNome(lead.nome)}! Aqui está o link para você assinar o plano ${link.planoNome}: ${link.url}`
+    ? mensagemDoModelo(eu.config.modelosMensagem, 'envio-link', {
+        nome: primeiroNome(lead.nome),
+        plano: link.planoNome,
+        vendedor: eu.agente?.nome ?? '',
+        link: link.url,
+      })
     : ''
   const waLink = link ? montarWaLink(lead.telefone, textoWa) : null
 
@@ -160,7 +173,7 @@ export function ConversaoClube({
           <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Carregando planos…
         </div>
       ) : planos.length === 0 ? (
-        <p className="m-0 text-sm text-muted-foreground">Este clube ainda não tem plano ativo para oferecer.</p>
+        <p className="m-0 text-sm text-muted-foreground">O clube ainda não tem plano ativo. Peça ao administrador para ativar um plano.</p>
       ) : (
         <SeletorPlano planos={planos} valor={planoId} aoMudar={setPlanoId} />
       )}
@@ -226,10 +239,49 @@ export function ConversaoClube({
             </AcaoPrincipal>
           </div>
         ) : null}
-        <AcaoPrincipal variante="secundaria" onClick={() => void assinar()} carregando={assinando} disabled={!planoId} bloco>
-          Assinar agora
+        <AcaoPrincipal variante="secundaria" onClick={() => setConfirmandoAssinatura(true)} carregando={assinando} disabled={!planoId} bloco aria-describedby={planoId ? undefined : 'motivo-assinar-agora'}>
+          Assinar agora com o cliente
         </AcaoPrincipal>
+        {!planoId ? (
+          <p id="motivo-assinar-agora" className="m-0 text-xs text-muted-foreground">
+            Escolha um plano para assinar.
+          </p>
+        ) : null}
       </section>
+
+      <ConfirmDialog
+        open={confirmandoAssinatura}
+        onOpenChange={setConfirmandoAssinatura}
+        title="Assinar agora?"
+        confirmLabel="Criar assinatura"
+        onConfirm={assinar}
+        description={
+          <div className="flex flex-col gap-3 text-sm text-foreground">
+          <dl className="m-0 flex flex-col gap-1.5">
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Plano</dt>
+              <dd className="m-0 text-right font-semibold">{plano?.nome ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">1ª cobrança</dt>
+              <dd className="m-0 text-right font-semibold">
+                {plano ? formatarMoeda(plano.precoMensal + plano.adesao) : '—'}
+                {plano && plano.adesao > 0 ? <span className="block text-xs font-normal text-muted-foreground">mensalidade + adesão de {formatarMoeda(plano.adesao)}</span> : null}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Forma de pagamento</dt>
+              <dd className="m-0 text-right font-semibold">{metodo === 'pix' ? 'Pix' : 'Boleto'}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Titular</dt>
+              <dd className="m-0 text-right font-semibold">{lead.nome}</dd>
+            </div>
+          </dl>
+          <p className="m-0 text-xs text-muted-foreground">Isto cria a assinatura e a cobrança agora. Confirme com o cliente antes de continuar.</p>
+          </div>
+        }
+      />
     </div>
   )
 }

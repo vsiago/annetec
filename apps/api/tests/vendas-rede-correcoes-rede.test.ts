@@ -176,7 +176,7 @@ describe('M13 - ganho manual so para master e gerente', () => {
       const res = await call(token, 'POST', `${P}/leads/${LEAD_SEM_VENDA}/etapa`, { etapa: 'ganho', confirmar: true })
       expect(res.status).toBe(422)
       expect(res.body.error.code).toBe('VENDAS_TRANSICAO_INVALIDA')
-      expect(res.body.error.message).toContain('fluxo de venda')
+      expect(res.body.error.message).toContain('A venda fecha pela proposta ou pelo link de adesão')
     }
     expect(leadRow(LEAD_SEM_VENDA).etapa).toBe('proposta')
     expect((await call('u-gerente1', 'POST', `${P}/leads/${LEAD_SEM_VENDA}/etapa`, { etapa: 'ganho', confirmar: true })).status).toBe(200)

@@ -12,6 +12,7 @@ import { AppError } from '@/http/errors'
 import { auth } from '@/lib/auth'
 import { decryptSecret, encryptSecret } from '@/lib/crypto'
 import { getDigitalSaudeClient } from '@/integrations/digitalsaude/provider'
+import { garantirAgenteSolo } from '@/modules/vendas-rede/agente-solo'
 import { generateProvisionalPassword } from './access.service'
 import {
   cutMemberAccess,
@@ -217,6 +218,7 @@ export const usersService = {
   async create(
     tenantId: string,
     input: CreateTenantUserInput,
+    opcoes: { criadoPorUserId?: string | null; semAgenteComercial?: boolean } = {},
   ): Promise<{ tenantUser: TenantUser; provisionalPassword: string | null }> {
     const email = input.email.toLowerCase()
 
@@ -241,6 +243,18 @@ export const usersService = {
         .insert(sellerProfiles)
         .values({ userId: authUser.id, organizationId: tenantId })
         .onConflictDoNothing()
+      // Sem perfil na Rede Comercial o vendedor entra e vê "acesso não liberado": nasce como
+      // vendedor solo ativo (a Rede ajusta equipe e unidade). O cadastro pela Rede cria o dele.
+      if (!opcoes.semAgenteComercial) {
+        await garantirAgenteSolo({
+          scope: 'tenant',
+          tenantId,
+          userId: authUser.id,
+          nome: authUser.name || input.name,
+          telefone: input.phone ?? null,
+          criadoPorUserId: opcoes.criadoPorUserId ?? null,
+        })
+      }
     }
 
     // O perfil do associado só nasce com CPF porque a coluna é obrigatória —
@@ -351,6 +365,14 @@ export const usersService = {
         .where(and(eq(member.organizationId, tenantId), eq(member.userId, id)))
       if (input.role === 'seller') {
         await db.insert(sellerProfiles).values({ userId: id, organizationId: tenantId }).onConflictDoNothing()
+        await garantirAgenteSolo({
+          scope: 'tenant',
+          tenantId,
+          userId: id,
+          nome: input.name ?? row.user.name,
+          telefone: row.user.phone ?? null,
+          criadoPorUserId: actorUserId ?? null,
+        })
       }
     }
 
