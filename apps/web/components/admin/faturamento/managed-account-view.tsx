@@ -7,6 +7,7 @@ import {
   Clock,
   FileUp,
   Handshake,
+  Info,
   Landmark,
   LoaderCircle,
   RefreshCw,
@@ -26,6 +27,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   getReceivingAccountAction,
   listManagedDebitsAction,
@@ -391,8 +393,25 @@ export function ManagedConnected({
 
   if (!managed) return null
   const active = managed.generalStatus === 'aprovada' && managed.pendingDocuments === 0
-  const docsToSend = managed.documents.filter(doc => doc.actionRequired)
+  const approvedGeneral = managed.dimensions.general === 'APPROVED'
+  const rejectedCount = managed.documents.filter(doc => doc.status === 'REJECTED').length
   const sandbox = account.env === 'sandbox'
+
+  let title: string
+  let subtitle: string
+  if (approvedGeneral) {
+    title = 'Conta aprovada e ativa'
+    subtitle = 'Cobranças, Pix e repasses operando.'
+  } else if (rejectedCount > 0) {
+    title = rejectedCount === 1 ? 'Um documento foi recusado' : `${rejectedCount} documentos foram recusados`
+    subtitle = 'Veja o motivo e reenvie.'
+  } else if (managed.pendingDocuments > 0) {
+    title = `Envie ${managed.pendingDocuments} ${managed.pendingDocuments === 1 ? 'documento' : 'documentos'} para ativar a conta`
+    subtitle = 'Depois da análise, os recebimentos são liberados.'
+  } else {
+    title = 'Documentos em análise'
+    subtitle = 'Costuma levar até 48 h. Avisamos quando aprovar.'
+  }
 
   return (
     <div className="space-y-5">
@@ -400,23 +419,21 @@ export function ManagedConnected({
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="flex items-center gap-2 text-lg">
-              {active ? (
+              {active || approvedGeneral ? (
                 <CircleCheckBig className="h-5 w-5 text-emerald-600" />
+              ) : rejectedCount > 0 ? (
+                <CircleAlert className="h-5 w-5 text-destructive" />
               ) : (
                 <FileUp className="h-5 w-5 text-amber-600" />
               )}
-              {active ? 'Conta aprovada e ativa' : 'Conta criada: envie os documentos'}
+              {title}
             </CardTitle>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
               <Handshake className="h-3.5 w-3.5" />
               Gerenciada pela ANNETEC
             </span>
           </div>
-          <CardDescription>
-            {active
-              ? 'As mensalidades dos associados caem nesta conta. Mudanças na conta são feitas pela ANNETEC.'
-              : 'A conta já foi aberta. Para liberar os recebimentos, envie os documentos pedidos abaixo.'}
-          </CardDescription>
+          <CardDescription>{subtitle}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {sandbox && (
@@ -425,28 +442,41 @@ export function ManagedConnected({
             </p>
           )}
 
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Row label="Situação da conta">{managed.generalStatusLabel}</Row>
+          <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Row label="Situação">{managed.generalStatusLabel}</Row>
             <Row label="Nome da conta">{account.accountName || '—'}</Row>
             <Row label="CPF/CNPJ">{account.cpfCnpj || '—'}</Row>
             <Row label="Débito automático">
-              <span className={managed.autoDebitEnabled ? 'text-emerald-700 dark:text-emerald-300' : undefined}>
-                {managed.autoDebitEnabled ? 'Ligado' : 'Desligado'}
-              </span>
-              <span className="block text-xs font-normal text-muted-foreground">
-                {managed.autoDebitEnabled
-                  ? 'No vencimento da fatura da ANNETEC, o valor sai do saldo desta conta.'
-                  : 'As faturas da ANNETEC são pagas por Pix ou boleto.'}{' '}
-                Quem liga ou desliga é a ANNETEC.
+              <span className="inline-flex items-center gap-1.5">
+                <span>
+                  <span className={managed.autoDebitEnabled ? 'text-emerald-700 dark:text-emerald-300' : undefined}>
+                    {managed.autoDebitEnabled ? 'Ligado' : 'Desligado'}
+                  </span>
+                  <span className="font-normal text-muted-foreground">
+                    {managed.autoDebitEnabled
+                      ? ' · a fatura da ANNETEC sai do saldo desta conta'
+                      : ' · a fatura é paga por Pix ou boleto'}
+                  </span>
+                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Quem liga ou desliga é a ANNETEC."
+                      className="shrink-0 text-muted-foreground hover:text-foreground"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Quem liga ou desliga é a ANNETEC.</TooltipContent>
+                </Tooltip>
               </span>
             </Row>
             <Row label="Último débito">
               {managed.lastDebit ? (
-                <span className="space-y-1">
-                  <span className="flex flex-wrap items-center gap-2">
-                    {formatBRL(managed.lastDebit.amount)} <DebitBadge debit={managed.lastDebit} />
-                  </span>
-                  <span className="block text-xs font-normal text-muted-foreground">
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {formatBRL(managed.lastDebit.amount)} <DebitBadge debit={managed.lastDebit} />
+                  <span className="text-xs font-normal text-muted-foreground">
                     {formatDateTimeBR(managed.lastDebit.startedAt)}
                     {managed.lastDebit.status === 'falhou' && managed.lastDebit.failureReason
                       ? ` · ${managed.lastDebit.failureReason}`
@@ -462,7 +492,7 @@ export function ManagedConnected({
             </Row>
           </dl>
 
-          {managed.rejectReasons && (
+          {managed.rejectReasons && rejectedCount === 0 && (
             <p
               role="alert"
               className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
@@ -472,16 +502,11 @@ export function ManagedConnected({
             </p>
           )}
 
-          <section aria-label="Etapas da aprovação" className="space-y-2 border-t border-border pt-4">
+          <section aria-label="Andamento da aprovação" className="border-t border-border pt-4">
             <ManagedDimensions dimensions={managed.dimensions} />
-            {managed.dimensions.general === 'APPROVED' && (
-              <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                Recebimentos liberados: cobranças, Pix e repasses operam normalmente.
-              </p>
-            )}
           </section>
 
-          <section aria-labelledby="mg-docs" className="space-y-2 border-t border-border pt-4">
+          <section aria-labelledby="mg-docs" className="space-y-3 border-t border-border pt-4">
             <h3 id="mg-docs" className="text-sm font-semibold text-foreground">
               Documentos
             </h3>
@@ -504,33 +529,31 @@ export function ManagedConnected({
                 ))}
               </ul>
             )}
-            {docsToSend.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Depois de enviar, o parceiro de pagamentos analisa os documentos. Acompanhamos por aqui e, se preferir,
-                clique em &quot;Atualizar situação&quot;.
+
+            {error && (
+              <p
+                role="alert"
+                className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+              >
+                <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                {error}
               </p>
             )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <p className="text-xs text-muted-foreground">
+                Análise do parceiro de pagamentos: até 48 h. Atualizamos por aqui.
+              </p>
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => void refresh()} disabled={refreshing}>
+                {refreshing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {refreshing ? 'Atualizando…' : 'Atualizar situação'}
+              </Button>
+            </div>
           </section>
 
-          {error && (
-            <p
-              role="alert"
-              className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-            >
-              <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-              {error}
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
-            <p className="text-xs text-muted-foreground">
-              Para trocar ou desconectar esta conta, fale com a ANNETEC: as mudanças são feitas por ela.
-            </p>
-            <Button variant="outline" className="gap-2" onClick={() => void refresh()} disabled={refreshing}>
-              {refreshing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {refreshing ? 'Atualizando…' : 'Atualizar situação'}
-            </Button>
-          </div>
+          <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+            Para trocar ou desconectar a conta, fale com a ANNETEC.
+          </p>
         </CardContent>
       </Card>
 
