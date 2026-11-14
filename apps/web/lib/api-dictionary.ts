@@ -551,6 +551,92 @@ export const annetecModules: ApiModule[] = [
     ],
   },
   {
+    title: 'Candidaturas de parceiro comercial (público, plataforma)',
+    prefix: '/api/v1/public/vendas/candidaturas',
+    controllerRef: 'candidaturasPublicController',
+    summary:
+      'Candidatura de parceiro comercial ("Seja um parceiro comercial"): auto-cadastro sem conta, com rascunho retomável por link com ?chave= (HMAC do id; chave errada responde 404). O master do escopo aprova ou recusa em /rede/candidaturas.',
+    sections: [
+      {
+        heading: 'Candidatura',
+        items: [
+          { method: 'POST', route: '/', description: 'Inicia o rascunho da candidatura (PF/PJ, atuação, contato, CPF; CNPJ se PJ; código de indicação se vendedor em equipe) e devolve { id, chave, acompanhamentoPath }. 409 se já há candidatura em análise com o e-mail; honeypot website preenchido responde 201 sem gravar.', access: 'público (5/h/IP)' },
+          { method: 'POST', route: '/recuperar-acesso', description: 'Reenvia por e-mail o link de acompanhamento de rascunho ou candidatura em análise; responde sempre { enviado: true }.', access: 'público (5/h/IP)' },
+          { method: 'GET', route: '/codigo/:codigo', description: 'Quem é o dono do código de indicação neste escopo: { nome, papel } (404 se não há agente ativo).', access: 'público (120/h/IP)' },
+          { method: 'GET', route: '/:id?chave=', description: 'Candidatura do candidato, com pendências do que falta para enviar e indicado por.', access: 'público com chave' },
+          { method: 'PUT', route: '/:id/dados?chave=', description: 'Salva atuação, endereço, razão social/nome fantasia (PJ) e dados extras; só em rascunho (409 depois de enviada).', access: 'público com chave' },
+          { method: 'POST', route: '/:id/documentos?chave=', description: 'Upload multipart (file + kind) de documento, PDF/JPEG/PNG até 4 MB; o mesmo kind substitui o anterior.', access: 'público com chave' },
+          { method: 'DELETE', route: '/:id/documentos/:docId?chave=', description: 'Remove um documento do rascunho.', access: 'público com chave' },
+          { method: 'GET', route: '/:id/documentos/:docId/arquivo?chave=', description: 'Binário do documento enviado.', access: 'público com chave' },
+          { method: 'POST', route: '/:id/enviar?chave=', description: 'Envia para análise com aceite do termo e assinatura pelo nome; 422 com as pendências; avisa o master e confirma por e-mail ao candidato.', access: 'público com chave' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Candidaturas de parceiro comercial (público, clube)',
+    prefix: '/api/v1/t/:tenantSlug/public/vendas/candidaturas',
+    controllerRef: 'candidaturasPublicController',
+    summary:
+      'Candidatura de parceiro comercial ("Seja um parceiro comercial"): auto-cadastro sem conta, com rascunho retomável por link com ?chave= (HMAC do id; chave errada responde 404). O master do escopo aprova ou recusa em /rede/candidaturas. Mesmas rotas, presas ao clube do slug (404 se não existe).',
+    sections: [
+      {
+        heading: 'Candidatura',
+        items: [
+          { method: 'POST', route: '/', description: 'Inicia o rascunho da candidatura (PF/PJ, atuação, contato, CPF; CNPJ se PJ; código de indicação se vendedor em equipe) e devolve { id, chave, acompanhamentoPath }. 409 se já há candidatura em análise com o e-mail; honeypot website preenchido responde 201 sem gravar.', access: 'público (5/h/IP)' },
+          { method: 'POST', route: '/recuperar-acesso', description: 'Reenvia por e-mail o link de acompanhamento de rascunho ou candidatura em análise; responde sempre { enviado: true }.', access: 'público (5/h/IP)' },
+          { method: 'GET', route: '/codigo/:codigo', description: 'Quem é o dono do código de indicação neste escopo: { nome, papel } (404 se não há agente ativo).', access: 'público (120/h/IP)' },
+          { method: 'GET', route: '/:id?chave=', description: 'Candidatura do candidato, com pendências do que falta para enviar e indicado por.', access: 'público com chave' },
+          { method: 'PUT', route: '/:id/dados?chave=', description: 'Salva atuação, endereço, razão social/nome fantasia (PJ) e dados extras; só em rascunho (409 depois de enviada).', access: 'público com chave' },
+          { method: 'POST', route: '/:id/documentos?chave=', description: 'Upload multipart (file + kind) de documento, PDF/JPEG/PNG até 4 MB; o mesmo kind substitui o anterior.', access: 'público com chave' },
+          { method: 'DELETE', route: '/:id/documentos/:docId?chave=', description: 'Remove um documento do rascunho.', access: 'público com chave' },
+          { method: 'GET', route: '/:id/documentos/:docId/arquivo?chave=', description: 'Binário do documento enviado.', access: 'público com chave' },
+          { method: 'POST', route: '/:id/enviar?chave=', description: 'Envia para análise com aceite do termo e assinatura pelo nome; 422 com as pendências; avisa o master e confirma por e-mail ao candidato.', access: 'público com chave' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Candidaturas de parceiro comercial (gestão, plataforma)',
+    prefix: '/api/v1/vendas/rede/candidaturas',
+    controllerRef: 'candidaturasController',
+    summary:
+      'Gestão das candidaturas pelo master do escopo (equipe ANNETEC na plataforma, admin do clube no tenant). Id de outro escopo = 404; rascunhos não aparecem.',
+    sections: [
+      {
+        heading: 'Candidaturas',
+        items: [
+          { method: 'GET', route: '/?status=', description: 'Candidaturas enviadas do escopo (recebida padrão; aprovada, recusada ou todas) com { itens, pendentes }.', access: 'master' },
+          { method: 'GET', route: '/resumo', description: 'Quantidade de candidaturas em análise ({ pendentes }), para o selo do menu.', access: 'master' },
+          { method: 'GET', route: '/:id', description: 'Detalhe: dados completos, documentos, origem do envio, decisão e vínculo sugerido pela indicação.', access: 'master' },
+          { method: 'GET', route: '/:id/documentos/:docId/arquivo', description: 'Binário do documento da candidatura.', access: 'master' },
+          { method: 'POST', route: '/:id/aprovar', description: 'Aprova: cria a corretora (se for o caso) e o agente com conta e convite pelo fluxo da rede; devolve { candidatura, convite }. Em erro volta para em análise.', access: 'master (perfil ativo)' },
+          { method: 'POST', route: '/:id/recusar', description: 'Recusa com motivo (10 a 1000 caracteres) e avisa o candidato por e-mail; devolve { candidatura }.', access: 'master (perfil ativo)' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Candidaturas de parceiro comercial (gestão, clube)',
+    prefix: '/api/v1/t/:tenantSlug/vendas/rede/candidaturas',
+    controllerRef: 'candidaturasController',
+    summary:
+      'Gestão das candidaturas pelo master do escopo (equipe ANNETEC na plataforma, admin do clube no tenant). Id de outro escopo = 404; rascunhos não aparecem.',
+    sections: [
+      {
+        heading: 'Candidaturas',
+        items: [
+          { method: 'GET', route: '/?status=', description: 'Candidaturas enviadas do escopo (recebida padrão; aprovada, recusada ou todas) com { itens, pendentes }.', access: 'master' },
+          { method: 'GET', route: '/resumo', description: 'Quantidade de candidaturas em análise ({ pendentes }), para o selo do menu.', access: 'master' },
+          { method: 'GET', route: '/:id', description: 'Detalhe: dados completos, documentos, origem do envio, decisão e vínculo sugerido pela indicação.', access: 'master' },
+          { method: 'GET', route: '/:id/documentos/:docId/arquivo', description: 'Binário do documento da candidatura.', access: 'master' },
+          { method: 'POST', route: '/:id/aprovar', description: 'Aprova: cria a corretora (se for o caso) e o agente com conta e convite pelo fluxo da rede; devolve { candidatura, convite }. Em erro volta para em análise.', access: 'master (perfil ativo)' },
+          { method: 'POST', route: '/:id/recusar', description: 'Recusa com motivo (10 a 1000 caracteres) e avisa o candidato por e-mail; devolve { candidatura }.', access: 'master (perfil ativo)' },
+        ],
+      },
+    ],
+  },
+  {
     title: 'Contratação da plataforma (público)',
     prefix: '/api/v1/public/contratacao',
     controllerRef: 'onboardingPublicController',

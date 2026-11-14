@@ -29,6 +29,7 @@ import {
   IdCard,
   LogIn,
   Rocket,
+  Handshake,
 } from "lucide-react"
 
 /**
@@ -48,8 +49,9 @@ import {
  * quando o logo ou o botão mudam de largura.
  *
  * ── Hierarquia ───────────────────────────────────────────────────────────
- * Sobre o rosa existe um único bloco branco sólido: o CTA. O ENTRAR é
- * contornado, não preenchido, então lê como ação secundária sem sumir.
+ * Sobre o rosa existe um único bloco branco sólido: o CTA. Depois dele vem o
+ * SEJA UM PARCEIRO (preenchido translúcido, sem borda: destaque nº 2) e por
+ * último o ENTRAR, contornado — ação de menor peso que não some.
  */
 const ROSE = "#d12d4f"
 const INK = "#16203a"
@@ -344,10 +346,18 @@ export function Navbar() {
             })}
           </div>
 
-          {/* ── direita: entrar ────────────────────────────────────────────
-              Contornado, não preenchido: o único preenchimento branco da
-              barra é o CTA, para não haver dúvida sobre qual é a ação. */}
+          {/* ── direita: seja um parceiro + entrar ─────────────────────────
+              O único preenchimento branco sólido da barra é o CTA central.
+              "Seja um parceiro" é pílula translúcida (destaque secundário) e
+              "Entrar" continua contornado, para não haver dúvida sobre qual é a ação. */}
           <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href="/seja-parceiro"
+              className="hidden items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-[12px] font-extrabold uppercase tracking-wider text-white transition-colors hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#d12d4f] lg:flex xl:text-[12.5px]"
+            >
+              <Handshake className="size-3.5" aria-hidden="true" />
+              Seja um parceiro
+            </Link>
             <Link
               href="/login"
               className="hidden items-center gap-1.5 rounded-full border-2 border-white/70 px-4 py-2 text-[12px] font-extrabold uppercase tracking-wider text-white transition-colors hover:border-white hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#d12d4f] sm:flex xl:text-[12.5px]"
@@ -444,7 +454,16 @@ export function Navbar() {
                 )
               })}
 
-              <div className="border-t border-slate-200 pt-3">
+              <div className="space-y-2 border-t border-slate-200 pt-3">
+                <Link
+                  href="/seja-parceiro"
+                  onClick={() => setMenuMobileAberto(false)}
+                  style={{ color: INK }}
+                  className="flex items-center justify-center gap-2 rounded-full bg-slate-100 px-4 py-3 text-[13px] font-extrabold uppercase tracking-wider transition-colors hover:bg-slate-200"
+                >
+                  <Handshake className="size-4" aria-hidden="true" />
+                  Seja um parceiro
+                </Link>
                 <Link
                   href="/login"
                   onClick={() => setMenuMobileAberto(false)}

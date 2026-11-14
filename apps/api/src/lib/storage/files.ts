@@ -20,7 +20,7 @@ export interface StoreFileInput {
   ext: string
   purpose: FilePurpose
   visibility: FileVisibility
-  ownerType: 'proposal' | 'organization'
+  ownerType: 'proposal' | 'organization' | 'candidatura'
   ownerId: string
   /** `applicant` (candidato pela chave) ou `user.id`. */
   uploadedBy: string

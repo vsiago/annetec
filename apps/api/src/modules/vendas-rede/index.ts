@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import type { AppEnv } from '@/http/types'
 import { salesContext } from './context'
 import { balcaoController } from './controllers/balcao.controller'
+import { candidaturasController } from './controllers/candidaturas.controller'
+import { candidaturasPublicController } from './controllers/candidaturas-public.controller'
 import { comissoesController } from './controllers/comissoes.controller'
 import { configController } from './controllers/config.controller'
 import { leadsController } from './controllers/leads.controller'
@@ -29,6 +31,7 @@ const rotasComuns = new Hono<AppEnv>()
   .route('/', leadsController)
   .route('/', comissoesController)
   .route('/', painelController)
+  .route('/', candidaturasController)
 
 export const vendasRedePlatformRoutes = new Hono<AppEnv>()
   .use('*', salesContext('platform'))
@@ -40,4 +43,9 @@ export const vendasRedeTenantRoutes = new Hono<AppEnv>()
   .route('/', rotasComuns)
   .route('/balcao', balcaoController)
 
-export const vendasRedePublicRoutes = new Hono<AppEnv>().route('/', publicController)
+export const vendasRedePublicRoutes = new Hono<AppEnv>()
+  .route('/', publicController)
+  .route('/candidaturas', candidaturasPublicController('platform'))
+
+/** `/api/v1/t/:tenantSlug/public/vendas/*`: entrada pública de um clube (candidaturas; o slug resolve o inquilino). */
+export const vendasRedeTenantPublicRoutes = new Hono<AppEnv>().route('/candidaturas', candidaturasPublicController('tenant'))

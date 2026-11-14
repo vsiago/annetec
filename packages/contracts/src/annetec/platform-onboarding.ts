@@ -992,7 +992,7 @@ export const storageDriver = z.enum(['local', 'supabase', 's3'])
 export type StorageDriver = z.infer<typeof storageDriver>
 export const fileVisibility = z.enum(['private', 'public'])
 export type FileVisibility = z.infer<typeof fileVisibility>
-export const filePurpose = z.enum(['kyb_document', 'brand_logo'])
+export const filePurpose = z.enum(['kyb_document', 'brand_logo', 'candidatura_document'])
 export type FilePurpose = z.infer<typeof filePurpose>
 
 export const kybDocument = z.object({

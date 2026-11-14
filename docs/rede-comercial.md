@@ -330,3 +330,60 @@ Regras da Varredura (`docs/DESIGN.md` de lá): 60/30/10, **uma ação principal 
 
 ## 7. Fora de escopo nesta versão
 IA, WhatsApp automático (Baileys/API), vídeo, metas gamificadas, split no Asaas, exclusão das tabelas legadas.
+
+---
+
+## 8. Candidaturas (Seja um parceiro comercial)
+
+Auto-cadastro público de parceiros comerciais (PF ou PJ), aprovado pelo master do escopo. Existe nos dois escopos: plataforma (equipe ANNETEC aprova) e clube (admin do clube aprova). Nome de código: **candidatura** (o termo "parceiros" já é a rede credenciada). Só os textos de tela dizem "parceiro comercial".
+
+### 8.1 Modelo (`db/schema/vendas-candidaturas.ts`, migração `0021_vendas_candidaturas.sql`)
+- `vendas_candidaturas`: `scope`/`tenant_id` (mesma regra das outras tabelas `vendas_*`), `status`, `tipo_pessoa` (pf|pj), `atuacao` (vendedor_solo|vendedor_equipe|supervisor|gerente|corretora), contato (`nome`, `email` minúsculo, `telefone`, `cpf` — PJ: do representante), `cnpj`, `razao_social`, `nome_fantasia`, `data_nascimento`, `endereco` (jsonb), `codigo_indicacao` + `indicado_por_agente_id`, `dados` (experiência, região, como conheceu), `aceite` (jsonb: versão, hash sha256 do termo, nome da assinatura, data, IP, user-agent), `origem_ip`/`origem_user_agent`, `enviada_em`, `decidida_em`, `decidida_por_user_id`, `motivo_recusa`, `observacoes_decisao`, `agente_id`/`corretora_id` (o que a aprovação criou). Índice único parcial: um e-mail só tem UMA candidatura `recebida` por escopo.
+- `vendas_candidatura_documentos`: `candidatura_id`, `kind`, `file_id` (para `platform_files`, `purpose = candidatura_document`, `owner_type = candidatura`, privado), `status` (uploaded|replaced).
+- Contratos: `packages/contracts/src/annetec/vendas-candidaturas.ts`. Regras puras: `candidaturas.rules.ts` (documentos obrigatórios, pendências, vínculo sugerido). Chave: `candidaturas-access-key.ts`. Serviço: `candidaturas.service.ts`.
+
+### 8.2 Estados
+`rascunho` → `recebida` (enviada, "Em análise") → `aprovada` ou `recusada`. Só `rascunho` é editável (dados, documentos); depois do envio qualquer escrita do candidato responde 409. Rascunho não aparece para o admin. Aprovar e recusar usam UPDATE condicional `recebida → ...`: duas decisões simultâneas, só uma vence (a outra recebe 409).
+
+### 8.3 Rotas públicas (sem login)
+Plataforma: `/api/v1/public/vendas/candidaturas`. Clube: `/api/v1/t/:tenantSlug/public/vendas/candidaturas` (slug resolvido como em `/t/:slug/public/leads`; 404 se o clube não existe). A candidatura é presa ao escopo da URL: a chave de uma candidatura da plataforma não abre pela rota de um clube (404).
+
+| Método e rota | Efeito |
+|---|---|
+| `POST /` | 5/h/IP, corpo até 16 KB. Cria o rascunho, devolve `{ id, chave, acompanhamentoPath }`. 409 se o e-mail já tem candidatura em análise. `codigoIndicacao` só vale para `vendedor_equipe` (nas outras atuações é ignorado) e precisa ser de agente ativo do MESMO escopo/clube (senão erro no campo). Honeypot `website` preenchido: 201 com id/chave falsos, nada gravado. Sem e-mail nesta etapa. |
+| `POST /recuperar-acesso` | 5/h/IP, `{ email }`. Reenvia o link por e-mail (template `vendas_candidatura_recebida`, variante `acesso`; disparado sem esperar, para o tempo da resposta não revelar se o e-mail existe) se houver rascunho ou análise; resposta sempre `{ enviado: true }`. |
+| `GET /codigo/:codigo` | `{ nome, papel }` do agente ativo do escopo (404 `VENDAS_CODIGO_INVALIDO`). |
+| `GET /:id?chave=` | `CandidaturaPublica` (com `pendencias`, `indicadoPor`, `loginPath` se aprovada). |
+| `PUT /:id/dados?chave=` | Atuação, código (só `vendedor_equipe`), nascimento (data válida, não futura, ano ≥ 1900), endereço, razão social/nome fantasia (obrigatórios em PJ), extras. Só rascunho. |
+| `POST /:id/documentos?chave=` | 30/h/IP. Multipart (`file` + `kind`), PDF/JPEG/PNG até 4 MB (413 acima), tipo conferido pelos bytes, máx. 10 documentos ATIVOS (não conta o que será substituído, então trocar um documento com 10 ativos funciona). Mesmo `kind` já enviado: o anterior vira `replaced` e o arquivo antigo é descartado (melhor esforço); `outro` aceita vários. Se o INSERT falha depois de gravar o arquivo, o arquivo novo é descartado. |
+| `DELETE /:id/documentos/:docId?chave=` | Remove documento do rascunho. |
+| `GET /:id/documentos/:docId/arquivo?chave=` | Binário. |
+| `POST /:id/enviar?chave=` | `{ aceiteTermos: true, nomeAssinatura }`. Exige `pendencias` vazia (422 com a lista) e assinatura igual ao nome (ignora caixa, acento, espaços duplos). Grava o aceite e passa a `recebida`. |
+
+Chave: HMAC-SHA256 do id com `BETTER_AUTH_SECRET` (32 caracteres), no link `/seja-parceiro/<id>?chave=` ou `/<slug>/seja-parceiro/<id>?chave=`. Chave errada ou id inválido = 404.
+
+### 8.4 Gestão (master do escopo)
+`/api/v1/vendas/rede/candidaturas` (plataforma) e `/api/v1/t/:tenantSlug/vendas/rede/candidaturas` (clube); `requirePapel('master')`, e `requireEscrita` em aprovar/recusar.
+- `GET /?status=recebida|aprovada|recusada|todas` (padrão `recebida`; `todas` = tudo menos rascunho) → `{ itens: CandidaturaResumo[], pendentes }`, mais recentes primeiro.
+- `GET /resumo` → `{ pendentes }`. `GET /:id` → `CandidaturaDetalhe` (inclui `vinculoSugerido`, origem do envio, `decididaPor`). `GET /:id/documentos/:docId/arquivo` → binário.
+- `POST /:id/aprovar` `{ papel?, corretoraId?, unidadeId?, equipeId?, observacoes?, enviarConvite = true }` → `{ candidatura, convite }`, com `convite` no mesmo formato de `POST /rede/agentes` (`{ enviado, status, contaNova }`).
+- `POST /:id/recusar` `{ motivo }` (10 a 1000 caracteres) → `{ candidatura }`.
+
+### 8.5 Aprovação
+1. UPDATE condicional `recebida → aprovada` (com quem decidiu e quando); 0 linhas = 409 "já decidida".
+2. Papel = `papel` informado ou o da atuação (`vendedor_solo`/`vendedor_equipe` → vendedor, `supervisor`, `gerente`/`corretora` → gerente). Vínculo = exatamente o informado em `corretoraId/unidadeId/equipeId` (ausente = nenhum); o servidor NÃO reaplica o sugerido. O `vinculoSugerido` do detalhe só pré-preenche a tela: indicador supervisor → equipe que ele supervisiona (e corretora/unidade); vendedor → mesma equipe; gerente → a corretora dele; sem indicação → nenhum (para supervisor/gerente o master escolhe; `validarPapelNoVinculo` dá o erro).
+3. Atuação `corretora`: `criarCorretora` (dados da PJ) e depois o gerente dela (`criarGerenteDaCorretora`, o mesmo de `POST /rede/corretoras/:id/gerente`). Demais: `criarAgente` (mesmo de `POST /rede/agentes`, com conta, código de indicação e convite `club_staff_invite` com senha provisória; nenhum e-mail extra).
+4. Grava `agente_id`/`corretora_id`/`observacoes_decisao`.
+5. Erro na criação (passo 3): o status volta a `recebida` (decisão limpa; corretora recém-criada removida) e o erro é repassado, então o master pode corrigir e tentar de novo. Erro só na gravação do passo 4 (agente já criado): o status NÃO volta; registra log de erro com o id da candidatura e do agente e a resposta segue normal (evita agente órfão).
+6. Auditoria `vendas.candidatura_aprovada` (sem senha). Recusa: UPDATE condicional `recebida → recusada` com motivo, e-mail e auditoria `vendas.candidatura_recusada`.
+
+### 8.6 E-mails e notificação
+- `vendas_candidatura_recebida` (variante `recebida`: "Recebemos sua candidatura"; variante `acesso`: link de recuperação) e `vendas_candidatura_recusada` (com o motivo). Marca por escopo: plataforma = "ANNETEC"; clube = nome, cor e logo do clube (`loadClubBrand`). `sendEmail` nunca lança e, aqui, qualquer falha só vai para o log.
+- Ao enviar (depois do commit): notificação `vendas_candidatura_recebida` — público `platform` (escopo plataforma) ou `tenant` + `organizationId` (clube); título "Nova candidatura: <nome>", corpo "<atuação> · <PF/PJ>", link `/admin/comercial/candidaturas?id=<id>` ou `/<slug>/admin/comercial/candidaturas?id=<id>`, `dedupeKey = candidatura:<id>:recebida`. Falha de notificação nunca derruba o envio.
+
+### 8.7 Telas previstas (`apps/web`)
+- Público: `/seja-parceiro` (landing + formulário de início), `/seja-parceiro/[id]?chave=` (onboarding em etapas e acompanhamento); no clube, `/[tenant]/seja-parceiro` e `/[tenant]/seja-parceiro/[id]`. Link "Seja um parceiro" no cabeçalho e seção na home do clube.
+- Admin comercial: `/admin/comercial/candidaturas` e `/[tenant]/admin/comercial/candidaturas` (abas Em análise/Aprovadas/Recusadas/Todas, detalhe com documentos, aprovar com papel e vínculo, recusar com motivo; `?id=` abre o detalhe a partir da notificação; selo de pendentes via `/resumo`).
+
+### 8.8 Testes
+`vendas-rede-candidaturas-rules.test.ts` (regras puras, chave, e-mails), `vendas-rede-candidaturas-service.test.ts` (banco em memória: início, honeypot, dedupe, envio, aprovação com reversão, recusa, isolamento entre escopos) e `vendas-rede-candidaturas-http.test.ts` (chave inválida 404, honeypot 201, 413, escopo trocado, rate limit).

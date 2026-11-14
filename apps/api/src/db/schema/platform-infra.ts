@@ -11,7 +11,7 @@ import { organization } from './auth'
  */
 const STORAGE_DRIVERS = ['local', 'supabase', 's3'] as const
 const FILE_VISIBILITY = ['private', 'public'] as const
-const FILE_PURPOSES = ['kyb_document', 'brand_logo'] as const
+const FILE_PURPOSES = ['kyb_document', 'brand_logo', 'candidatura_document'] as const
 const EMAIL_PROVIDERS = ['outbox', 'resend', 'sendgrid'] as const
 const EMAIL_STATUSES = ['simulated', 'queued', 'sent', 'failed'] as const
 
@@ -46,7 +46,7 @@ export const platformFiles = pgTable(
     sha256: text('sha256').notNull(),
     visibility: text('visibility', { enum: FILE_VISIBILITY }).notNull().default('private'),
     purpose: text('purpose', { enum: FILE_PURPOSES }).notNull(),
-    ownerType: text('owner_type', { enum: ['proposal', 'organization'] }).notNull(),
+    ownerType: text('owner_type', { enum: ['proposal', 'organization', 'candidatura'] }).notNull(),
     ownerId: text('owner_id').notNull(),
     /** Preenchido no provisionamento (o arquivo passa a ser do inquilino). */
     organizationId: text('organization_id').references(() => organization.id, { onDelete: 'set null' }),

@@ -32,7 +32,7 @@ import { tenantPlansController } from '@/modules/tenant-plans/controller'
 import { tenantsController } from '@/modules/tenants/controller'
 import { tenantPublicController } from '@/modules/tenants/public-controller'
 import { usersController } from '@/modules/users/controller'
-import { vendasRedePlatformRoutes, vendasRedePublicRoutes, vendasRedeTenantRoutes } from '@/modules/vendas-rede'
+import { vendasRedePlatformRoutes, vendasRedePublicRoutes, vendasRedeTenantPublicRoutes, vendasRedeTenantRoutes } from '@/modules/vendas-rede'
 import type { AppEnv } from '@/http/types'
 
 /**
@@ -85,6 +85,7 @@ export const routes = new Hono<AppEnv>()
   .use('/api/v1/t/:tenantSlug/*', platformAccessGuard)
   .route('/api/v1/t/:tenantSlug/assinatura-annetec', tenantPlatformSubscriptionController)
   .route('/api/v1/t/:tenantSlug/public/checkout', clubCheckoutController)
+  .route('/api/v1/t/:tenantSlug/public/vendas', vendasRedeTenantPublicRoutes)
   .route('/api/v1/t/:tenantSlug/public', tenantPublicController)
   .route('/api/v1/t/:tenantSlug/marca', tenantBrandingController)
   .route('/api/v1/t/:tenantSlug/usuarios', usersController)

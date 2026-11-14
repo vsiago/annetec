@@ -512,3 +512,32 @@ export function vendasLeadAtribuidoNotification(facts: VendasLeadAtribuidoFacts)
     dedupeKey: `vendas_lead_atribuido:${facts.leadId}:${facts.em.toISOString()}:${facts.recipientUserId}`,
   }
 }
+
+export interface VendasCandidaturaRecebidaFacts {
+  /** `null` = escopo platform. */
+  tenant: TenantRef | null
+  candidaturaId: string
+  nome: string
+  /** "Vendedor independente · Pessoa física". */
+  detalhe: string
+}
+
+/** Rota relativa do web para abrir a candidatura na tela do admin comercial do escopo. */
+export function vendasCandidaturaLink(tenant: Pick<TenantRef, 'slug'> | null, candidaturaId: string): string {
+  const id = encodeURIComponent(candidaturaId)
+  return tenant ? `/${tenant.slug}/admin/comercial/candidaturas?id=${id}` : `/admin/comercial/candidaturas?id=${id}`
+}
+
+/** Candidatura de parceiro comercial enviada: sino do master do escopo (equipe ANNETEC ou admin do clube). Puro. */
+export function vendasCandidaturaRecebidaNotification(facts: VendasCandidaturaRecebidaFacts): NotifyInput {
+  return {
+    audience: facts.tenant ? 'tenant' : 'platform',
+    kind: 'vendas_candidatura_recebida',
+    organizationId: facts.tenant?.id ?? null,
+    title: `Nova candidatura: ${facts.nome}`,
+    body: facts.detalhe,
+    payload: { candidaturaId: facts.candidaturaId, personName: facts.nome },
+    link: vendasCandidaturaLink(facts.tenant, facts.candidaturaId),
+    dedupeKey: `candidatura:${facts.candidaturaId}:recebida`,
+  }
+}

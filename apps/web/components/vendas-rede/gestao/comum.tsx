@@ -40,7 +40,7 @@ export function useCaminhoTela(escopo: EscopoRede, tela: string): string {
   return base.endsWith('/funil') ? `${base.slice(0, -'/funil'.length)}/${tela}` : `${base}/${tela}`
 }
 
-export type TelaGestao = 'equipe' | 'rede' | 'resultados' | 'comissoes' | 'regras'
+export type TelaGestao = 'equipe' | 'rede' | 'resultados' | 'comissoes' | 'regras' | 'candidaturas'
 
 const QUEM_VE: Record<TelaGestao, readonly PapelComercial[]> = {
   equipe: ['master', 'gerente', 'supervisor'],
@@ -48,6 +48,7 @@ const QUEM_VE: Record<TelaGestao, readonly PapelComercial[]> = {
   resultados: ['master', 'gerente', 'supervisor'],
   comissoes: ['master', 'gerente', 'supervisor', 'vendedor'],
   regras: ['master'],
+  candidaturas: ['master'],
 }
 
 const EXPLICACAO: Record<TelaGestao, string> = {
@@ -56,6 +57,7 @@ const EXPLICACAO: Record<TelaGestao, string> = {
   resultados: 'Os resultados da rede são de quem acompanha vendedores: supervisor, gerente e administrador.',
   comissoes: 'As comissões aparecem para vendedores, supervisores, gerentes e administradores. O balcão não tem comissão.',
   regras: 'As regras de comissão e de distribuição de leads só podem ser alteradas pelo administrador.',
+  candidaturas: 'As candidaturas de parceiros comerciais são analisadas somente pelo administrador.',
 }
 
 export function podeVerTela(tela: TelaGestao, papel: PapelComercial): boolean {

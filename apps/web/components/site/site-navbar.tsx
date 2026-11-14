@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, LogIn, Menu, Phone } from 'lucide-react'
+import { ArrowRight, Handshake, LogIn, Menu, Phone } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
@@ -90,6 +90,12 @@ export function SiteNavbar() {
               {areaLink.label}
             </Link>
           </Button>
+          <Button variant="outline" className="hidden h-10 rounded-full px-4 font-semibold lg:inline-flex" asChild>
+            <Link href={paths.partner}>
+              <Handshake className="size-4" aria-hidden="true" />
+              Seja um parceiro
+            </Link>
+          </Button>
           <Button className="hidden h-10 rounded-full px-5 font-semibold shadow-sm sm:inline-flex" asChild>
             <Link href={primaryCta.href}>
               Assinar agora
@@ -134,6 +140,14 @@ export function SiteNavbar() {
                     <Link href={primaryCta.href}>
                       Assinar agora
                       <ArrowRight className="size-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
+                </SheetClose>
+                <SheetClose asChild>
+                  <Button size="lg" variant="outline" className="h-12 rounded-full text-base" asChild>
+                    <Link href={paths.partner}>
+                      <Handshake className="size-4" aria-hidden="true" />
+                      Seja um parceiro
                     </Link>
                   </Button>
                 </SheetClose>

@@ -55,6 +55,8 @@ export const NOTIFICATION_KINDS = [
   'vendas_lead_novo',
   /** Lead atribuído a um agente (público `sales`). */
   'vendas_lead_atribuido',
+  /** Candidatura de parceiro comercial enviada (sino do master do escopo). */
+  'vendas_candidatura_recebida',
 ] as const
 export const notificationKind = z.enum(NOTIFICATION_KINDS)
 export type NotificationKind = z.infer<typeof notificationKind>
@@ -73,11 +75,12 @@ export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   onboarding_submitted: 'Novos clubes',
   vendas_lead_novo: 'Novo lead disponível',
   vendas_lead_atribuido: 'Lead atribuído a você',
+  vendas_candidatura_recebida: 'Nova candidatura de parceiro comercial',
 }
 
 /** Família visual/sonora: dinheiro entrando ou pessoa chegando. */
 export function notificationTone(kind: NotificationKind): 'payment' | 'signup' {
-  return kind === 'client_signed_up' || kind === 'onboarding_submitted' || kind === 'vendas_lead_novo' || kind === 'vendas_lead_atribuido' ? 'signup' : 'payment'
+  return kind === 'client_signed_up' || kind === 'onboarding_submitted' || kind === 'vendas_lead_novo' || kind === 'vendas_lead_atribuido' || kind === 'vendas_candidatura_recebida' ? 'signup' : 'payment'
 }
 
 /** Como o associado chegou (só `client_signed_up`). */
@@ -112,6 +115,8 @@ export const notificationPayload = z.object({
   discountRequestId: z.string().optional(),
   /** Rede Comercial: lead envolvido (`vendas_lead_novo` / `vendas_lead_atribuido`). */
   leadId: z.string().optional(),
+  /** Rede Comercial: candidatura de parceiro comercial (`vendas_candidatura_recebida`). */
+  candidaturaId: z.string().optional(),
 })
 export type NotificationPayload = z.infer<typeof notificationPayload>
 

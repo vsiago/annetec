@@ -2,11 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { usePendentesCandidaturas } from '@/components/vendas-rede/gestao/candidaturas-pendentes'
 import { cn } from '@/lib/utils'
 
 const ABAS = [
   { segmento: 'funil', rotulo: 'Funil' },
   { segmento: 'rede', rotulo: 'Rede' },
+  { segmento: 'candidaturas', rotulo: 'Candidaturas' },
   { segmento: 'balcao', rotulo: 'Balcão' },
   { segmento: 'comissoes', rotulo: 'Comissões' },
   { segmento: 'resultados', rotulo: 'Resultados' },
@@ -16,6 +18,8 @@ const ABAS = [
 /** Abas sublinhadas entre as telas do Comercial do clube (`/[tenant]/admin/comercial/*`). */
 export function ComercialTabs({ slug }: { slug: string }) {
   const pathname = usePathname()
+  // Candidaturas em análise: uma consulta ao montar e outra após cada decisão (sem polling).
+  const pendentes = usePendentesCandidaturas({ kind: 'tenant', slug })
   return (
     <nav aria-label="Telas do Comercial">
       <ul className="scrollbar-none m-0 flex list-none gap-0.5 overflow-x-auto border-b border-border p-0">
@@ -37,6 +41,12 @@ export function ComercialTabs({ slug }: { slug: string }) {
                 )}
               >
                 {aba.rotulo}
+                {aba.segmento === 'candidaturas' && pendentes > 0 ? (
+                  <span className="ml-2 rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary-foreground">
+                    {pendentes}
+                    <span className="sr-only"> em análise</span>
+                  </span>
+                ) : null}
               </Link>
             </li>
           )

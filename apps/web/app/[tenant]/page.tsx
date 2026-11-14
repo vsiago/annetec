@@ -3,6 +3,7 @@
 import { BenefitsGrid, SavingsSimulator } from '@/components/site/benefits'
 import { Hero } from '@/components/site/hero'
 import { NetworkPreview } from '@/components/site/network'
+import { PartnerSection } from '@/components/site/partner-section'
 import { PlansSection } from '@/components/site/plans'
 import { SiteShell } from '@/components/site/site-shell'
 import { FaqSection, Testimonials } from '@/components/site/trust'
@@ -28,6 +29,7 @@ export default function TenantLandingPage() {
       <Testimonials tone="white" />
       <Guarantees tone="soft" />
       <FaqSection tone="white" />
+      <PartnerSection tone="soft" />
       <FinalCta />
     </SiteShell>
   )

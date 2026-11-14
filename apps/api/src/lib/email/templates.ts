@@ -409,6 +409,8 @@ export const CLUB_EMAIL_TEMPLATES = [
   'club_subscribe_reminder',
   'club_staff_invite',
   'club_staff_password_reset',
+  'vendas_candidatura_recebida',
+  'vendas_candidatura_recusada',
 ] as const
 export type ClubEmailTemplate = (typeof CLUB_EMAIL_TEMPLATES)[number]
 
@@ -422,6 +424,8 @@ export const CLUB_EMAIL_TEMPLATE_LABELS: Record<ClubEmailTemplate, string> = {
   club_subscribe_reminder: 'Clube: lembrete para assinar um plano (associado sem plano)',
   club_staff_invite: 'Clube: convite de acesso (usuário cadastrado pelo admin)',
   club_staff_password_reset: 'Clube: senha redefinida pelo administrador',
+  vendas_candidatura_recebida: 'Rede Comercial: candidatura recebida ou link de acompanhamento',
+  vendas_candidatura_recusada: 'Rede Comercial: candidatura recusada',
 }
 
 export function isClubEmailTemplate(template: string): template is ClubEmailTemplate {
@@ -524,6 +528,9 @@ function buildClub(template: ClubEmailTemplate, d: Record<string, unknown>): Blo
     case 'club_staff_invite':
     case 'club_staff_password_reset':
       return buildStaffAccess(template, club, d)
+    case 'vendas_candidatura_recebida':
+    case 'vendas_candidatura_recusada':
+      return buildCandidatura(template, club, d)
     case 'club_subscription_suspended':
       return {
         subject: `${club}: sua assinatura foi suspensa`,
@@ -731,6 +738,52 @@ function buildSubscribeNudge(template: ClubEmailTemplate, club: string, d: Recor
  * redefinida pelo admin. A senha provisória só aparece aqui — a tela de quem
  * cadastrou nunca a vê.
  */
+function buildCandidatura(template: ClubEmailTemplate, club: string, d: Record<string, unknown>): Block {
+  const url = str(d.acompanhamentoUrl)
+  const footer = `${club} — e-mail automático sobre a sua candidatura. Não responda a esta mensagem.`
+
+  if (template === 'vendas_candidatura_recusada') {
+    const motivo = str(d.motivo)
+    return {
+      subject: 'Sobre a sua candidatura',
+      greeting: hello(d.nome),
+      paragraphs: [
+        `Analisamos a sua candidatura para ser parceiro comercial do ${club} e, neste momento, não vamos seguir com ela.`,
+        ...(motivo ? [`Motivo informado pela equipe: ${motivo}`] : []),
+      ],
+      action: url ? { label: 'Ver minha candidatura', url } : undefined,
+      after: [`Dúvidas? Fale com o ${club} pelos canais de atendimento.`],
+      footer,
+    }
+  }
+
+  if (str(d.variante) === 'acesso') {
+    return {
+      subject: 'Seu link de acompanhamento',
+      greeting: hello(d.nome),
+      paragraphs: [
+        `Você pediu o link para acompanhar ou continuar a sua candidatura a parceiro comercial do ${club}.`,
+        'Use o botão abaixo. Quem tem este link acessa a candidatura, então não o compartilhe.',
+      ],
+      action: url ? { label: 'Abrir minha candidatura', url } : undefined,
+      after: ['Se você não pediu este link, ignore este e-mail.'],
+      footer,
+    }
+  }
+
+  return {
+    subject: 'Recebemos sua candidatura',
+    greeting: hello(d.nome),
+    paragraphs: [
+      `Recebemos a sua candidatura para ser parceiro comercial do ${club}.`,
+      'A equipe vai analisar os dados e documentos. Quando houver decisão, você recebe um e-mail; se aprovada, o acesso à área de vendas chega por e-mail.',
+    ],
+    action: url ? { label: 'Acompanhar candidatura', url } : undefined,
+    after: ['Guarde este e-mail: o link acima é a forma de acompanhar o andamento.'],
+    footer,
+  }
+}
+
 function buildStaffAccess(template: ClubEmailTemplate, club: string, d: Record<string, unknown>): Block {
   const loginUrl = str(d.loginUrl)
   const password = str(d.password)

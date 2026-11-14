@@ -16,6 +16,8 @@ export interface SitePaths {
   business: string
   about: string
   signup: string
+  /** "Seja um parceiro comercial" (`/[tenant]/seja-parceiro`). */
+  partner: string
   /** Login do próprio inquilino (`/[tenant]/login`): reconhece sozinho admin, vendedor ou associado. */
   clientArea: string
   checkout: (planId?: string) => string
@@ -30,6 +32,7 @@ export function buildSitePaths(slug: string): SitePaths {
     business: `${base}/empresas`,
     about: `${base}/sobre`,
     signup: `${base}/cadastro`,
+    partner: `${base}/seja-parceiro`,
     clientArea: `${base}/login`,
     checkout: planId => (planId ? `${base}/assinar?plano=${encodeURIComponent(planId)}` : `${base}/assinar`),
   }

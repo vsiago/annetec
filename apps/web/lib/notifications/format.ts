@@ -71,6 +71,7 @@ export function platformHeadline(notification: AppNotification): string {
     case 'platform_auto_debit_failed':
     case 'vendas_lead_novo':
     case 'vendas_lead_atribuido':
+    case 'vendas_candidatura_recebida':
       return notification.title
   }
 }
@@ -87,7 +88,8 @@ export function isSalesNotification(notification: Pick<AppNotification, 'kind'>)
     notification.kind === 'sales_discount_rejected' ||
     notification.kind === 'onboarding_submitted' ||
     notification.kind === 'vendas_lead_novo' ||
-    notification.kind === 'vendas_lead_atribuido'
+    notification.kind === 'vendas_lead_atribuido' ||
+    notification.kind === 'vendas_candidatura_recebida'
   )
 }
 

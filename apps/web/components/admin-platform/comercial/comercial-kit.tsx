@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import type { PlatformSeller } from '@annetec/contracts'
 import { useConsoleData } from '@/components/admin-platform/billing/console-kit'
 import { listSellersAction } from '@/lib/actions/comercial-api'
+import { usePendentesCandidaturas } from '@/components/vendas-rede/gestao/candidaturas-pendentes'
 import { cn } from '@/lib/utils'
 
 /**
@@ -17,6 +18,7 @@ import { cn } from '@/lib/utils'
 export const COMERCIAL_TABS = [
   { href: '/admin/comercial/funil', label: 'Funil' },
   { href: '/admin/comercial/rede', label: 'Rede' },
+  { href: '/admin/comercial/candidaturas', label: 'Candidaturas' },
   { href: '/admin/comercial/comissoes', label: 'Comissões' },
   { href: '/admin/comercial/descontos', label: 'Aprovações de desconto' },
   { href: '/admin/comercial/resultados', label: 'Resultados' },
@@ -25,13 +27,15 @@ export const COMERCIAL_TABS = [
 
 /** Abas sublinhadas (links) entre as telas do Comercial, no mesmo desenho das `SectionTabs`. */
 export function ComercialNav({ badges }: { badges?: Partial<Record<(typeof COMERCIAL_TABS)[number]['href'], number>> }) {
+  // Candidaturas em análise: uma consulta ao montar e outra após cada decisão (sem polling).
+  const pendentes = usePendentesCandidaturas({ kind: 'platform' })
   const pathname = usePathname()
   return (
     <nav aria-label="Telas do Comercial" className="-mt-2">
       <ul className="scrollbar-none m-0 flex list-none gap-0.5 overflow-x-auto border-b border-border p-0">
         {COMERCIAL_TABS.map(tab => {
           const active = pathname === tab.href || pathname?.startsWith(`${tab.href}/`)
-          const badge = badges?.[tab.href]
+          const badge = badges?.[tab.href] ?? (tab.href === '/admin/comercial/candidaturas' ? pendentes : 0)
           return (
             <li key={tab.href} className="shrink-0">
               <Link
