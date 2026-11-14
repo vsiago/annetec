@@ -4,6 +4,7 @@ import { CardDeclinedError } from '@/integrations/payments/gateway'
 import { logger } from '@/lib/logger'
 import type {
   AsaasAccessToken,
+  AsaasAccountDocumentFile,
   AsaasAccountDocuments,
   AsaasAccountStatus,
   AsaasBalance,
@@ -67,11 +68,24 @@ export interface AsaasClientConfig {
   baseUrl?: string
 }
 
+export interface AsaasDocumentUploadInput {
+  bytes: Uint8Array
+  fileName: string
+  contentType: string
+}
+
+function documentForm(input: AsaasDocumentUploadInput): FormData {
+  const form = new FormData()
+  form.set('documentFile', new Blob([input.bytes as unknown as ArrayBuffer], { type: input.contentType }), input.fileName)
+  return form
+}
+
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE'
 type Query = Record<string, string | number | boolean | undefined | null>
 
 interface RequestOptions {
   query?: Query
+  /** `FormData` (multipart) vai direto no fetch, sem `content-type` (o fetch põe o boundary). */
   body?: unknown
   /** Operação com cartão: 400 vira `CardDeclinedError`. */
   cardOperation?: boolean
@@ -114,7 +128,8 @@ export function createAsaasClient(config: AsaasClientConfig) {
       'User-Agent': config.userAgent,
       accept: 'application/json',
     }
-    if (hasBody) headers['content-type'] = 'application/json'
+    const isForm = hasBody && options.body instanceof FormData
+    if (hasBody && !isForm) headers['content-type'] = 'application/json'
 
     const maxAttempts = method === 'GET' ? MAX_GET_ATTEMPTS : 1
     let lastError: unknown
@@ -126,7 +141,7 @@ export function createAsaasClient(config: AsaasClientConfig) {
         response = await fetch(url, {
           method,
           headers,
-          body: hasBody ? JSON.stringify(options.body) : undefined,
+          body: hasBody ? (isForm ? (options.body as FormData) : JSON.stringify(options.body)) : undefined,
           signal: AbortSignal.timeout(config.timeoutMs),
         })
       } catch (error) {
@@ -254,6 +269,21 @@ export function createAsaasClient(config: AsaasClientConfig) {
       status: () => request<AsaasAccountStatus>('GET', '/myAccount/status/'),
       /** Documentos exigidos para aprovar a conta (links de envio quando houver). */
       documents: () => request<AsaasAccountDocuments>('GET', '/myAccount/documents'),
+      /**
+       * Envia o arquivo de um grupo (multipart `documentFile` + `type`). O Asaas guarda um arquivo
+       * válido por grupo; novo envio substitui. Sem retry (POST). Nunca logar o conteúdo.
+       */
+      uploadDocument: (groupId: string, input: AsaasDocumentUploadInput & { type: string }) => {
+        const form = documentForm(input)
+        form.set('type', input.type)
+        return request<AsaasAccountDocumentFile>('POST', `/myAccount/documents/${encodeURIComponent(groupId)}`, { body: form })
+      },
+      documentFile: (fileId: string) =>
+        request<AsaasAccountDocumentFile>('GET', `/myAccount/documents/files/${encodeURIComponent(fileId)}`),
+      replaceDocumentFile: (fileId: string, input: AsaasDocumentUploadInput) =>
+        request<AsaasAccountDocumentFile>('POST', `/myAccount/documents/files/${encodeURIComponent(fileId)}`, { body: documentForm(input) }),
+      deleteDocumentFile: (fileId: string) =>
+        request<{ deleted: boolean; id: string }>('DELETE', `/myAccount/documents/files/${encodeURIComponent(fileId)}`),
     },
     /** Subcontas da conta dona da chave (conta gerenciada: chave da ANNETEC). */
     accounts: {
@@ -282,6 +312,7 @@ export function createAsaasClient(config: AsaasClientConfig) {
       cancel: (id: string) => request<AsaasTransfer>('DELETE', `/transfers/${encodeURIComponent(id)}/cancel`),
     },
     webhooks: {
+      get: (id: string) => request<AsaasWebhook>('GET', `/webhooks/${encodeURIComponent(id)}`),
       create: (input: AsaasCreateWebhookInput) => request<AsaasWebhook>('POST', '/webhooks', { body: input }),
       list: (query: { offset?: number; limit?: number } = {}) =>
         request<AsaasList<AsaasWebhook>>('GET', '/webhooks', { query: { ...query } }),

@@ -70,7 +70,7 @@ const { AsaasApiError } = await import('@/integrations/asaas/client')
 const { logger } = await import('@/lib/logger')
 const { decryptSecret, encryptSecret } = await import('@/lib/crypto')
 const { MANAGED_ACCOUNT_TERMS_TEXT, MANAGED_ACCOUNT_TERMS_VERSION, ERROR_CODES, companyTypeFromLegalNature } = await import('@annetec/contracts')
-const { ASAAS_WEBHOOK_EVENTS } = await import('@/integrations/asaas/webhook-events')
+const { ASAAS_WEBHOOK_EVENTS, SUBACCOUNT_WEBHOOK_EVENTS, ASAAS_ACCOUNT_STATUS_EVENTS } = await import('@/integrations/asaas/webhook-events')
 
 type Memory = import('./helpers/memory-db').MemoryDb
 const db = () => memory.db as unknown as Memory
@@ -403,7 +403,7 @@ describe('aprovação pelo superadmin', () => {
     expect(fakeAsaas.webhooks).toHaveLength(1)
     const hook = fakeAsaas.webhooks[0]!
     expect(hook.apiKey).toBe(sub.apiKey)
-    expect(hook.input).toMatchObject({ url: `https://api.teste.annetec.org.br/api/v1/webhooks/asaas/clube/${ORG}`, events: [...ASAAS_WEBHOOK_EVENTS] })
+    expect(hook.input).toMatchObject({ url: `https://api.teste.annetec.org.br/api/v1/webhooks/asaas/clube/${ORG}`, events: [...SUBACCOUNT_WEBHOOK_EVENTS] })
     expect(decryptSecret(String(row.webhookTokenEncrypted))).toBe(hook.input.authToken)
     expect(row.webhookStatus).toBe('ativo')
 
@@ -745,5 +745,291 @@ describe('travas do recebimento com conta gerenciada', () => {
     ])
     expect(await managedAccountService.list({ status: 'aprovado' })).toHaveLength(1)
     expect(fakeAsaas.calls.some(call => call.call === 'finance.balance')).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Upload de documento, regras novas, webhook de situação e assinatura de eventos
+// ---------------------------------------------------------------------------
+
+const { waitForBackgroundWork } = await import('@/lib/background')
+
+describe('regras: documentos com envio e dimensões', () => {
+  const snapshot = rules.documentsSnapshotOf({
+    rejectReasons: null,
+    data: [
+      { id: 'g1', status: 'NOT_SENT', type: 'IDENTIFICATION', title: 'Identificação', responsible: { name: 'Ana', type: ['DIRECTOR', 'PARTNER'] } },
+      { id: 'g2', status: 'REJECTED', type: 'SOCIAL_CONTRACT', onboardingUrl: 'https://asaas.test/onb', documents: [{ id: 'f2', status: 'REJECTED' }] },
+      { id: 'g3', status: 'PENDING', type: 'CUSTOM', responsible: { name: 'Bia', type: 'PARTNER' }, documents: [{ id: 'f3', status: 'PENDING' }] },
+      { id: 'g4', status: 'APPROVED', type: 'CUSTOM' },
+    ],
+  })
+
+  it('uploadMethod: link com onboardingUrl, api quando precisa de ação, none nos demais', () => {
+    const docs = rules.documentsOf(snapshot)
+    expect(docs.map(doc => [doc.id, doc.uploadMethod, doc.canUpload])).toEqual([
+      ['g1', 'api', true],
+      ['g2', 'link', false],
+      ['g3', 'none', false],
+      ['g4', 'none', false],
+    ])
+    expect(docs[0]).toMatchObject({ responsibleType: 'DIRECTOR', files: [], rejectReason: null })
+    expect(docs[2]).toMatchObject({ responsibleType: 'PARTNER', files: [{ id: 'f3', status: 'PENDING', statusLabel: expect.any(String) }] })
+    expect(docs[1]!.files[0]).toMatchObject({ id: 'f2', status: 'REJECTED' })
+  })
+
+  it('onboardingUrl sem ação pendente não vira link', () => {
+    const done = { rejectReasons: null, groups: [{ id: 'z', status: 'PENDING', type: null, title: null, description: null, responsibleName: null, onboardingUrl: 'https://asaas.test/x', onboardingUrlExpirationDate: null }] }
+    expect(rules.documentsOf(done)[0]).toMatchObject({ uploadMethod: 'none', canUpload: false })
+  })
+
+  it('linhas antigas (sem files/responsibleType) continuam válidas', () => {
+    const old = { rejectReasons: null, groups: [{ id: 'x', status: 'NOT_SENT', type: null, title: null, description: null, responsibleName: null, onboardingUrl: null, onboardingUrlExpirationDate: null }] }
+    expect(rules.documentsOf(old)[0]).toMatchObject({ uploadMethod: 'api', files: [], responsibleType: null })
+  })
+
+  it('managedInfoOf devolve as dimensões cruas (null sem retrato)', () => {
+    const base = { documentsJson: null, documentsCheckedAt: null, autoDebitEnabled: false }
+    expect(rules.managedInfoOf({ ...base, accountStatusJson: null }, null).dimensions).toEqual({ commercialInfo: null, bankAccountInfo: null, documentation: null, general: null })
+    expect(
+      rules.managedInfoOf({ ...base, accountStatusJson: { commercialInfo: 'APPROVED', bankAccountInfo: 'PENDING', documentation: 'REJECTED', general: 'PENDING' } }, null).dimensions,
+    ).toEqual({ commercialInfo: 'APPROVED', bankAccountInfo: 'PENDING', documentation: 'REJECTED', general: 'PENDING' })
+  })
+})
+
+describe('envio de documento da subconta', () => {
+  const FILE = { bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 1, 2, 3]), fileName: 'rg.pdf', contentType: 'application/pdf' }
+
+  async function managedWithGroups(groups: Record<string, unknown>[]) {
+    await managedAccountService.submitRequest(ORG, REQUEST_INPUT, CLUB_ADMIN)
+    await managedAccountService.approve(ORG, ACTOR)
+    const sub = fakeAsaas.subaccounts[0]!
+    fakeAsaas.documents.set(sub.apiKey, { rejectReasons: null, data: groups })
+    return sub
+  }
+
+  it('feliz: envia com o type do grupo, relê e devolve a conta', async () => {
+    const sub = await managedWithGroups([{ id: 'g1', status: 'NOT_SENT', type: 'IDENTIFICATION', title: 'RG' }])
+    const result = await managedAccountService.uploadDocument(ORG, 'g1', FILE, ACTOR)
+    const sent = fakeAsaas.calls.find(call => call.call === 'account.uploadDocument')!
+    expect(sent.apiKey).toBe(sub.apiKey)
+    expect(sent.args).toMatchObject({ groupId: 'g1', fileName: 'rg.pdf', type: 'IDENTIFICATION', size: 8 })
+    expect(fakeAsaas.uploadedFiles).toHaveLength(1)
+    expect(result.file).toEqual({ id: expect.any(String), status: 'PENDING' })
+    expect(result.account.managed?.documentsCheckedAt).not.toBeNull()
+  })
+
+  it('o snapshot persistido traz os arquivos do grupo', async () => {
+    await managedWithGroups([{ id: 'g1', status: 'PENDING', type: 'CUSTOM', documents: [{ id: 'f9', status: 'PENDING' }] }])
+    await managedAccountService.refreshStatus(ORG)
+    const row = db().rows(schema.tenantAsaasAccounts)[0] as { documentsJson: { groups: { files: unknown[] }[] } }
+    expect(row.documentsJson.groups[0]).toMatchObject({ files: [{ id: 'f9', status: 'PENDING' }] })
+  })
+
+  it('type ausente no grupo → CUSTOM', async () => {
+    await managedWithGroups([{ id: 'g1', status: 'REJECTED', type: null }])
+    await managedAccountService.uploadDocument(ORG, 'g1', FILE, ACTOR)
+    expect(fakeAsaas.calls.find(call => call.call === 'account.uploadDocument')!.args).toMatchObject({ type: 'CUSTOM' })
+  })
+
+  it('grupo com onboardingUrl → LINK_ONLY, sem enviar', async () => {
+    await managedWithGroups([{ id: 'g1', status: 'NOT_SENT', type: 'IDENTIFICATION', onboardingUrl: 'https://asaas.test/onb' }])
+    const error = await rejection(managedAccountService.uploadDocument(ORG, 'g1', FILE, ACTOR))
+    expect(error.code).toBe(ERROR_CODES.MANAGED_DOCUMENT_LINK_ONLY)
+    expect(error.message).toBe('Este documento precisa ser enviado pelo link seguro do parceiro de pagamentos')
+    expect(fakeAsaas.calls.some(call => call.call === 'account.uploadDocument')).toBe(false)
+  })
+
+  it('status não pendente com onboardingUrl → NOT_PENDING (status vem antes do link)', async () => {
+    await managedWithGroups([{ id: 'g1', status: 'PENDING', type: 'CUSTOM', onboardingUrl: 'https://asaas.test/onb' }])
+    expect((await rejection(managedAccountService.uploadDocument(ORG, 'g1', FILE, ACTOR))).code).toBe(ERROR_CODES.MANAGED_DOCUMENT_NOT_PENDING)
+  })
+
+  it('PENDING (em análise) e APPROVED → NOT_PENDING com mensagens diferentes', async () => {
+    await managedWithGroups([
+      { id: 'g1', status: 'PENDING', type: 'CUSTOM' },
+      { id: 'g2', status: 'APPROVED', type: 'CUSTOM' },
+    ])
+    const pending = await rejection(managedAccountService.uploadDocument(ORG, 'g1', FILE, ACTOR))
+    const approved = await rejection(managedAccountService.uploadDocument(ORG, 'g2', FILE, ACTOR))
+    expect(pending.code).toBe(ERROR_CODES.MANAGED_DOCUMENT_NOT_PENDING)
+    expect(approved.code).toBe(ERROR_CODES.MANAGED_DOCUMENT_NOT_PENDING)
+    expect(pending.message).toMatch(/em análise/)
+    expect(approved.message).toMatch(/aprovado/)
+  })
+
+  it('grupo inexistente → 404; clube sem subconta → regra de negócio', async () => {
+    await managedWithGroups([{ id: 'g1', status: 'NOT_SENT', type: 'CUSTOM' }])
+    const missing = await rejection(managedAccountService.uploadDocument(ORG, 'nao-existe', FILE, ACTOR))
+    expect(missing.code).toBe(ERROR_CODES.MANAGED_DOCUMENT_GROUP_NOT_FOUND)
+    expect(missing.message).not.toMatch(/Asaas/)
+    db().rows(schema.tenantAsaasAccounts).length = 0
+    seedOwnAccount()
+    expect((await rejection(managedAccountService.uploadDocument(ORG, 'g1', FILE, ACTOR))).code).toBe(ERROR_CODES.BUSINESS_RULE_VIOLATION)
+  })
+
+  it('400 do Asaas vira recusa do parceiro; 5xx vira mensagem genérica; 401 vira orientação de recuperar chave', async () => {
+    await managedWithGroups([{ id: 'g1', status: 'NOT_SENT', type: 'CUSTOM' }])
+    fakeAsaas.uploadDocumentError = new AsaasApiError(ERROR_CODES.BUSINESS_RULE_VIOLATION, 'Arquivo ilegível.', 400)
+    const error = await rejection(managedAccountService.uploadDocument(ORG, 'g1', FILE, ACTOR))
+    expect(error.message).toBe('O parceiro de pagamentos recusou o arquivo: Arquivo ilegível.')
+    fakeAsaas.uploadDocumentError = new AsaasApiError(ERROR_CODES.UPSTREAM_ERROR, 'Asaas fora do ar', 503)
+    const down = await rejection(managedAccountService.uploadDocument(ORG, 'g1', FILE, ACTOR))
+    expect(down.message).toBe('Não foi possível enviar ao parceiro de pagamentos agora. Tente de novo em instantes.')
+    fakeAsaas.uploadDocumentError = new AsaasApiError(ERROR_CODES.UPSTREAM_UNAUTHORIZED, 'chave', 401)
+    expect((await rejection(managedAccountService.uploadDocument(ORG, 'g1', FILE, ACTOR))).message).toMatch(/Recuperar chave/)
+  })
+})
+
+describe('assinatura dos eventos de situação no webhook da subconta', () => {
+  const row = () => db().rows(schema.tenantAsaasAccounts)[0] as { webhookStatus: string; webhookLastError: string | null; statusEventsSyncedAt: Date | null }
+  const webhookCalls = () => fakeAsaas.calls.filter(call => call.call.startsWith('webhooks.'))
+
+  async function approved() {
+    await managedAccountService.submitRequest(ORG, REQUEST_INPUT, CLUB_ADMIN)
+    await managedAccountService.approve(ORG, ACTOR)
+  }
+
+  it('criação com a lista completa grava statusEventsSyncedAt; já sincronizado → refresh sem chamadas de webhook', async () => {
+    await approved()
+    expect(row().statusEventsSyncedAt).not.toBeNull()
+    fakeAsaas.calls.length = 0
+    await managedAccountService.refreshStatus(ORG)
+    expect(webhookCalls()).toHaveLength(0)
+  })
+
+  it('webhook já contém os eventos → só o GET e grava statusEventsSyncedAt', async () => {
+    await approved()
+    row().statusEventsSyncedAt = null
+    fakeAsaas.calls.length = 0
+    await managedAccountService.refreshStatus(ORG)
+    expect(webhookCalls().map(call => call.call)).toEqual(['webhooks.get'])
+    expect(row().statusEventsSyncedAt).not.toBeNull()
+  })
+
+  it('conta antiga (só PAYMENT_*): PUT com a união, sem tirar os existentes, e grava', async () => {
+    await approved()
+    row().statusEventsSyncedAt = null
+    fakeAsaas.webhooks[0]!.input.events = [...ASAAS_WEBHOOK_EVENTS]
+    fakeAsaas.calls.length = 0
+    await managedAccountService.refreshStatus(ORG)
+    expect(fakeAsaas.webhooks[0]!.input.events).toEqual(expect.arrayContaining([...SUBACCOUNT_WEBHOOK_EVENTS]))
+    expect(ASAAS_ACCOUNT_STATUS_EVENTS).toHaveLength(18)
+    expect(webhookCalls().map(call => call.call)).toEqual(['webhooks.get', 'webhooks.update'])
+    expect(row().statusEventsSyncedAt).not.toBeNull()
+  })
+
+  it('PUT falhando: nada muda (webhookStatus intacto, statusEventsSyncedAt nulo), sem lançar', async () => {
+    await approved()
+    row().statusEventsSyncedAt = null
+    fakeAsaas.webhooks[0]!.input.events = [...ASAAS_WEBHOOK_EVENTS]
+    fakeAsaas.webhookUpdateError = new AsaasApiError(ERROR_CODES.BUSINESS_RULE_VIOLATION, 'recusado', 400)
+    await expect(managedAccountService.refreshStatus(ORG)).resolves.toBeDefined()
+    expect(row()).toMatchObject({ webhookStatus: 'ativo', webhookLastError: null, statusEventsSyncedAt: null })
+  })
+
+  it('falha ao consultar o webhook também não altera webhookStatus', async () => {
+    await approved()
+    row().statusEventsSyncedAt = null
+    fakeAsaas.webhooks = [] // webhooks.get passa a falhar
+    await expect(managedAccountService.refreshStatus(ORG)).resolves.toBeDefined()
+    expect(row()).toMatchObject({ webhookStatus: 'ativo', webhookLastError: null, statusEventsSyncedAt: null })
+  })
+
+  it('Asaas recusa (400) os eventos de situação: cai para PAYMENT_*, webhook ativo e statusEventsSyncedAt nulo', async () => {
+    fakeAsaas.webhookStatusEventsError = new AsaasApiError(ERROR_CODES.BUSINESS_RULE_VIOLATION, 'evento inválido', 400)
+    await approved()
+    const creates = fakeAsaas.calls.filter(call => call.call === 'webhooks.create').map(call => (call.args as { events: string[] }).events)
+    expect(creates).toHaveLength(2)
+    expect(creates[0]).toEqual([...SUBACCOUNT_WEBHOOK_EVENTS])
+    expect(creates[1]).toEqual([...ASAAS_WEBHOOK_EVENTS])
+    expect(row()).toMatchObject({ webhookStatus: 'ativo', webhookLastError: null, statusEventsSyncedAt: null })
+  })
+
+  it('o mesmo fallback vale no update de webhook existente', async () => {
+    await approved()
+    fakeAsaas.webhookStatusEventsError = new AsaasApiError(ERROR_CODES.BUSINESS_RULE_VIOLATION, 'evento inválido', 400)
+    row().statusEventsSyncedAt = null
+    fakeAsaas.calls.length = 0
+    await receivingAccountService.test(ORG)
+    const updates = fakeAsaas.calls.filter(call => call.call === 'webhooks.update').map(call => (call.args as { input: { events: string[] } }).input.events)
+    expect(updates).toHaveLength(2)
+    expect(updates[1]).toEqual([...ASAAS_WEBHOOK_EVENTS])
+    expect(row()).toMatchObject({ webhookStatus: 'ativo', statusEventsSyncedAt: null })
+  })
+})
+
+describe('refresh coalescido', () => {
+  it('3 chamadas concorrentes → 1 conjunto de GETs', async () => {
+    await managedAccountService.submitRequest(ORG, REQUEST_INPUT, CLUB_ADMIN)
+    await managedAccountService.approve(ORG, ACTOR)
+    fakeAsaas.calls.length = 0
+    await Promise.all([managedAccountService.refreshStatus(ORG), managedAccountService.refreshStatus(ORG), managedAccountService.refreshStatus(ORG)])
+    expect(fakeAsaas.calls.filter(call => call.call === 'account.status')).toHaveLength(1)
+    expect(fakeAsaas.calls.filter(call => call.call === 'account.documents')).toHaveLength(1)
+    // terminou: a próxima chamada dispara outro refresh
+    await managedAccountService.refreshStatus(ORG)
+    expect(fakeAsaas.calls.filter(call => call.call === 'account.status')).toHaveLength(2)
+  })
+})
+
+describe('webhook ACCOUNT_STATUS (serviço)', () => {
+  async function managed() {
+    await managedAccountService.submitRequest(ORG, REQUEST_INPUT, CLUB_ADMIN)
+    await managedAccountService.approve(ORG, ACTOR)
+    notified.length = 0
+    return fakeAsaas.subaccounts[0]!
+  }
+  const approvedStatus = (id: string) => ({ id, commercialInfo: 'APPROVED', bankAccountInfo: 'APPROVED', documentation: 'APPROVED', general: 'APPROVED' })
+  const statusRow = () => db().rows(schema.tenantAsaasAccounts)[0] as { accountStatusJson: { general: string }; documentsCheckedAt: Date | null }
+
+  it('persiste o accountStatus na hora, dispara o refresh e avisa a aprovação (uma vez)', async () => {
+    const sub = await managed()
+    fakeAsaas.status.set(sub.apiKey, approvedStatus(sub.id))
+    const event = { id: 'evt1', event: 'ACCOUNT_STATUS_GENERAL_APPROVAL_APPROVED', accountId: sub.id, accountStatus: approvedStatus(sub.id) }
+    expect(await managedAccountService.handleStatusWebhook(ORG, event)).toBe('applied')
+    expect(statusRow().accountStatusJson.general).toBe('APPROVED')
+    await waitForBackgroundWork()
+    expect(fakeAsaas.calls.some(call => call.call === 'account.documents')).toBe(true)
+    expect(statusRow().documentsCheckedAt).not.toBeNull()
+    expect(notified).toEqual([
+      expect.objectContaining({ audience: 'tenant', link: '/clube-a/admin/faturamento?tab=recebimento', dedupeKey: `managed_account_status:${ORG}:approved` }),
+    ])
+    // reentrega: sem nova transição, sem novo aviso
+    await managedAccountService.handleStatusWebhook(ORG, event)
+    await waitForBackgroundWork()
+    expect(notified).toHaveLength(1)
+  })
+
+  it('documentation REJECTED avisa o clube', async () => {
+    const sub = await managed()
+    await managedAccountService.handleStatusWebhook(ORG, {
+      id: 'evt2',
+      event: 'ACCOUNT_STATUS_DOCUMENT_REJECTED',
+      accountId: sub.id,
+      accountStatus: { id: sub.id, documentation: 'REJECTED', general: 'PENDING' },
+    })
+    await waitForBackgroundWork()
+    expect(notified).toEqual([expect.objectContaining({ kind: 'managed_account_decided', title: 'Documentos da conta recusados' })])
+  })
+
+  it('payload parcial (só general) não apaga as outras dimensões', async () => {
+    const sub = await managed()
+    fakeAsaas.statusError = new Error('indisponível') // o refresh não sobrescreve o que o evento gravou
+    db().rows(schema.tenantAsaasAccounts)[0]!.accountStatusJson = { id: sub.id, commercialInfo: 'APPROVED', bankAccountInfo: 'APPROVED', documentation: 'PENDING', general: 'PENDING' }
+    await managedAccountService.handleStatusWebhook(ORG, { id: 'evt-p', event: 'ACCOUNT_STATUS_GENERAL_APPROVAL_AWAITING_APPROVAL', accountId: sub.id, accountStatus: { general: 'AWAITING_APPROVAL' } })
+    await waitForBackgroundWork()
+    expect(statusRow().accountStatusJson).toMatchObject({ commercialInfo: 'APPROVED', bankAccountInfo: 'APPROVED', documentation: 'PENDING', general: 'AWAITING_APPROVAL' })
+  })
+
+  it('account.id divergente e clube sem subconta são ignorados sem alterar nada', async () => {
+    const sub = await managed()
+    const before = JSON.stringify(statusRow().accountStatusJson)
+    const other = { id: 'e', event: 'ACCOUNT_STATUS_GENERAL_APPROVAL_APPROVED', accountId: 'outra', accountStatus: approvedStatus('outra') }
+    expect(await managedAccountService.handleStatusWebhook(ORG, other)).toBe('ignored')
+    expect(JSON.stringify(statusRow().accountStatusJson)).toBe(before)
+    db().rows(schema.tenantAsaasAccounts).length = 0
+    seedOwnAccount()
+    expect(await managedAccountService.handleStatusWebhook(ORG, { ...other, accountId: sub.id })).toBe('ignored')
   })
 })

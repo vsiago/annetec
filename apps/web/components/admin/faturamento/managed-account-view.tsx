@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   CircleAlert,
   CircleCheckBig,
   Clock,
-  ExternalLink,
   FileUp,
   Handshake,
   Landmark,
@@ -18,6 +17,7 @@ import {
   ASAAS_COMPANY_TYPE_LABELS,
   MANAGED_AUTO_DEBIT_STATUS_LABELS,
   formatBRL,
+  type ClubManagedAccountInfo,
   type ClubManagedAccountStatus,
   type ClubReceivingAccount,
   type ManagedAccountRequest,
@@ -26,10 +26,16 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { listManagedDebitsAction, refreshManagedAccountAction } from '@/lib/actions/faturamento-api'
+import {
+  getReceivingAccountAction,
+  listManagedDebitsAction,
+  refreshManagedAccountAction,
+} from '@/lib/actions/faturamento-api'
 import { formatDateBR, formatDateTimeBR } from '@/lib/adapters/faturamento'
 import { cn } from '@/lib/utils'
 import { LoadError } from './billing-ui'
+import { ManagedDocumentCard } from './managed-document-card'
+import { ManagedDimensions } from './managed-dimensions'
 import { useActionData } from './use-action-data'
 
 // ---------------------------------------------------------------------------
@@ -299,6 +305,19 @@ function DebitHistory({ tenantSlug, refreshKey }: { tenantSlug: string; refreshK
   )
 }
 
+/** O polling só avisa o pai quando algo que a tela mostra mudou (evita reflexo em cascata a cada minuto). */
+function managedChanged(current: ClubManagedAccountInfo | null | undefined, next: ClubManagedAccountInfo | null | undefined): boolean {
+  if (!current || !next) return current !== next
+  const docs = (info: ClubManagedAccountInfo) => info.documents.map(doc => `${doc.id}:${doc.status}`).join('|')
+  return (
+    current.documentsCheckedAt !== next.documentsCheckedAt ||
+    current.generalStatus !== next.generalStatus ||
+    current.pendingDocuments !== next.pendingDocuments ||
+    JSON.stringify(current.dimensions) !== JSON.stringify(next.dimensions) ||
+    docs(current) !== docs(next)
+  )
+}
+
 export function ManagedConnected({
   tenantSlug,
   account,
@@ -330,6 +349,44 @@ export function ManagedConnected({
     } finally {
       setRefreshing(false)
     }
+  }
+
+  // Acompanhamento automático: lê do banco (barato) a cada 60 s, só com a aba visível.
+  // Não chama o parceiro (a atualização manual tem limite de 30/h).
+  const shouldPoll =
+    !!managed &&
+    managed.generalStatus !== 'aprovada' &&
+    managed.generalStatus !== 'recusada' &&
+    (managed.documents.some(doc => doc.status === 'PENDING') ||
+      ((managed.generalStatus === 'em_analise' || managed.generalStatus === 'pendente') &&
+        managed.pendingDocuments === 0))
+  const onUpdateRef = useRef(onUpdate)
+  useEffect(() => {
+    onUpdateRef.current = onUpdate
+  }, [onUpdate])
+  const managedRef = useRef(managed)
+  useEffect(() => {
+    managedRef.current = managed
+  }, [managed])
+  useEffect(() => {
+    if (!shouldPoll) return
+    let running = false
+    const timer = setInterval(async () => {
+      if (document.visibilityState !== 'visible' || running) return
+      running = true
+      try {
+        const result = await getReceivingAccountAction(tenantSlug)
+        if (result.success && managedChanged(managedRef.current, result.data.managed)) onUpdateRef.current(result.data)
+      } finally {
+        running = false
+      }
+    }, 60_000)
+    return () => clearInterval(timer)
+  }, [shouldPoll, tenantSlug])
+
+  function handleUpdate(next: ClubReceivingAccount) {
+    onUpdate(next)
+    setRefreshKey(key => key + 1)
   }
 
   if (!managed) return null
@@ -415,6 +472,15 @@ export function ManagedConnected({
             </p>
           )}
 
+          <section aria-label="Etapas da aprovação" className="space-y-2 border-t border-border pt-4">
+            <ManagedDimensions dimensions={managed.dimensions} />
+            {managed.dimensions.general === 'APPROVED' && (
+              <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                Recebimentos liberados: cobranças, Pix e repasses operam normalmente.
+              </p>
+            )}
+          </section>
+
           <section aria-labelledby="mg-docs" className="space-y-2 border-t border-border pt-4">
             <h3 id="mg-docs" className="text-sm font-semibold text-foreground">
               Documentos
@@ -424,49 +490,24 @@ export function ManagedConnected({
                 Nenhum documento pedido até agora. Clique em &quot;Atualizar situação&quot; para conferir.
               </p>
             ) : (
-              <ul className="divide-y divide-border rounded-lg border border-border">
+              <ul className="space-y-3">
                 {managed.documents.map(doc => (
-                  <li key={doc.id} className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground">{doc.title}</p>
-                      {doc.description && <p className="text-xs text-muted-foreground">{doc.description}</p>}
-                      {doc.responsibleName && (
-                        <p className="text-xs text-muted-foreground">Responsável: {doc.responsibleName}</p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold',
-                          doc.status === 'APPROVED'
-                            ? DEBIT_TONE.concluida
-                            : doc.actionRequired
-                              ? doc.status === 'REJECTED'
-                                ? DEBIT_TONE.falhou
-                                : DEBIT_TONE.em_andamento
-                              : 'border-border bg-muted text-muted-foreground',
-                        )}
-                      >
-                        {doc.statusLabel}
-                      </span>
-                      {doc.actionRequired && doc.onboardingUrl && (
-                        <Button asChild size="sm" className="gap-1.5">
-                          <a href={doc.onboardingUrl} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            Enviar documento
-                            <span className="sr-only"> (abre em nova aba)</span>
-                          </a>
-                        </Button>
-                      )}
-                    </div>
-                  </li>
+                  <ManagedDocumentCard
+                    key={doc.id}
+                    tenantSlug={tenantSlug}
+                    doc={doc}
+                    generalRejectReasons={managed.rejectReasons}
+                    refreshing={refreshing}
+                    onUpdate={handleUpdate}
+                    onRefresh={() => void refresh()}
+                  />
                 ))}
               </ul>
             )}
             {docsToSend.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                O envio é feito pelo link seguro do nosso parceiro de pagamentos. Depois de enviar, volte e clique em
-                &quot;Atualizar situação&quot;.
+                Depois de enviar, o parceiro de pagamentos analisa os documentos. Acompanhamos por aqui e, se preferir,
+                clique em &quot;Atualizar situação&quot;.
               </p>
             )}
           </section>

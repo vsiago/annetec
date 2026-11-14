@@ -114,6 +114,10 @@ export interface ManagedAccountDocumentsSnapshot {
     title: string | null
     description: string | null
     responsibleName: string | null
+    /** Primeiro item de `responsible.type` (`DIRECTOR`, `PARTNER`…). Ausente em linhas antigas. */
+    responsibleType?: string | null
+    /** Arquivos já enviados ao grupo (só id e status, nunca o conteúdo). Ausente em linhas antigas. */
+    files?: { id: string; status: string }[]
     onboardingUrl: string | null
     onboardingUrlExpirationDate: string | null
   }[]
@@ -157,6 +161,8 @@ export const tenantAsaasAccounts = pgTable('tenant_asaas_accounts', {
   webhookTokenEncrypted: text('webhook_token_encrypted'),
   webhookStatus: text('webhook_status', { enum: RECEIVING_WEBHOOK_STATUS }).notNull().default('pendente'),
   webhookLastError: text('webhook_last_error'),
+  /** Quando o webhook da subconta passou a assinar os `ACCOUNT_STATUS_*` (nulo = ainda não confirmado). */
+  statusEventsSyncedAt: timestamp('status_events_synced_at', { withTimezone: true }),
   /** Id do usuário que conectou (sem FK: o registro sobrevive à conta). */
   connectedBy: text('connected_by'),
   connectedAt: timestamp('connected_at', { withTimezone: true }).notNull().defaultNow(),

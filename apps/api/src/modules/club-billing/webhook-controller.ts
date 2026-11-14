@@ -6,6 +6,7 @@ import { ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { asaasWebhookBody, checkAsaasWebhookToken } from '@/integrations/asaas/webhook'
 import { logger } from '@/lib/logger'
+import { managedAccountService } from '@/modules/managed-account/service'
 import { handleGatewayEvent } from './events.service'
 import { limitBody } from './http'
 import { loadClubWebhookToken } from './receiving-account.service'
@@ -47,6 +48,33 @@ async function processClubWebhook(c: Context<AppEnv>, organizationId: string) {
     return ok(c, { received: true })
   }
   const parsed = asaasWebhookBody.safeParse(raw)
+  if (parsed.success && parsed.data.event.startsWith('ACCOUNT_STATUS_')) {
+    const body = parsed.data
+    try {
+      const outcome = await managedAccountService.handleStatusWebhook(organizationId, {
+        id: body.id,
+        event: body.event,
+        accountId: body.account?.id ?? null,
+        accountStatus: body.accountStatus
+          ? {
+              id: body.accountStatus.id ?? null,
+              commercialInfo: body.accountStatus.commercialInfo ?? null,
+              bankAccountInfo: body.accountStatus.bankAccountInfo ?? null,
+              documentation: body.accountStatus.documentation ?? null,
+              general: body.accountStatus.general ?? null,
+            }
+          : null,
+      })
+      logger.info({ tenantId: organizationId, event: body.event, outcome }, 'Webhook de situação da conta Asaas processado')
+    } catch (error) {
+      // Nunca devolve erro ao Asaas (a fila pausaria); a varredura da automação recupera.
+      logger.error(
+        { tenantId: organizationId, event: body.event, err: error instanceof Error ? error.message : String(error) },
+        'Falha ao processar webhook de situação da conta Asaas',
+      )
+    }
+    return ok(c, { received: true })
+  }
   if (!parsed.success || !parsed.data.payment) {
     logger.info(
       { tenantId: organizationId, event: parsed.success ? parsed.data.event : undefined },

@@ -7,6 +7,7 @@ import {
   roundCents,
   type ClubManagedAccountInfo,
   type ManagedAccountDocument,
+  type ManagedAccountDocumentUploadMethod,
   type ManagedAccountGeneralStatus,
   type ManagedAccountRequestStatus,
   type ManagedAutoDebit,
@@ -159,6 +160,12 @@ export function generalStatusOf(snapshot: AsaasAccountStatusSnapshot | null | un
 /** Grupos que pedem ação do clube: não enviado ou recusado. */
 const ACTION_REQUIRED = new Set(['NOT_SENT', 'REJECTED'])
 
+/** `responsible.type` é array na doc do Asaas; tolera string e vazio. */
+function firstResponsibleType(value: string[] | string | null | undefined): string | null {
+  const first = Array.isArray(value) ? value[0] : value
+  return typeof first === 'string' && first.trim() ? first.trim() : null
+}
+
 export function documentsSnapshotOf(response: AsaasAccountDocuments): ManagedAccountDocumentsSnapshot {
   return {
     rejectReasons: response.rejectReasons?.trim() || null,
@@ -169,6 +176,8 @@ export function documentsSnapshotOf(response: AsaasAccountDocuments): ManagedAcc
       title: group.title ?? null,
       description: group.description ?? null,
       responsibleName: group.responsible?.name ?? null,
+      responsibleType: firstResponsibleType(group.responsible?.type),
+      files: (group.documents ?? []).map(file => ({ id: file.id, status: file.status ?? 'PENDING' })),
       onboardingUrl: group.onboardingUrl ?? null,
       onboardingUrlExpirationDate: group.onboardingUrlExpirationDate ?? null,
     })),
@@ -176,7 +185,10 @@ export function documentsSnapshotOf(response: AsaasAccountDocuments): ManagedAcc
 }
 
 export function documentsOf(snapshot: ManagedAccountDocumentsSnapshot | null | undefined): ManagedAccountDocument[] {
-  return (snapshot?.groups ?? []).map(group => ({
+  return (snapshot?.groups ?? []).map(group => {
+    const pending = ACTION_REQUIRED.has(group.status)
+    const uploadMethod: ManagedAccountDocumentUploadMethod = pending ? (group.onboardingUrl ? 'link' : 'api') : 'none'
+    return {
     id: group.id,
     type: group.type,
     title: group.title || group.type || 'Documento',
@@ -187,13 +199,24 @@ export function documentsOf(snapshot: ManagedAccountDocumentsSnapshot | null | u
     responsibleName: group.responsibleName,
     onboardingUrl: group.onboardingUrl,
     onboardingUrlExpiresAt: group.onboardingUrlExpirationDate,
-  }))
+    uploadMethod,
+    canUpload: uploadMethod === 'api',
+    responsibleType: group.responsibleType ?? null,
+    files: (group.files ?? []).map(file => ({
+      id: file.id,
+      status: file.status,
+      statusLabel: MANAGED_ACCOUNT_DOCUMENT_STATUS_LABELS[file.status] ?? file.status,
+    })),
+    rejectReason: null,
+    }
+  })
 }
 
 export interface ManagedRowView {
   accountStatusJson: AsaasAccountStatusSnapshot | null
   documentsJson: ManagedAccountDocumentsSnapshot | null
   documentsCheckedAt: Date | null
+  statusEventsSyncedAt?: Date | null
   autoDebitEnabled: boolean
 }
 
@@ -203,10 +226,17 @@ export function managedInfoOf(row: ManagedRowView, lastDebit: ManagedAutoDebit |
   return {
     generalStatus,
     generalStatusLabel: MANAGED_ACCOUNT_GENERAL_STATUS_LABELS[generalStatus],
+    dimensions: {
+      commercialInfo: row.accountStatusJson?.commercialInfo ?? null,
+      bankAccountInfo: row.accountStatusJson?.bankAccountInfo ?? null,
+      documentation: row.accountStatusJson?.documentation ?? null,
+      general: row.accountStatusJson?.general ?? null,
+    },
     documents,
     pendingDocuments: documents.filter(doc => doc.actionRequired).length,
     rejectReasons: row.documentsJson?.rejectReasons ?? null,
     documentsCheckedAt: row.documentsCheckedAt ? row.documentsCheckedAt.toISOString() : null,
+    statusEventsSyncedAt: row.statusEventsSyncedAt ? row.statusEventsSyncedAt.toISOString() : null,
     autoDebitEnabled: row.autoDebitEnabled,
     lastDebit,
   }

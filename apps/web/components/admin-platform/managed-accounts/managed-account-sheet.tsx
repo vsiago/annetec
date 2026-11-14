@@ -405,6 +405,13 @@ export function ManagedAccountSheet({
                     <Field label="Carteira (walletId)">{detail.walletId ?? '—'}</Field>
                     <Field label="Chave de API">{account.keyHint ? `termina em …${account.keyHint}` : '—'}</Field>
                     <Field label="Webhook">{account.webhookStatus ?? '—'}</Field>
+                    {managed && (
+                      <Field label="Eventos de situação da conta">
+                        {managed.statusEventsSyncedAt
+                          ? `assinados em ${formatDateTimeBR(managed.statusEventsSyncedAt)}`
+                          : 'ainda não confirmados'}
+                      </Field>
+                    )}
                     <Field label="Assinaturas de associados vinculadas">{detail.linkedSubscriptions}</Field>
                     <Field label="Conectada em">{account.connectedAt ? formatDateTimeBR(account.connectedAt) : '—'}</Field>
                   </dl>

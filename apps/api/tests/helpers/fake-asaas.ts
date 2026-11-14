@@ -52,6 +52,11 @@ function freshState() {
     statusError: null as Error | null,
     documents: new Map<string, Record<string, unknown>>(),
     documentsError: null as Error | null,
+    /** Erro simulado no upload de documento (ex.: 400 do Asaas). */
+    uploadDocumentError: null as Error | null,
+    /** Status devolvido ao enviar/substituir arquivo. */
+    uploadedFileStatus: 'PENDING',
+    uploadedFiles: [] as { apiKey: string; groupId: string | null; id: string; fileName: string; contentType: string; size: number; type: string | null }[],
     balance: new Map<string, number>(),
     balanceError: null as Error | null,
     transfers: [] as FakeTransfer[],
@@ -61,6 +66,10 @@ function freshState() {
     transferThrowsAfterCreate: null as Error | null,
     transferCancelError: null as Error | null,
     webhooks: [] as FakeWebhook[],
+    /** Erro de create/update de webhook cujos `events` incluem `ACCOUNT_STATUS_*` (ex.: 400 do Asaas). */
+    webhookStatusEventsError: null as Error | null,
+    /** Erro de qualquer `webhooks.update`. */
+    webhookUpdateError: null as Error | null,
     /** Status cru dos pagamentos da conta da ANNETEC (`payments.get`). */
     payments: new Map<string, string>(),
     clients: [] as { apiKey: string; environment: string }[],
@@ -77,6 +86,10 @@ export const fakeAsaas = {
 
 let seq = 0
 const nextId = (prefix: string) => `${prefix}_${String(++seq).padStart(6, '0')}`
+
+function hasStatusEvents(input: Record<string, unknown>): boolean {
+  return Array.isArray(input.events) && input.events.some(event => String(event).startsWith('ACCOUNT_STATUS_'))
+}
 
 function transferDto(transfer: FakeTransfer) {
   return {
@@ -115,6 +128,26 @@ export function fakeAsaasClient(config: { apiKey: string; environment: string })
         log('account.documents')
         if (fakeAsaas.documentsError) throw fakeAsaas.documentsError
         return fakeAsaas.documents.get(apiKey) ?? { rejectReasons: null, data: [] }
+      },
+      uploadDocument: async (groupId: string, input: { bytes: Uint8Array; fileName: string; contentType: string; type: string }) => {
+        log('account.uploadDocument', { groupId, fileName: input.fileName, contentType: input.contentType, size: input.bytes.length, type: input.type })
+        if (fakeAsaas.uploadDocumentError) throw fakeAsaas.uploadDocumentError
+        const id = nextId('file')
+        fakeAsaas.uploadedFiles.push({ apiKey, groupId, id, fileName: input.fileName, contentType: input.contentType, size: input.bytes.length, type: input.type })
+        return { id, status: fakeAsaas.uploadedFileStatus }
+      },
+      documentFile: async (fileId: string) => {
+        log('account.documentFile', fileId)
+        return { id: fileId, status: fakeAsaas.uploadedFileStatus }
+      },
+      replaceDocumentFile: async (fileId: string, input: { bytes: Uint8Array; fileName: string; contentType: string }) => {
+        log('account.replaceDocumentFile', { fileId, fileName: input.fileName, size: input.bytes.length })
+        if (fakeAsaas.uploadDocumentError) throw fakeAsaas.uploadDocumentError
+        return { id: fileId, status: fakeAsaas.uploadedFileStatus }
+      },
+      deleteDocumentFile: async (fileId: string) => {
+        log('account.deleteDocumentFile', fileId)
+        return { deleted: true, id: fileId }
       },
     },
     accounts: {
@@ -224,14 +257,23 @@ export function fakeAsaasClient(config: { apiKey: string; environment: string })
         const data = fakeAsaas.webhooks.filter(hook => hook.apiKey === apiKey).map(hook => ({ id: hook.id, ...hook.input }))
         return { data, hasMore: false, totalCount: data.length, limit: 100, offset: 0 }
       },
+      get: async (id: string) => {
+        log('webhooks.get', id)
+        const hook = fakeAsaas.webhooks.find(item => item.id === id && item.apiKey === apiKey)
+        if (!hook) throw new Error('webhook não encontrado')
+        return { id: hook.id, ...hook.input }
+      },
       create: async (input: Record<string, unknown>) => {
         log('webhooks.create', input)
+        if (fakeAsaas.webhookStatusEventsError && hasStatusEvents(input)) throw fakeAsaas.webhookStatusEventsError
         const hook = { apiKey, id: nextId('wh'), input }
         fakeAsaas.webhooks.push(hook)
         return { id: hook.id, ...input }
       },
       update: async (id: string, input: Record<string, unknown>) => {
         log('webhooks.update', { id, input })
+        if (fakeAsaas.webhookUpdateError) throw fakeAsaas.webhookUpdateError
+        if (fakeAsaas.webhookStatusEventsError && hasStatusEvents(input)) throw fakeAsaas.webhookStatusEventsError
         const hook = fakeAsaas.webhooks.find(item => item.id === id && item.apiKey === apiKey)
         if (hook) Object.assign(hook.input, input)
         return { id, ...input }

@@ -30,13 +30,16 @@ import {
   organization,
   tenantAsaasAccounts,
   tenantProfiles,
+  type AsaasAccountStatusSnapshot,
   type ManagedAccountRequestData,
 } from '@/db/schema'
 import { AppError } from '@/http/errors'
 import { AsaasApiError, type AsaasClient } from '@/integrations/asaas/client'
+import { ASAAS_ACCOUNT_STATUS_EVENTS, SUBACCOUNT_WEBHOOK_EVENTS } from '@/integrations/asaas/webhook-events'
 import { lookupCnpj } from '@/integrations/cnpj'
 import type { AsaasSubaccount } from '@/integrations/asaas/types'
 import { decryptSecret, encryptSecret } from '@/lib/crypto'
+import { runInBackground } from '@/lib/background'
 import { logger } from '@/lib/logger'
 import { notify } from '@/lib/notifications'
 import {
@@ -575,40 +578,139 @@ export const managedAccountService = {
    * Situação e documentos da subconta (chave DELA). Grava o retrato e devolve
    * a conta. Clube (admin) e superadmin; a automação chama para as não aprovadas.
    */
-  async refreshStatus(orgId: string): Promise<ClubReceivingAccount> {
-    const row = await loadAccountRow(orgId)
-    if (!row || row.source !== 'subaccount') throw AppError.businessRule('O recebimento deste clube não é gerenciado pela ANNETEC.')
-    const client = subaccountClient(decryptSecret(row.apiKeyEncrypted), row.env)
-    const [status, documents] = await Promise.allSettled([client.account.status(), client.account.documents()])
-    for (const result of [status, documents]) {
-      if (result.status === 'rejected' && result.reason instanceof AsaasApiError && (result.reason.httpStatus === 401 || result.reason.httpStatus === 403)) {
-        throw AppError.businessRule(SUBACCOUNT_KEY_REJECTED)
-      }
+  async refreshStatus(orgId: string, opts: SyncOptions = {}): Promise<ClubReceivingAccount> {
+    // Rajada (vários webhooks/cliques): reaproveita o refresh em andamento da mesma conta.
+    const running = refreshesInFlight.get(orgId)
+    if (running) return running
+    const work = (async () => {
+      const row = await requireSubaccountRow(orgId)
+      const client = subaccountClient(decryptSecret(row.apiKeyEncrypted), row.env)
+      await syncFromAsaas(orgId, client, opts)
+      await ensureAccountStatusSubscription(orgId, row, client)
+      return receivingAccountDto(await loadAccountRow(orgId), orgId)
+    })()
+    refreshesInFlight.set(orgId, work)
+    try {
+      return await work
+    } finally {
+      if (refreshesInFlight.get(orgId) === work) refreshesInFlight.delete(orgId)
     }
-    if (status.status === 'rejected' && documents.status === 'rejected') throw status.reason
-    const now = new Date()
-    await db
-      .update(tenantAsaasAccounts)
-      .set({
-        ...(status.status === 'fulfilled'
-          ? {
-              accountStatusJson: {
-                id: status.value.id ?? null,
-                commercialInfo: status.value.commercialInfo ?? null,
-                bankAccountInfo: status.value.bankAccountInfo ?? null,
-                documentation: status.value.documentation ?? null,
-                general: status.value.general ?? null,
-              },
-            }
-          : {}),
-        ...(documents.status === 'fulfilled' ? { documentsJson: documentsSnapshotOf(documents.value), documentsCheckedAt: now } : {}),
-        lastCheckedAt: now,
-        updatedAt: now,
-      })
-      .where(and(eq(tenantAsaasAccounts.organizationId, orgId), eq(tenantAsaasAccounts.source, 'subaccount')))
-    if (status.status === 'rejected') logger.warn({ tenantId: orgId, err: errorText(status.reason) }, 'Conta gerenciada: /myAccount/status indisponível')
-    if (documents.status === 'rejected') logger.warn({ tenantId: orgId, err: errorText(documents.reason) }, 'Conta gerenciada: /myAccount/documents indisponível')
-    return receivingAccountDto(await loadAccountRow(orgId), orgId)
+  },
+
+  /**
+   * Envia um documento do grupo direto ao Asaas (chave da subconta), SEM guardar cópia do arquivo:
+   * os bytes só passam pela memória; fica em auditoria apenas metadado (feito pela rota).
+   * Consulta os grupos frescos (o snapshot pode estar velho) e só envia quando o grupo está
+   * `NOT_SENT`/`REJECTED` e não exige o link seguro (`onboardingUrl`).
+   */
+  async uploadDocument(
+    orgId: string,
+    groupId: string,
+    file: { bytes: Uint8Array; fileName: string; contentType: string },
+    actor: { userId: string | null } = { userId: null },
+  ): Promise<{ account: ClubReceivingAccount; file: { id: string; status: string }; groupType: string | null }> {
+    const row = await requireSubaccountRow(orgId)
+    const client = subaccountClient(decryptSecret(row.apiKeyEncrypted), row.env)
+
+    const documents = await rejectKeyErrors(() => client.account.documents())
+    const group = (documents.data ?? []).find(item => item.id === groupId)
+    if (!group) throw new AppError(ERROR_CODES.MANAGED_DOCUMENT_GROUP_NOT_FOUND, 'Documento não encontrado entre os exigidos pelo parceiro de pagamentos.')
+    const status = group.status ?? 'NOT_SENT'
+    if (status !== 'NOT_SENT' && status !== 'REJECTED') {
+      const message =
+        status === 'APPROVED'
+          ? 'Este documento já foi aprovado e não precisa de novo envio.'
+          : status === 'PENDING'
+            ? 'Este documento já foi enviado e está em análise. Aguarde o resultado antes de enviar outro.'
+            : 'Este documento não precisa ser enviado.'
+      throw new AppError(ERROR_CODES.MANAGED_DOCUMENT_NOT_PENDING, message)
+    }
+    if (group.onboardingUrl) {
+      throw new AppError(
+        ERROR_CODES.MANAGED_DOCUMENT_LINK_ONLY,
+        'Este documento precisa ser enviado pelo link seguro do parceiro de pagamentos',
+      )
+    }
+
+    let sent: Awaited<ReturnType<typeof client.account.uploadDocument>>
+    try {
+      sent = await rejectKeyErrors(() => client.account.uploadDocument(group.id, { ...file, type: group.type?.trim() || 'CUSTOM' }))
+    } catch (error) {
+      if (error instanceof AsaasApiError) {
+        if (error.httpStatus === 400) {
+          throw AppError.businessRule(`O parceiro de pagamentos recusou o arquivo: ${error.message.replace(/Asaas/g, 'parceiro de pagamentos')}`)
+        }
+        throw AppError.businessRule('Não foi possível enviar ao parceiro de pagamentos agora. Tente de novo em instantes.')
+      }
+      throw error
+    }
+    logger.info(
+      { tenantId: orgId, userId: actor.userId, groupId: group.id, groupType: group.type ?? null, fileId: sent.id, size: file.bytes.length },
+      'Conta gerenciada: documento enviado ao Asaas',
+    )
+
+    try {
+      await syncFromAsaas(orgId, client)
+    } catch (error) {
+      // O envio já foi feito; a falha ao reler não pode escondê-lo (a varredura/webhook atualizam).
+      logger.warn({ tenantId: orgId, err: errorText(error) }, 'Conta gerenciada: documento enviado, mas a releitura da situação falhou')
+    }
+    return {
+      account: await receivingAccountDto(await loadAccountRow(orgId), orgId),
+      file: { id: sent.id, status: sent.status ?? 'PENDING' },
+      groupType: group.type ?? null,
+    }
+  },
+
+  /**
+   * Evento `ACCOUNT_STATUS_*` do webhook do clube (token já conferido pelo controller). Grava o
+   * `accountStatus` do evento na hora (sem chamar o Asaas) e, em segundo plano, atualiza os
+   * documentos (`refreshStatus`) e avisa o clube quando a conta foi aprovada ou a documentação
+   * recusada. Idempotente: reprocessar o mesmo evento só repete o refresh.
+   */
+  async handleStatusWebhook(
+    orgId: string,
+    event: { id: string; event: string; accountId?: string | null; accountStatus?: AsaasAccountStatusSnapshot | null },
+  ): Promise<'ignored' | 'applied'> {
+    const row = await loadAccountRow(orgId)
+    if (!row || row.source !== 'subaccount') {
+      logger.info({ tenantId: orgId, event: event.event }, 'Webhook ACCOUNT_STATUS para clube sem conta gerenciada — ignorado')
+      return 'ignored'
+    }
+    if (event.accountId && row.asaasAccountId && event.accountId !== row.asaasAccountId) {
+      logger.warn({ tenantId: orgId, event: event.event }, 'Webhook ACCOUNT_STATUS de outra conta Asaas — ignorado')
+      return 'ignored'
+    }
+    const before = row.accountStatusJson ?? null
+    const after: AsaasAccountStatusSnapshot | null = event.accountStatus
+      ? {
+          id: event.accountStatus.id ?? before?.id ?? null,
+          commercialInfo: event.accountStatus.commercialInfo ?? before?.commercialInfo ?? null,
+          bankAccountInfo: event.accountStatus.bankAccountInfo ?? before?.bankAccountInfo ?? null,
+          documentation: event.accountStatus.documentation ?? before?.documentation ?? null,
+          general: event.accountStatus.general ?? before?.general ?? null,
+        }
+      : null
+    if (after) {
+      const now = new Date()
+      await db
+        .update(tenantAsaasAccounts)
+        .set({ accountStatusJson: after, lastCheckedAt: now, updatedAt: now })
+        .where(and(eq(tenantAsaasAccounts.organizationId, orgId), eq(tenantAsaasAccounts.source, 'subaccount')))
+    }
+    runInBackground(
+      (async () => {
+        try {
+          // A notificação sai do próprio refresh (antes → depois); `hint` cobre a falha ao reler a situação.
+          await managedAccountService.refreshStatus(orgId, { previous: before, hint: after, eventId: event.id })
+        } catch (error) {
+          logger.warn({ tenantId: orgId, err: errorText(error) }, 'Webhook ACCOUNT_STATUS: refresh dos documentos falhou (a varredura cobre)')
+          if (after) await notifyStatusTransition(orgId, event.id, before, after).catch(() => undefined)
+        }
+      })(),
+      error => logger.error({ tenantId: orgId, err: errorText(error) }, 'Webhook ACCOUNT_STATUS: falha em segundo plano'),
+    )
+    return 'applied'
   },
 
   // ---- Plataforma ----------------------------------------------------------
@@ -991,8 +1093,155 @@ async function afterConnected(orgId: string, previous: AccountRow | null): Promi
   await syncWebhookSafely(orgId)
 }
 
-/** Revisão automática da situação: subcontas ainda não aprovadas, no máximo 1× a cada 6 h por clube. */
-const REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000
+async function requireSubaccountRow(orgId: string): Promise<AccountRow> {
+  const row = await loadAccountRow(orgId)
+  if (!row || row.source !== 'subaccount') throw AppError.businessRule('O recebimento deste clube não é gerenciado pela ANNETEC.')
+  return row
+}
+
+/** 401/403 do Asaas na chave da subconta → orientação (`SUBACCOUNT_KEY_REJECTED`); o resto segue. */
+async function rejectKeyErrors<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work()
+  } catch (error) {
+    if (error instanceof AsaasApiError && (error.httpStatus === 401 || error.httpStatus === 403)) {
+      throw AppError.businessRule(SUBACCOUNT_KEY_REJECTED)
+    }
+    throw error
+  }
+}
+
+/** Lê situação + documentos na subconta e grava o retrato (parcial se um dos dois falhar). */
+interface SyncOptions {
+  /** Retrato anterior a comparar (o webhook já gravou o novo antes do refresh). Omitido = o gravado agora. */
+  previous?: AsaasAccountStatusSnapshot | null
+  /** Retrato do evento, usado se `/myAccount/status` falhar. */
+  hint?: AsaasAccountStatusSnapshot | null
+  eventId?: string
+}
+
+/** Refresh em andamento por clube (coalesce rajadas). */
+const refreshesInFlight = new Map<string, Promise<ClubReceivingAccount>>()
+
+async function syncFromAsaas(orgId: string, client: AsaasClient, opts: SyncOptions = {}): Promise<void> {
+  const before = opts.previous !== undefined ? opts.previous : ((await loadAccountRow(orgId))?.accountStatusJson ?? null)
+  const [status, documents] = await Promise.allSettled([client.account.status(), client.account.documents()])
+  for (const result of [status, documents]) {
+    if (result.status === 'rejected' && result.reason instanceof AsaasApiError && (result.reason.httpStatus === 401 || result.reason.httpStatus === 403)) {
+      throw AppError.businessRule(SUBACCOUNT_KEY_REJECTED)
+    }
+  }
+  if (status.status === 'rejected' && documents.status === 'rejected') throw status.reason
+  const now = new Date()
+  await db
+    .update(tenantAsaasAccounts)
+    .set({
+      ...(status.status === 'fulfilled'
+        ? {
+            accountStatusJson: {
+              id: status.value.id ?? null,
+              commercialInfo: status.value.commercialInfo ?? null,
+              bankAccountInfo: status.value.bankAccountInfo ?? null,
+              documentation: status.value.documentation ?? null,
+              general: status.value.general ?? null,
+            },
+          }
+        : {}),
+      ...(documents.status === 'fulfilled' ? { documentsJson: documentsSnapshotOf(documents.value), documentsCheckedAt: now } : {}),
+      lastCheckedAt: now,
+      updatedAt: now,
+    })
+    .where(and(eq(tenantAsaasAccounts.organizationId, orgId), eq(tenantAsaasAccounts.source, 'subaccount')))
+  if (status.status === 'rejected') logger.warn({ tenantId: orgId, err: errorText(status.reason) }, 'Conta gerenciada: /myAccount/status indisponível')
+  if (documents.status === 'rejected') logger.warn({ tenantId: orgId, err: errorText(documents.reason) }, 'Conta gerenciada: /myAccount/documents indisponível')
+  const fetched: AsaasAccountStatusSnapshot | null =
+    status.status === 'fulfilled'
+      ? {
+          id: status.value.id ?? null,
+          commercialInfo: status.value.commercialInfo ?? null,
+          bankAccountInfo: status.value.bankAccountInfo ?? null,
+          documentation: status.value.documentation ?? null,
+          general: status.value.general ?? null,
+        }
+      : null
+  // Aprovação/recusa detectada por clique, automação ou webhook avisa o clube (dedupeKey evita repetir).
+  // O retrato do evento (`hint`) também conta: o webhook pode chegar antes de a leitura refletir a mudança.
+  const eventId = opts.eventId ?? `sync:${now.getTime()}`
+  for (const snapshot of [fetched, opts.hint ?? null]) {
+    if (!snapshot) continue
+    const notified = await notifyStatusTransition(orgId, eventId, before, snapshot).catch(error => {
+      logger.warn({ tenantId: orgId, err: errorText(error) }, 'Conta gerenciada: falha ao notificar a mudança de situação')
+      return false
+    })
+    if (notified) break
+  }
+}
+
+/**
+ * Garante que o webhook da subconta assina os `ACCOUNT_STATUS_*` (contas criadas antes só tinham
+ * `PAYMENT_*`). `statusEventsSyncedAt` preenchido = nada a fazer (zero chamadas). Senão: 1 GET e,
+ * se faltar evento, 1 PUT com a união. Nunca lança e NUNCA mexe em `webhookStatus`/`webhookLastError`
+ * (o estado do webhook de pagamentos): falha só vira `logger.warn` e tenta de novo na próxima.
+ * Sem `webhookId` não faz nada (quem cria é `syncWebhookWith`).
+ */
+async function ensureAccountStatusSubscription(orgId: string, row: AccountRow, client: AsaasClient): Promise<void> {
+  if (row.statusEventsSyncedAt || !row.webhookId) return
+  try {
+    const hook = await client.webhooks.get(row.webhookId)
+    const current = hook.events ?? []
+    if (!ASAAS_ACCOUNT_STATUS_EVENTS.every(event => current.includes(event))) {
+      await client.webhooks.update(row.webhookId, { events: [...new Set([...current, ...SUBACCOUNT_WEBHOOK_EVENTS])] })
+    }
+    const now = new Date()
+    await db
+      .update(tenantAsaasAccounts)
+      .set({ statusEventsSyncedAt: now, updatedAt: now })
+      .where(eq(tenantAsaasAccounts.organizationId, orgId))
+  } catch (error) {
+    logger.warn({ tenantId: orgId, err: errorText(error) }, 'Conta gerenciada: não foi possível assinar os eventos de situação da conta no webhook')
+  }
+}
+
+/** Avisa o clube (sino) quando a conta virou `APPROVED` ou a documentação virou `REJECTED`. */
+async function notifyStatusTransition(
+  orgId: string,
+  eventId: string,
+  before: AsaasAccountStatusSnapshot | null,
+  after: AsaasAccountStatusSnapshot,
+): Promise<boolean> {
+  const approved = after.general === 'APPROVED' && before?.general !== 'APPROVED'
+  const rejectedDocs = after.documentation === 'REJECTED' && before?.documentation !== 'REJECTED'
+  if (!approved && !rejectedDocs) return false
+  const basics = await tenantBasics(orgId).catch(() => null)
+  const link = basics ? `/${basics.slug}/admin/faturamento?tab=recebimento` : null
+  // Reutiliza `managed_account_decided`: a lista de tipos é compartilhada com o web (switch exaustivo).
+  if (approved) {
+    await notify({
+      audience: 'tenant',
+      kind: 'managed_account_decided',
+      organizationId: orgId,
+      title: 'Conta de recebimento aprovada',
+      body: 'O parceiro de pagamentos aprovou a conta do clube. O recebimento está liberado.',
+      link,
+      dedupeKey: `managed_account_status:${orgId}:approved`,
+    })
+  }
+  if (rejectedDocs) {
+    await notify({
+      audience: 'tenant',
+      kind: 'managed_account_decided',
+      organizationId: orgId,
+      title: 'Documentos da conta recusados',
+      body: 'O parceiro de pagamentos recusou algum documento. Veja o motivo e reenvie na aba Recebimento.',
+      link,
+      dedupeKey: `managed_account_status:${orgId}:documentation_rejected:${eventId}`,
+    })
+  }
+  return true
+}
+
+/** Revisão automática da situação: subcontas ainda não aprovadas, no máximo 1× a cada 30 min por clube (o webhook cobre o resto). */
+const REFRESH_INTERVAL_MS = 30 * 60 * 1000
 
 /**
  * Passo da automação da plataforma: atualiza situação e documentos das

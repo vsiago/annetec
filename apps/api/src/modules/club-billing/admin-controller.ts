@@ -1,4 +1,6 @@
 import {
+  ERROR_CODES,
+  MANAGED_DOCUMENT_MAX_FILE_BYTES,
   cancelClubChargeInput,
   cancelClubSubscriptionInput,
   connectClubReceivingAccountInput,
@@ -20,8 +22,11 @@ import { resolveTenant, tenantOf } from '@/http/middleware/tenant'
 import { created, ok } from '@/http/respond'
 import type { AppEnv } from '@/http/types'
 import { json, param, query } from '@/http/validate'
+import { createHash } from 'node:crypto'
 import { recordAudit } from '@/lib/audit'
 import { rateLimit, requestIp } from '@/lib/rate-limit'
+import { checkUpload, sanitizeFileName } from '@/lib/storage/sniff'
+import { readMultipart, uploadBodyLimit } from '@/modules/platform-onboarding/http'
 import { listDebitsOf } from '@/modules/managed-account/queries'
 import { managedAccountService } from '@/modules/managed-account/service'
 import { runForTenant } from './automation.service'
@@ -318,6 +323,55 @@ export const clubBillingAdminController = new Hono<AppEnv>()
 
   .post('/configuracoes/recebimento/gerenciada/atualizar-status', managedRateLimit, async c =>
     ok(c, await managedAccountService.refreshStatus(tenantOf(c).id)),
+  )
+
+  // Envio do documento de um grupo direto ao Asaas (multipart, campo `file`). Não guardamos cópia
+  // do arquivo (LGPD): só metadados na auditoria. Admin do clube ou superadmin.
+  .post(
+    '/configuracoes/recebimento/gerenciada/documentos/:groupId',
+    managedRateLimit,
+    uploadBodyLimit(MANAGED_DOCUMENT_MAX_FILE_BYTES),
+    async c => {
+      const session = c.get('auth')
+      const isSuperadmin = session?.membership.scope === 'platform' && session.membership.platformRole === 'superadmin'
+      if (!session || (session.membership.scope !== 'tenant' && !isSuperadmin)) {
+        throw AppError.forbidden('O envio de documentos é feito pelo administrador do clube.')
+      }
+      const groupId = c.req.param('groupId')
+      if (!groupId || groupId.length > 120) throw AppError.notFound('Documento')
+      const { file } = await readMultipart(c)
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const check = checkUpload('managed_document', bytes)
+      if (!check.ok) {
+        throw new AppError(
+          ERROR_CODES.VALIDATION_ERROR,
+          check.message,
+          { status: check.reason === 'too_large' ? 413 : 422, issues: [{ path: 'file', message: check.message }] },
+        )
+      }
+      const fileName = sanitizeFileName(file.name, check.type.ext)
+      const result = await managedAccountService.uploadDocument(
+        tenantOf(c).id,
+        groupId,
+        { bytes, fileName, contentType: check.type.mime },
+        { userId: session.user.id },
+      )
+      await recordAudit(c, {
+        action: 'managed_account.document_sent',
+        resource: 'managed_account',
+        resourceId: groupId,
+        metadata: {
+          groupId,
+          groupType: result.groupType,
+          fileName,
+          size: bytes.length,
+          sha256: createHash('sha256').update(bytes).digest('hex'),
+          asaasFileId: result.file.id,
+          asaasFileStatus: result.file.status,
+        },
+      })
+      return ok(c, result.account)
+    },
   )
 
   .get('/configuracoes/recebimento/gerenciada/debitos', async c => ok(c, await listDebitsOf(tenantOf(c).id, 100)))

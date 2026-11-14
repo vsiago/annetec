@@ -263,6 +263,15 @@ export interface AsaasWebhookEvent {
   payment?: AsaasPayment
 }
 
+/** Corpo do webhook `ACCOUNT_STATUS_*` (status em `accountStatus`, não em `account`). */
+export interface AsaasAccountStatusWebhookEvent {
+  id: string
+  event: string
+  dateCreated?: string
+  account?: { id?: string | null; ownerId?: string | null } | null
+  accountStatus?: AsaasAccountStatus | null
+}
+
 // ---------------------------------------------------------------------------
 // Subcontas, documentos, saldo, carteiras e transferências (conta gerenciada)
 // ---------------------------------------------------------------------------
@@ -344,10 +353,17 @@ export interface AsaasAccountDocumentGroup {
   type?: string | null
   title?: string | null
   description?: string | null
-  responsible?: { name?: string | null; type?: string | null } | null
+  /** `type` é ARRAY na doc do Asaas; aceitamos string/null por tolerância. */
+  responsible?: { name?: string | null; type?: string[] | string | null } | null
   onboardingUrl?: string | null
   onboardingUrlExpirationDate?: string | null
   documents?: { id: string; status?: string | null }[] | null
+}
+
+/** Arquivo de um grupo de documentos (`POST /myAccount/documents/{grupo}` e `.../files/{id}`). */
+export interface AsaasAccountDocumentFile {
+  id: string
+  status?: string | null
 }
 
 export interface AsaasAccountDocuments {

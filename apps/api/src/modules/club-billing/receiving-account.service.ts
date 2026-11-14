@@ -8,7 +8,7 @@ import { clubSubscriptions, organization, tenantAsaasAccounts, tenantProfiles, t
 import { AppError } from '@/http/errors'
 import { AsaasApiError, createAsaasClient, type AsaasClient } from '@/integrations/asaas/client'
 import type { AsaasAccountStatus, AsaasCommercialInfo, AsaasWebhook } from '@/integrations/asaas/types'
-import { ASAAS_WEBHOOK_EVENTS } from '@/integrations/asaas/webhook-events'
+import { ASAAS_WEBHOOK_EVENTS, SUBACCOUNT_WEBHOOK_EVENTS } from '@/integrations/asaas/webhook-events'
 import { GatewayNotConfiguredError } from '@/integrations/payments/gateway'
 import { decryptSecret, encryptSecret } from '@/lib/crypto'
 import { logger } from '@/lib/logger'
@@ -275,15 +275,16 @@ async function syncWebhookWith(orgId: string, client: AsaasClient): Promise<void
   const contact = await tenantContact(orgId)
   const email = row.accountEmail ?? contact.email
   const name = clubWebhookName(contact.slug)
-  const base = {
+  const isSubaccount = row.source === 'subaccount'
+  const baseWith = (events: readonly string[]) => ({
     name,
     url,
     enabled: true,
     interrupted: false,
     authToken: token,
     sendType: 'SEQUENTIALLY' as const,
-    events: [...ASAAS_WEBHOOK_EVENTS],
-  }
+    events: [...events],
+  })
 
   try {
     const hooks = await listAllWebhooks(client)
@@ -291,22 +292,45 @@ async function syncWebhookWith(orgId: string, client: AsaasClient): Promise<void
       (row.webhookId ? hooks.find(hook => hook.id === row.webhookId) : undefined) ??
       hooks.find(hook => normalizeWebhookUrl(hook.url) === normalizeWebhookUrl(url)) ??
       hooks.find(hook => hook.name?.trim().toLowerCase() === name.toLowerCase())
-    let webhookId: string
-    if (match) {
-      const updated = await client.webhooks.update(match.id, base)
-      webhookId = updated.id ?? match.id
-    } else {
-      if (!email) {
-        await saveRow(orgId, {
-          webhookStatus: 'erro',
-          webhookLastError: 'A conta Asaas não informou e-mail e o clube não tem e-mail cadastrado — o Asaas exige um para avisar falhas do webhook.',
-        })
-        return
-      }
-      const created = await client.webhooks.create({ ...base, email, apiVersion: 3 })
-      webhookId = created.id
+    if (!match && !email) {
+      await saveRow(orgId, {
+        webhookStatus: 'erro',
+        webhookLastError: 'A conta Asaas não informou e-mail e o clube não tem e-mail cadastrado — o Asaas exige um para avisar falhas do webhook.',
+      })
+      return
     }
-    await saveRow(orgId, { webhookId, webhookStatus: 'ativo', webhookLastError: null })
+    const apply = async (events: readonly string[]): Promise<string> => {
+      if (match) {
+        const updated = await client.webhooks.update(match.id, baseWith(events))
+        return updated.id ?? match.id
+      }
+      const created = await client.webhooks.create({ ...baseWith(events), email: email as string, apiVersion: 3 })
+      return created.id
+    }
+    let webhookId: string
+    let statusEventsSynced = false
+    if (isSubaccount) {
+      try {
+        webhookId = await apply(SUBACCOUNT_WEBHOOK_EVENTS)
+        statusEventsSynced = true
+      } catch (error) {
+        // O webhook de pagamentos nunca pode depender dos eventos de situação da conta.
+        if (!(error instanceof AsaasApiError && error.httpStatus === 400)) throw error
+        logger.warn(
+          { tenantId: orgId, integration: 'asaas', err: errorText(error) },
+          'Recebimento do clube: o Asaas recusou os eventos de situação da conta; webhook cadastrado só com os eventos de pagamento',
+        )
+        webhookId = await apply(ASAAS_WEBHOOK_EVENTS)
+      }
+    } else {
+      webhookId = await apply(ASAAS_WEBHOOK_EVENTS)
+    }
+    await saveRow(orgId, {
+      webhookId,
+      webhookStatus: 'ativo',
+      webhookLastError: null,
+      ...(isSubaccount ? { statusEventsSyncedAt: statusEventsSynced ? new Date() : null } : {}),
+    })
   } catch (error) {
     logger.warn({ tenantId: orgId, integration: 'asaas', err: errorText(error) }, 'Recebimento do clube: falha ao cadastrar o webhook')
     await saveRow(orgId, { webhookStatus: 'erro', webhookLastError: `O Asaas recusou o cadastro do webhook: ${describeAsaasError(error)}` })
@@ -361,6 +385,7 @@ export async function receivingAccountDto(row: AccountRow | null, orgId: string)
         accountStatusJson: row.accountStatusJson ?? null,
         documentsJson: row.documentsJson ?? null,
         documentsCheckedAt: row.documentsCheckedAt ?? null,
+        statusEventsSyncedAt: row.statusEventsSyncedAt ?? null,
         autoDebitEnabled: Boolean(row.autoDebitEnabled),
       },
       await lastDebitOf(orgId),

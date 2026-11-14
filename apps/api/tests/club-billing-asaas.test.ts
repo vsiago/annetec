@@ -220,6 +220,20 @@ describe('webhook do Asaas', () => {
     expect(checkAsaasWebhookToken('qualquer', undefined)).toBe('unconfigured')
   })
 
+  it('formato inesperado em account/accountStatus não derruba um PAYMENT_*', async () => {
+    const { asaasWebhookBody } = await import('@/integrations/asaas/webhook')
+    const parsed = asaasWebhookBody.parse({
+      id: 'evt_1',
+      event: 'PAYMENT_RECEIVED',
+      account: 123,
+      accountStatus: 'x',
+      payment: { id: 'pay_1', status: 'RECEIVED' },
+    })
+    expect(parsed.payment?.id).toBe('pay_1')
+    expect(parsed.account).toBeUndefined()
+    expect(parsed.accountStatus).toBeUndefined()
+  })
+
   it('mapeia status e bandeira do Asaas', () => {
     expect(mapAsaasPaymentStatus('PENDING')).toBe('pending')
     expect(mapAsaasPaymentStatus('AWAITING_RISK_ANALYSIS')).toBe('pending')
@@ -286,5 +300,46 @@ describe('cartão: nova tentativa sem cobrança dupla (reuseExistingCardPayment)
     })
     const { reuseExistingCardPayment: _ignored, ...firstAttempt } = cardInput
     await expect(new AsaasGateway(client(), 'production').createCharge(firstAttempt)).rejects.toMatchObject({ inconclusive: true })
+  })
+})
+
+describe('cliente Asaas — upload de documento (multipart)', () => {
+  it('envia FormData sem content-type JSON, com documentFile e type, e sem retry em 5xx', async () => {
+    const calls = stubFetch(() => json({ id: 'file_1', status: 'PENDING' }))
+    const sent = await client().account.uploadDocument('grp/1', {
+      bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+      fileName: 'rg.pdf',
+      contentType: 'application/pdf',
+      type: 'IDENTIFICATION',
+    })
+    expect(sent).toEqual({ id: 'file_1', status: 'PENDING' })
+    const call = calls[0]!
+    expect(call.url.pathname).toBe('/v3/myAccount/documents/grp%2F1')
+    expect(call.init.method).toBe('POST')
+    expect(header(call.init, 'content-type')).toBeUndefined()
+    expect(header(call.init, 'access_token')).toBe('$aact_hmlg_teste')
+    const form = call.init.body as FormData
+    expect(form).toBeInstanceOf(FormData)
+    expect(form.get('type')).toBe('IDENTIFICATION')
+    expect((form.get('documentFile') as File).name).toBe('rg.pdf')
+
+    const failing = stubFetch(() => json({ errors: [] }, 500))
+    await expect(
+      client().account.uploadDocument('g', { bytes: new Uint8Array([1]), fileName: 'a.pdf', contentType: 'application/pdf', type: 'CUSTOM' }),
+    ).rejects.toThrow()
+    expect(failing).toHaveLength(1)
+  })
+
+  it('documentFile/replaceDocumentFile/deleteDocumentFile usam os caminhos de arquivo', async () => {
+    const calls = stubFetch(() => json({ id: 'f1', status: 'PENDING' }))
+    await client().account.documentFile('f1')
+    await client().account.replaceDocumentFile('f1', { bytes: new Uint8Array([1]), fileName: 'b.png', contentType: 'image/png' })
+    await client().account.deleteDocumentFile('f1')
+    expect(calls.map(call => `${call.init.method} ${call.url.pathname}`)).toEqual([
+      'GET /v3/myAccount/documents/files/f1',
+      'POST /v3/myAccount/documents/files/f1',
+      'DELETE /v3/myAccount/documents/files/f1',
+    ])
+    expect((calls[1]!.init.body as FormData).get('documentFile')).toBeInstanceOf(File)
   })
 })

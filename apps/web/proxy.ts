@@ -62,6 +62,8 @@ export function proxy(request: NextRequest, event: NextFetchEvent) {
 export const config = {
   matcher: [
     // Toda navegação de página, menos assets internos do Next e arquivos estáticos.
-    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|webmanifest|woff2?)$).*)',
+    // `api/clube/*/recebimento/documentos/*` (upload de até 10 MB) fica de fora: com proxy ativo o Next
+    // bufferiza o corpo e corta em 10 MB (`experimental.proxyClientMaxBodySize`), truncando o multipart.
+    '/((?!_next/static|_next/image|api/clube/[^/]+/recebimento/documentos/|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|webmanifest|woff2?)$).*)',
   ],
 }

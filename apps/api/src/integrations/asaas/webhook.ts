@@ -33,6 +33,19 @@ export const asaasWebhookBody = z
     id: text(120),
     event: text(80),
     dateCreated: text(40).nullish(),
+    /** Eventos `ACCOUNT_STATUS_*`: conta (`id`, `ownerId`) e situação cadastral. */
+    account: z.object({ id: text(120).nullish(), ownerId: text(120).nullish() }).passthrough().nullish().catch(undefined),
+    accountStatus: z
+      .object({
+        id: text(120).nullish(),
+        commercialInfo: text(40).nullish(),
+        bankAccountInfo: text(40).nullish(),
+        documentation: text(40).nullish(),
+        general: text(40).nullish(),
+      })
+      .passthrough()
+      .nullish()
+      .catch(undefined),
     payment: z
       .object({
         id: text(120),

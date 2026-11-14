@@ -3,6 +3,8 @@ import {
   BRAND_LOGO_MIME_TYPES,
   KYB_ACCEPTED_MIME_TYPES,
   KYB_MAX_FILE_BYTES,
+  MANAGED_DOCUMENT_ACCEPTED_MIME_TYPES,
+  MANAGED_DOCUMENT_MAX_FILE_BYTES,
 } from '@annetec/contracts'
 
 /**
@@ -51,10 +53,12 @@ export function sniffFileType(bytes: Uint8Array): SniffedType | null {
   return null
 }
 
-export type UploadKind = 'kyb_document' | 'brand_logo'
+export type UploadKind = 'kyb_document' | 'brand_logo' | 'managed_document'
 
 export const UPLOAD_RULES: Record<UploadKind, { maxBytes: number; mimeTypes: readonly string[]; label: string }> = {
   kyb_document: { maxBytes: KYB_MAX_FILE_BYTES, mimeTypes: KYB_ACCEPTED_MIME_TYPES, label: 'PDF, JPEG ou PNG' },
+  /** Documento da subconta Asaas: repassado ao Asaas, nunca guardado por nós. */
+  managed_document: { maxBytes: MANAGED_DOCUMENT_MAX_FILE_BYTES, mimeTypes: MANAGED_DOCUMENT_ACCEPTED_MIME_TYPES, label: 'PDF, JPEG ou PNG' },
   brand_logo: { maxBytes: BRAND_LOGO_MAX_BYTES, mimeTypes: BRAND_LOGO_MIME_TYPES, label: 'PNG, JPEG, WebP ou SVG' },
 }
 

@@ -981,6 +981,50 @@ export const MANAGED_ACCOUNT_DOCUMENT_STATUS_LABELS: Record<string, string> = {
   IGNORED: 'Não exigido',
 }
 
+/** Arquivo já enviado a um grupo de documentos. O Asaas aceita um arquivo válido por vez; novo envio substitui o anterior. */
+export const managedAccountDocumentFile = z.object({
+  id: z.string(),
+  /** Status cru do arquivo no Asaas (`NOT_SENT`, `PENDING`, `APPROVED`, `REJECTED`). */
+  status: z.string(),
+  statusLabel: z.string(),
+})
+export type ManagedAccountDocumentFile = z.infer<typeof managedAccountDocumentFile>
+
+/**
+ * Como o grupo recebe documento:
+ * - `link`: o grupo tem `onboardingUrl` (o Asaas exige envio pelo link seguro, com prova de vida do
+ *   responsável; upload por API é rejeitado);
+ * - `api`: o grupo precisa de ação (`NOT_SENT`/`REJECTED`) e NÃO tem `onboardingUrl`;
+ * - `none`: demais casos (aprovado, em análise, não exigido).
+ */
+export const managedAccountDocumentUploadMethod = z.enum(['api', 'link', 'none'])
+export type ManagedAccountDocumentUploadMethod = z.infer<typeof managedAccountDocumentUploadMethod>
+
+/** Regras do upload de documento da subconta (painel e API). */
+export const MANAGED_DOCUMENT_MAX_FILE_BYTES = 10 * 1024 * 1024
+export const MANAGED_DOCUMENT_ACCEPTED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'] as const
+export const MANAGED_DOCUMENT_ACCEPTED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png'] as const
+/** Nome do campo multipart do arquivo. */
+export const MANAGED_DOCUMENT_UPLOAD_FIELD = 'file'
+
+/** Dimensões do `GET /myAccount/status` do Asaas. */
+export const managedAccountDimensionStatus = z.enum(['PENDING', 'AWAITING_APPROVAL', 'APPROVED', 'REJECTED'])
+export type ManagedAccountDimensionStatus = z.infer<typeof managedAccountDimensionStatus>
+
+export const MANAGED_ACCOUNT_DIMENSION_LABELS: Record<'commercialInfo' | 'bankAccountInfo' | 'documentation' | 'general', string> = {
+  commercialInfo: 'Dados comerciais',
+  bankAccountInfo: 'Dados bancários',
+  documentation: 'Documentação',
+  general: 'Aprovação geral',
+}
+
+export const MANAGED_ACCOUNT_DIMENSION_STATUS_LABELS: Record<ManagedAccountDimensionStatus, string> = {
+  PENDING: 'Pendente',
+  AWAITING_APPROVAL: 'Em análise',
+  APPROVED: 'Aprovado',
+  REJECTED: 'Recusado',
+}
+
 /** Documento (grupo) exigido pelo Asaas para aprovar a subconta. */
 export const managedAccountDocument = z.object({
   id: z.string(),
@@ -998,6 +1042,16 @@ export const managedAccountDocument = z.object({
   /** Link do Asaas para enviar o documento (quando existe, o envio é por ele). */
   onboardingUrl: z.string().nullable(),
   onboardingUrlExpiresAt: z.string().nullable(),
+  /** Como enviar: `link` (onboardingUrl), `api` (upload pelo painel) ou `none`. */
+  uploadMethod: managedAccountDocumentUploadMethod,
+  /** `true` somente quando `uploadMethod === 'api'`. */
+  canUpload: z.boolean(),
+  /** Primeiro valor de `responsible.type` do Asaas (`DIRECTOR`, `PARTNER`…), ou null. */
+  responsibleType: z.string().nullable(),
+  /** Arquivos já enviados ao grupo. */
+  files: z.array(managedAccountDocumentFile),
+  /** Motivo de recusa do grupo, se o Asaas devolver. */
+  rejectReason: z.string().nullable().default(null),
 })
 export type ManagedAccountDocument = z.infer<typeof managedAccountDocument>
 
@@ -1061,12 +1115,21 @@ export type ManagedAutoDebit = z.infer<typeof managedAutoDebit>
 export const clubManagedAccountInfo = z.object({
   generalStatus: managedAccountGeneralStatus,
   generalStatusLabel: z.string(),
+  /** Status cru de cada dimensão do Asaas (rótulos em `MANAGED_ACCOUNT_DIMENSION_*`). */
+  dimensions: z.object({
+    commercialInfo: z.string().nullable(),
+    bankAccountInfo: z.string().nullable(),
+    documentation: z.string().nullable(),
+    general: z.string().nullable(),
+  }),
   documents: z.array(managedAccountDocument),
   /** Documentos que precisam de ação do clube. */
   pendingDocuments: z.number().int(),
   /** Motivo de reprovação informado pelo Asaas. */
   rejectReasons: z.string().nullable(),
   documentsCheckedAt: z.string().datetime().nullable(),
+  /** Quando o webhook passou a assinar os eventos de situação da conta (`null` = não confirmado). */
+  statusEventsSyncedAt: z.string().datetime().nullable(),
   /** Débito automático das faturas da ANNETEC no vencimento (liga/desliga só o superadmin). */
   autoDebitEnabled: z.boolean(),
   lastDebit: managedAutoDebit.nullable(),

@@ -50,6 +50,12 @@ export const ERROR_CODES = {
   VENDAS_CODIGO_INVALIDO: 'VENDAS_CODIGO_INVALIDO',
   /** Atendimento de balcão inconsistente com o resultado informado (422). */
   VENDAS_ATENDIMENTO_INVALIDO: 'VENDAS_ATENDIMENTO_INVALIDO',
+  /** Grupo de documentos da subconta inexistente (404). */
+  MANAGED_DOCUMENT_GROUP_NOT_FOUND: 'MANAGED_DOCUMENT_GROUP_NOT_FOUND',
+  /** Grupo só aceita envio pelo link seguro do Asaas (422). */
+  MANAGED_DOCUMENT_LINK_ONLY: 'MANAGED_DOCUMENT_LINK_ONLY',
+  /** Grupo não precisa de envio (aprovado, em análise ou não exigido) (422). */
+  MANAGED_DOCUMENT_NOT_PENDING: 'MANAGED_DOCUMENT_NOT_PENDING',
   // 410
   /**
    * Rota de escrita do módulo comercial antigo (vendedores, comissões, CRM de inquilino)
@@ -100,6 +106,9 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   VENDAS_SEM_PERMISSAO_NA_REDE: 403,
   VENDAS_CODIGO_INVALIDO: 404,
   VENDAS_ATENDIMENTO_INVALIDO: 422,
+  MANAGED_DOCUMENT_GROUP_NOT_FOUND: 404,
+  MANAGED_DOCUMENT_LINK_ONLY: 422,
+  MANAGED_DOCUMENT_NOT_PENDING: 422,
   RECURSO_LEGADO_DESATIVADO: 410,
   BUSINESS_RULE_VIOLATION: 422,
   RATE_LIMITED: 429,

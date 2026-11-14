@@ -29,3 +29,20 @@ export const ASAAS_WEBHOOK_EVENTS = [
 ] as const
 
 export type AsaasWebhookEventName = (typeof ASAAS_WEBHOOK_EVENTS)[number]
+
+/**
+ * Eventos de situação cadastral da SUBCONTA (conta gerenciada pela ANNETEC):
+ * 4 dimensões × 4 status + vencimento dos dados comerciais. Só o webhook de
+ * subconta os assina; clubes com chave própria seguem só com `PAYMENT_*`.
+ */
+const ACCOUNT_STATUS_DIMENSIONS = ['BANK_ACCOUNT_INFO', 'COMMERCIAL_INFO', 'DOCUMENT', 'GENERAL_APPROVAL'] as const
+const ACCOUNT_STATUS_VALUES = ['APPROVED', 'AWAITING_APPROVAL', 'PENDING', 'REJECTED'] as const
+
+export const ASAAS_ACCOUNT_STATUS_EVENTS: readonly string[] = [
+  ...ACCOUNT_STATUS_DIMENSIONS.flatMap(dimension => ACCOUNT_STATUS_VALUES.map(value => `ACCOUNT_STATUS_${dimension}_${value}`)),
+  'ACCOUNT_STATUS_COMMERCIAL_INFO_EXPIRING_SOON',
+  'ACCOUNT_STATUS_COMMERCIAL_INFO_EXPIRED',
+]
+
+/** Eventos do webhook do clube com SUBCONTA: cobranças + situação cadastral. */
+export const SUBACCOUNT_WEBHOOK_EVENTS: readonly string[] = [...ASAAS_WEBHOOK_EVENTS, ...ASAAS_ACCOUNT_STATUS_EVENTS]

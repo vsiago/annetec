@@ -176,7 +176,7 @@ describe('inventário', () => {
         'POST /api/v1/platform/contas-gerenciadas/:orgId/recusar',
       ].sort(),
     )
-    expect(CLUB).toHaveLength(5)
+    expect(CLUB).toHaveLength(6)
   })
 })
 
@@ -321,5 +321,193 @@ describe('admin do clube', () => {
     state.session = platformSession('superadmin')
     expect((await call('DELETE', '/api/v1/t/clube-a/faturamento/configuracoes/recebimento')).status).toBe(200)
     expect(db().rows(schema.tenantAsaasAccounts)).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Upload de documento (multipart) e webhook ACCOUNT_STATUS
+// ---------------------------------------------------------------------------
+
+const SUB_KEY = '$aact_hmlg_000SubcontaDocumentosChaveDeTesteComTamanhoSuficiente'
+const DOC_URL = '/api/v1/t/clube-a/faturamento/configuracoes/recebimento/gerenciada/documentos/grp_1'
+const WEBHOOK_TOKEN = 'token-do-webhook-da-subconta-com-mais-de-32-caracteres'
+
+function seedSubaccount() {
+  db().insertRow(schema.tenantAsaasAccounts, {
+    organizationId: 'org-clube-a',
+    source: 'subaccount',
+    apiKeyEncrypted: encryptSecret(SUB_KEY),
+    env: 'sandbox',
+    keyHint: 'ente',
+    asaasAccountId: 'acc_sub',
+    walletId: 'wallet_sub',
+    webhookId: 'wh_1',
+    webhookTokenEncrypted: encryptSecret(WEBHOOK_TOKEN),
+    webhookStatus: 'ativo',
+    autoDebitEnabled: true,
+    accountStatusJson: { id: 'acc_sub', general: 'PENDING', documentation: 'PENDING' },
+  })
+  fakeAsaas.documents.set(SUB_KEY, { rejectReasons: null, data: [{ id: 'grp_1', status: 'NOT_SENT', type: 'IDENTIFICATION', title: 'RG' }] })
+}
+
+const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 1, 2, 3])
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+
+async function upload(bytes: Uint8Array, name = 'rg.pdf', url = DOC_URL) {
+  const form = new FormData()
+  form.set('file', new Blob([bytes as unknown as ArrayBuffer]), name)
+  const response = await app.request(url, {
+    method: 'POST',
+    headers: { authorization: 'Bearer x', 'x-forwarded-for': '200.100.50.25' },
+    body: form,
+  })
+  return { status: response.status, body: (await response.json().catch(() => null)) as { data?: Record<string, unknown>; error?: { code?: string } } | null }
+}
+
+describe('upload de documento da subconta', () => {
+  it('admin do clube: 200, repassa ao Asaas, devolve a conta e audita só metadados', async () => {
+    seedSubaccount()
+    state.session = tenantSession('clube-a')
+    const res = await upload(PDF_BYTES)
+    expect(res.status).toBe(200)
+    expect(res.body?.data).toMatchObject({ connected: true, source: 'subaccount', managed: expect.objectContaining({ documents: expect.any(Array) }) })
+    const sent = fakeAsaas.calls.find(call => call.call === 'account.uploadDocument')!
+    expect(sent.apiKey).toBe(SUB_KEY)
+    expect(sent.args).toMatchObject({ groupId: 'grp_1', contentType: 'application/pdf', type: 'IDENTIFICATION', size: PDF_BYTES.length })
+    const { recordAudit } = await import('@/lib/audit')
+    const audit = vi.mocked(recordAudit).mock.calls.find(call => call[1].action === 'managed_account.document_sent')!
+    expect(audit[1]).toMatchObject({
+      resource: 'managed_account',
+      resourceId: 'grp_1',
+      metadata: { groupId: 'grp_1', groupType: 'IDENTIFICATION', size: PDF_BYTES.length, sha256: expect.stringMatching(/^[0-9a-f]{64}$/), asaasFileStatus: 'PENDING' },
+    })
+    expect(JSON.stringify(audit[1])).not.toContain('bytes')
+  })
+
+  it('aceita PNG; tipo errado → 422; arquivo vazio → 422; sem campo file → 400', async () => {
+    seedSubaccount()
+    state.session = tenantSession('clube-a')
+    expect((await upload(PNG_BYTES, 'rg.png')).status).toBe(200)
+    expect((await upload(new TextEncoder().encode('MZ executavel'), 'rg.pdf')).status).toBe(422)
+    expect((await upload(new Uint8Array(0))).status).toBe(422)
+    const response = await app.request(DOC_URL, { method: 'POST', headers: { authorization: 'Bearer x' }, body: new FormData() })
+    expect(response.status).toBe(400)
+    expect(fakeAsaas.uploadedFiles).toHaveLength(1)
+  })
+
+  it('acima de 10 MB → 413, sem chamar o Asaas', async () => {
+    seedSubaccount()
+    state.session = tenantSession('clube-a')
+    const big = new Uint8Array(10 * 1024 * 1024 + 300 * 1024)
+    big.set(PDF_BYTES)
+    expect((await upload(big)).status).toBe(413)
+    const slightlyOver = new Uint8Array(10 * 1024 * 1024 + 1)
+    slightlyOver.set(PDF_BYTES)
+    expect((await upload(slightlyOver)).status).toBe(413)
+    expect(fakeAsaas.calls.some(call => call.call === 'account.uploadDocument')).toBe(false)
+  })
+
+  it('vendedor ANNETEC e platform_admin: 403; superadmin: 200; vendedor/associado do clube: 403', async () => {
+    seedSubaccount()
+    state.session = platformSession('platform_seller')
+    expect((await upload(PDF_BYTES)).status).toBe(403)
+    state.session = platformSession('platform_admin')
+    expect((await upload(PDF_BYTES)).status).toBe(403)
+    for (const role of ['seller', 'client'] as const) {
+      state.session = tenantSession('clube-a', role)
+      expect((await upload(PDF_BYTES)).status).toBe(403)
+    }
+    expect(fakeAsaas.calls.some(call => call.call === 'account.uploadDocument')).toBe(false)
+    state.session = platformSession('superadmin')
+    expect((await upload(PDF_BYTES)).status).toBe(200)
+  })
+
+  it('erros do serviço chegam com o código certo (grupo inexistente 404, link 422, em análise 422)', async () => {
+    seedSubaccount()
+    state.session = tenantSession('clube-a')
+    const missing = await upload(PDF_BYTES, 'rg.pdf', DOC_URL.replace('grp_1', 'grp_x'))
+    expect(missing.status).toBe(404)
+    expect(missing.body?.error?.code).toBe('MANAGED_DOCUMENT_GROUP_NOT_FOUND')
+    fakeAsaas.documents.set(SUB_KEY, { rejectReasons: null, data: [{ id: 'grp_1', status: 'NOT_SENT', type: 'X', onboardingUrl: 'https://a.test/b' }] })
+    expect((await upload(PDF_BYTES)).body?.error?.code).toBe('MANAGED_DOCUMENT_LINK_ONLY')
+    fakeAsaas.documents.set(SUB_KEY, { rejectReasons: null, data: [{ id: 'grp_1', status: 'PENDING', type: 'X' }] })
+    const pending = await upload(PDF_BYTES)
+    expect(pending.status).toBe(422)
+    expect(pending.body?.error?.code).toBe('MANAGED_DOCUMENT_NOT_PENDING')
+  })
+
+  it('clube sem subconta (chave própria): 422 e nada é enviado', async () => {
+    db().insertRow(schema.tenantAsaasAccounts, {
+      organizationId: 'org-clube-a',
+      source: 'api_key',
+      apiKeyEncrypted: encryptSecret(SUB_KEY),
+      env: 'sandbox',
+      keyHint: 'ente',
+    })
+    state.session = tenantSession('clube-a')
+    expect((await upload(PDF_BYTES)).status).toBe(422)
+    expect(fakeAsaas.calls.some(call => call.call === 'account.uploadDocument')).toBe(false)
+  })
+})
+
+describe('webhook ACCOUNT_STATUS do clube', () => {
+  const URL_WEBHOOK = '/api/v1/webhooks/asaas/clube/org-clube-a'
+  const statusBody = (accountId = 'acc_sub') => ({
+    id: 'evt_1',
+    event: 'ACCOUNT_STATUS_GENERAL_APPROVAL_APPROVED',
+    dateCreated: '2026-11-14 10:00:00',
+    account: { id: accountId, ownerId: 'owner_1' },
+    accountStatus: { id: 'st_1', commercialInfo: 'APPROVED', bankAccountInfo: 'APPROVED', documentation: 'APPROVED', general: 'APPROVED' },
+  })
+  async function hook(body: unknown, token: string | null = WEBHOOK_TOKEN) {
+    const response = await app.request(URL_WEBHOOK, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(token ? { 'asaas-access-token': token } : {}) },
+      body: JSON.stringify(body),
+    })
+    return response.status
+  }
+  const accountRow = () => db().rows(schema.tenantAsaasAccounts)[0] as { accountStatusJson: { general: string }; lastCheckedAt: Date | null }
+
+  it('token certo: 200, grava accountStatus na hora e dispara o refresh em segundo plano', async () => {
+    seedSubaccount()
+    const { runInBackground } = await import('@/lib/background')
+    vi.mocked(runInBackground).mockClear()
+    expect(await hook(statusBody())).toBe(200)
+    expect(accountRow().accountStatusJson).toMatchObject({ general: 'APPROVED', documentation: 'APPROVED' })
+    expect(accountRow().lastCheckedAt).not.toBeNull()
+    expect(runInBackground).toHaveBeenCalledTimes(1)
+    // idempotente: reentrega só repete o refresh
+    expect(await hook(statusBody())).toBe(200)
+    expect(accountRow().accountStatusJson.general).toBe('APPROVED')
+    // runInBackground está mockado, mas o trabalho já começou: deixa terminar antes do próximo teste.
+    await new Promise(resolve => setTimeout(resolve, 50))
+  })
+
+  it('token errado ou ausente → 401, sem alterar nada', async () => {
+    seedSubaccount()
+    expect(await hook(statusBody(), 'errado')).toBe(401)
+    expect(await hook(statusBody(), null)).toBe(401)
+    expect(accountRow().accountStatusJson.general).toBe('PENDING')
+  })
+
+  it('account.id divergente → 200 sem alterar nada nem disparar refresh', async () => {
+    seedSubaccount()
+    const { runInBackground } = await import('@/lib/background')
+    vi.mocked(runInBackground).mockClear()
+    expect(await hook(statusBody('acc_de_outro_clube'))).toBe(200)
+    expect(accountRow().accountStatusJson.general).toBe('PENDING')
+    expect(runInBackground).not.toHaveBeenCalled()
+  })
+
+  it('clube com chave própria ignora ACCOUNT_STATUS (200); evento de pagamento segue o fluxo antigo (200, sem refresh)', async () => {
+    seedSubaccount()
+    ;(db().rows(schema.tenantAsaasAccounts)[0] as { source: string }).source = 'api_key'
+    const { runInBackground } = await import('@/lib/background')
+    vi.mocked(runInBackground).mockClear()
+    expect(await hook(statusBody())).toBe(200)
+    expect(accountRow().accountStatusJson.general).toBe('PENDING')
+    expect(await hook({ id: 'evt_pay', event: 'PAYMENT_RECEIVED', payment: { id: 'pay_1', status: 'RECEIVED' } })).toBe(200)
+    expect(runInBackground).not.toHaveBeenCalled()
   })
 })
